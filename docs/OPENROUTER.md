@@ -5,7 +5,7 @@ Bu seçenek isteğe bağlı, ücretli ve bulut tabanlıdır. Yerel kayıt/STT va
 ## Kullanım
 
 1. Sol menüde **OpenRouter ile ses aç**.
-2. OpenRouter API anahtarını güvenli alana girip **Anahtarı kaydet**. Anahtar macOS Anahtar Zinciri’nde `local.boran.meeting-os.openrouter`, hesap `openrouter` olarak saklanır. İlk backend kullanımında macOS erişim sorabilir. Anahtar CLI argümanlarına, SQLite’a veya loglara yazılmaz. CLI ayrıca `OPENROUTER_API_KEY` ortam değişkenini kabul eder; başka uygulamaların anahtarları aranmaz.
+2. OpenRouter API anahtarını güvenli alana girip **Anahtarı kaydet**. Anahtar macOS Anahtar Zinciri’nde `local.boran.meeting-os.openrouter`, hesap `openrouter` olarak saklanır. İlk backend kullanımında macOS “security anahtarınıza erişmek istiyor” sorusu gösterebilir; **Her Zaman İzin Ver** seçin. Cevap için 5 dakika süre vardır; süre dolarsa veya erişim reddedilirse iş “anahtar eksik” yerine ayrı bir Anahtar Zinciri mesajıyla durur. Anahtar CLI argümanlarına, SQLite’a veya loglara yazılmaz. CLI ayrıca `OPENROUTER_API_KEY` ortam değişkenini kabul eder; başka uygulamaların anahtarları aranmaz.
 3. Transkripsiyon modelini, dosyayı ve başlığı seçin. Varsayılan GPT Transcribe’dır. Gönderim/ücret kutusunu işaretleyip **Yükle ve yazıya çevir**.
 4. Transkript tamamlanınca konuşmacı etiketlerini düzeltin. **Özet** sekmesinden özet, karar ve görevleri yerel modelle hazırlayın. 16 GB Mac’lerde mevcut davranış gereği analiz otomatik başlatılmaz. Metinde desteklenmeyen sorumlu/tarih üretilmemesi için mevcut kaynak-alıntısı doğrulamaları kullanılır; sonuçlar yine incelenmelidir.
 5. Ağ hatasında tamamlanmış parçalar saklanır. Aynı toplantıyı seçip **İşlemi sürdür**. Belirsiz ağ hatasından önce sunucu ücret kesmiş olabilir; otomatik tekrar yoktur. Kaynağı veya modeli değişmiş işe devam edilmez.
@@ -30,8 +30,12 @@ Varsayılan model `openai/gpt-transcribe`. Menüde GPT-4o Transcribe, GPT-4o Min
 - [OpenRouter STT](https://openrouter.ai/docs/guides/overview/multimodal/stt): `/api/v1/audio/transcriptions`, JSON base64, kullanım verisi; uzun sesleri bölme önerisi. Top-level prompt kullanılmıyor.
 - Genel katalog API’si ve `/api/v1/models/openai/gpt-transcribe/endpoints` doğrudan sorgulandı; model ve aktif OpenAI sağlayıcısı doğrulandı. Bu, kullanıcının anahtar/bakiye erişiminin canlı testi değildir.
 
+## Hata mesajları
+
+HTTP hataları koda göre ayrışır: 401 anahtar reddedildi, 402 bakiye yetersiz, 429 hız sınırı, 5xx hizmet hatası. Her mesaj HTTP kodunu ve “otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor” notunu içerir. Anahtar veya yanıt içeriği mesaja girmez.
+
 ## Test durumu
 
-56 Python testi: beş modelin istekle eşleşmesi, model değişiminde checkpoint reddi, eski checkpoint geçişi, istemci kontratı, onaysız gönderim engeli, hatalarda gizli veri sızdırmama, yeniden yönlendirme engeli, parça checkpoint/devam, değişen kaynak reddi, 40 dakikalık parça planı, dosya import fixture’ı, mevcut masaüstü/metin aktarımı ve kaynaklı analiz testleri. 44 Swift testi geçti. Gerçek API çağrısı, özel ses yükleme veya canlı Türkçe doğruluk benchmark’ı yapılmadı. Keychain’e gerçek anahtar yazılmadı.
+58 Python testi (56 önceki + Anahtar Zinciri zaman aşımı/red ayrımı + HTTP mesajları): beş modelin istekle eşleşmesi, model değişiminde checkpoint reddi, eski checkpoint geçişi, istemci kontratı, onaysız gönderim engeli, hatalarda gizli veri sızdırmama, yeniden yönlendirme engeli, parça checkpoint/devam, değişen kaynak reddi, 40 dakikalık parça planı, dosya import fixture’ı, mevcut masaüstü/metin aktarımı ve kaynaklı analiz testleri. 44 Swift testi geçti. Gerçek API çağrısı, özel ses yükleme veya canlı Türkçe doğruluk benchmark’ı yapılmadı. Keychain’e gerçek anahtar yazılmadı.
 
 Model fiyatları aynı birimle dönmüyor: GPT-4o modellerinde token bazlı, Whisper modellerinde sağlayıcıya bağlı bilgiler var. Menü GPT Transcribe fiyatını yalnız o seçildiğinde gösterir; diğer seçeneklerde doğrulanmamış dakika tahmini yerine ilgili resmî model/fiyat bağlantısını açar.

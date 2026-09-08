@@ -76,6 +76,33 @@ class OpenRouterTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][0],'/usr/bin/security')
             self.assertIn('local.boran.meeting-os.openrouter',run.call_args.args[0])
 
+    def test_keychain_prompt_timeout_and_denial_are_distinguished(self):
+        import subprocess
+        from meeting_os.openrouter import KEYCHAIN_TIMEOUT
+        self.assertGreaterEqual(KEYCHAIN_TIMEOUT,120)  # user must have time to answer the macOS access prompt
+        with patch.dict('os.environ',{},clear=True), patch('subprocess.run',side_effect=subprocess.TimeoutExpired('security',KEYCHAIN_TIMEOUT)):
+            with self.assertRaises(OpenRouterError) as caught:read_api_key()
+            self.assertIn('zaman aşımı',str(caught.exception));self.assertNotIn('eksik',str(caught.exception))
+        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
+            run.return_value.returncode=44;run.return_value.stdout='';run.return_value.stderr='security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.'
+            with self.assertRaises(OpenRouterError) as caught:read_api_key()
+            self.assertIn('eksik',str(caught.exception))
+        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
+            run.return_value.returncode=36;run.return_value.stdout='';run.return_value.stderr='security: SecKeychainItemCopyContent: User interaction is not allowed.'
+            with self.assertRaises(OpenRouterError) as caught:read_api_key()
+            self.assertIn('reddedildi',str(caught.exception));self.assertNotIn('eksik',str(caught.exception))
+        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
+            run.return_value.returncode=0;run.return_value.stdout='sk-or-secret\n';run.return_value.stderr=''
+            self.assertEqual(read_api_key(),'sk-or-secret')
+            self.assertEqual(run.call_args.kwargs['timeout'],KEYCHAIN_TIMEOUT)
+
+    def test_http_status_messages_are_specific_and_leak_nothing(self):
+        from meeting_os.openrouter import http_error_message
+        self.assertIn('reddedildi',http_error_message(401));self.assertIn('bakiye',http_error_message(402))
+        self.assertIn('hız sınırı',http_error_message(429));self.assertIn('hizmet',http_error_message(503))
+        for code in (401,402,429,500,418):
+            text=http_error_message(code);self.assertIn(str(code),text);self.assertIn('Otomatik tekrar yapılmadı',text)
+
     def test_analysis_adapter_uses_requested_model_and_json_schema(self):
         client=self.client({'choices':[{'finish_reason':'stop','message':{'content':'{"summary":[]}'}}]})
         llm=client.analysis('openai/gpt-5.6-luna',consent=True)

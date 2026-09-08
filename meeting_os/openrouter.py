@@ -30,14 +30,21 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl): return None
 
 
+KEYCHAIN_TIMEOUT = 300  # macOS may show an access prompt; the user needs time to answer it.
+
 def read_api_key():
     key = os.environ.get('OPENROUTER_API_KEY', '').strip()
     if not key:
         try:
             result = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE,
-                                     '-a', 'openrouter', '-w'], capture_output=True, text=True, timeout=10)
-            if result.returncode == 0: key = result.stdout.strip()
-        except (OSError, subprocess.TimeoutExpired): pass
+                                     '-a', 'openrouter', '-w'], capture_output=True, text=True, timeout=KEYCHAIN_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise OpenRouterError('macOS Anahtar Zinciri erişim onayı zaman aşımına uğradı. İşlemi tekrar başlatıp çıkan soruda “Her Zaman İzin Ver” seçin.') from None
+        except OSError:
+            raise OpenRouterError('macOS Anahtar Zinciri okunamadı. Uygulamadaki OpenRouter ayarlarına API anahtarını yeniden kaydedin.') from None
+        if result.returncode == 0: key = result.stdout.strip()
+        elif 'could not be found' not in (result.stderr or ''):
+            raise OpenRouterError('macOS Anahtar Zinciri erişimi reddedildi veya okunamadı. İşlemi tekrar başlatıp erişime izin verin ya da anahtarı yeniden kaydedin.')
     if not key or any(c.isspace() for c in key):
         raise OpenRouterError('OpenRouter anahtarı eksik. Uygulamadaki OpenRouter ayarlarına API anahtarını kaydedin.')
     return key
@@ -51,6 +58,19 @@ def _model(model):
 
 def _consent(consent):
     if consent is not True: raise OpenRouterError('OpenRouter’a içerik gönderimi için açık onay gerekir.')
+
+
+def http_error_message(code):
+    detail={401:'OpenRouter anahtarı reddedildi; anahtarı kontrol edip yeniden kaydedin.',
+            402:'OpenRouter bakiyesi yetersiz; hesabınıza kredi ekleyin.',
+            403:'OpenRouter bu isteği reddetti; hesap/model erişimini kontrol edin.',
+            404:'Seçilen model veya uç nokta OpenRouter’da bulunamadı.',
+            408:'OpenRouter isteği zaman aşımına uğradı.',
+            413:'Ses parçası OpenRouter sınırını aştı.',
+            429:'OpenRouter hız sınırı; biraz bekleyip sürdürün.'}.get(code)
+    if detail is None:
+        detail='OpenRouter hizmet hatası; biraz bekleyip sürdürün.' if code>=500 else 'Anahtarı, bakiyeyi veya hizmet durumunu kontrol edin.'
+    return f'OpenRouter HTTP {code}. {detail} Otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor.'
 
 
 class OpenRouterClient:
@@ -69,8 +89,7 @@ class OpenRouterClient:
         try:
             with self._transport(req, timeout=90) as response: raw=response.read(self.MAX_RESPONSE_BYTES+1)
         except urllib.error.HTTPError as exc:
-            code=exc.code
-            raise OpenRouterError(f'OpenRouter HTTP {code}. Otomatik tekrar yapılmadı; anahtarı, bakiyeyi veya hizmet durumunu kontrol edin.') from None
+            raise OpenRouterError(http_error_message(exc.code)) from None
         except (OSError, TimeoutError):
             raise OpenRouterError('OpenRouter bağlantısı tamamlanamadı. Ücret oluşmuş olabilir; otomatik tekrar yapılmadı.') from None
         if len(raw)>self.MAX_RESPONSE_BYTES: raise OpenRouterError('OpenRouter yanıtı boyut sınırını aştı.')
