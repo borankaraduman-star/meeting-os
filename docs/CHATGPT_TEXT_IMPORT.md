@@ -1,6 +1,6 @@
 # ChatGPT metni aktar
 
-Meeting OS sol menüde **ChatGPT metni aktar** düğmesini açın. **ChatGPT’yi aç** uygulamayı açar; Record kaydını orada kendiniz başlatın. Metni kopyalayıp bu pencereye yapıştırın veya UTF-8 .txt dosyası seçin. Toplantı adı verin → **Önizle** → **Yeni toplantıya kaydet**.
+9 Eylül 2026 itibarıyla bu düğme kullanıcı isteğiyle kenar çubuğundan kaldırıldı; backend `transcript_import` yolu ve testleri duruyor, arayüzden erişilemez. Aşağıdaki akış eski arayüzü anlatır. Meeting OS sol menüde **ChatGPT metni aktar** düğmesini açın. **ChatGPT’yi aç** uygulamayı açar; Record kaydını orada kendiniz başlatın. Metni kopyalayıp bu pencereye yapıştırın veya UTF-8 .txt dosyası seçin. Toplantı adı verin → **Önizle** → **Yeni toplantıya kaydet**.
 
 Aktarılan toplantı listede açılır; konuşmada arama ve Düzelt kullanılabilir. Ses yoktur; oynatma veya ses profili kaydetme sunulmaz. Konuşmacı etiketleri ses kimliği doğrulaması değildir.
 

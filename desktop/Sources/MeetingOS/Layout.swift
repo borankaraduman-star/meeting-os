@@ -20,7 +20,6 @@ struct MeetingContent:View {
         .sheet(isPresented:$m.showOpenRouter) { OpenRouterImportView(model:m) }
         .sheet(item:$m.editRow) { row in EditSegmentSheet(model:m,row:row) }
         .sheet(isPresented:$m.showSettings) { SettingsSheet(model:m) }
-        .sheet(isPresented:$m.showTranscriptImport) { TranscriptImportSheet(model:m) }
     }
 }
 
@@ -44,14 +43,7 @@ struct SidebarView:View {
                 .disabled(model.busy && !model.recording)
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
-                Button(action:model.importAudio) { Label("Ses dosyası aç",systemImage:"square.and.arrow.down").frame(maxWidth:.infinity) }
-                    .controlSize(.large).disabled(model.busy)
-                    .accessibilityIdentifier("importButton")
-                    .accessibilityLabel("Ses dosyası aç")
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
-                Button { model.showTranscriptImport=true } label: { Label("ChatGPT metni aktar",systemImage:"doc.text.badge.plus").frame(maxWidth:.infinity) }
-                    .controlSize(.large).disabled(model.busy)
-                    .accessibilityIdentifier("transcriptImportButton")
             }.padding(18)
             HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(model.meetings.count)").monospacedDigit().font(.caption) }
                 .foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,6)
@@ -60,6 +52,7 @@ struct SidebarView:View {
                 ForEach(model.meetings) { meeting in
                     MeetingLibraryRow(meeting:meeting)
                         .tag(meeting.id)
+                        .contextMenu { Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(model.busy || meeting.recoveryState=="active") }
                         .accessibilityIdentifier("meetingRow-\(meeting.id)")
                         .accessibilityLabel("\(meeting.title.isEmpty ? "Adsız toplantı" : meeting.title), \(statusLabel(meeting.displayStatus))")
                 }
@@ -68,6 +61,10 @@ struct SidebarView:View {
             .scrollContentBackground(.hidden)
             .frame(maxHeight:.infinity)
             .accessibilityIdentifier("meetingLibraryList")
+            .confirmationDialog("“\(model.deleteCandidate?.title ?? "")” silinsin mi?",isPresented:Binding(get:{ model.deleteCandidate != nil },set:{ if !$0 { model.deleteCandidate=nil } }),titleVisibility:.visible) {
+                Button("Sil",role:.destructive) { if let meeting=model.deleteCandidate { model.deleteCandidate=nil;Task { await model.deleteMeeting(meeting) } } }
+                Button("Vazgeç",role:.cancel) { model.deleteCandidate=nil }
+            } message: { Text("Transkript, düzeltmeler, özet ve görevler ile bu toplantıya ait ses dosyaları kalıcı olarak silinir. Kaydedilmiş ses profilleri korunur.") }
             Divider()
             VStack(alignment:.leading,spacing:8) {
                 ApplicationActivityView(model:model).accessibilityIdentifier("activitySummary")
@@ -155,6 +152,10 @@ struct DetailHeader:View {
             .disabled(model.selected==nil)
             .accessibilityIdentifier("exportMenu")
             .accessibilityLabel("Dışa aktar")
+            Button { if let meeting=model.meeting { model.deleteCandidate=meeting } } label: { Label("Sil",systemImage:"trash") }
+                .disabled(model.meeting==nil || model.busy || model.meeting?.recoveryState=="active")
+                .accessibilityIdentifier("deleteMeetingButton")
+                .accessibilityLabel("Toplantıyı sil")
         }.padding(24)
     }
 }

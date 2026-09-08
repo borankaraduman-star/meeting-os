@@ -106,6 +106,29 @@ class Store:
             self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)', (name,r['embedding_model'],json.dumps(vector),duration,f'{mid}:{sid}'))
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(name,mid,sid))
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created) VALUES(?,?,?,?)',(mid,f'segment:{sid}',name,datetime.now(timezone.utc).isoformat()))
+    def delete_meeting(self, mid):
+        """Remove one meeting and every row derived from it. Voice profiles are kept. Returns metadata for file cleanup."""
+        row=self.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
+        if not row: raise ValueError('Toplantı bulunamadı')
+        tables={r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        with self.db:
+            if 'tasks' in tables:
+                if 'drafts' in tables:
+                    if 'draft_edits' in tables:
+                        self.db.execute('DELETE FROM draft_edits WHERE draft IN (SELECT id FROM drafts WHERE task IN (SELECT id FROM tasks WHERE meeting=?))',(mid,))
+                    self.db.execute('DELETE FROM drafts WHERE task IN (SELECT id FROM tasks WHERE meeting=?)',(mid,))
+                if 'task_edits' in tables:
+                    self.db.execute('DELETE FROM task_edits WHERE task IN (SELECT id FROM tasks WHERE meeting=?)',(mid,))
+                self.db.execute('DELETE FROM tasks WHERE meeting=?',(mid,))
+            if 'retry_attempts' in tables:
+                for t in ('retry_segments','retry_workspaces'):
+                    if t in tables: self.db.execute(f'DELETE FROM {t} WHERE attempt IN (SELECT id FROM retry_attempts WHERE meeting=?)',(mid,))
+                self.db.execute('DELETE FROM retry_attempts WHERE meeting=?',(mid,))
+            for t in ('analyses','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','segments'):
+                if t in tables: self.db.execute(f'DELETE FROM {t} WHERE meeting=?',(mid,))
+            self.db.execute('DELETE FROM meetings WHERE id=?',(mid,))
+        try: return json.loads(row['metadata']) or {}
+        except (TypeError,ValueError): return {}
     def profiles(self):
         return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples GROUP BY name,model')]
     def delete_profile(self, name):

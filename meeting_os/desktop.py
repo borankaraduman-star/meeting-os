@@ -64,6 +64,40 @@ def capture_presentation(status, owner, capture, metadata=None):
     return status
 
 
+def meeting_files(metadata, data_dir):
+    """Audio/capture folders owned by this meeting, only when they live inside the app data directory."""
+    data_dir=Path(data_dir).resolve()
+    candidates=[metadata.get('capture_dir')]+[v for v in (metadata.get('paths') or {}).values() if isinstance(v,str)]
+    folders=set()
+    for value in candidates:
+        if not isinstance(value,str) or not value: continue
+        path=Path(value)
+        try: resolved=path.resolve()
+        except OSError: continue
+        if path.suffix: resolved=resolved.parent  # a file inside its own import/capture folder
+        try: relative=resolved.relative_to(data_dir)
+        except ValueError: continue
+        if len(relative.parts)==2 and relative.parts[0] in ('recordings','imports'): folders.add(resolved)
+    return sorted(folders)
+
+
+def delete_meeting(store, mid, data_dir):
+    import shutil
+    from .recovery import classify, metadata as read_metadata
+    row=store.db.execute('SELECT * FROM meetings WHERE id=?',(mid,)).fetchone()
+    if not row: raise ValueError('Toplantı bulunamadı')
+    meta=read_metadata(row)
+    if row['status'] in ('processing','provisional') and classify(meta.get('worker_identity'))=='active':
+        raise ValueError('Bu toplantı üzerinde iş sürüyor; önce işlemi durdurun')
+    folders=meeting_files(meta,data_dir)
+    store.delete_meeting(mid)
+    removed=[]
+    for folder in folders:
+        if folder.is_dir() and not folder.is_symlink():
+            shutil.rmtree(folder,ignore_errors=True); removed.append(str(folder))
+    return {'deleted':True,'removed_folders':removed}
+
+
 def dispatch(request, db=None):
     if request.get('action')=='diagnostics':
         from .diagnostics import collect,export_report
@@ -113,6 +147,8 @@ def dispatch(request, db=None):
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action=='delete_meeting':
+            return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='export_analysis':
             current=memory.latest(request['meeting'])
             if not current:raise ValueError('Önce toplantıyı analiz edin')

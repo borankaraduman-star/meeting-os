@@ -35,8 +35,12 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    çakışan veya kısa bağlamlı örnekler reddedilir. Aynı adlı farklı kişilere
    ayırt edici adlar verin. Belirsiz eşleşmeler isimsiz kalır.
 
-**Ses dosyası aç** WAV/MP3/M4A/MP4 ve ffmpeg’in okuyabildiği diğer sesleri yerel
-arşive kopyalayıp dönüştürür. Arama seçili toplantının metnini ve konuşmacılarını
+Kayıtlı ses dosyaları **OpenRouter ile ses aç** üzerinden yazıya çevrilir; yerel
+`import` ve `transcript_import` yolları CLI’de durur, kenar çubuğunda düğmeleri yoktur.
+Bir toplantıyı silmek için listede sağ tıklayıp **Toplantıyı sil…** seçin veya
+başlıktaki çöp kutusunu kullanın; onaydan sonra transkript, düzeltmeler, özet,
+görevler ve toplantıya ait ses klasörü silinir, ses profilleri korunur. Üzerinde iş
+süren toplantı silinemez. Arama seçili toplantının metnini ve konuşmacılarını
 filtreler. Markdown, SRT ve JSON dışa aktarımı vardır; JSON export ses vektörlerini
 içermez. **Sözlük ve ses profilleri** bölümünde kişi adlarını ve PM terimlerini
 satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.

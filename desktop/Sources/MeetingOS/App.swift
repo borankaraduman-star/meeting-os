@@ -46,7 +46,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
-    @Published var showTranscriptImport=false
+    @Published var deleteCandidate:Meeting?
     @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
     @Published var tab="transcript" { didSet { if tab != "transcript" { pendingEvidence=nil } } }; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
     @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
@@ -186,17 +186,6 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(payload);activity="Tanılama raporu kaydedildi · Toplantı içeriği dahil değil" }
         catch { self.error=error.localizedDescription }
     }
-    func importAudio() {
-        let panel=NSOpenPanel(); panel.canChooseDirectories=false; panel.allowsMultipleSelection=false
-        if panel.runModal() == .OK, let url=panel.url {
-            activity="Dosya yazıya dönüştürülüyor…"
-            let result=dataDir.appendingPathComponent("import-\(UUID().uuidString).json")
-            launch(["import",url.path,"--title",url.deletingPathExtension().lastPathComponent,"--output",result.path]) { [weak self] ok in
-                guard let self=self else { return }
-                if ok, let mid=self.resultMeeting(result) { self.selected=mid;self.analyzeAutomatically(mid) } else { self.activity="Dosya işlenemedi" }
-            }
-        }
-    }
     func saveLabel(enroll:Bool) async {
         guard let row=editRow, let mid=selected else { return }
         guard !enroll || meeting?.metadata["text_only"] as? Bool != true else { return }
@@ -208,6 +197,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func saveText() async {
         guard let row=editRow, let mid=selected else { return }
         do { _=try await request(["action":"edit_text","meeting":mid,"segment":row.id,"text":editText]); editRow=nil; await refresh() } catch { self.error=error.localizedDescription }
+    }
+    func deleteMeeting(_ meeting:Meeting) async {
+        guard !busy else { return }
+        do {
+            _=try await request(["action":"delete_meeting","meeting":meeting.id])
+            if selected==meeting.id { selected=nil;rows=[] }
+            activity="Toplantı silindi · Ses profilleri korundu"
+            await refresh()
+        } catch { self.error=error.localizedDescription }
     }
     func deleteProfile(_ name:String) async { do { _=try await request(["action":"delete_profile","name":name]); await refresh() } catch { self.error=error.localizedDescription } }
     func export(_ format:String) async {
