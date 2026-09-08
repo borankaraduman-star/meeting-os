@@ -1,0 +1,56 @@
+{
+  "scope": "18-second real hardware capture with public Turkish playback on this Mac; no ASR",
+  "run": {
+    "playback": "started_after_capture_ready",
+    "playback_exit": 0,
+    "resources": {
+      "peak_footprint_bytes": 20644992,
+      "samples": 139,
+      "elapsed_seconds": 18.4975220420165
+    },
+    "capture_status": "complete"
+  },
+  "sources": {
+    "mic": {
+      "chunks": 6,
+      "formats": [
+        [
+          48000,
+          1
+        ]
+      ],
+      "seconds": 17.996083333333335,
+      "rms_all_channels": 0.0328306259492511,
+      "peak": 0.24528822302818298,
+      "nonzero_samples": 863232,
+      "digital_silence": false,
+      "reference_correlation": -0.14131972465457773,
+      "reference_offset_seconds": 0.4764375
+    },
+    "system": {
+      "chunks": 7,
+      "formats": [
+        [
+          48000,
+          2
+        ]
+      ],
+      "seconds": 18.06,
+      "rms_all_channels": 0.18518653493764073,
+      "peak": 1.079629898071289,
+      "nonzero_samples": 1547948,
+      "digital_silence": false,
+      "reference_correlation": 0.3062466406031707,
+      "reference_offset_seconds": 0.4481875,
+      "max_abs_correlation_other_offsets_100ms_away": 0.029838746711916022,
+      "mono16k_peak": 1.0567010641098022,
+      "mono16k_samples_over_unity": 20
+    }
+  },
+  "limitations": [
+    "Short capture-only test, not long-run or ASR validation",
+    "System mix may contain other apps; no output devices, volume or other playback changed",
+    "Mic nonzero validates signal availability, not intelligibility or speaker accuracy",
+    "Float PCM peak above 1 is observed; no clipping claim without downstream conversion audit"
+  ]
+}

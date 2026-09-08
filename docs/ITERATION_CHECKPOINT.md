@@ -1,3 +1,7 @@
+## Latest: known local Turkish playback captured in both-channel hardware test
+
+18s signed helper capture and afplay completed without permission error, ~19.7MiB sampled capture tree footprint. Mic and system nonzero, all samples finite. System/reference correlation peak .306 vs <=.02984 at offsets >100ms away supports actual local playback capture. Numeric evidence in `benchmarks/results/local-playback-capture-2026-09-08.json`; raw recordings ignored/local. Short capture only; no ASR or long-run stability claim. Found 20 mono16k system samples >1 before PCM16 assembly; amplitude policy remains to inspect through CPP export. Real meeting recovery still incomplete, 270 original segments preserved. No active capture from this test. Goal remains active.
+
 ## Latest: full vocabulary ablation complete; real retry stopped at admission/loading
 
 All 12 paired public human references: current vocabulary 14/244 edits (5.74%), off 17/244 (6.97%). Keep current vocabulary; no meeting-generalization claim. On/off each required resource retries; raw attempts preserved. Real bounded-final retry session 79872, parent 70131/worker 70142 is TERMINAL exit75 after 9.77s, MemoryPressureError, sampled peak 239,764,776 bytes. It failed during model loading before meaningful ASR, so does not validate the long bounded-final path. OS pressure rose from 1 to 2. Dead-owner cleanup removed exactly one private retry snapshot; original 270 segments and raw recordings preserved, meeting incomplete. Do not restart from these stale PIDs/session.
