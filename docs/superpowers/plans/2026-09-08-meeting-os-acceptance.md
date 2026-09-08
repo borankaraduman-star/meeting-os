@@ -50,6 +50,8 @@ Initial target: no pressure warning, peak group footprint below3.5 GiB, short fi
 
 ### B: Echo and overlapping speech
 
+Execution split: Codex implements bounded measurements and regression tests; Claude reviews complete small code checkpoints and proposes adversarial controls. B1: read-only per-window correlation. B2: timestamp-aware windows, drift and speech-shaped controls. B3: hardware speaker/headphone evidence and conservative UI markers. No cancellation until near-end preservation is demonstrated. See docs/ECHO_MEASUREMENT.md.
+
 Files: meeting_os/audio.py, meeting_os/pipeline.py, meeting_os/types.py; new bounded echo analysis module and synthetic alignment tests.
 - [ ] Create delayed/attenuated system-to-mic fixtures plus genuine near-end and simultaneous speech controls.
 - [ ] Measure clock offset/drift and duplicate content before choosing a cancellation approach.
