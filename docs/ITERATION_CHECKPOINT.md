@@ -1,3 +1,9 @@
+## Latest: real ASR cache reuse verified; diarization cached; retry still active
+
+Session57037,parent8996/worker9007 was confirmed running. Full mic diarization completed and one diarization checkpoint exists. All ten prior ASR outputs were cache hits (zero errors); new processing reached16/392 at last observation.270original segments unchanged. This proves actual ASR resume and diarization cache population, not a real diarization cache hit or full recovery. Logs/progress build/recovery-diar-cache.*, observation build/recovery-diar-cache-watch.json. Revalidate the live session before any restart or code edit. Do not edit checkpoint identity inputs while it runs.
+
+Installed Sherpa process.__doc__ confirms optional callback(processed_chunks,num_chunks), return0 to continue/nonzero abort. Future progress presentation can use it, but no code change during this live retry. Keep callback observational and failure-isolated, throttle writes, test native result equality; update after retry terminates because speakers.py/isolated_diarization.py participate in cache identity.
+
 ## Latest: retry-only completed diarization cache implemented
 
 33tests passed including failed-ASR retry integration; native95s13turns exactly match baseline, fresh-wrapper reuse4.71s→.208s including hashing. Full audio/model/runtime/options/code identity, bounded checksummed SQLite, overlap retained and original final-commit protection unchanged. Actual Claude review done. See DIARIZATION_CHECKPOINT_PLAN.md. Real cache population/resume and long recovery remain pending; previous owned-audio session32354 is terminal, ten ASR checkpoints persist.
