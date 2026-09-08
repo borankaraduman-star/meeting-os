@@ -13,6 +13,10 @@ The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.
 - A capture helper ignoring SIGINT can no longer leave the live queue waiting forever for EOF. Stop has a 15-second grace period; timeout terminates the owned helper, marks the meeting incomplete and retains finalized audio/journal.
 - Regression reproduced with a small subprocess, then fixed. 75 Python tests pass; the additional explicit-environment/offline test also passes (76 total). 9 Swift tests and the native release build pass. No model inference or real microphone capture was needed for this checkpoint.
 
+## New empirical acceptance result
+
+Read [CONCEPT_TEST_2026-09-08](CONCEPT_TEST_2026-09-08.md) before further inference. Actual default turbo import hit OS pressure at 6.13 s; actual Qwen analysis hit it at 8.66 s. Both guarded aborts returned the OS to normal. Do not retry unchanged. Direct quantized CPU turbo with GPU disabled succeeded on captured system audio in 11.73 s at 1.14 GiB, 0/58 normalized word errors on a single synthetic voice. This is not an integrated fallback yet. Microphone file was completely silent. Prioritize integrating low-memory staged inference, microphone silence feedback and deferred analysis after the independent supervisor. Full concept acceptance failed; no natural-meeting or speaker-identity claim is justified.
+
 ## Next bounded checkpoints (in priority order)
 
 1. Independent inference supervisor: inspect native main-thread guard and direct CLI; bound unresponsive model jobs without blocking UI, test with fake child processes, and ensure cleanup marks interrupted meetings recoverable. Do not claim Python polling interrupts a native inference call.
