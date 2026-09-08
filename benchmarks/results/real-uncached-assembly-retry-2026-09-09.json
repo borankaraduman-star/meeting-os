@@ -1,0 +1,68 @@
+{
+  "pid": 63001,
+  "state": "terminal",
+  "started_at": 1788904828.50821,
+  "experiment": "uncached snapshot transfers and private assembly",
+  "base_commit": "5c7d5ad",
+  "exit": 1,
+  "ended_at": 1788904844.7090712,
+  "session": 55850,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "numeric_events": [
+    {
+      "uncached_transfer_applied": "source_fds"
+    },
+    {
+      "uncached_transfer_applied": "destination_fds"
+    },
+    {
+      "uncached_assembly_applied": {
+        "source_fds": 1,
+        "destination_fds": 0
+      }
+    },
+    {
+      "uncached_assembly_applied": {
+        "source_fds": 263,
+        "destination_fds": 1
+      }
+    },
+    {
+      "supervisor_failure": {
+        "kind": "MemoryPressureError",
+        "supervisor_pid": 63011,
+        "child_pid": 63440,
+        "sampled_peak_footprint_bytes": 722470640,
+        "samples": 19,
+        "budget_bytes": 3758096384,
+        "elapsed_seconds": 2.055201416951604
+      }
+    },
+    {
+      "supervisor_failure": {
+        "kind": "MemoryPressureError",
+        "supervisor_pid": 63001,
+        "child_pid": 63011,
+        "sampled_peak_footprint_bytes": 734890192,
+        "samples": 137,
+        "budget_bytes": 3758096384,
+        "elapsed_seconds": 16.1192165419925
+      }
+    }
+  ],
+  "stage": {
+    "stage": "vad",
+    "current": 0,
+    "total": 0,
+    "source": "mic",
+    "updated_at": 1788904842.594709
+  },
+  "scope": "Full experimental retry still stopped at VAD; no ASR/cache reuse/full result. Both transfer and assembly flags attributed by actual runtime markers. No default promotion."
+}
