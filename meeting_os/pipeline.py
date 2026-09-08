@@ -32,9 +32,14 @@ class Pipeline:
         emit("diarizing",source=source)
         turns = self.diarizer.turns(audio,source)
         result = []
+        batch_rows = None
+        if provisional and getattr(self.asr,'engine',None)=='cpp' and getattr(self.asr,'batch_regions',False) is True and len(regions)>1:
+            emit('transcribing',current=0,total=len(regions),source=source)
+            batch_rows=self.asr.transcribe_batch([audio[a:b] for a,b in regions])
+            if len(batch_rows)!=len(regions):raise ValueError('ASR batch result count mismatch')
         for index,(begin,end) in enumerate(regions):
             emit("transcribing",current=index,total=len(regions),source=source)
-            raw_rows = self.asr.transcribe(audio[begin:end])
+            raw_rows = batch_rows[index] if batch_rows is not None else self.asr.transcribe(audio[begin:end])
             rows = [part for row in raw_rows for part in split_by_speaker(row, begin/RATE, turns)]
             emit("identifying",current=index,total=len(regions),source=source)
             for row in rows:

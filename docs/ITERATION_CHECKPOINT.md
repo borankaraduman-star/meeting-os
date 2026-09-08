@@ -10,7 +10,11 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
-## Current checkpoint — live feedback goal and bounded CPU experiment
+## Current checkpoint — batch candidate tested, native comparison deferred by active recording
+
+Added default-OFF, provisional-only separate-file cpp batching to avoid repeated model initialization without splicing audio.16 targeted tests pass; Claude reviewed compact candidate. Source pin supports multi-input and context reset, but installed-binary ordering/isolation/speed not yet verified. Matched ABBA benchmark script refuses active Meeting OS audio jobs and bounds a future run to180s/12s total audio; actual current invocation deferred before model load. Current recording remains untouched and uses serial2-thread CPU; no batch caller enabled. See follow-up in LIVE_OPTIMIZATION_LOOP_2026-09-08.md. Still pursue full live lag/source visibility goal, not just green unit tests. Check real processes; do not wait on stale artifacts or restart user capture.
+
+## Historical checkpoint — live feedback goal and bounded CPU experiment
 
 User explicitly asked to keep optimizing with Claude while video/recording continues. Active goal created; existing heartbeat updated to protect user recording, never duplicate inference or treat ASR as training labels. Stage telemetry and read-only observation script added;35 targeted tests passed. Transcribing dominates12s chunks (baseline totals14–33s). Recording-scoped expiring4-thread CPU experiment yielded19–26s on unmatched chunks, insufficient evidence for promotion; config removed, default2 restored for new workers. Capture not stopped/restarted; memory pressure1 and owned footprint~1.25GiB. System samples still silent while mic has signal, playback route not established. Live lag remains unresolved. See LIVE_OPTIMIZATION_LOOP_2026-09-08.md for evidence and next bounded tasks. Check actual current processes before any restart/build/inference; previous no-active-recording statements are historical.
 

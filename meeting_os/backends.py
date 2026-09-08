@@ -46,3 +46,30 @@ class ASR:
             return [{'start':s['offsets']['from']/1000, 'end':s['offsets']['to']/1000,
                      'text':s['text'], 'words':[], 'confidence_unavailable':True}
                     for s in data['transcription']]
+
+    def transcribe_batch(self, clips):
+        """Bounded sequential multi-file cpp pass; each result remains clip-local.
+
+        Experimental until matched-audio verification. No callers enabled by default.
+        Pinned CLI loads one model outside its file loop and resets decode context.
+        """
+        if self.engine != 'cpp':raise ValueError('Batch mode requires cpp')
+        if not clips:return []
+        if len(clips)>32 or any(getattr(x,'ndim',0)!=1 or len(x)==0 for x in clips) or sum(len(x) for x in clips)>RATE*12:
+            raise ValueError('Batch exceeds bounded live audio limits')
+        with tempfile.TemporaryDirectory(prefix='meeting-os-batch-') as tmp:
+            root=Path(tmp);prefixes=[]
+            command=[self.cpp_bin,'-m',self.model,'-l',self.language,'-ojf','-np','-ng','-t',str(self.cpp_threads),'--prompt',self.prompt]
+            for i,audio in enumerate(clips):
+                wav=root/f'input-{i}.wav';prefix=root/f'result-{i}'
+                sf.write(wav,audio,RATE,subtype='PCM_16');prefixes.append(prefix)
+                command.extend(['-f',str(wav),'-of',str(prefix)])
+            run_guarded(command,timeout=120)
+            # Read all outputs before returning. Missing/corrupt output fails the batch.
+            results=[]
+            for prefix in prefixes:
+                data=json.loads(prefix.with_suffix('.json').read_text())
+                results.append([{'start':s['offsets']['from']/1000,'end':s['offsets']['to']/1000,
+                                 'text':s['text'],'words':[],'confidence_unavailable':True}
+                                for s in data['transcription']])
+            return results
