@@ -75,3 +75,12 @@ class Tests(unittest.TestCase):
         self.backend.turns_file=lambda *a:[]
         self.assertEqual(self.wrap().turns_file(self.wav,'mic',16000),[])
         w=self.wrap();self.assertEqual(w.turns_file(self.wav,'mic',16000),[]);self.assertEqual(w.hits,1)
+    def test_reassembled_snapshot_timestamp_does_not_recompute(self):
+        import struct
+        first=self.wrap().turns_file(self.wav,'mic',16000)
+        raw=bytearray(self.wav.read_bytes());peak=raw.index(b'PEAK')
+        raw[peak+12:peak+16]=struct.pack('<I',123)
+        self.wav.write_bytes(raw)
+        self.backend.fail=True
+        w=self.wrap();self.assertEqual(w.turns_file(self.wav,'mic',16000),first)
+        self.assertEqual(w.hits,1);self.assertEqual(self.backend.calls,1)

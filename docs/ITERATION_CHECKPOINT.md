@@ -1,3 +1,7 @@
+## Latest: fixed WAV timestamp causing real diarization cache misses
+
+Session41921,parent28739/worker28750 intentionally canceled, terminalexit1/JobCancelledError144.24s. Real cache miss revealed whole-WAV hashing includes PEAKcreationtime. Schema2 exact float32 sample hash now ignores metadata, preserves bit-level audio/config/runtime identity.30tests+native altered-timestamp13turn equality/hit passed.270segments and56ASR rows preserved, one private workspace cleaned. Previous schema1 diarization rows safely miss; one schema2 full computation needed before real reuse. See DIARIZATION_CHECKPOINT_PLAN.md. No active recovery from that session. Goal incomplete.
+
 ## Latest: real retry terminal at56/392;56ASR outputs and full diarization preserved
 
 Session57037,parent8996/worker9007 is TERMINAL exit75 after658.32s OS pressure, sampled outer tree peak1.663GB. Ten previous ASR hits+46new results, no cache errors.56ASR rows and1diarization row persist;270original provisional segments preserved. Targeted cleanup removed one dead-owner private workspace. Real full-diarization cache hit remains to verify on the next safe retry; full meeting not finished. Evidence benchmarks/results/real-diar-cache-retry-2026-09-09.json. OS pressure2at final measurement; do not blindly restart under pressure.

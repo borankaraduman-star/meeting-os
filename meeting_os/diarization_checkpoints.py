@@ -4,6 +4,7 @@ from pathlib import Path
 import soundfile as sf
 from .asr_checkpoints import _hash_file,_signature
 from .isolated_diarization import validate_turns
+from .diarization_audio_key import hash_snapshot
 
 MAX_ENTRY=4*1024**2
 MAX_BYTES=32*1024**2
@@ -19,7 +20,7 @@ def artifact_paths(backend):
     # as model auxiliary files; exclude bytecode, which changes on import.
     paths=[p.resolve() for p in models.rglob('*') if p.is_file()]
     paths += [p.resolve() for p in runtime.rglob('*') if p.is_file() and p.suffix in ('.py','.so','.dylib')]
-    paths += [root/n for n in ('speakers.py','isolated_diarization.py','diarization_checkpoints.py')]
+    paths += [root/n for n in ('speakers.py','isolated_diarization.py','diarization_checkpoints.py','diarization_audio_key.py')]
     paths=sorted(set(paths))
     if len(paths)>1024 or not (models/'titanet-small.onnx').is_file() or not (models/'sherpa-onnx-pyannote-segmentation-3-0/model.onnx').is_file():
         raise ValueError('Invalid diarization artifacts')
@@ -34,7 +35,7 @@ class CheckpointDiarizer:
         if self.db.in_transaction:raise ValueError('Diarization checkpoint requires idle transaction')
         self.paths=artifact_paths(backend);self.artifacts=[_hash_file(p) for p in self.paths]
         self.options=self._options()
-        self.identity=hashlib.sha256(json.dumps({'schema':1,'artifacts':[(str(p),h) for p,(_,h) in zip(self.paths,self.artifacts)],'options':self.options},sort_keys=True).encode()).hexdigest()
+        self.identity=hashlib.sha256(json.dumps({'schema':2,'artifacts':[(str(p),h) for p,(_,h) in zip(self.paths,self.artifacts)],'options':self.options},sort_keys=True).encode()).hexdigest()
         self.db.execute('''CREATE TABLE IF NOT EXISTS diarization_checkpoints(
             meeting TEXT REFERENCES meetings(id) ON DELETE CASCADE,identity TEXT,audio TEXT,
             payload TEXT NOT NULL,bytes INTEGER NOT NULL,digest TEXT NOT NULL,used INTEGER NOT NULL,
@@ -51,7 +52,7 @@ class CheckpointDiarizer:
         print(json.dumps({'diarization_checkpoints':{'hits':self.hits,'misses':self.misses,'errors':self.errors}}),file=sys.stderr)
     def turns_file(self,path,source,frames):
         if self.db.in_transaction:raise ValueError('Diarization checkpoint requires idle transaction')
-        path=Path(path).resolve(strict=True);signature,audio_hash=_hash_file(path)
+        path=Path(path).resolve(strict=True);signature,audio_hash=hash_snapshot(path)
         info=sf.info(path)
         if type(frames) is not int or not 0<frames<=16000*14400 or info.frames!=frames or info.samplerate!=16000 or info.channels!=1 or info.subtype!='FLOAT':
             raise ValueError('Checkpoint requires private mono16k float32 snapshot')
