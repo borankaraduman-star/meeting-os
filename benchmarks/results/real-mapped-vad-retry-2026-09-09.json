@@ -1,0 +1,56 @@
+{
+  "pid": 67487,
+  "state": "terminal",
+  "started_at": 1788905434.1466172,
+  "experiment": "mapped VAD plus uncached snapshot transfers/assembly",
+  "base_commit": "8976bd0",
+  "exit": 1,
+  "ended_at": 1788905460.435817,
+  "session": 41036,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "failures": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 67492,
+      "child_pid": 68191,
+      "sampled_peak_footprint_bytes": 961628008,
+      "samples": 28,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 3.0811110410140827
+    },
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 67487,
+      "child_pid": 67492,
+      "sampled_peak_footprint_bytes": 974014792,
+      "samples": 217,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 26.21612900006585
+    }
+  ],
+  "asr_checkpoint_stats": {
+    "hits": 69,
+    "misses": 0,
+    "errors": 0
+  },
+  "diarization_checkpoint_stats": {
+    "hits": 1,
+    "misses": 0,
+    "errors": 0
+  },
+  "stage": {
+    "stage": "transcribing",
+    "current": 69,
+    "total": 392,
+    "source": "mic",
+    "updated_at": 1788905457.223258
+  },
+  "scope": "Full mic VAD completed; regenerated real snapshot reused diarization and69ASR results. Resource failure on first uncached ASR region; not full meeting completion."
+}

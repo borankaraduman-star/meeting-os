@@ -1,3 +1,7 @@
+## Latest: mapped VAD passes real full record; resume reaches first new ASR
+
+48 related tests+native95s exact13sample spans passed; implementation8976bd0. Real session41036/PID67487/worker67492 TERMINAL exit1 after26.22s: fullmic VAD completed, freshly regenerated snapshotdiar cachehit1/errors0 and69ASRcachehits/errors0, thenOSpressure at firstnewASR69/392. Sampled974MBoutertree.Original270segments/69completedASRremain; privatecleanup1. Evidence real-mapped-vad-retry-2026-09-09.json. This is concrete VAD/resume progress, not full recovery/live acceptance. ClaudeFable mapped-VAD review39042/PID67449 is still running at ~/Library/Caches/MeetingOS/fable-mapped-vad-review; revalidate handle, no completedreviewclaim. No active native retry. User resumed goal; don't use previous blocked status as a reason to stop independent work.
+
 ## Latest: user resumed; identified Docker and stopped already-shutdown Gradle; VAD optimization underway
 
 Current memory investigation identified VM3757 asDocker (active PostgreSQL/Redis/HomeAssistant containers left running), Java73863 asGradle8.14.3. Daemon log explicitly requested stop/removed registry onSep2, --status lists no registered daemon, no Daemon/Execution workers in JVM dump. Targeted SIGTERM exited the leftover stopped Gradle process; prior footprint1,169,754,056bytes (not guaranteed equal physical RAM freed). User explicitly requested computer recovery and continuation. MeetingOS UI remains~51MiB.
