@@ -14,3 +14,10 @@ class ProgressTests(unittest.TestCase):
     def test_unwritable_progress_does_not_fail_audio(self):
         with tempfile.TemporaryDirectory() as t:
             with patch.dict(os.environ,{'MEETING_OS_PROGRESS_PATH':t}):emit('loading_models')
+
+    def test_failed_observer_does_not_interrupt_progress(self):
+        from meeting_os.progress import stage_observer
+        def fail(stage):raise RuntimeError('diagnostic failure')
+        token=stage_observer.set(fail)
+        try:emit('transcribing')
+        finally:stage_observer.reset(token)

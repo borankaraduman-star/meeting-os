@@ -30,3 +30,16 @@ class LowMemoryTests(unittest.TestCase):
                 self.assertIn('-ng',command);self.assertEqual(command[command.index('-t')+1],'2')
             with patch('meeting_os.backends.run_guarded',side_effect=run):
                 ASR('cpp',model).transcribe(np.zeros(16000))
+
+    def test_four_thread_experiment_preserves_cpu_and_model_settings(self):
+        import json,numpy as np
+        from meeting_os.backends import ASR
+        with tempfile.TemporaryDirectory() as t:
+            model=Path(t)/'weights';model.touch()
+            def run(command,**kwargs):
+                self.assertIn('-ng',command)
+                self.assertEqual(command[command.index('-t')+1],'4')
+                self.assertEqual(command[command.index('-m')+1],str(model.resolve()))
+                Path(command[command.index('-of')+1]).with_suffix('.json').write_text(json.dumps({'transcription':[]}))
+            with patch('meeting_os.backends.run_guarded',side_effect=run):
+                asr=ASR('cpp',model);asr.cpp_threads=4;asr.transcribe(np.zeros(16000))

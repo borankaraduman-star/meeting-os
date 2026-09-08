@@ -10,7 +10,11 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
-## Current checkpoint — user recording inspected, silence overhead and status fixed
+## Current checkpoint — live feedback goal and bounded CPU experiment
+
+User explicitly asked to keep optimizing with Claude while video/recording continues. Active goal created; existing heartbeat updated to protect user recording, never duplicate inference or treat ASR as training labels. Stage telemetry and read-only observation script added;35 targeted tests passed. Transcribing dominates12s chunks (baseline totals14–33s). Recording-scoped expiring4-thread CPU experiment yielded19–26s on unmatched chunks, insufficient evidence for promotion; config removed, default2 restored for new workers. Capture not stopped/restarted; memory pressure1 and owned footprint~1.25GiB. System samples still silent while mic has signal, playback route not established. Live lag remains unresolved. See LIVE_OPTIMIZATION_LOOP_2026-09-08.md for evidence and next bounded tasks. Check actual current processes before any restart/build/inference; previous no-active-recording statements are historical.
+
+## Historical checkpoint — user recording inspected, silence overhead and status fixed
 
 User-owned recording was active; do not stop it or rebuild/re-sign/relaunch until it finishes. Added conservative exact-zero per-chunk shortcut before model/DB construction, and evidence-based live display status with retry protection. Claude reviewed edge cases; differential duration parity caught/fixed. 28 targeted tests passed. Native capture reached ~432s with no errors and normal memory pressure. System samples remained zero while mic contained signal; playback route unconfirmed. Live lag ~150s remains a throughput problem, not solved by this bounded optimization. See LIVE_OBSERVATION_2026-09-08.md. Check current processes before any further action; historical statements below about no active recording are stale.
 

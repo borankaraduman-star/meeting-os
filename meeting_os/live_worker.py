@@ -18,6 +18,11 @@ class IsolatedLivePipeline:
 
 def main():
     data=json.loads(Path(sys.argv[1]).read_text())
+    from .live_timing import observe_worker
+    with observe_worker(data):
+        process_request(data)
+
+def process_request(data):
     from .audio_probe import digital_silence_duration
     duration=digital_silence_duration(data['path'])
     if duration is not None:
@@ -29,6 +34,10 @@ def main():
     store=Store(args.db)
     try:
         pipeline=make_pipeline(args,store)
+        from .live_tuning import cpp_threads
+        data['_cpp_threads']=cpp_threads(data)
+        if getattr(pipeline.asr,'engine',None)=='cpp':
+            pipeline.asr.cpp_threads=data['_cpp_threads']
         rows,turns,duration=pipeline.process(data['path'],data['source'],data['offset'],data['provisional'])
         Path(sys.argv[2]).write_text(json.dumps({'segments':[r.to_dict() for r in rows],'turns':turns,'duration':duration}))
     finally:store.close()

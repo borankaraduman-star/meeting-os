@@ -1,8 +1,15 @@
 """Local job progress; no transcript or audio content is written here."""
 import json,os,time
 from pathlib import Path
+from contextvars import ContextVar
+
+stage_observer = ContextVar("meeting_os_stage_observer", default=None)
 
 def emit(stage,current=0,total=0,source=''):
+    observer=stage_observer.get()
+    if observer is not None:
+        try:observer(stage)
+        except Exception:pass  # Optional diagnostics must not fail audio work.
     target=os.environ.get('MEETING_OS_PROGRESS_PATH')
     if not target:return
     path=Path(target); temp=path.with_name(path.name+'.tmp')
