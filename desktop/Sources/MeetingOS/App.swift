@@ -3,8 +3,8 @@ import AppKit
 import AVFoundation
 
 struct Meeting: Identifiable {
-    let id: String; let title: String; let status: String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:] }
+    let id: String; let title: String; let status: String; let recoveryState:String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:] }
 }
 struct Row: Identifiable {
     let id:Int; let start:Double; let end:Double; let text:String; let speaker:String; let name:String; let source:String; let flags:[String]
@@ -54,7 +54,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var resourceStopMessage=""
     var pressureSource:DispatchSourceMemoryPressure?
     var requestedQuit=false
-    var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
+    @Published var jobKind:String?; @Published var jobCanceled=false
+    @Published var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
     init() {
         let url=Bundle.main.resourceURL!.appendingPathComponent("runtime.json")
         runtime=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
@@ -114,20 +115,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let log=dataDir.appendingPathComponent("last-job.log")
             FileManager.default.createFile(atPath:log.path,contents:nil)
             let handle=try FileHandle(forWritingTo:log)
-            resourceStopMessage=""
+            resourceStopMessage="";jobCanceled=false;jobKind=args.first
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor"
             let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }; p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 Task { @MainActor in
-                    guard let self=self else { return }; self.job=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress)
-                    if process.terminationStatus != 0 { self.error=self.resourceStopMessage.isEmpty ? (try? String(contentsOf:log,encoding:.utf8)).map { String($0.split(separator:"\n").last ?? "İşlem tamamlanamadı") } ?? "İşlem tamamlanamadı" : self.resourceStopMessage }
-                    complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
+                    guard let self=self else { return }; self.job=nil; self.jobKind=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress)
+                    if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? (try? String(contentsOf:log,encoding:.utf8)).map { String($0.split(separator:"\n").last ?? "İşlem tamamlanamadı") } ?? "İşlem tamamlanamadı" : self.resourceStopMessage }
+                    complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }
             try p.run(); job=p; busy=true; error=""
-        } catch { self.error=error.localizedDescription; busy=false; recording=false; recordingNavigation.cancel() }
+        } catch { self.error=error.localizedDescription; busy=false; jobKind=nil; recording=false; recordingNavigation.cancel() }
     }
     func start() {
         guard job==nil else { return }
@@ -150,7 +151,27 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if ok, let mid=self.resultMeeting(result) { self.selected=mid; self.analyzeAutomatically(mid) } else { self.activity="Son işlem başarısız · Ses korunuyor" }
         }
     }
-    func recover() { guard let m=meeting, let dir=m.metadata["capture_dir"] as? String else { return }; finalize(URL(fileURLWithPath:dir),name:m.title) }
+    var canCancelJob:Bool { RecoveryPresentation.canCancel(jobKind:jobKind,running:job?.isRunning == true,requested:jobCanceled) }
+    func cancelJob() {
+        guard canCancelJob else { return }
+        jobCanceled=true;activity="İşlem durduruluyor · Kaynak kayıt korunuyor";job?.interrupt()
+    }
+    func recover() {
+        guard job==nil, let m=meeting, RecoveryPresentation.canRetry(status:m.status,hasCapture:m.metadata["capture_dir"] is String,owner:m.recoveryState) else { return }
+        let mid=m.id;activity="Kayıt kontrol ediliyor ve aynı toplantı yeniden işleniyor…"
+        launch(["retry",mid]) { [weak self] ok in
+            guard let self=self else { return }
+            self.activity=ok ? "Toplantı kurtarıldı" : self.jobCanceled ? "İşlem durduruldu · Kaynak kayıt korunuyor" : "Kurtarma tamamlanamadı · Önceki metin korunuyor"
+        }
+    }
+    func exportDiagnostics() async {
+        let panel=NSSavePanel();panel.nameFieldStringValue="MeetingOS-tanilama-\(UUID().uuidString.prefix(8)).json"
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        var payload:[String:Any]=["action":"diagnostics","path":url.path]
+        if let progress=progressURL { payload["progress"]=progress.path }
+        do { _=try await request(payload);activity="Tanılama raporu kaydedildi · Toplantı içeriği dahil değil" }
+        catch { self.error=error.localizedDescription }
+    }
     func importAudio() {
         let panel=NSOpenPanel(); panel.canChooseDirectories=false; panel.allowsMultipleSelection=false
         if panel.runModal() == .OK, let url=panel.url {
@@ -215,13 +236,21 @@ struct MeetingContent:View {
                 HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(m.meetings.count)").monospacedDigit().font(.caption) }.foregroundStyle(.secondary).padding(.top,14)
                 List(selection:$m.selected) { ForEach(m.meetings) { meeting in MeetingLibraryRow(meeting:meeting).tag(meeting.id) } }.listStyle(.sidebar)
                 ApplicationActivityView(model:m)
+                if m.canCancelJob { Button("İşlemi iptal et",action:m.cancelJob).disabled(m.jobCanceled) }
+                Button { Task { await m.exportDiagnostics() } } label: { Label("Tanılama raporu kaydet",systemImage:"doc.badge.gearshape") }.buttonStyle(.plain).font(.caption)
                 Divider()
                 Button { Task { await m.settings() } } label:{ Label("Sözlük ve ses profilleri",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.buttonStyle(.plain).font(.callout).padding(.vertical,8)
             }.padding().navigationSplitViewColumnWidth(min:240,ideal:280)
         } detail: {
             VStack(alignment:.leading,spacing:0) {
                 HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Bir sonraki iyi fikri kaçırmayın.").font(.system(size:27,weight:.bold,design:.rounded)).lineLimit(2); HStack(spacing:6) { Circle().fill(MeetingStyle.statusColor(m.meeting?.status ?? "")).frame(width:6,height:6);Text(m.meeting.map { statusLabel($0.status) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary) }.padding(.top,5) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Özet ve görevler (Markdown)") { Task { await m.export("analysis.md") } }; Button("Transkript (Markdown)") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
-                if let meeting=m.meeting, meeting.metadata["capture_dir"] != nil, meeting.status != "canceled", !m.busy { HStack { Text("Canlı kayıt geçicidir; son işlem ayrı ve kalıcı bir transkript oluşturur.").font(.caption); Spacer(); Button("Son transkripti oluştur / Kurtar",action:m.recover) }.padding(.horizontal,24).padding(.bottom,12) }
+                if let meeting=m.meeting, meeting.metadata["capture_dir"] is String, !["complete","canceled"].contains(meeting.status), !m.busy {
+                    HStack {
+                        Text(RecoveryPresentation.canRetry(status:meeting.status,hasCapture:true,owner:meeting.recoveryState) ? "Kurtarma aynı toplantıyı günceller; işlem bitene kadar önceki metin korunur." : "İşlem sürüyor veya durumu doğrulanamıyor. Kayıt değiştirilmedi.").font(.caption)
+                        Spacer()
+                        if RecoveryPresentation.canRetry(status:meeting.status,hasCapture:true,owner:meeting.recoveryState) { Button("Toplantıyı kurtar",action:m.recover) }
+                    }.padding(.horizontal,24).padding(.bottom,12)
+                }
                 if m.meeting?.metadata["text_only"] as? Bool == true { Text("Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8) }
                 MeetingNavigation(model:m).padding(.horizontal,24).padding(.bottom,18)
                 if m.tab=="transcript" { HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Bu konuşmada ara",text:$m.search).textFieldStyle(.plain); if m.focusedSegment != nil { Button("Tüm konuşmayı göster") { m.focusedSegment=nil } } }.padding(11).meetingCard().padding(.horizontal,24).padding(.bottom,16) }

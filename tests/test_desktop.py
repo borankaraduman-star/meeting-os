@@ -40,3 +40,32 @@ class DesktopTests(unittest.TestCase):
    db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Still working')
    sid=s.add_segment(mid,Segment(0,4,'Test','system','S0'));s.close()
    with self.assertRaises(ValueError):dispatch({'action':'label','meeting':mid,'segment':sid,'name':'Test'},db)
+
+ def test_diagnostics_bridge_bypasses_database_and_filters_content(self):
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'report.json'
+   with patch('meeting_os.desktop.Store') as store:
+    result=dispatch({'action':'diagnostics','path':str(path)},Path(t)/'unused-db')
+    store.assert_not_called()
+   self.assertTrue(result['diagnostics_saved']);self.assertNotIn('meetings',path.read_text())
+
+ def test_snapshot_classifies_processing_owner_without_mutation(self):
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'db';db=Store(path);identity={'pid':123,'started_us':1,'boot':'fictional'};mid=db.create_meeting('fictional',{'worker_identity':identity});db.close()
+   with patch('meeting_os.recovery.classify',return_value='unknown') as classify:
+    result=dispatch({'action':'snapshot','meeting':mid},path)
+    classify.assert_called_once_with(identity)
+   self.assertEqual(result['meetings'][0]['recovery_state'],'unknown')
+   self.assertEqual(result['meetings'][0]['status'],'processing')
+
+ def test_diagnostics_uses_destination_volume_and_missing_progress_is_safe(self):
+  from unittest.mock import patch
+  from meeting_os.diagnostics import collect
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);output=root/'report.json';missing=root/'gone-progress.json'
+   with patch('meeting_os.diagnostics.collect',wraps=collect) as collector:
+    dispatch({'action':'diagnostics','path':str(output),'progress':str(missing)})
+    collector.assert_called_once_with(root,str(missing))
+   self.assertEqual(json.loads(output.read_text())['progress']['stage'],'unknown')

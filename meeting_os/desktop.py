@@ -42,6 +42,11 @@ def capture_state(metadata):
 
 
 def dispatch(request, db=None):
+    if request.get('action')=='diagnostics':
+        from .diagnostics import collect,export_report
+        path=Path(request['path'])
+        export_report(path,collect(path.parent,request.get('progress')))
+        return {'diagnostics_saved':True}
     with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as store:
         action=request['action']
         if action in ('label','edit_text','enroll'):
@@ -59,7 +64,9 @@ def dispatch(request, db=None):
         if action=='snapshot':
             meetings=store.meetings()
             for m in meetings:
-                m['metadata']=json.loads(m['metadata']); m['capture']=capture_state(m['metadata'])
+                from .recovery import metadata,classify
+                m['metadata']=metadata(m); m['capture']=capture_state(m['metadata'])
+                m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status']=='processing' else m['status']
             return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(request.get('meeting',''))}
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}

@@ -64,7 +64,7 @@ Gate: fixture truth shows no lost near-end speech; duplicate reduction and resid
 Files: meeting_os/store.py, meeting_os/live.py, meeting_os/supervisor.py, meeting_os/desktop.py and SwiftUI recovery flow; new diagnostics module/tests.
 - [x] Reproduce crash leftovers with fake processes and temporary DBs.
 - [x] Distinguish stale processing jobs using PID, microsecond kernel start timestamp and boot UUID; native identity exercised on this Mac, unknown states preserved. Read-only recovery CLI plus transactional mark, no signals.
-- [ ] Expose recoverable finalized audio and idempotent retry without duplicate task/profile writes.
+- [x] Expose finalized audio availability and same-meeting guarded retry without task/profile writes; manual native recovery/cancel wired. Corrected/analyzed/final records conservatively refused. Visual QA and legacy auto-finalize consolidation remain pending.
 - [x] Export only allowlisted versions, stage/resource counters and sanitized error codes. Diagnostics CLI implements current snapshot with private no-overwrite export; no DB/raw logs/audio/transcripts/names/credentials/paths/URLs. Independent Claude review and privacy tests passed. GUI integration pending.
 - [ ] Claude reviews the allowlist and fault-injection results; test restart during finalization/analysis and interrupted download.
 
