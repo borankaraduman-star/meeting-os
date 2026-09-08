@@ -1,0 +1,83 @@
+{
+  "kind": "real meeting first finalized microphone chunk; no manual reference, no content exported",
+  "runs": [
+    {
+      "enabled": false,
+      "seconds": 16.255324417026713,
+      "asr_calls": 3,
+      "call_frames": [
+        87296,
+        28928,
+        61568
+      ],
+      "segments": 3,
+      "turns": [
+        [
+          0.14909374713897705,
+          5.346593856811523,
+          "system:S0"
+        ],
+        [
+          6.122844219207764,
+          7.506594181060791,
+          "system:S0"
+        ],
+        [
+          8.299718856811523,
+          11.978468894958496,
+          "system:S0"
+        ]
+      ],
+      "wer": null,
+      "word_errors": null,
+      "reference_words": null,
+      "merged_segments": 0,
+      "known_identities": 0
+    },
+    {
+      "enabled": true,
+      "seconds": 15.740688749938272,
+      "asr_calls": 3,
+      "call_frames": [
+        87296,
+        28928,
+        61568
+      ],
+      "segments": 3,
+      "turns": [
+        [
+          0.14909374713897705,
+          5.346593856811523,
+          "system:S0"
+        ],
+        [
+          6.122844219207764,
+          7.506594181060791,
+          "system:S0"
+        ],
+        [
+          8.299718856811523,
+          11.978468894958496,
+          "system:S0"
+        ]
+      ],
+      "wer": null,
+      "word_errors": null,
+      "reference_words": null,
+      "merged_segments": 0,
+      "known_identities": 0
+    }
+  ],
+  "text_exact_match": true,
+  "resources": {
+    "peak_footprint_bytes": 1517521896,
+    "samples": 273,
+    "elapsed_seconds": 33.289574582944624
+  },
+  "limitations": [
+    "First finalized mic chunk only, no manual reference or saved profiles",
+    "Test harness used default system namespace for mic audio; ephemeral labels are not capture-source evidence",
+    "No regions merged, so timings do not demonstrate window acceleration",
+    "Both runs use new isolated diarizer and threshold .9; old failed attempt is not a matched timing baseline"
+  ]
+}

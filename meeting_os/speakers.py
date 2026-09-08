@@ -44,14 +44,16 @@ class Clusterer:
         return f'S{len(self.centroids)-1}'
 
 class Diarizer:
-    def __init__(self, embedder, mode='cluster', model=None, threshold=0.75):
+    def __init__(self, embedder, mode='cluster', model=None, threshold=0.75, isolate_sherpa=False):
         self.embedder, self.mode = embedder, mode
         self.clusters = {}
         self.threshold = threshold
+        self.isolate_sherpa = isolate_sherpa
         self.pipeline = None
         if mode == 'sherpa':
             import sherpa_onnx as sherpa
             root = Path(model) if model else Path(__file__).resolve().parents[1]/'models/sherpa'
+            self.sherpa_root = root.resolve()
             cfg = sherpa.OfflineSpeakerDiarizationConfig(
                 segmentation=sherpa.OfflineSpeakerSegmentationModelConfig(
                     pyannote=sherpa.OfflineSpeakerSegmentationPyannoteModelConfig(model=str(root/'sherpa-onnx-pyannote-segmentation-3-0/model.onnx')), num_threads=2),
@@ -65,6 +67,9 @@ class Diarizer:
             from pyannote.audio import Pipeline
             self.pipeline = Pipeline.from_pretrained(str(Path(model).resolve()))
     def turns(self, audio, source):
+        if self.mode == 'sherpa' and self.isolate_sherpa:
+            from .isolated_diarization import isolated_turns
+            return isolated_turns(audio,source,self.sherpa_root,self.threshold)
         if self.mode == 'sherpa':
             import sherpa_onnx as sherpa
             # Fresh clustering for each finalized recording; IDs are recording-local.

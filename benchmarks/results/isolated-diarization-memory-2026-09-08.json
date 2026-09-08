@@ -1,0 +1,81 @@
+{
+  "fixture": "public constructed four voices, 95.58s",
+  "threshold": 0.9,
+  "turns_equal": true,
+  "turn_count": 13,
+  "detected_speakers": 4,
+  "parent_stages": {
+    "inprocess": [
+      {
+        "stage": "python_base",
+        "footprint_bytes": 10764768
+      },
+      {
+        "stage": "audio_loaded",
+        "footprint_bytes": 89031232
+      },
+      {
+        "stage": "identity_model_loaded",
+        "footprint_bytes": 252461944
+      },
+      {
+        "stage": "diarizer_configured",
+        "footprint_bytes": 254772160
+      },
+      {
+        "stage": "vad_complete",
+        "footprint_bytes": 267846592
+      },
+      {
+        "stage": "diarization_complete",
+        "footprint_bytes": 674284864
+      },
+      {
+        "stage": "after_gc",
+        "footprint_bytes": 674284864
+      }
+    ],
+    "isolated": [
+      {
+        "stage": "python_base",
+        "footprint_bytes": 10764744
+      },
+      {
+        "stage": "audio_loaded",
+        "footprint_bytes": 89031208
+      },
+      {
+        "stage": "identity_model_loaded",
+        "footprint_bytes": 252396384
+      },
+      {
+        "stage": "diarizer_configured",
+        "footprint_bytes": 254755752
+      },
+      {
+        "stage": "vad_complete",
+        "footprint_bytes": 267994024
+      },
+      {
+        "stage": "diarization_complete",
+        "footprint_bytes": 268190632
+      },
+      {
+        "stage": "after_gc",
+        "footprint_bytes": 268190632
+      }
+    ]
+  },
+  "resources": {
+    "inprocess": {
+      "peak_footprint_bytes": 685573920,
+      "samples": 46,
+      "elapsed_seconds": 5.5385728750843555
+    },
+    "isolated": {
+      "peak_footprint_bytes": 800655784,
+      "samples": 52,
+      "elapsed_seconds": 6.297187292017043
+    }
+  }
+}

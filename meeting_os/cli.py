@@ -48,7 +48,9 @@ def make_pipeline(args,store):
     with contextlib.redirect_stdout(sys.stderr):
         asr=ASR(args.engine,args.model,args.language,vocabulary,args.cpp_bin)
         emb=Embedder(args.embedding,args.embedding_model)
-        diar=Diarizer(emb,args.diarization,args.diarization_model,args.cluster_threshold)
+        from .resources import low_memory_mac
+        diar=Diarizer(emb,args.diarization,args.diarization_model,args.cluster_threshold,
+            isolate_sherpa=args.diarization=='sherpa' and low_memory_mac())
     missing=[p['name'] for p in store.profiles() if p['model'] != emb.model_id]
     if missing: print('Active embedding model has different profile versions: '+', '.join(sorted(set(missing))),file=sys.stderr)
     return Pipeline(asr,diar,store,args.identity_threshold,args.identity_margin)
