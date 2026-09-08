@@ -187,10 +187,10 @@ struct ErrorBanner:View {
                 Image(systemName:"exclamationmark.triangle.fill").foregroundStyle(.orange)
                 if expanded && isLong {
                     ScrollView {
-                        Text(model.error).font(.callout).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
+                        Text(ErrorPresentation.summary(model.error)).font(.callout).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
                     }.frame(maxHeight:160)
                 } else {
-                    Text(model.error).font(.callout).lineLimit(2).truncationMode(.tail).textSelection(.enabled)
+                    Text(ErrorPresentation.summary(model.error)).font(.callout).lineLimit(2).truncationMode(.tail).textSelection(.enabled)
                 }
                 Spacer(minLength:12)
                 if isLong {
@@ -226,7 +226,7 @@ struct EditSegmentSheet:View {
                     Button("Yalnızca ismi kaydet") { Task { await model.saveLabel(enroll:false) } }.disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
                     Button("Ses profilini kaydet") { Task { await model.saveLabel(enroll:true) } }.disabled(!model.clean || model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
                 }
-                if !model.error.isEmpty { Text(model.error).foregroundStyle(.red).font(.caption) }
+                if !model.error.isEmpty { Text(ErrorPresentation.summary(model.error)).foregroundStyle(.red).font(.caption) }
             }.padding(28)
         }.frame(width:540,height:520)
     }

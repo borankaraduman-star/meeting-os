@@ -1,3 +1,7 @@
+## Latest checkpoint: UI freeze repair installed
+
+See `UI_FREEZE_2026-09-08.md`. Current recording ended incomplete before repair; no live capture now. Installed bounded error display and deterministic/equatable transcript rows. 40 Swift + 20 live Python tests pass. Final transcription and long-duration soak remain pending. GPU live trial failed memory protection and is disabled; `build/live-tuning.json` is absent. Earlier optimization candidates are not promoted.
+
 # Local reliability iteration — 2026-09-08
 
 ## Active work plan

@@ -5,16 +5,19 @@ struct TranscriptView:View {
     var body:some View {
         ScrollView {
             LazyVStack(alignment:.leading,spacing:20) {
-                ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row) }
+                ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:!model.recording && model.meeting?.metadata["text_only"] as? Bool != true,canEdit:model.meeting?.status == "complete").equatable() }
                 if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
             }.padding(24)
         }
     }
 }
 
-struct TranscriptRow:View {
-    @ObservedObject var model:Model
+struct TranscriptRow:View, Equatable {
+    let model:Model
     let row:Row
+    let canPlay:Bool
+    let canEdit:Bool
+    static func == (lhs:Self,rhs:Self)->Bool { lhs.row == rhs.row && lhs.canPlay == rhs.canPlay && lhs.canEdit == rhs.canEdit && lhs.model === rhs.model }
     var body:some View {
         HStack(alignment:.top,spacing:14) {
             Button { model.play(row) } label:{
@@ -24,21 +27,13 @@ struct TranscriptRow:View {
                 }.frame(width:48)
             }
             .buttonStyle(.plain).help("Bu bölümü dinle")
-            .disabled(model.recording || model.meeting?.metadata["text_only"] as? Bool == true)
+            .disabled(!canPlay)
             .accessibilityIdentifier("playSegment-\(row.id)")
             .accessibilityLabel("Bu bölümü dinle, \(row.time)")
             VStack(alignment:.leading,spacing:7) {
-                ViewThatFits(in:.horizontal) {
-                    HStack {
-                        Text(row.label).font(.headline).lineLimit(1)
-                        Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary)
-                        Spacer(minLength:12)
-                        editButton
-                    }
-                    VStack(alignment:.leading,spacing:4) {
-                        HStack { Text(row.label).font(.headline).lineLimit(1);Spacer();editButton }
-                        Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary)
-                    }
+                VStack(alignment:.leading,spacing:4) {
+                    HStack { Text(row.label).font(.headline).lineLimit(1); Spacer(minLength:12); editButton }
+                    Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary)
                 }
                 Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6)
                 if !row.flags.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) }
@@ -47,7 +42,7 @@ struct TranscriptRow:View {
     }
     var editButton:some View {
         Button("Düzelt") { model.editRow=row;model.editName=row.name;model.editText=row.text;model.clean=false }
-            .disabled(model.meeting?.status != "complete")
+            .disabled(!canEdit)
             .accessibilityIdentifier("editSegment-\(row.id)")
             .accessibilityLabel("Bölümü düzelt: \(row.label)")
     }

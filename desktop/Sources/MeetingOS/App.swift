@@ -9,7 +9,7 @@ struct Meeting: Identifiable {
 extension Meeting {
     var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
 }
-struct Row: Identifiable {
+struct Row: Identifiable, Equatable {
     let id:Int; let start:Double; let end:Double; let text:String; let speaker:String; let name:String; let source:String; let flags:[String]
     init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; start=d["start"] as? Double ?? 0; end=d["end"] as? Double ?? 0; text=d["text"] as? String ?? ""; speaker=d["speaker"] as? String ?? ""; name=d["speaker_name"] as? String ?? ""; source=d["source"] as? String ?? ""; flags=d["flags"] as? [String] ?? [] }
     var label:String {
@@ -106,7 +106,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 activity=CaptureSignalPresentation.label(active.capture)
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            if wanted==selected { rows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); resolvePendingEvidence(); try await refreshIntelligence(wanted) }
+            if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
     }
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
@@ -122,9 +122,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }; p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
+                let jobError=ErrorPresentation.logSummary(log)
                 Task { @MainActor in
                     guard let self=self else { return }; self.job=nil; self.jobKind=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress)
-                    if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? (try? String(contentsOf:log,encoding:.utf8)).map { String($0.split(separator:"\n").last ?? "İşlem tamamlanamadı") } ?? "İşlem tamamlanamadı" : self.resourceStopMessage }
+                    if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }
