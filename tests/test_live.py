@@ -31,6 +31,7 @@ class LiveTests(unittest.TestCase):
                 record(binary,root/'capture',1,1,store=db,pipeline_factory=broken)
             self.assertEqual(db.meetings()[0]['status'],'incomplete')
             self.assertIn('capture_dir',db.meetings()[0]['metadata'])
+            self.assertIn('worker_identity',db.meetings()[0]['metadata'])
             db.close()
     def test_stop_skips_queued_live_inference_but_keeps_capture_journal(self):
         import signal,time,json,sys

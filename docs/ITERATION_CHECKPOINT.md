@@ -2,13 +2,17 @@
 
 ## Active work plan
 
-Follow docs/superpowers/plans/2026-09-08-meeting-os-acceptance.md as the current ordered plan. Codex implements/tests; Claude independently reviews and authors adversarial fixtures. A1 completed:90 tests pass and12 independent fictional cases frozen in benchmarks/analysis-heldout-v1. Next execute A2 lower-overhead local analysis; B echo, C recovery/diagnostics, D long/device/installer and E natural meetings follow. Historical sections below are evidence, not instructions to redo completed work.
+Follow docs/superpowers/plans/2026-09-08-meeting-os-acceptance.md as the current ordered plan. Codex implements/tests; Claude independently reviews and authors adversarial fixtures. A1 completed:90 tests pass and12 independent fictional cases frozen in benchmarks/analysis-heldout-v1. A2 CPU candidate failed resource gate; execute model-free C recovery/diagnostics, then B echo, D long/device/installer and E natural meetings. Historical sections below are evidence, not instructions to redo completed work.
 
 User authorized continued local testing and improvement with Claude Code. Codex implements; Claude reviews compact code-only checkpoints using the existing Max session. No paid API, private audio/transcripts, outbound messages, or OS permission bypass.
 
 ## Safety baseline
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
+
+## C1 process identity and conservative recovery
+
+Implemented native PID + microsecond start time + boot UUID for live/import/finalize ownership. New recovery CLI lists processing rows without mutations; explicit mark rechecks under SQLite transaction and changes only confirmed interrupted rows to incomplete. PID-only/corrupt/denied inspection remains unknown. Supervisor cleanup uses the same classifier rather than PID-only SQL. No process signals, model loading, user DB edits, audio changes or retry flow. Claude reviewed the small checkpoint; no confirmed blockers. Its zombie/reaping concern was checked against supervisor wait-before-callback order and a dedicated regression test; native EPERM path also tested. Full suite104 passed before these two additional focused passing regressions. SDK layout compiled to136/120/128. See docs/RECOVERY.md. Next C2: finalized-audio availability and idempotent retry contract, then allowlisted diagnostics and GUI integration; do not claim recovery UX complete.
 
 ## A2.1 runtime qualification
 

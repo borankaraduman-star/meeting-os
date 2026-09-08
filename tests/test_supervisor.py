@@ -76,3 +76,12 @@ class SupervisorTests(unittest.TestCase):
             run_guarded([sys.executable,'-c','import sys;print("PRIVATE_TRANSCRIPT",file=sys.stderr);sys.exit(3)'],failure_details=False)
         self.assertNotIn('PRIVATE_TRANSCRIPT',str(caught.exception))
         self.assertEqual(caught.exception.code,3)
+    def test_failure_callback_runs_after_reaping(self):
+        from meeting_os.supervisor import run_guarded
+        called=[]
+        def on_failure(pid):
+            with self.assertRaises(ProcessLookupError):os.kill(pid,0)
+            called.append(pid)
+        with self.assertRaisesRegex(RuntimeError,'süre'):
+            run_guarded([sys.executable,'-c','import time;time.sleep(10)'],timeout=.2,isolated=True,on_failure=on_failure)
+        self.assertEqual(len(called),1)

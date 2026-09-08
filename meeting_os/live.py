@@ -17,7 +17,8 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     if (directory/'events.jsonl').exists(): raise ValueError('Use a new capture directory; existing recordings are never overwritten')
     pending=queue.Queue(); errors=[]; captured=[0]
-    mid=store.create_meeting(title,{'capture_dir':str(directory),'provisional':True}) if store else None
+    from .recovery import current_job_metadata
+    mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True}) if store else None
     try:
         process=subprocess.Popen([str(Path(binary).resolve()),'--output',str(directory),'--seconds',str(seconds),'--chunk-seconds',str(chunk_seconds)],stdout=subprocess.PIPE,text=True,start_new_session=True)
     except Exception:

@@ -56,7 +56,8 @@ def run_transcribe(args,store,paths=None):
     started=time.monotonic()
     pipe=make_pipeline(args,store)
     paths=paths or {args.source:str(args.audio)}
-    mid=store.create_meeting(args.title,{'worker_pid':os.getpid(),'paths':paths,'engine':args.engine,'model':args.model,'diarization':args.diarization})
+    from .recovery import current_job_metadata
+    mid=store.create_meeting(args.title,{**current_job_metadata(),'paths':paths,'engine':args.engine,'model':args.model,'diarization':args.diarization})
     all_turns=[]; duration=0
     try:
         for source,path in paths.items():
@@ -86,6 +87,7 @@ def parser():
     f=sub.add_parser('finalize'); f.add_argument('directory',type=Path); f.add_argument('--title',default='Final meeting'); f.add_argument('--output',type=Path); inference_options(f)
     r=sub.add_parser('record'); r.add_argument('directory',type=Path); r.add_argument('--seconds',type=float,default=3600); r.add_argument('--chunk-seconds',type=float,default=12); r.add_argument('--live',action='store_true'); r.add_argument('--title',default='Live meeting'); r.add_argument('--capture-bin',default=str(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture')); inference_options(r)
     sub.add_parser('meetings')
+    recovery=sub.add_parser('recovery'); recovery.add_argument('--mark-interrupted',metavar='MEETING')
     s=sub.add_parser('show'); s.add_argument('meeting'); s.add_argument('--json',action='store_true')
     c=sub.add_parser('label'); c.add_argument('meeting'); c.add_argument('speaker'); c.add_argument('name')
     c=sub.add_parser('label-segment'); c.add_argument('meeting'); c.add_argument('segment',type=int); c.add_argument('name')
@@ -112,8 +114,9 @@ def main(supervised=False):
                 from .store import Store
                 db=Store(args.db)
                 try:
-                    with db.db:
-                        db.db.execute("UPDATE meetings SET status='incomplete' WHERE status='processing' AND json_extract(metadata,'$.worker_pid')=?",(pid,))
+                    from .recovery import mark_interrupted,metadata
+                    for row in db.meetings():
+                        if metadata(row).get('worker_pid')==pid:mark_interrupted(db,row['id'])
                 finally:db.close()
             run_guarded([sys.executable,'-c','from meeting_os.cli import main; main(supervised=True)',*sys.argv[1:]],timeout=14400,isolated=True,passthrough=True,on_failure=interrupted)
             return
@@ -173,6 +176,10 @@ def main(supervised=False):
                 factory=(lambda: IsolatedLivePipeline(args)) if args.live else None
                 record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory)
             elif args.command=='meetings': output(store.meetings())
+            elif args.command=='recovery':
+                from .recovery import list_recovery,mark_interrupted
+                if args.mark_interrupted:output({'marked_interrupted':mark_interrupted(store,args.mark_interrupted)})
+                else:output(list_recovery(store))
             elif args.command=='show':
                 rows=store.segments(args.meeting)
                 if args.json: output(rows)
