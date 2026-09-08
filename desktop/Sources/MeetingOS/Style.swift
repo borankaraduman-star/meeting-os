@@ -6,7 +6,7 @@ enum MeetingStyle {
     static let surface=Color(nsColor:.controlBackgroundColor)
     static let canvas=Color(nsColor:.windowBackgroundColor)
     static func statusColor(_ status:String)->Color {
-        switch status { case "complete":return accent;case "failed":return .red;case "processing","provisional","incomplete":return .orange;default:return .secondary }
+        switch status { case "complete":return accent;case "failed","not_started","capturing":return .red;case "processing","provisional","incomplete","pending_finalization","capture_unknown":return .orange;default:return .secondary }
     }
 }
 struct MeetingCard:ViewModifier {
@@ -27,7 +27,7 @@ struct MeetingNavigation:View {
 }
 struct MeetingLibraryRow:View {
     let meeting:Meeting
-    var body:some View { VStack(alignment:.leading,spacing:8) { Text(meeting.title).font(.system(size:13,weight:.semibold)).lineLimit(2);HStack(spacing:5) { Circle().fill(MeetingStyle.statusColor(meeting.status)).frame(width:5,height:5);Text(statusLabel(meeting.status));Spacer();Text(String(meeting.created.prefix(10))).monospacedDigit() }.font(.system(size:10)).foregroundStyle(.secondary) }.padding(.vertical,9) }
+    var body:some View { VStack(alignment:.leading,spacing:8) { Text(meeting.title).font(.system(size:13,weight:.semibold)).lineLimit(2);HStack(spacing:5) { Circle().fill(MeetingStyle.statusColor(meeting.displayStatus)).frame(width:5,height:5);Text(statusLabel(meeting.displayStatus));Spacer();Text(String(meeting.created.prefix(10))).monospacedDigit() }.font(.system(size:10)).foregroundStyle(.secondary) }.padding(.vertical,9) }
 }
 
 struct TaskStatusBadge:View {
@@ -42,8 +42,11 @@ struct TranscriptEmptyView:View {
     @ObservedObject var model:Model
     var title:String {
         if !model.rows.isEmpty { return model.focusedSegment == nil ? "Eşleşen konuşma bulunamadı":"Kaynak bölümü görünmüyor" }
-        switch model.meeting?.status {
-        case "processing","provisional":return "Konuşma bölümleri bekleniyor"
+        switch model.meeting?.displayStatus {
+        case "not_started":return "Kayıt başlayamadı"
+        case "pending_finalization":return "Kayıt bitti · Son işlem bekliyor"
+        case "capture_unknown":return "Kayıt durumu doğrulanamıyor"
+        case "capturing","processing","provisional":return "Konuşma bölümleri bekleniyor"
         case "failed","incomplete":return "Transkript tamamlanamadı"
         case "canceled":return "Kayıt iptal edildi"
         case "complete":return "Gösterilecek konuşma bölümü yok"
@@ -52,8 +55,11 @@ struct TranscriptEmptyView:View {
     }
     var detail:String {
         if !model.rows.isEmpty { return "Başka bir kelime deneyin veya tüm konuşmayı gösterin." }
-        switch model.meeting?.status {
-        case "processing","provisional":return "Bu toplantı henüz nihai değil. Kullanılabilir bölümler geldikçe burada görünür."
+        switch model.meeting?.displayStatus {
+        case "not_started":return "Bu denemede ses parçası alınmadı. macOS izinlerini kontrol edip Yeni kayıt düğmesiyle tekrar başlayın."
+        case "pending_finalization":return "Canlı kayıt sona erdi. Kaydedilen sesi yazıya dönüştürmek için Transkripti tamamla düğmesini kullanın."
+        case "capture_unknown":return "Bu kaydın çalışan bir işleme ait olup olmadığı doğrulanamadı."
+        case "capturing","processing","provisional":return "Bu toplantı henüz nihai değil. Kullanılabilir bölümler geldikçe burada görünür."
         case "failed","incomplete":return "İşlem durumunu ve varsa hata bilgisini kontrol edin. Kayıt arşivi varsa üstteki kurtarma seçeneğini kullanabilirsiniz."
         case "canceled":return "Bu toplantı için şu anda gösterilecek bir konuşma bölümü yok. Yeni bir kayıt başlatabilir veya ses dosyası açabilirsiniz."
         case "complete":return "Bu toplantının metni şu anda boş görünüyor. Yenileyerek tekrar kontrol edebilirsiniz."

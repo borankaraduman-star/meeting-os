@@ -41,6 +41,18 @@ def capture_state(metadata):
     return {'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
 
 
+def capture_presentation(status, owner, capture):
+    if status not in ('processing','provisional','incomplete','failed') or capture is None:
+        return status
+    if status=='provisional':
+        if owner=='active':return 'capturing'
+        if owner=='unknown':return 'capture_unknown'
+        return 'pending_finalization' if capture.get('sources') else 'not_started'
+    if status in ('incomplete','failed') and owner!='active' and not capture.get('sources'):
+        return 'not_started'
+    return status
+
+
 def dispatch(request, db=None):
     if request.get('action')=='diagnostics':
         from .diagnostics import collect,export_report
@@ -66,7 +78,8 @@ def dispatch(request, db=None):
             for m in meetings:
                 from .recovery import metadata,classify
                 m['metadata']=metadata(m); m['capture']=capture_state(m['metadata'])
-                m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status']=='processing' else m['status']
+                m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in ('processing','provisional','incomplete','failed') else m['status']
+                m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'])
             return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(request.get('meeting',''))}
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}

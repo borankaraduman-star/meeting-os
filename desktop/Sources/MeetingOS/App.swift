@@ -3,8 +3,11 @@ import AppKit
 import AVFoundation
 
 struct Meeting: Identifiable {
-    let id: String; let title: String; let status: String; let recoveryState:String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:] }
+    let id: String; let title: String; let status: String; let displayStatus:String; let recoveryState:String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; displayStatus=d["display_status"] as? String ?? status; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:] }
+}
+extension Meeting {
+    var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
 }
 struct Row: Identifiable {
     let id:Int; let start:Double; let end:Double; let text:String; let speaker:String; let name:String; let source:String; let flags:[String]
@@ -40,7 +43,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[]; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
     @Published var tab="transcript" { didSet { if tab != "transcript" { pendingEvidence=nil } } }; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
@@ -167,7 +170,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         jobCanceled=true;activity="İşlem durduruluyor · Kaynak kayıt korunuyor";job?.interrupt()
     }
     func recover() {
-        guard job==nil, let m=meeting, RecoveryPresentation.canRetry(status:m.status,hasCapture:m.metadata["capture_dir"] is String,owner:m.recoveryState) else { return }
+        guard job==nil, let m=meeting, RecoveryPresentation.canRetry(status:m.status,hasCapture:!m.captureSourcesEmpty,owner:m.recoveryState) else { return }
         let mid=m.id;activity="Kayıt kontrol ediliyor ve aynı toplantı yeniden işleniyor…"
         launch(["retry",mid]) { [weak self] ok in
             guard let self=self else { return }
@@ -232,7 +235,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 }
 
 func statusLabel(_ status:String)->String {
-    ["complete":"Hazır", "processing":"İşleniyor", "provisional":"Canlı kayıt", "incomplete":"Kurtarılabilir", "failed":"İşlem başarısız", "canceled":"İptal edildi"][status] ?? status
+    ["not_started":"Kayıt başlayamadı", "pending_finalization":"Son işlem bekliyor", "capture_unknown":"Kayıt durumu belirsiz", "capturing":"Kaydediliyor", "complete":"Hazır", "processing":"İşleniyor", "provisional":"Canlı kayıt", "incomplete":"Kurtarılabilir", "failed":"İşlem başarısız", "canceled":"İptal edildi"][status] ?? status
 }
 struct MeetingContent:View {
     @StateObject var m=Model()
@@ -241,7 +244,7 @@ struct MeetingContent:View {
             VStack(alignment:.leading,spacing:14) {
                 HStack(spacing:11) { Image(systemName:"waveform").font(.system(size:23,weight:.semibold)).foregroundStyle(MeetingStyle.accent).frame(width:45,height:45).background(MeetingStyle.accent.opacity(0.13),in:RoundedRectangle(cornerRadius:14));VStack(alignment:.leading,spacing:3) { Text("Meeting OS").font(.system(size:23,weight:.bold,design:.rounded));Text("Boran’ın toplantı hafızası").font(.caption).foregroundStyle(.secondary) } }.padding(.bottom,12)
                 TextField("Toplantıya bir ad ver",text:$m.title).textFieldStyle(.roundedBorder)
-                Button(action:{ m.recording ? m.stop() : m.start() }) { Label(m.recording ? "Kaydı bitir":"Yeni kayıt",systemImage:m.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity) }.buttonStyle(.borderedProminent).controlSize(.large).tint(m.recording ? .red:MeetingStyle.accent).disabled(m.busy && !m.recording)
+                Button(action:{ m.recording ? m.stop() : m.start() }) { Label(RecoveryPresentation.recordingLabel(recording:m.recording,jobKind:m.jobKind),systemImage:m.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity) }.buttonStyle(.borderedProminent).controlSize(.large).tint(m.recording ? .red:MeetingStyle.accent).disabled(m.busy && !m.recording)
                 Button(action:m.importAudio) { Label("Ses dosyası aç",systemImage:"square.and.arrow.down").frame(maxWidth:.infinity) }.controlSize(.large).disabled(m.busy)
                 HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(m.meetings.count)").monospacedDigit().font(.caption) }.foregroundStyle(.secondary).padding(.top,14)
                 List(selection:$m.selected) { ForEach(m.meetings) { meeting in MeetingLibraryRow(meeting:meeting).tag(meeting.id) } }.listStyle(.sidebar)
@@ -253,12 +256,12 @@ struct MeetingContent:View {
             }.padding().navigationSplitViewColumnWidth(min:240,ideal:280)
         } detail: {
             VStack(alignment:.leading,spacing:0) {
-                HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Bir sonraki iyi fikri kaçırmayın.").font(.system(size:27,weight:.bold,design:.rounded)).lineLimit(2); HStack(spacing:6) { Circle().fill(MeetingStyle.statusColor(m.meeting?.status ?? "")).frame(width:6,height:6);Text(m.meeting.map { statusLabel($0.status) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary) }.padding(.top,5) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Özet ve görevler (Markdown)") { Task { await m.export("analysis.md") } }; Button("Transkript (Markdown)") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
+                HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Bir sonraki iyi fikri kaçırmayın.").font(.system(size:27,weight:.bold,design:.rounded)).lineLimit(2); HStack(spacing:6) { Circle().fill(MeetingStyle.statusColor(m.meeting?.displayStatus ?? "")).frame(width:6,height:6);Text(m.meeting.map { statusLabel($0.displayStatus) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary) }.padding(.top,5) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Özet ve görevler (Markdown)") { Task { await m.export("analysis.md") } }; Button("Transkript (Markdown)") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
                 if let meeting=m.meeting, meeting.metadata["capture_dir"] is String, !["complete","canceled"].contains(meeting.status), !m.busy {
                     HStack {
-                        Text(RecoveryPresentation.canRetry(status:meeting.status,hasCapture:true,owner:meeting.recoveryState) ? "Kurtarma aynı toplantıyı günceller; işlem bitene kadar önceki metin korunur." : "İşlem sürüyor veya durumu doğrulanamıyor. Kayıt değiştirilmedi.").font(.caption)
+                        Text(RecoveryPresentation.canRetry(status:meeting.status,hasCapture:!meeting.captureSourcesEmpty,owner:meeting.recoveryState) ? "Kurtarma aynı toplantıyı günceller; işlem bitene kadar önceki metin korunur." : (meeting.displayStatus == "not_started" ? "Ses alınamadı. macOS izinlerini kontrol edip yeni kayıt başlatın." : "İşlem sürüyor veya durumu doğrulanamıyor. Kayıt değiştirilmedi.")).font(.caption)
                         Spacer()
-                        if RecoveryPresentation.canRetry(status:meeting.status,hasCapture:true,owner:meeting.recoveryState) { Button("Toplantıyı kurtar",action:m.recover) }
+                        if RecoveryPresentation.canRetry(status:meeting.status,hasCapture:!meeting.captureSourcesEmpty,owner:meeting.recoveryState) { Button(meeting.displayStatus == "pending_finalization" ? "Transkripti tamamla" : "Toplantıyı kurtar",action:m.recover) }
                     }.padding(.horizontal,24).padding(.bottom,12)
                 }
                 if m.meeting?.metadata["text_only"] as? Bool == true { Text("Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8) }
