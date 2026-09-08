@@ -10,6 +10,10 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
+## A2.1 runtime qualification
+
+Completed weight-free qualification of pinned llama.cpp b10853 for candidate Qwen3-4B-Instruct-2507 GGUF Q4_K_S. See docs/candidates/ANALYSIS_CPU_QUALIFICATION.md and pinned JSON. Official runtime archive SHA verified; native help/version and analysis schema conversion passed. Model metadata pinned but weights NOT downloaded/evaluated; default unchanged. Claude reviewed design. Next checkpoint: disk/pressure check, single pinned file download with streamed SHA verification, experimental adapter/fake tests and one supervised short development case. Do not repeat runtime discovery or touch held-out cases prematurely.
+
 ## Open-lid microphone retest
 
 User opened lid and switched output from Bluetooth to built-in MacBook Air speakers. Read-only device inspection confirmed built-in input/output and open lid. Fresh13s actual capture: microphone RMS0.01748, system RMS0.11246, both separate channels. Guarded CPU pipeline transcribed microphone audio in7.11s, correctly recovering the played Turkish opening (product meeting, payment error, conversion drop). No audio settings changed in this final retest. Built-in microphone path now validated on this short controlled sample; natural live conversation, echo handling and long recordings still need testing. Local evidence: concept-test/builtin-retest-* under MeetingOS cache. No audio/transcripts published.

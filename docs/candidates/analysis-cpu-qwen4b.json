@@ -1,0 +1,27 @@
+{
+  "runtime": {
+    "tag": "b10853",
+    "asset": "llama-b10853-bin-macos-arm64.tar.gz",
+    "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10853/llama-b10853-bin-macos-arm64.tar.gz",
+    "digest": "sha256:44ac38967081c681880467e7d8ffed0fa4389797a659f446e87bc31c7e82c48b",
+    "bytes": 11137009,
+    "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b10853",
+    "reported_version": "0.4.0-dev (build10853, commit9dcf84e5a)"
+  },
+  "model": {
+    "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+    "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+    "file": "Qwen3-4B-Instruct-2507-Q4_K_S.gguf",
+    "lfs": {
+      "sha256": "90bc7227557ed8a417696b6ed8a94b2c351ad1d94de39bf2889ad8778366c68a",
+      "size": 2383309920,
+      "pointerSize": 135
+    },
+    "license": "apache-2.0"
+  },
+  "converter": {
+    "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/b10853/examples/json_schema_to_grammar.py",
+    "sha256": "574c9571b0200718f570a5fc702f08358c23134adaeb1ff7b1c7d214aa01b545"
+  },
+  "status": "runtime_qualified_model_not_downloaded_or_evaluated"
+}
