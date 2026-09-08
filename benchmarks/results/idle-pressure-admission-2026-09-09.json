@@ -1,0 +1,146 @@
+{
+  "experiment": "idle OS pressure before isolated public CPP admission",
+  "native_started": false,
+  "admission_failure": "MemoryPressureError",
+  "samples": [
+    {
+      "time": 1788906021.144866,
+      "pressure": 2,
+      "largest_measurable": [
+        {
+          "pid": 3757,
+          "name": "com.apple.Virtualization.VirtualMachine",
+          "footprint_bytes": 2390069088
+        },
+        {
+          "pid": 3171,
+          "name": "Codex (Renderer)",
+          "footprint_bytes": 1282215320
+        },
+        {
+          "pid": 68884,
+          "name": "VTDecoderXPCService",
+          "footprint_bytes": 837567088
+        },
+        {
+          "pid": 54293,
+          "name": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 436063448
+        },
+        {
+          "pid": 56067,
+          "name": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 322226432
+        },
+        {
+          "pid": 2597,
+          "name": "ChatGPT",
+          "footprint_bytes": 295144400
+        },
+        {
+          "pid": 2960,
+          "name": "Codex (Service)",
+          "footprint_bytes": 275645832
+        },
+        {
+          "pid": 25770,
+          "name": "Google Chrome",
+          "footprint_bytes": 243730544
+        }
+      ]
+    },
+    {
+      "time": 1788906026.212564,
+      "pressure": 2,
+      "largest_measurable": [
+        {
+          "pid": 3757,
+          "name": "com.apple.Virtualization.VirtualMachine",
+          "footprint_bytes": 2390069088
+        },
+        {
+          "pid": 3171,
+          "name": "Codex (Renderer)",
+          "footprint_bytes": 1273417112
+        },
+        {
+          "pid": 68884,
+          "name": "VTDecoderXPCService",
+          "footprint_bytes": 837567088
+        },
+        {
+          "pid": 54293,
+          "name": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 439471320
+        },
+        {
+          "pid": 56067,
+          "name": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 322226432
+        },
+        {
+          "pid": 2597,
+          "name": "ChatGPT",
+          "footprint_bytes": 306285520
+        },
+        {
+          "pid": 25770,
+          "name": "Google Chrome",
+          "footprint_bytes": 243746928
+        },
+        {
+          "pid": 3172,
+          "name": "Spotify Helper (Renderer)",
+          "footprint_bytes": 240175048
+        }
+      ]
+    },
+    {
+      "time": 1788906031.26609,
+      "pressure": 2,
+      "largest_measurable": [
+        {
+          "pid": 3757,
+          "name": "com.apple.Virtualization.VirtualMachine",
+          "footprint_bytes": 2390069088
+        },
+        {
+          "pid": 3171,
+          "name": "Codex (Renderer)",
+          "footprint_bytes": 1274482072
+        },
+        {
+          "pid": 68884,
+          "name": "VTDecoderXPCService",
+          "footprint_bytes": 837567088
+        },
+        {
+          "pid": 54293,
+          "name": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 430443736
+        },
+        {
+          "pid": 56067,
+          "name": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 322226432
+        },
+        {
+          "pid": 2597,
+          "name": "ChatGPT",
+          "footprint_bytes": 308218832
+        },
+        {
+          "pid": 25770,
+          "name": "Google Chrome",
+          "footprint_bytes": 243714160
+        },
+        {
+          "pid": 3172,
+          "name": "Spotify Helper (Renderer)",
+          "footprint_bytes": 240175048
+        }
+      ]
+    }
+  ],
+  "scope": "shared OS pressure can block inference before a model starts; not evidence that MeetingOS has zero memory impact"
+}

@@ -355,3 +355,10 @@ Read [CONCEPT_TEST_2026-09-08](CONCEPT_TEST_2026-09-08.md) before further infere
 ## Exit criteria
 
 Pause when this bounded backlog is complete or further acceptance requires unavailable hardware permissions or 3–5 consented natural meeting fixtures. Report remaining limits honestly. Do not invent endless features, keep retesting unchanged code, claim “perfect”, or claim a second Mac was tested. Publish only reviewed, tested source/bootstrap releases with checksums. Do not overwrite a running recording or unrelated user changes.
+
+
+## 2026-09-09 — idle admission pressure isolation
+
+After commit42b79ba and terminal Fable review, attempted a guarded isolated CPP decode of first3s of public FLEURS00 with unchanged CPU2/flash-attention/vocabulary. No capture or model process was running at preflight. OS pressure changed from normal to warning before admission; check_pressure raised before launching the decoder. No inference result or WER is claimed. Three following samples5s apart all reported pressure2. Largest measurable physical footprints: Docker VM2.39GB, Codex renderer1.27–1.28GB, VideoToolbox VTDecoderXPCService0.838GB, Chrome renderer0.430–0.439GB. Units are decimal bytes converted toGB; footprints include compressed accounting and are not RSS. Some processes cannot be measured.
+
+Video decoder parent is launchd; launchctl procinfo requires root, so owning client was not established and service was left untouched. Existing active Docker services and user apps also retained. This establishes shared pressure can prevent even standalone inference before model allocation, not that MeetingOS has no memory cost or that a particular app alone caused pressure. No guard was relaxed and no automatic retry launched. Evidence: benchmarks/results/idle-pressure-admission-2026-09-09.json. Full recording completion and live latency acceptance remain pending stable headroom; private raw recording,270provisional segments and69ASR checkpoints remain from last verified full trial.
