@@ -1,0 +1,46 @@
+{
+  "pid": 59643,
+  "state": "terminal",
+  "started_at": 1788904306.39925,
+  "experiment": "uncached snapshot transfers only",
+  "base_commit": "063e6c2",
+  "exit": 1,
+  "ended_at": 1788904320.897231,
+  "session": 63919,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "failure": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 59648,
+      "child_pid": 60117,
+      "sampled_peak_footprint_bytes": 140608664,
+      "samples": 3,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 0.324038999970071
+    },
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 59643,
+      "child_pid": 59648,
+      "sampled_peak_footprint_bytes": 159598200,
+      "samples": 122,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 14.421249957988039
+    }
+  ],
+  "stage": {
+    "stage": "vad",
+    "current": 0,
+    "total": 0,
+    "source": "mic",
+    "updated_at": 1788904320.484158
+  },
+  "scope": "Uncached snapshot transfer experiment completed assembly, resource stop at VAD entry. No completed VAD/ASR/full recovery or live latency claim. Not promoted."
+}
