@@ -1,0 +1,84 @@
+{
+  "run": {
+    "minutes_requested": 30,
+    "scope": "hardware_capture_only",
+    "status": "captured_pending_acceptance",
+    "resources": {
+      "peak_footprint_bytes": 20972648,
+      "samples": 12646,
+      "elapsed_seconds": 1800.9102451249491
+    },
+    "timeline": {
+      "scope": "metadata_only",
+      "sources": {
+        "mic": {
+          "chunks": 151,
+          "first_start": 0.24708154203835875,
+          "last_end": 1800.257748208705,
+          "covered_seconds": 1800.0106666666666,
+          "gap_seconds": 0.0,
+          "overlap_seconds": 0.0,
+          "out_of_order_chunks": 0
+        },
+        "system": {
+          "chunks": 151,
+          "first_start": 0.14650537504348904,
+          "last_end": 1800.2065053750434,
+          "covered_seconds": 1800.06,
+          "gap_seconds": 0.0,
+          "overlap_seconds": 0.0,
+          "out_of_order_chunks": 0
+        }
+      }
+    }
+  },
+  "validation": {
+    "header_validation": {
+      "status": "available",
+      "available_chunks": 302,
+      "missing_chunks": 0,
+      "invalid_chunks": 0,
+      "sources": {
+        "mic": 151,
+        "system": 151
+      },
+      "issues": [],
+      "validation": "header_only"
+    },
+    "decoded_sources": {
+      "mic": {
+        "chunks": 151,
+        "frames": 86400512,
+        "nonzero_samples": 86400509,
+        "peak": 0.19597014784812927,
+        "samples": 86400512,
+        "sample_rates": [
+          48000
+        ],
+        "channel_counts": [
+          1
+        ],
+        "rms": 0.002068574929848607
+      },
+      "system": {
+        "chunks": 151,
+        "frames": 86402880,
+        "nonzero_samples": 844196,
+        "peak": 0.8407427072525024,
+        "samples": 172805760,
+        "sample_rates": [
+          48000
+        ],
+        "channel_counts": [
+          2
+        ],
+        "rms": 0.01033863593669337
+      }
+    },
+    "partial_files": 0,
+    "native_stopped": true,
+    "source_metadata_unchanged": true,
+    "original_supervisor_and_native_pids_absent": true,
+    "scope": "30_minute_capture_only_not_asr_or_natural_accuracy"
+  }
+}
