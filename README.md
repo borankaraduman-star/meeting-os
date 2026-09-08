@@ -168,3 +168,11 @@ Uygulama kendi işinin fiziksel bellek kullanımını ve macOS bellek uyarılar�
 izler; kaynak baskısında işi durdurur. Kayıt sürüyorsa önce normal kapanış ister;
 hâlihazırdaki model çağrısı dönerken gecikme olabilir. İşletim sistemi veya diğer
 uygulamaların neden olduğu tüm bellek sorunlarını engelleme garantisi değildir.
+
+## 1.0.4 kurulum ve kayıt durdurma
+
+Standart kurulum artık yalnızca turbo STT, konuşmacı ve yerel özet modellerini indirir; büyük Whisper isteğe bağlı benchmark modelidir. Hugging Face CAS/Xet varsayılan olarak kapalıdır, HTTP indirme zaman aşımı 120 saniyedir. Hesap/token zorunlu değildir; açıkça ayarlanmış ortam değişkenleri korunur. Bu ayar tüm ağ hatalarını önleme garantisi değildir.
+
+Kayıt yardımcısı durdurma sinyalinden sonra 15 saniye içinde kapanmazsa uygulama kendi yardımcısını sonlandırır ve kaydı eksik olarak işaretler. Tamamlanmış ses parçaları ve günlük korunur. Hâlen çalışan native model çağrısının iptali ayrı bir sınırlamadır; bu sürüm onun için kesin bir zaman garantisi vermez.
+
+Güncel kalite döngüsü ve kalan kabul testleri: [ITERATION_CHECKPOINT](docs/ITERATION_CHECKPOINT.md).

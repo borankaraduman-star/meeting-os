@@ -1,4 +1,4 @@
-# Meeting OS 1.0.3 teslimi
+# Meeting OS 1.0.4 teslimi
 
 **Aç:** [Meeting OS.command](Meeting%20OS.command)
 
@@ -12,7 +12,7 @@ Bu Mac’te uygulama, yerel modeller ve Python ortamı hazırdır. Sesin üzerin
 - Toplantılar arası arama, kaynaklı yerel yanıt ve isteğe bağlı salt okunur MCP.
 - Metin/ses profili düzeltme, özel sözlük, kayıt kurtarma, Markdown/SRT/JSON export.
 
-Python tarafında 62 otomatik test geçti. Gece eklenen 7 Swift durum/gezinme testi de geçti. Üç kurgu analiz senaryosu gerçek yerel modelde geçti;
+Güncel turda 75 Python testi ve ardından eklenen indirme ayarı testi geçti (toplam 76 test). 9 Swift testi de geçti. Üç kurgu analiz senaryosu gerçek yerel modelde geçti;
 iptal/öneri, bilinmeyen sahip, söylenen tarih ve gömülü saldırı talimatları test edildi.
 Özet/görev/draft/hafıza arayüzleri, yerel dışa aktarım ve kayıtların yeniden
 okunması ayrıca kontrol edildi. Detaylar [V1 doğrulama raporunda](docs/VALIDATION_V1.md).

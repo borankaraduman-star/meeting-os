@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from .progress import emit
 
+CAPTURE_STOP_GRACE_SECONDS = 15.0
+
 def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None):
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -37,11 +39,12 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         finally: pending.put(None)
     thread=threading.Thread(target=reader,daemon=True); thread.start()
     print(json.dumps({'meeting':mid,'capture_dir':str(directory),'status':'capturing'},ensure_ascii=False),flush=True)
-    old_handler=signal.getsignal(signal.SIGINT); stopping=False
+    old_handler=signal.getsignal(signal.SIGINT); stopping=False; stop_deadline=None
     def stop(sig,frame):
-        nonlocal stopping
+        nonlocal stopping, stop_deadline
         if not stopping:
             stopping=True
+            stop_deadline=time.monotonic()+CAPTURE_STOP_GRACE_SECONDS
             if process.poll() is None: process.send_signal(signal.SIGINT)
             emit("stopping_capture")
             print('Stopping capture; draining finalized chunks...',flush=True)
@@ -50,7 +53,15 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         # Capture and its durable journal start before expensive model warm-up.
         if pipeline_factory is not None: pipeline=pipeline_factory()
         while True:
-            event=pending.get()
+            # The reader may never reach EOF if the native helper hangs.
+            # Check the deadline before waiting, including when chunks are queued.
+            if stop_deadline is not None and time.monotonic() >= stop_deadline:
+                if process.poll() is None:
+                    process.kill()
+                    errors.append('Capture did not exit after stop; recover finalized audio with finalize')
+                break
+            try: event=pending.get(timeout=.1)
+            except queue.Empty: continue
             if event is None: break
             if pipeline is None: print(json.dumps(event),flush=True); continue
             if stopping:
@@ -71,7 +82,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         try: code=process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             process.kill(); code=process.wait(); errors.append('Capture did not exit')
-        if stopping and captured[0]==0 and code in (0,-2,-15):
+        if stopping and not errors and captured[0]==0 and code in (0,-2,-15):
             if store: store.status(mid,'canceled')
             return mid
         if code: errors.append(f'Capture exited {code}')

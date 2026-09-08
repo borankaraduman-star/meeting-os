@@ -51,3 +51,23 @@ class LiveTests(unittest.TestCase):
             self.assertEqual(calls,[])
             self.assertIn('saved.wav',(root/'capture/events.jsonl').read_text())
             self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
+    def test_stop_times_out_when_capture_ignores_interrupt_and_keeps_stdout_open(self):
+        import signal,time
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); ready=root/'ready'; binary=root/'recorder'
+            binary.write_text('#!/usr/bin/env python3\nimport signal,time\nfrom pathlib import Path\nsignal.signal(signal.SIGINT,signal.SIG_IGN)\nPath('+repr(str(ready))+').write_text("ready")\ntime.sleep(1.5)\n')
+            binary.chmod(0o700);db=Store(root/'db')
+            def factory():
+                deadline=time.monotonic()+3
+                while not ready.exists():
+                    if time.monotonic()>deadline:raise RuntimeError('recorder did not start')
+                    time.sleep(.01)
+                signal.getsignal(signal.SIGINT)(signal.SIGINT,None)
+            started=time.monotonic()
+            with patch('meeting_os.live.CAPTURE_STOP_GRACE_SECONDS',.2,create=True):
+                with self.assertRaisesRegex(RuntimeError,'Capture did not exit'):
+                    record(binary,root/'capture',10,1,store=db,pipeline_factory=factory)
+            self.assertLess(time.monotonic()-started,1.2)
+            self.assertEqual(db.meetings()[0]['status'],'incomplete')
+            self.assertTrue((root/'capture/events.jsonl').exists());db.close()
