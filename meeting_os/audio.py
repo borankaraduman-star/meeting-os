@@ -8,6 +8,7 @@ import errno
 import numpy as np
 import soundfile as sf
 from scipy.signal import resample_poly
+from .progress import emit
 
 RATE = 16000
 
@@ -61,10 +62,11 @@ def assemble_capture(directory):
         required = frames_needed*4+4096+100*1024**2
         if shutil.disk_usage(directory).free < required:
             raise OSError(errno.ENOSPC, 'Insufficient disk space for assembled float audio')
+        emit('assembling',current=0,total=len(chunks),source=source)
         target = directory/f'{source}-full.wav'
         with sf.SoundFile(target, 'w', samplerate=RATE, channels=1, subtype='FLOAT') as out:
             cursor = 0
-            for e in chunks:
+            for index,e in enumerate(chunks):
                 path = Path(e['path']).resolve()
                 if path.parent != directory: raise ValueError('Chunk must be inside capture directory')
                 x = read_audio(path)
@@ -77,6 +79,7 @@ def assemble_capture(directory):
                 elif start < cursor:
                     x = x[min(len(x), cursor-start):]
                 out.write(x); cursor = max(cursor, start)+len(x)
+                emit('assembling',current=index+1,total=len(chunks),source=source)
         result[source] = str(target)
     if not result: raise ValueError('No finalized audio chunks')
     return result
