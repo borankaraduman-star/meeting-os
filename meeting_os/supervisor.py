@@ -6,8 +6,17 @@ import sys
 import signal
 import tempfile
 import time
-from .resources import check_pressure, physical_memory, GIB
+from .resources import check_pressure, physical_memory, GIB, ResourceProbeError
 
+
+class JobTimeoutError(RuntimeError):
+    pass
+
+class JobCancelledError(RuntimeError):
+    pass
+
+class JobMemoryLimitError(RuntimeError):
+    pass
 
 class ChildFailure(RuntimeError):
     def __init__(self,code):
@@ -26,7 +35,7 @@ def footprint(pid):
     lib.proc_pid_rusage.argtypes=[ctypes.c_int,ctypes.c_int,ctypes.c_void_p]
     lib.proc_pid_rusage.restype=ctypes.c_int
     if lib.proc_pid_rusage(pid,2,ctypes.byref(info)) != 0:
-        raise RuntimeError('İşlem bellek ölçümü okunamadı')
+        raise ResourceProbeError('İşlem bellek ölçümü okunamadı')
     return int(info.values[7])
 
 
@@ -68,15 +77,15 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
         guardian,lifeline=open_lifeline(process) if isolated else (None,None)
         old_handlers={}
         if isolated and handle_signals:
-            def canceled(sig,frame):raise RuntimeError('İşlem iptal edildi; ses korunuyor')
+            def canceled(sig,frame):raise JobCancelledError('İşlem iptal edildi; ses korunuyor')
             for sig in (signal.SIGINT,signal.SIGTERM):
                 old_handlers[sig]=signal.signal(sig,canceled)
         start=time.monotonic();peak=0;samples=0
         try:
             while process.poll() is None:
-                if cancel_requested and cancel_requested():raise RuntimeError("Canlı metin işlemi durduruldu; ses korunuyor")
+                if cancel_requested and cancel_requested():raise JobCancelledError("Canlı metin işlemi durduruldu; ses korunuyor")
                 if time.monotonic()-start > timeout:
-                    raise RuntimeError('Yerel model süre sınırını aştı; ses korunuyor')
+                    raise JobTimeoutError('Yerel model süre sınırını aştı; ses korunuyor')
                 check_pressure()
                 try:
                     if isolated:
@@ -96,7 +105,7 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
                     raise
                 peak=max(peak,usage);samples+=1
                 if usage>budget:
-                    raise RuntimeError('Yerel model bellek sınırını aştı; ses korunuyor')
+                    raise JobMemoryLimitError('Yerel model bellek sınırını aştı; ses korunuyor')
                 time.sleep(.1)
             if process.returncode:
                 if passthrough or not failure_details:raise ChildFailure(process.returncode)

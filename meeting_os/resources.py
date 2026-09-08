@@ -3,6 +3,13 @@ import json,subprocess,sys
 from pathlib import Path
 GIB=1024**3
 
+class MemoryPressureError(RuntimeError):
+    """OS reported non-normal memory pressure; no content-bearing metadata."""
+
+class ResourceProbeError(RuntimeError):
+    """Resource state could not be read; distinct from observed pressure."""
+
+
 def physical_memory():
     if sys.platform!='darwin':return 0
     try:return int(subprocess.check_output(['/usr/sbin/sysctl','-n','hw.memsize'],timeout=2))
@@ -12,8 +19,8 @@ def check_pressure():
     if sys.platform!='darwin':return
     try:level=int(subprocess.check_output(['/usr/sbin/sysctl','-n','kern.memorystatus_vm_pressure_level'],timeout=2))
     except (OSError,ValueError,subprocess.SubprocessError) as exc:
-        raise RuntimeError(f"Bellek durumu okunamadı ({type(exc).__name__}); güvenlik için yerel model başlatılmadı.") from exc
-    if level!=1:raise RuntimeError('Mac bellek baskısı altında. Ağır uygulamaları kapatıp yeniden deneyin; ses dosyaları korunuyor.')
+        raise ResourceProbeError(f"Bellek durumu okunamadı ({type(exc).__name__}); güvenlik için yerel model başlatılmadı.") from exc
+    if level!=1:raise MemoryPressureError('Mac bellek baskısı altında. Ağır uygulamaları kapatıp yeniden deneyin; ses dosyaları korunuyor.')
 
 def check_asr_model(path):
     cfg=Path(path)/'config.json'
