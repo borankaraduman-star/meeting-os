@@ -1,3 +1,7 @@
+## Latest: bounded final-audio residency implemented
+
+See `BOUNDED_FINAL_AUDIO.md`. Retry now releases mmap-backed analysis audio before ASR and reads exact VAD regions on demand. Synthetic no-model footprint at ASR entry drops ~433 MiB; six new correctness/lifetime tests, pipeline and retry suites pass. Native short-pipeline validation and real recovery remain pending. No active retry; do not treat old PID notes below as current. Goal incomplete.
+
 ## Latest: recovery stopped safely under OS memory pressure
 
 Parent 40778 and worker 40784 exited; meeting 553993e7544a remains incomplete with original 270 provisional segments. Log ends with MemoryPressureError wording. Diarization completed, ASR reached at least 12/391 before last observed progress; final result was not committed. Targeted dead-owner retry cleanup removed one temporary snapshot; audio and SQLite backup remain. No immediate duplicate/retry. Full decoded source audit now proves all mic chunks valid/nonzero and all system chunks zero. Next required work: reduce final/live working set or make final phases resumable; capture peak/pressure failure telemetry before any further long retry. Window benchmark is prepared but unrun. Goal incomplete.

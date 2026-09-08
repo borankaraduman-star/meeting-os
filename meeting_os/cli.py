@@ -87,7 +87,7 @@ def run_retry(args,store):
         paths=assemble_capture(work)
         pipe=make_pipeline(args,store)
         for source,path in sorted(paths.items()):
-            with contextlib.redirect_stdout(sys.stderr):rows,_,_=pipe.process(path,source)
+            with contextlib.redirect_stdout(sys.stderr):rows,_,_=pipe.process(path,source,bounded_final=True)
             yield from rows
     retry=RetryStore(store)
     from .retry_workspaces import cleanup_workspaces

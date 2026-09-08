@@ -57,7 +57,7 @@ class RetryCaptureTests(unittest.TestCase):
             with patch('sys.argv',args),patch('meeting_os.supervisor.run_guarded') as guarded:
                 main();guarded.assert_called_once();self.assertTrue(guarded.call_args.kwargs['isolated'])
             class Pipe:
-                def process(self,path,source):
+                def process(self,path,source,*,bounded_final=False):
                     if Path(path).parent==capture:raise AssertionError('raw directory modified')
                     return [Segment(0,.01,'CLI result',source)],[],.01
             stream=io.StringIO()
@@ -130,7 +130,7 @@ print(json.dumps({'event':'chunk','source':'system','path':str(path),'start':0,'
             with patch('sys.argv',['meeting_os','--db',str(dbpath),'record',str(capture),'--seconds','1','--capture-bin',str(helper),'--output',str(receipt)]),contextlib.redirect_stdout(io.StringIO()):main(supervised=True)
             mid=json.loads(receipt.read_text())['meeting']
             class Pipe:
-                def process(self,path,source):return [Segment(0,.01,'final fixture',source)],[],.01
+                def process(self,path,source,*,bounded_final=False):return [Segment(0,.01,'final fixture',source)],[],.01
             with patch('sys.argv',['meeting_os','--db',str(dbpath),'retry',mid]),patch('meeting_os.cli.make_pipeline',return_value=Pipe()),contextlib.redirect_stdout(io.StringIO()):main(supervised=True)
             db=Store(dbpath);self.assertEqual(len(db.meetings()),1);self.assertEqual(db.meetings()[0]['id'],mid)
             self.assertEqual(db.meetings()[0]['status'],'complete');self.assertEqual(db.segments(mid)[0]['text'],'final fixture');db.close()

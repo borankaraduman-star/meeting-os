@@ -1,0 +1,16 @@
+{
+  "fixture_seconds": 3154,
+  "results": [
+    {
+      "bounded": false,
+      "python_footprint_bytes_at_asr": 532448144,
+      "clip_samples": 16000
+    },
+    {
+      "bounded": true,
+      "python_footprint_bytes_at_asr": 77972008,
+      "clip_samples": 16000
+    }
+  ],
+  "limit": "Fake ASR/VAD/diarization: isolates audio residency, not total real model memory or recognition quality."
+}
