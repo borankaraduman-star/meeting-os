@@ -1,0 +1,33 @@
+{
+  "native": {
+    "exact_turn_match": true,
+    "turns": 13,
+    "speakers": 4,
+    "duration": 95.58,
+    "threshold": 0.9,
+    "scope": "public constructed four-voice native file handoff"
+  },
+  "parent_memory": {
+    "seconds": 3154,
+    "scope": "synthetic audio, fake models; parent residency at diarization entry only",
+    "runs": [
+      {
+        "mode": "array",
+        "at_diarization_bytes": 279708368
+      },
+      {
+        "mode": "file",
+        "at_diarization_bytes": 77726248
+      }
+    ]
+  },
+  "real_long_attempt_before_fix": {
+    "exit_code": 75,
+    "kind": "MemoryPressureError",
+    "duration_seconds": 107.17237845796626,
+    "sampled_tree_peak_bytes": 1906363608,
+    "phase": "isolated_diarization",
+    "original_segments_preserved": 270,
+    "private_retry_workspaces_cleaned": 1
+  }
+}

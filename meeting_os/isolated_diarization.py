@@ -17,23 +17,42 @@ def isolated_turns(audio,source,model,threshold):
         root=Path(tmp);wav=root/'input.wav';out=root/'turns.json'
         if shutil.disk_usage(root).free < audio.nbytes+100*1024**2:raise OSError('Insufficient diarization disk space')
         sf.write(wav,audio,RATE,subtype='FLOAT')
-        # Same owned process group as the caller: outer CLI lifeline can reap
-        # this worker too. Worker performs no further subprocess/model jobs.
-        run_guarded([sys.executable,'-m','meeting_os.isolated_diarization','--audio',str(wav),
-            '--output',str(out),'--model',str(Path(model).resolve()),'--source',source,
-            '--threshold',str(threshold)],timeout=600)
-        with out.open('rb') as f:raw=f.read(4*1024**2+1)
-        if len(raw)>4*1024**2:raise ValueError('Diarization result too large')
-        data=json.loads(raw)
-        if not isinstance(data,list) or len(data)>10000:raise ValueError('Invalid diarization result')
-        turns=[];previous=-1
-        for row in data:
-            if not isinstance(row,list) or len(row)!=3:raise ValueError('Invalid diarization turn')
-            a,b,s=row
-            if type(a) not in (int,float) or type(b) not in (int,float) or not math.isfinite(a) or not math.isfinite(b) or not 0<=a<b<=len(audio)/RATE or a<previous:
-                raise ValueError('Invalid diarization timeline')
-            if not isinstance(s,str) or not s.startswith(source+':S') or not s[len(source)+2:].isdigit():raise ValueError('Invalid speaker label')
-            turns.append((a,b,s));previous=a
+        return _run_child(wav,out,source,model,threshold,len(audio))
+
+
+def _run_child(wav,out,source,model,threshold,frames):
+    # Same owned process group as the caller: outer CLI lifeline can reap
+    # this worker too. Worker performs no further subprocess/model jobs.
+    run_guarded([sys.executable,'-m','meeting_os.isolated_diarization','--audio',str(wav),
+        '--output',str(out),'--model',str(Path(model).resolve()),'--source',source,
+        '--threshold',str(threshold)],timeout=600)
+    with out.open('rb') as f:raw=f.read(4*1024**2+1)
+    if len(raw)>4*1024**2:raise ValueError('Diarization result too large')
+    data=json.loads(raw)
+    if not isinstance(data,list) or len(data)>10000:raise ValueError('Invalid diarization result')
+    turns=[];previous=-1
+    for row in data:
+        if not isinstance(row,list) or len(row)!=3:raise ValueError('Invalid diarization turn')
+        a,b,s=row
+        if type(a) not in (int,float) or type(b) not in (int,float) or not math.isfinite(a) or not math.isfinite(b) or not 0<=a<b<=frames/RATE or a<previous:
+            raise ValueError('Invalid diarization timeline')
+        if not isinstance(s,str) or not s.startswith(source+':S') or not s[len(source)+2:].isdigit():raise ValueError('Invalid speaker label')
+        turns.append((a,b,s));previous=a
+    return turns
+
+
+def isolated_file_turns(path,source,model,threshold,frames):
+    """Only for retry-owned immutable mono16k snapshots; never delete input."""
+    path=Path(path).resolve(strict=True)
+    def signature():
+        st=path.stat();return (st.st_dev,st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)
+    before=signature();info=sf.info(path)
+    if type(frames) is not int or not 0<frames<=RATE*14400 or info.frames!=frames or info.samplerate!=RATE or info.channels!=1:
+        raise ValueError('Invalid immutable diarization snapshot')
+    if not isinstance(source,str) or not source or len(source)>128:raise ValueError('Invalid source label')
+    with tempfile.TemporaryDirectory(prefix='meeting-os-diarization-') as tmp:
+        turns=_run_child(path,Path(tmp)/'turns.json',source,model,threshold,frames)
+        if signature()!=before:raise ValueError('Diarization snapshot changed')
         return turns
 
 

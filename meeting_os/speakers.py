@@ -66,6 +66,11 @@ class Diarizer:
             if not model or not Path(model).exists(): raise ValueError('pyannote requires an explicitly downloaded local pipeline')
             from pyannote.audio import Pipeline
             self.pipeline = Pipeline.from_pretrained(str(Path(model).resolve()))
+    def turns_file(self,path,source,frames):
+        if self.mode!='sherpa' or not self.isolate_sherpa:raise ValueError('File diarization requires isolated Sherpa')
+        from .isolated_diarization import isolated_file_turns
+        return isolated_file_turns(path,source,self.sherpa_root,self.threshold,frames)
+
     def turns(self, audio, source):
         if self.mode == 'sherpa' and self.isolate_sherpa:
             from .isolated_diarization import isolated_turns

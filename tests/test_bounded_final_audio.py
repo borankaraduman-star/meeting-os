@@ -80,3 +80,20 @@ class BoundedFinalTests(unittest.TestCase):
   with patch('soundfile.SoundFile',return_value=reader),self.assertRaisesRegex(ValueError,'truncated'):
    Pipeline(None,None,None).process('unused',bounded_final=True)
   self.assertTrue(reader.closed)
+
+ def test_isolated_file_diarization_releases_mapping_before_child(self):
+  refs=[];case=self
+  class D:
+   mode='sherpa';isolate_sherpa=True
+   def turns_file(self,path,source,frames):
+    case.assertIsNone(refs[0]())
+    case.assertEqual(frames,32000)
+    return []
+   def turns(self,*args):raise AssertionError('must use immutable file')
+  class A:
+   def transcribe(self,x):return []
+  def vad(x):refs.append(weakref.ref(x));return [(0,32000)]
+  with tempfile.TemporaryDirectory() as tmp:
+   p=Path(tmp)/'audio.wav';sf.write(p,np.ones(32000)*.1,16000,subtype='FLOAT')
+   with patch('meeting_os.pipeline.speech_regions',new=vad):
+    Pipeline(A(),D(),None).process(p,bounded_final=True)

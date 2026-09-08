@@ -1,3 +1,7 @@
+## Latest: long attempt terminal; file handoff now frees parent audio before diarization
+
+Session27868 exited75 after107.17s in isolated diarization (sampled tree peak1.91GB); original270segments preserved, one dead-owner retry workspace cleaned. No running recovery from that attempt. Bounded-final path now releases mmap afterVAD and sends existing private snapshot path to child, with shape/frame and file-change checks.26tests passed; native13turns identical; synthetic3154s parent-at-diarization footprint280MB→78MB. Claude review covered private-file mutation assumptions. Full long-record validation after this additional change remains pending. Do not restart from old PIDs or old running watch notes below.
+
 ## Active long recovery after isolated-diarization change — revalidate before action
 
 New guarded retry session27868, parent78102/worker78113, isolated Sherpa child78478 was observed live on real meeting553993e7544a. Reached isolated full-record diarization;270original segments retained. Logs `build/recovery-isolated-real.{stderr,stdout}.log`; current observation `build/recovery-isolated-watch.json`. These are observations, not permanent ownership. Poll the existing session/check exact processes; do not start a duplicate or edit running pipeline code. No progress-path env was set for this launch, so phase comes from live child command and logs. Full result remains unverified. Goal active.

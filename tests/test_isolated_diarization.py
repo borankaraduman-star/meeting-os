@@ -53,3 +53,19 @@ class IsolatedDiarizationTests(unittest.TestCase):
         def native(cmd,**kwargs):Path(cmd[cmd.index('--output')+1]).write_text(json.dumps(turns))
         with patch('meeting_os.isolated_diarization.run_guarded',side_effect=native):
             self.assertEqual(isolated_turns(np.zeros(16000),'mic',Path('/models'),.9),[(0,.8,'mic:S0'),(.4,1,'mic:S1')])
+
+    def test_file_handoff_uses_existing_snapshot_and_rejects_change(self):
+        from meeting_os.isolated_diarization import isolated_file_turns
+        with tempfile.TemporaryDirectory() as tmp:
+            wav=Path(tmp)/'audio.wav';sf.write(wav,np.zeros(16000),16000,subtype='FLOAT')
+            for mutate in (False,True):
+                def native(cmd,**kwargs):
+                    self.assertEqual(Path(cmd[cmd.index('--audio')+1]),wav.resolve())
+                    Path(cmd[cmd.index('--output')+1]).write_text('[[0,1,"mic:S0"]]')
+                    if mutate:sf.write(wav,np.ones(16000)*.2,16000,subtype='FLOAT')
+                with patch('meeting_os.isolated_diarization.run_guarded',side_effect=native):
+                    if mutate:
+                        with self.assertRaises(ValueError):isolated_file_turns(wav,'mic',Path('/models'),.9,16000)
+                    else:self.assertEqual(isolated_file_turns(wav,'mic',Path('/models'),.9,16000),[(0,1,'mic:S0')])
+            with self.assertRaises(ValueError):isolated_file_turns(wav,'mic',Path('/models'),.9,32000)
+            self.assertTrue(wav.exists())

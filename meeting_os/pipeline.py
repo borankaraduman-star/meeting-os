@@ -50,7 +50,11 @@ class Pipeline:
         regions = speech_regions(audio)
         if not regions: return [], [], len(audio)/RATE
         emit("diarizing",source=source)
-        turns = self.diarizer.turns(audio,source)
+        if reader is not None and getattr(self.diarizer,'isolate_sherpa',False) is True:
+            audio=None  # Retry owns the file; avoid keeping a second full recording.
+            turns = self.diarizer.turns_file(path,source,reader.frames)
+        else:
+            turns = self.diarizer.turns(audio,source)
         if reader is not None:
             audio=None  # Unreferenced mmap pages return to OS, not NumPy's cache.
         window_counts = {}
