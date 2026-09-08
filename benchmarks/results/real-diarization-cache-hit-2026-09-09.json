@@ -1,0 +1,9 @@
+{
+  "cache_hits": 1,
+  "cache_misses": 0,
+  "turns": 442,
+  "seconds_including_hashing": 1.043705000076443,
+  "native_inference_forbidden": true,
+  "turn_digest": "1cb3055db34cddcef391b595d28b1245be7dac044b1956ba2a29aaf2b5d87968",
+  "scope": "fresh process reads real full-record schema2 cache using same immutable snapshot; independently regenerated snapshot acceptance still pending"
+}

@@ -1,3 +1,7 @@
+## Latest: real schema2 diarization cache read verified; canonical retry active
+
+Session91879,parent33865/worker33878 confirmed running; full diarization completed,56priorASR hits and new work beyond60/392. Independent fresh-process probe prohibited native inference and retrieved all442real turns with hit1/miss0/error0 in1.044s including hashing, same immutable snapshot. Evidence benchmarks/results/real-diarization-cache-hit-2026-09-09.json. This proves real schema2 cache reading; full retry with independently regenerated snapshot still pending. Metadata-only variation was tested on public native fixture. Do not edit runtime/cache identity inputs or restart while session91879 is live. Logs build/recovery-canonical.*. Goal incomplete.
+
 ## Latest: fixed WAV timestamp causing real diarization cache misses
 
 Session41921,parent28739/worker28750 intentionally canceled, terminalexit1/JobCancelledError144.24s. Real cache miss revealed whole-WAV hashing includes PEAKcreationtime. Schema2 exact float32 sample hash now ignores metadata, preserves bit-level audio/config/runtime identity.30tests+native altered-timestamp13turn equality/hit passed.270segments and56ASR rows preserved, one private workspace cleaned. Previous schema1 diarization rows safely miss; one schema2 full computation needed before real reuse. See DIARIZATION_CHECKPOINT_PLAN.md. No active recovery from that session. Goal incomplete.
