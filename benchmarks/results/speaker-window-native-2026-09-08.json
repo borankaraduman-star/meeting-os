@@ -1,0 +1,59 @@
+{
+  "kind": "synthetic same TTS voice, real VAD/diarizer/embedder/CPP; not human meeting accuracy",
+  "runs": [
+    {
+      "enabled": false,
+      "seconds": 10.79851366695948,
+      "asr_calls": 2,
+      "call_frames": [
+        40064,
+        54598
+      ],
+      "segments": 2,
+      "turns": [
+        [
+          0.03096874989569187,
+          6.092375,
+          "system:S1"
+        ]
+      ],
+      "wer": 0.0,
+      "word_errors": 0,
+      "reference_words": 11,
+      "merged_segments": 0,
+      "known_identities": 0
+    },
+    {
+      "enabled": true,
+      "seconds": 5.295884874998592,
+      "asr_calls": 1,
+      "call_frames": [
+        97478
+      ],
+      "segments": 1,
+      "turns": [
+        [
+          0.03096874989569187,
+          6.092375,
+          "system:S1"
+        ]
+      ],
+      "wer": 0.0,
+      "word_errors": 0,
+      "reference_words": 11,
+      "merged_segments": 1,
+      "known_identities": 0
+    }
+  ],
+  "resources": {
+    "peak_footprint_bytes": 1582058616,
+    "samples": 149,
+    "elapsed_seconds": 17.949938291916624
+  },
+  "limitations": [
+    "Single off/on order, cache/model warm-up may contribute; not ABBA",
+    "TTS voice is not human meeting ground truth",
+    "Empty profile store does not validate saved-identity consistency",
+    "Real first-mic-chunk trial failed OS pressure before comparison; no promotion"
+  ]
+}

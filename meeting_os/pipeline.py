@@ -53,6 +53,12 @@ class Pipeline:
         turns = self.diarizer.turns(audio,source)
         if reader is not None:
             audio=None  # Unreferenced mmap pages return to OS, not NumPy's cache.
+        window_counts = {}
+        if provisional and getattr(self.asr,'engine',None)=='cpp' and getattr(self.asr,'same_speaker_windows',False) is True and not getattr(self.asr,'batch_regions',False):
+            from .speaker_windows import group_regions
+            original_regions = regions
+            regions = group_regions(regions, turns)
+            window_counts = {(a,b):sum(a<=x and y<=b for x,y in original_regions) for a,b in regions}
         result = []
         batch_rows = None
         if provisional and getattr(self.asr,'engine',None)=='cpp' and getattr(self.asr,'batch_regions',False) is True and len(regions)>1:
@@ -78,6 +84,9 @@ class Pipeline:
                 metrics = {k:row[k] for k in ('avg_logprob','no_speech_prob','compression_ratio','temperature') if k in row}
                 if row.get('word_timing'):metrics['word_timing']=row['word_timing']
                 flags = ['provisional'] if provisional else []
+                if window_counts.get((begin,end),1)>1:
+                    metrics['asr_window_regions']=window_counts[(begin,end)]
+                    flags.append('experimental_asr_window')
                 if metrics.get('avg_logprob',0) < -0.8: flags.append('low_asr_confidence')
                 if metrics.get('no_speech_prob',0) > 0.5: flags.append('possible_non_speech')
                 if metrics.get('compression_ratio',0) > 2.4: flags.append('repetition')

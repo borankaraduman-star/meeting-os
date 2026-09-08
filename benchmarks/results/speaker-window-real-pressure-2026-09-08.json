@@ -1,0 +1,9 @@
+{
+  "status": "failed",
+  "reason": "MemoryPressureError",
+  "sampled_peak_footprint_bytes": 1676364944,
+  "elapsed_seconds": 5.95670904207509,
+  "budget_bytes": 3758096384,
+  "scope": "real meeting first finalized mic chunk, temporary independent store, originals untouched",
+  "comparison_complete": false
+}

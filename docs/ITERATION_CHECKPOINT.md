@@ -1,3 +1,7 @@
+## Latest: same-speaker window opt-in implemented; synthetic native benefit only
+
+Internal provisional CPP opt-in groups nearby same-detected-speaker spans with full-span exclusion and coverage guards. Default/final unchanged; not exposed in live tuning. 20 relevant tests passed. Real local model TTS test reduced ASR calls 2→1 and time 10.80→5.30s, both WER0/11 words, but single-order/synthetic/empty-profile limits remain. Actual first real mic chunk trial failed OS pressure after5.96s before comparison; no promotion. See `SAME_SPEAKER_WINDOWS.md`. Real recovery/live latency/human identity acceptance remain open.
+
 ## Latest: float audio fidelity fix implemented and checked
 
 Assembly and CPP single/batch temporary WAVs now preserve float32 samples rather than clipping/quantizing to PCM16. Added output-space preflight with 100MiB reserve; float temp disk cost doubles. Reproduction failed before fix, 25 relevant tests pass. Installed CPP read 3s public FLOAT WAV and returned text; hardware test assembly retains all 20 over-unity system samples. See `FLOAT_AUDIO_FIDELITY.md`. No accuracy gain claimed; prior WER scores predate format change. Claude call did not yield a review. Real meeting recovery and live latency still incomplete.
