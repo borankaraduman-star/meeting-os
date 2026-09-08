@@ -62,9 +62,8 @@ extension Model {
         }
     }
     func openEvidence(_ e:Evidence) {
-        if !e.meeting.isEmpty && !meetings.contains(where: { $0.id==e.meeting }) {
-            error="Kaynak toplantı bulunamadı."; return
-        }
+        // The library cache may lag behind search results. Resolve against the
+        // target snapshot; an empty/missing source is reported by the resolver.
         if !e.meeting.isEmpty { selected=e.meeting }
         tab="transcript"; search=""; error=""; pendingEvidence=e
         if !rows.isEmpty { resolvePendingEvidence() }

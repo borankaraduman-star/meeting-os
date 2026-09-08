@@ -16,3 +16,7 @@ no acoustic echo cancellation, and GUI-specific macOS recording consent remains
 uncompleted. Prior CLI capture verification does not imply GUI consent. Seven
 Swift tests cover extracted recording selection and evidence resolver policies;
 full async Model integration is covered only by the listed manual UI flows.
+
+Cycle7 follow-up at 08:08: Swift7 passed again after removing stale library-cache
+rejection; release build passed in 4.59s. CUA cross-meeting source flow passed.
+Final Claude review completed and dispositions recorded in NIGHT_ITERATION.md.
