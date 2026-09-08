@@ -23,7 +23,7 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    transkripti ayrı bir arşiv kaydı olarak oluşturur. Canlı kayıt kurtarma için korunur.
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
-5. **Özet ve kararlar** ekranında her maddenin kaynak alıntısını kontrol edin.
+5. **Özet** ekranında her maddenin kaynak alıntısını kontrol edin.
    Kayıt son işlemi ve dosya içe aktarımı bittiğinde yerel analiz otomatik başlar.
    İsim/metin düzeltince analiz eski işaretlenir; **Analizi güncelle** seçin.
 6. Aynı kişinin sonraki toplantılarda tanınması için en az 3 saniyelik temiz,
