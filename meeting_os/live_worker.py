@@ -17,9 +17,15 @@ class IsolatedLivePipeline:
             return [Segment(**row) for row in data['segments']],data['turns'],data['duration']
 
 def main():
+    data=json.loads(Path(sys.argv[1]).read_text())
+    from .audio_probe import digital_silence_duration
+    duration=digital_silence_duration(data['path'])
+    if duration is not None:
+        Path(sys.argv[2]).write_text(json.dumps({'segments':[], 'turns':[], 'duration':duration}))
+        return
     from .cli import make_pipeline
     from .store import Store
-    data=json.loads(Path(sys.argv[1]).read_text());args=argparse.Namespace(**data['options']);args.vocabulary=Path(args.vocabulary)
+    args=argparse.Namespace(**data['options']);args.vocabulary=Path(args.vocabulary)
     store=Store(args.db)
     try:
         pipeline=make_pipeline(args,store)

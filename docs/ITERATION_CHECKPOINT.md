@@ -10,7 +10,11 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
-## Current checkpoint — Claude-authored native UI installed and tested
+## Current checkpoint — user recording inspected, silence overhead and status fixed
+
+User-owned recording was active; do not stop it or rebuild/re-sign/relaunch until it finishes. Added conservative exact-zero per-chunk shortcut before model/DB construction, and evidence-based live display status with retry protection. Claude reviewed edge cases; differential duration parity caught/fixed. 28 targeted tests passed. Native capture reached ~432s with no errors and normal memory pressure. System samples remained zero while mic contained signal; playback route unconfirmed. Live lag ~150s remains a throughput problem, not solved by this bounded optimization. See LIVE_OBSERVATION_2026-09-08.md. Check current processes before any further action; historical statements below about no active recording are stale.
+
+## Historical checkpoint — Claude-authored native UI installed and tested
 
 User requested Claude implement a modern usable UI. Claude Code Sonnet edited isolated desktop source only; Codex integrated and tested it. Fixed actual overflow: old NavigationSplitView content was1489px high inside1000x852 window; record button115px above window and title216px above. New fixed264px sidebar + flexible detail HStack, bounded list/content scroll regions, independent headers/footer, extracted Layout.swift/TranscriptView.swift. Responsive intelligence views, bounded expandable errors, accessibility IDs, scrollable sheets; Codex added explicit cancel/empty profiles and footer hit targets. Model/runtime and intelligence Model extension byte-identical to previous commit. Preserve all existing recording/recovery/evidence/enrollment logic.
 
