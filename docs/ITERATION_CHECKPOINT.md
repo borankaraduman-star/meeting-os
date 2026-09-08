@@ -1,3 +1,7 @@
+## Active long recovery after isolated-diarization change — revalidate before action
+
+New guarded retry session27868, parent78102/worker78113, isolated Sherpa child78478 was observed live on real meeting553993e7544a. Reached isolated full-record diarization;270original segments retained. Logs `build/recovery-isolated-real.{stderr,stdout}.log`; current observation `build/recovery-isolated-watch.json`. These are observations, not permanent ownership. Poll the existing session/check exact processes; do not start a duplicate or edit running pipeline code. No progress-path env was set for this launch, so phase comes from live child command and logs. Full result remains unverified. Goal active.
+
 ## Latest: Sherpa isolation enabled for <=16GiB Mac; real short comparison completed
 
 Same native13turns/four-speaker output at production threshold.9. Parent residency after diarization674MB→268MB (~387MiB reduction), while diarization tree peak increases686MB→801MB. Factory uses bounded direct worker on low-memory Macs. See `ISOLATED_DIARIZATION.md`. Real first mic chunk now completed (both window flag states): same text/turns,3calls each,no eligible merges,~16s. No live speed gain claimed. Claude review completed and overlap-rejection suggestion rejected with a regression test. Long meeting recovery still incomplete; next run must be newly verified rather than reusing prior PIDs.
