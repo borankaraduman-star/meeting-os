@@ -75,6 +75,20 @@ def run_transcribe(args,store,paths=None):
     if args.output: args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False))
     return result
 
+def run_retry(args,store):
+    from .retry import RetryStore
+    from .retry_capture import retry_capture
+    from .recovery import current_job_metadata
+    def process(work):
+        from .audio import assemble_capture
+        emit('assembling')
+        paths=assemble_capture(work)
+        pipe=make_pipeline(args,store)
+        for source,path in sorted(paths.items()):
+            with contextlib.redirect_stdout(sys.stderr):rows,_,_=pipe.process(path,source)
+            yield from rows
+    return retry_capture(RetryStore(store),args.meeting,current_job_metadata()['worker_identity'],process)
+
 def parser():
     p=argparse.ArgumentParser(description='Meeting OS V1 — local Turkish meetings and memory')
     p.add_argument('--db',type=Path,default=DATA_DIR/'meeting-os.sqlite')
@@ -86,6 +100,7 @@ def parser():
     t=sub.add_parser('transcribe'); t.add_argument('audio',type=Path); t.add_argument('--source',choices=['mic','system'],default='system'); t.add_argument('--title',default='Imported meeting'); t.add_argument('--output',type=Path); inference_options(t)
     f=sub.add_parser('finalize'); f.add_argument('directory',type=Path); f.add_argument('--title',default='Final meeting'); f.add_argument('--output',type=Path); inference_options(f)
     r=sub.add_parser('record'); r.add_argument('directory',type=Path); r.add_argument('--seconds',type=float,default=3600); r.add_argument('--chunk-seconds',type=float,default=12); r.add_argument('--live',action='store_true'); r.add_argument('--title',default='Live meeting'); r.add_argument('--capture-bin',default=str(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture')); inference_options(r)
+    retry=sub.add_parser('retry'); retry.add_argument('meeting'); inference_options(retry)
     sub.add_parser('meetings')
     recovery=sub.add_parser('recovery'); recovery.add_argument('--mark-interrupted',metavar='MEETING'); recovery.add_argument('--audio',action='store_true',help='Inspect finalized capture headers without loading audio or models')
     s=sub.add_parser('show'); s.add_argument('meeting'); s.add_argument('--json',action='store_true')
@@ -108,7 +123,7 @@ def main(supervised=False):
     args=parser().parse_args()
     os.umask(0o077)
     try:
-        if not supervised and args.command in ('import','transcribe','finalize','analyze','prepare','ask'):
+        if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask'):
             from .supervisor import run_guarded
             def interrupted(pid):
                 from .store import Store
@@ -175,6 +190,7 @@ def main(supervised=False):
                 from .live_worker import IsolatedLivePipeline
                 factory=(lambda: IsolatedLivePipeline(args)) if args.live else None
                 record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory)
+            elif args.command=='retry': output(run_retry(args,store))
             elif args.command=='meetings': output(store.meetings())
             elif args.command=='recovery':
                 from .recovery import list_recovery,mark_interrupted

@@ -74,7 +74,8 @@ class RetryStore:
             used=self.db.execute('SELECT COALESCE(SUM(length(CAST(payload AS BLOB))),0) FROM retry_segments WHERE attempt=?',(attempt,)).fetchone()[0]
             if used+len(payload.encode())>MAX_STAGE_BYTES:raise ValueError('Retry staging budget exceeded')
             self.db.execute('INSERT INTO retry_segments VALUES(?,?,?)',(attempt,sequence,payload))
-    def finish(self,attempt,expected_count):
+    def finish(self,attempt,expected_count,source_digest=None):
+        if source_digest is not None and (not isinstance(source_digest,str) or len(source_digest)!=64 or any(c not in '0123456789abcdef' for c in source_digest)):raise ValueError('Invalid retry source digest')
         if type(expected_count)!=int or not 1<=expected_count<=10000:raise ValueError('Explicit complete segment count required')
         with self.transaction():
             old=self.db.execute('SELECT state FROM retry_attempts WHERE id=?',(attempt,)).fetchone()
@@ -89,6 +90,7 @@ class RetryStore:
                 self.db.execute('INSERT INTO segments(meeting,start,end,source,speaker,speaker_name,payload) VALUES(?,?,?,?,?,?,?)',
                     (mid,data['start'],data['end'],data['source'],data['speaker'],data['speaker_name'],staged[0]))
             meta=metadata(self.meeting(mid));meta.pop('retry_attempt',None);meta['provisional']=False
+            if source_digest is not None:meta['retry_source_digest']=source_digest
             self.db.execute("UPDATE meetings SET status='complete',metadata=? WHERE id=?",(json.dumps(meta),mid))
             self.db.execute("UPDATE retry_attempts SET state='complete' WHERE id=?",(attempt,))
             self.db.execute('DELETE FROM retry_segments WHERE attempt=?',(attempt,));return True
