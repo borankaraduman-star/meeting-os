@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "meeting-os"
+version = "0.1.0"
+description = "Local Turkish meeting transcription and speaker memory for macOS"
+requires-python = ">=3.11,<3.13"
+dependencies = ["numpy>=1.26,<3", "scipy>=1.12,<2", "soundfile>=0.12,<1", "huggingface-hub>=0.27,<2"]
+[project.optional-dependencies]
+mlx = ["mlx-whisper>=0.4.2,<0.5"]
+speakers = ["resemblyzer==0.1.4", "setuptools>=68,<81", "silero-vad>=6,<7", "sherpa-onnx==1.13.7"]
+whisper = ["openai-whisper>=20240930"]
+ecapa = ["speechbrain>=1.0,<2", "torchaudio>=2.6,<2.12"]
+pyannote = ["pyannote.audio>=4,<5"]
+[project.scripts]
+meeting-os = "meeting_os.cli:main"
+[tool.setuptools.packages.find]
+include = ["meeting_os*"]

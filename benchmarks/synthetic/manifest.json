@@ -1,0 +1,14 @@
+{
+ "kind":"synthetic", "timeout_seconds":1800,
+ "cases":[
+  {"id":"turkish-tts","session":"synthetic-01","audio":"turkish.wav","reference":"turkish.reference.json","tags":["tts","names","jargon"]},
+  {"id":"digital-silence","session":"synthetic-02","audio":"silence.wav","reference":"silence.reference.json","tags":["silence"]}
+ ],
+ "configs":[
+  {"name":"MLX turbo + Resemblyzer","options":["--model","../../models/mlx-turbo"]},
+  {"name":"MLX large-v3 + Resemblyzer","options":["--model","../../models/mlx-large"]},
+  {"name":"whisper.cpp turbo q5 + Resemblyzer","options":["--engine","cpp","--model","../../models/cpp-turbo/ggml-large-v3-turbo-q5_0.bin","--cpp-bin","../../build/whisper-cpp/bin/whisper-cli"]},
+  {"name":"OpenAI Whisper turbo CPU + Resemblyzer","options":["--engine","whisper","--model","../../models/whisper-turbo/large-v3-turbo.pt"]},
+  {"name":"MLX turbo + ECAPA","options":["--model","../../models/mlx-turbo","--embedding","ecapa","--embedding-model","../../models/ecapa"]}
+ ]
+}

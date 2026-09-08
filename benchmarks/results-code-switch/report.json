@@ -1,0 +1,169 @@
+{
+  "kind": "synthetic",
+  "results": [
+    {
+      "config": "MLX turbo tr",
+      "case": "tr-en-switch",
+      "session": "synthetic-03",
+      "kind": "synthetic",
+      "tags": [
+        "tts",
+        "code-switch",
+        "two-voices"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 6.579733583028428,
+      "command": [
+        "/Users/boran/Library/Caches/MeetingOS/venv-v0.1/bin/python3",
+        "-m",
+        "meeting_os",
+        "--db",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/results-code-switch/00-00/meeting.sqlite",
+        "transcribe",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/code-switch-synthetic/mixed.wav",
+        "--output",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/results-code-switch/00-00/result.json",
+        "--model",
+        "../../models/mlx-turbo"
+      ],
+      "wer": 0.0,
+      "raw_wer": 0.0,
+      "cer": 0.0,
+      "reference_words": 22,
+      "word_errors": 0,
+      "insertions": null,
+      "entity_recall": 1.0,
+      "entity_found": 6,
+      "entity_total": 6,
+      "hypothesis": "İpek, ödeme adımını konuşalım. Let's check the funnel because conversion dropped after the rollout. Çağrı yarın feature flag durumunu kontrol edecek.",
+      "rtf": 0.6995530422516768,
+      "peak_rss_bytes": 987807744,
+      "embedding_model": "resemblyzer:39373b86598fa3da",
+      "diarization": {
+        "der": 0.16049400241323036,
+        "miss_seconds": 0.0,
+        "false_alarm_seconds": 0.6000000000000014,
+        "confusion_seconds": 0.81325,
+        "reference_speaker_seconds": 8.805625,
+        "mapping": {
+          "system:S1": "en-voice",
+          "system:S0": "tr-voice"
+        },
+        "collar": 0,
+        "overlap_scored": true
+      },
+      "identity": null,
+      "silence_hallucination_words": null
+    },
+    {
+      "config": "MLX turbo auto",
+      "case": "tr-en-switch",
+      "session": "synthetic-03",
+      "kind": "synthetic",
+      "tags": [
+        "tts",
+        "code-switch",
+        "two-voices"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 6.834764749975875,
+      "command": [
+        "/Users/boran/Library/Caches/MeetingOS/venv-v0.1/bin/python3",
+        "-m",
+        "meeting_os",
+        "--db",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/results-code-switch/01-00/meeting.sqlite",
+        "transcribe",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/code-switch-synthetic/mixed.wav",
+        "--output",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/results-code-switch/01-00/result.json",
+        "--model",
+        "../../models/mlx-turbo",
+        "--language",
+        "auto"
+      ],
+      "wer": 0.0,
+      "raw_wer": 0.0,
+      "cer": 0.0,
+      "reference_words": 22,
+      "word_errors": 0,
+      "insertions": null,
+      "entity_recall": 1.0,
+      "entity_found": 6,
+      "entity_total": 6,
+      "hypothesis": "İpek, ödeme adımını konuşalım. Let's check the funnel because conversion dropped after the rollout. Çağrı yarın feature flag durumunu kontrol edecek.",
+      "rtf": 0.7266677918772941,
+      "peak_rss_bytes": 2053685248,
+      "embedding_model": "resemblyzer:39373b86598fa3da",
+      "diarization": {
+        "der": 0.16049400241323036,
+        "miss_seconds": 0.0,
+        "false_alarm_seconds": 0.6000000000000014,
+        "confusion_seconds": 0.81325,
+        "reference_speaker_seconds": 8.805625,
+        "mapping": {
+          "system:S1": "en-voice",
+          "system:S0": "tr-voice"
+        },
+        "collar": 0,
+        "overlap_scored": true
+      },
+      "identity": null,
+      "silence_hallucination_words": null
+    },
+    {
+      "config": "MLX large-v3 tr",
+      "case": "tr-en-switch",
+      "session": "synthetic-03",
+      "kind": "synthetic",
+      "tags": [
+        "tts",
+        "code-switch",
+        "two-voices"
+      ],
+      "exit_code": 0,
+      "wall_seconds": 10.850130332983099,
+      "command": [
+        "/Users/boran/Library/Caches/MeetingOS/venv-v0.1/bin/python3",
+        "-m",
+        "meeting_os",
+        "--db",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/results-code-switch/02-00/meeting.sqlite",
+        "transcribe",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/code-switch-synthetic/mixed.wav",
+        "--output",
+        "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/benchmarks/results-code-switch/02-00/result.json",
+        "--model",
+        "../../models/mlx-large"
+      ],
+      "wer": 0.0,
+      "raw_wer": 0.0,
+      "cer": 0.0,
+      "reference_words": 22,
+      "word_errors": 0,
+      "insertions": null,
+      "entity_recall": 1.0,
+      "entity_found": 6,
+      "entity_total": 6,
+      "hypothesis": "İpek, ödeme adımını konuşalım. Let's check the funnel because conversion dropped after the rollout. Çağrı yarın feature flag durumunu kontrol edecek.",
+      "rtf": 1.153578877850552,
+      "peak_rss_bytes": 1486274560,
+      "embedding_model": "resemblyzer:39373b86598fa3da",
+      "diarization": {
+        "der": 0.16049400241323036,
+        "miss_seconds": 0.0,
+        "false_alarm_seconds": 0.6000000000000014,
+        "confusion_seconds": 0.81325,
+        "reference_speaker_seconds": 8.805625,
+        "mapping": {
+          "system:S1": "en-voice",
+          "system:S0": "tr-voice"
+        },
+        "collar": 0,
+        "overlap_scored": true
+      },
+      "identity": null,
+      "silence_hallucination_words": null
+    }
+  ]
+}

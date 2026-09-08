@@ -1,0 +1,1 @@
+Constructed concatenation of real LibriSpeech dev-clean voices. CC-BY4, https://www.openslr.org/12/. Four speakers × three utterances, 250ms gaps. Majority attribution uses known utterance bounds with pauses; not a natural meeting, not gold DER.

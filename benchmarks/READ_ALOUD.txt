@@ -1,0 +1,15 @@
+Bu metin yalnızca kontrollü test içindir; gerçek toplantı benchmark'ının yerine geçmez.
+
+Merhaba, ben Boran. İpek ile checkout akışını konuştuk.
+Çağrı backend için Jira kaydını açacak.
+EDD ve NDD metriklerini refinement toplantısında inceleyelim.
+Yeni rollout öncesinde conversion oranını kontrol edeceğiz.
+Gökçe, SDS tarafındaki retention düşüşü için PRD hazırlıyor.
+Let's check the funnel, çünkü payment adımında drop-off görüyoruz.
+A/B test yüzde beşte başlayacak; stakeholder review sonrasında yüzde yirmiye çıkacağız.
+Hayır, feature flag bugün açılmayacak. Pazartesi değil, salı günü.
+Sipariş numarası bin iki yüz kırk beş; hedef yüzde iki virgül beş artış.
+
+İki konuşmacıyla doğal hızda tekrar edin. Sonra 30 saniye sessizlik,
+klavye sesi, kısa üst üste konuşma ve uzaktan toplantı hoparlörü senaryosu ekleyin.
+İsimler ve kısaltmalar için insan tarafından doğrulanmış referans yazın.

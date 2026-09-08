@@ -1,0 +1,16 @@
+{
+  "mic": {
+    "chunks": 3,
+    "duration_seconds": 2.9906666666666664,
+    "max_boundary_error_seconds": 4.501399253342697e-11,
+    "sample_rate": 48000,
+    "channels": 1
+  },
+  "system": {
+    "chunks": 4,
+    "duration_seconds": 3.22,
+    "max_boundary_error_seconds": 0.0,
+    "sample_rate": 48000,
+    "channels": 2
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "synthetic",
+  "live_capture_source": "fake recorder using real WAV fixtures; native hardware checked separately",
+  "live_status": "provisional",
+  "final_status": "complete",
+  "corrected_and_enrolled": true,
+  "second_utterance_recognized": true,
+  "identity_similarity": 0.9755765228758796,
+  "profile_count": 1
+}

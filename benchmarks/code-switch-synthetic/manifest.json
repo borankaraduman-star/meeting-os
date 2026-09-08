@@ -1,0 +1,42 @@
+{
+  "kind": "synthetic",
+  "timeout_seconds": 600,
+  "cases": [
+    {
+      "id": "tr-en-switch",
+      "session": "synthetic-03",
+      "audio": "mixed.wav",
+      "reference": "mixed.reference.json",
+      "tags": [
+        "tts",
+        "code-switch",
+        "two-voices"
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "name": "MLX turbo tr",
+      "options": [
+        "--model",
+        "../../models/mlx-turbo"
+      ]
+    },
+    {
+      "name": "MLX turbo auto",
+      "options": [
+        "--model",
+        "../../models/mlx-turbo",
+        "--language",
+        "auto"
+      ]
+    },
+    {
+      "name": "MLX large-v3 tr",
+      "options": [
+        "--model",
+        "../../models/mlx-large"
+      ]
+    }
+  ]
+}

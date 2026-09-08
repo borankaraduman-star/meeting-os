@@ -1,0 +1,19 @@
+Boran
+İpek
+Çağrı
+Gökçe
+Trendyol
+EDD
+NDD
+SDS
+Jira
+checkout
+backend
+refinement
+prod
+rollout
+PRD
+retention
+conversion
+A/B test
+stakeholder

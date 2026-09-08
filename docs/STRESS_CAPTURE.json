@@ -1,0 +1,10 @@
+{
+  "native_broken_stdout": "passed",
+  "native_journal_recovery": "passed",
+  "accelerated_duration_hours": 3,
+  "sources": 2,
+  "chunks": 1800,
+  "reconstructed_frames_per_source": 172800000,
+  "elapsed_seconds": 3.606216875021346,
+  "scope": "Accelerated WAV reconstruction; not a 3-hour hardware or ASR soak test"
+}

@@ -1,0 +1,355 @@
+{
+  "duration": 95.58,
+  "scope": "Constructed human audiobook turns; majority attribution after optimal global label mapping. Not natural meeting DER.",
+  "results": [
+    {
+      "threshold": 0.7,
+      "elapsed": 3.963579957955517,
+      "speaker_count": 6,
+      "turn_majority_correct": 11,
+      "turns_total": 12,
+      "predictions": [
+        {
+          "start": 0.0,
+          "end": 5.6,
+          "speaker": "2277",
+          "source_file": "LibriSpeech/dev-clean/2277/149896/2277-149896-0005.flac",
+          "predicted": "2277",
+          "correct": true
+        },
+        {
+          "start": 5.85,
+          "end": 12.06,
+          "speaker": "2035",
+          "source_file": "LibriSpeech/dev-clean/2035/147960/2035-147960-0008.flac",
+          "predicted": "2035",
+          "correct": true
+        },
+        {
+          "start": 12.31,
+          "end": 19.28,
+          "speaker": "2086",
+          "source_file": "LibriSpeech/dev-clean/2086/149214/2086-149214-0001.flac",
+          "predicted": "2086",
+          "correct": true
+        },
+        {
+          "start": 19.53,
+          "end": 24.88,
+          "speaker": "7976",
+          "source_file": "LibriSpeech/dev-clean/7976/110124/7976-110124-0015.flac",
+          "predicted": "7976",
+          "correct": true
+        },
+        {
+          "start": 25.13,
+          "end": 30.505,
+          "speaker": "2277",
+          "source_file": "LibriSpeech/dev-clean/2277/149896/2277-149896-0007.flac",
+          "predicted": "2277",
+          "correct": true
+        },
+        {
+          "start": 30.755,
+          "end": 39.775,
+          "speaker": "2035",
+          "source_file": "LibriSpeech/dev-clean/2035/147960/2035-147960-0000.flac",
+          "predicted": "2035",
+          "correct": true
+        },
+        {
+          "start": 40.025,
+          "end": 55.245,
+          "speaker": "2086",
+          "source_file": "LibriSpeech/dev-clean/2086/149214/2086-149214-0004.flac",
+          "predicted": "2086",
+          "correct": true
+        },
+        {
+          "start": 55.495,
+          "end": 60.79,
+          "speaker": "7976",
+          "source_file": "LibriSpeech/dev-clean/7976/110124/7976-110124-0008.flac",
+          "predicted": "7976",
+          "correct": true
+        },
+        {
+          "start": 61.04,
+          "end": 67.34,
+          "speaker": "2277",
+          "source_file": "LibriSpeech/dev-clean/2277/149896/2277-149896-0030.flac",
+          "predicted": null,
+          "correct": false
+        },
+        {
+          "start": 67.59,
+          "end": 77.175,
+          "speaker": "2035",
+          "source_file": "LibriSpeech/dev-clean/2035/147960/2035-147960-0010.flac",
+          "predicted": "2035",
+          "correct": true
+        },
+        {
+          "start": 77.425,
+          "end": 87.235,
+          "speaker": "2086",
+          "source_file": "LibriSpeech/dev-clean/2086/149214/2086-149214-0000.flac",
+          "predicted": "2086",
+          "correct": true
+        },
+        {
+          "start": 87.485,
+          "end": 95.33,
+          "speaker": "7976",
+          "source_file": "LibriSpeech/dev-clean/7976/110124/7976-110124-0002.flac",
+          "predicted": "7976",
+          "correct": true
+        }
+      ],
+      "turns": [
+        [
+          0.4528437554836273,
+          5.144093990325928,
+          "system:S0"
+        ],
+        [
+          6.274718761444092,
+          11.590344429016113,
+          "system:S1"
+        ],
+        [
+          12.737844467163086,
+          18.745344161987305,
+          "system:S2"
+        ],
+        [
+          19.82534408569336,
+          24.027219772338867,
+          "system:S3"
+        ],
+        [
+          24.027219772338867,
+          24.567218780517578,
+          "system:S0"
+        ],
+        [
+          25.51222038269043,
+          30.37221908569336,
+          "system:S0"
+        ],
+        [
+          31.013469696044922,
+          39.299095153808594,
+          "system:S1"
+        ],
+        [
+          40.49721908569336,
+          54.72284698486328,
+          "system:S2"
+        ],
+        [
+          55.76909637451172,
+          60.35909652709961,
+          "system:S3"
+        ],
+        [
+          61.33784484863281,
+          67.24409484863281,
+          "system:S8"
+        ],
+        [
+          68.02034759521484,
+          68.98222351074219,
+          "system:S9"
+        ],
+        [
+          68.98222351074219,
+          76.79534912109375,
+          "system:S1"
+        ],
+        [
+          77.82472229003906,
+          86.76847076416016,
+          "system:S2"
+        ],
+        [
+          88.03409576416016,
+          95.03722381591797,
+          "system:S3"
+        ]
+      ]
+    },
+    {
+      "threshold": 0.9,
+      "elapsed": 3.9161134170135483,
+      "speaker_count": 4,
+      "turn_majority_correct": 12,
+      "turns_total": 12,
+      "predictions": [
+        {
+          "start": 0.0,
+          "end": 5.6,
+          "speaker": "2277",
+          "source_file": "LibriSpeech/dev-clean/2277/149896/2277-149896-0005.flac",
+          "predicted": "2277",
+          "correct": true
+        },
+        {
+          "start": 5.85,
+          "end": 12.06,
+          "speaker": "2035",
+          "source_file": "LibriSpeech/dev-clean/2035/147960/2035-147960-0008.flac",
+          "predicted": "2035",
+          "correct": true
+        },
+        {
+          "start": 12.31,
+          "end": 19.28,
+          "speaker": "2086",
+          "source_file": "LibriSpeech/dev-clean/2086/149214/2086-149214-0001.flac",
+          "predicted": "2086",
+          "correct": true
+        },
+        {
+          "start": 19.53,
+          "end": 24.88,
+          "speaker": "7976",
+          "source_file": "LibriSpeech/dev-clean/7976/110124/7976-110124-0015.flac",
+          "predicted": "7976",
+          "correct": true
+        },
+        {
+          "start": 25.13,
+          "end": 30.505,
+          "speaker": "2277",
+          "source_file": "LibriSpeech/dev-clean/2277/149896/2277-149896-0007.flac",
+          "predicted": "2277",
+          "correct": true
+        },
+        {
+          "start": 30.755,
+          "end": 39.775,
+          "speaker": "2035",
+          "source_file": "LibriSpeech/dev-clean/2035/147960/2035-147960-0000.flac",
+          "predicted": "2035",
+          "correct": true
+        },
+        {
+          "start": 40.025,
+          "end": 55.245,
+          "speaker": "2086",
+          "source_file": "LibriSpeech/dev-clean/2086/149214/2086-149214-0004.flac",
+          "predicted": "2086",
+          "correct": true
+        },
+        {
+          "start": 55.495,
+          "end": 60.79,
+          "speaker": "7976",
+          "source_file": "LibriSpeech/dev-clean/7976/110124/7976-110124-0008.flac",
+          "predicted": "7976",
+          "correct": true
+        },
+        {
+          "start": 61.04,
+          "end": 67.34,
+          "speaker": "2277",
+          "source_file": "LibriSpeech/dev-clean/2277/149896/2277-149896-0030.flac",
+          "predicted": "2277",
+          "correct": true
+        },
+        {
+          "start": 67.59,
+          "end": 77.175,
+          "speaker": "2035",
+          "source_file": "LibriSpeech/dev-clean/2035/147960/2035-147960-0010.flac",
+          "predicted": "2035",
+          "correct": true
+        },
+        {
+          "start": 77.425,
+          "end": 87.235,
+          "speaker": "2086",
+          "source_file": "LibriSpeech/dev-clean/2086/149214/2086-149214-0000.flac",
+          "predicted": "2086",
+          "correct": true
+        },
+        {
+          "start": 87.485,
+          "end": 95.33,
+          "speaker": "7976",
+          "source_file": "LibriSpeech/dev-clean/7976/110124/7976-110124-0002.flac",
+          "predicted": "7976",
+          "correct": true
+        }
+      ],
+      "turns": [
+        [
+          0.4528437554836273,
+          5.144093990325928,
+          "system:S0"
+        ],
+        [
+          6.274718761444092,
+          11.590344429016113,
+          "system:S1"
+        ],
+        [
+          12.737844467163086,
+          18.745344161987305,
+          "system:S2"
+        ],
+        [
+          19.82534408569336,
+          24.027219772338867,
+          "system:S3"
+        ],
+        [
+          24.027219772338867,
+          24.567218780517578,
+          "system:S0"
+        ],
+        [
+          25.51222038269043,
+          30.37221908569336,
+          "system:S0"
+        ],
+        [
+          31.013469696044922,
+          39.299095153808594,
+          "system:S1"
+        ],
+        [
+          40.49721908569336,
+          54.72284698486328,
+          "system:S2"
+        ],
+        [
+          55.76909637451172,
+          60.35909652709961,
+          "system:S3"
+        ],
+        [
+          61.33784484863281,
+          67.24409484863281,
+          "system:S0"
+        ],
+        [
+          68.02034759521484,
+          76.79534912109375,
+          "system:S1"
+        ],
+        [
+          77.82472229003906,
+          86.76847076416016,
+          "system:S2"
+        ],
+        [
+          88.03409576416016,
+          95.03722381591797,
+          "system:S3"
+        ]
+      ]
+    }
+  ]
+}

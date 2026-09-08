@@ -1,0 +1,26 @@
+{
+  "kind": "synthetic",
+  "scope": "same TTS voice, different utterance, reopened SQLite; not human speaker validation",
+  "results": [
+    {
+      "engine": "resemblyzer",
+      "model": "resemblyzer:39373b86598fa3da",
+      "result": {
+        "name": "SYNTHETIC Yelda",
+        "similarity": 0.9790439304860695,
+        "margin": 1.9790439304860694
+      },
+      "passed": true
+    },
+    {
+      "engine": "ecapa",
+      "model": "ecapa:0575cb64845e6b9a",
+      "result": {
+        "name": "SYNTHETIC Yelda",
+        "similarity": 0.9434929030903885,
+        "margin": 1.9434929030903885
+      },
+      "passed": true
+    }
+  ]
+}

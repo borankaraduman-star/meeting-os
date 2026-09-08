@@ -1,0 +1,209 @@
+import SwiftUI
+import AppKit
+import AVFoundation
+
+struct Meeting: Identifiable {
+    let id: String; let title: String; let status: String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:] }
+}
+struct Row: Identifiable {
+    let id:Int; let start:Double; let end:Double; let text:String; let speaker:String; let name:String; let source:String; let flags:[String]
+    init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; start=d["start"] as? Double ?? 0; end=d["end"] as? Double ?? 0; text=d["text"] as? String ?? ""; speaker=d["speaker"] as? String ?? ""; name=d["speaker_name"] as? String ?? ""; source=d["source"] as? String ?? ""; flags=d["flags"] as? [String] ?? [] }
+    var label:String {
+        if !name.isEmpty { return name }
+        if flags.contains("provisional") { return "Geçici konuşmacı" }
+        if let tail=speaker.split(separator:":").last, tail.hasPrefix("S"), let n=Int(tail.dropFirst()) { return "Konuşmacı \(n+1)" }
+        return "İsimsiz konuşmacı"
+    }
+    var notices:String {
+        let labels=["provisional":"Canlı metin · değişebilir", "short_context_diarization":"Konuşmacı için kısa ses örneği", "speaker_ambiguous":"Konuşmacı belirsiz / sesler çakışıyor", "low_asr_confidence":"Bu bölümü dinleyerek kontrol edin", "possible_non_speech":"Konuşma dışı ses olabilir", "repetition":"Tekrar algılandı", "confidence_unavailable":"Güven ölçümü yok", "baseline_diarization":"Temel konuşmacı ayrımı"]
+        return flags.map { labels[$0] ?? $0 }.joined(separator:" · ")
+    }
+    var time:String { String(format:"%02d:%02d",Int(start)/60,Int(start)%60) }
+}
+struct Profile:Identifiable { let name:String; let model:String; let samples:Int; var id:String { name+model } }
+struct Runtime:Decodable { let python:String; let repo:String }
+
+func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
+    let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os.desktop"]; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo)
+    let input=Pipe(), output=Pipe(); p.standardInput=input; p.standardOutput=output; p.standardError=FileHandle.nullDevice
+    try p.run()
+    let deadline=DispatchWorkItem { if p.isRunning { p.terminate() } }
+    DispatchQueue.global().asyncAfter(deadline:.now()+10, execute:deadline)
+    defer { deadline.cancel() }
+    try input.fileHandleForWriting.write(contentsOf:JSONSerialization.data(withJSONObject:request)); try input.fileHandleForWriting.close()
+    let data=output.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+    guard let result=try JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw NSError(domain:"MeetingOS",code:1,userInfo:[NSLocalizedDescriptionKey:"Invalid local response"]) }
+    if let message=result["error"] as? String { throw NSError(domain:"MeetingOS",code:2,userInfo:[NSLocalizedDescriptionKey:message]) }
+    return result
+}
+
+@MainActor final class Model:ObservableObject {
+    @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[]; @Published var profiles:[Profile]=[]
+    @Published var selected:String?; @Published var search=""; @Published var title=""; @Published var error=""
+    @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
+    @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
+    let runtime:Runtime; let dataDir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS")
+    var requestedQuit=false
+    var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
+    init() {
+        let url=Bundle.main.resourceURL!.appendingPathComponent("runtime.json")
+        runtime=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
+        AppDelegate.model=self
+        timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true) { [weak self] _ in Task { @MainActor in await self?.refresh() } }
+        Task { await refresh() }
+    }
+    var meeting:Meeting? { meetings.first { $0.id==selected } }
+    var filteredRows:[Row] { search.isEmpty ? rows : rows.filter { ($0.text+" "+$0.label).localizedCaseInsensitiveContains(search) } }
+    func request(_ req:[String:Any]) async throws -> [String:Any] {
+        let rt=runtime
+        return try await Task.detached { try invoke(rt,req) }.value
+    }
+    func refresh() async {
+        guard !refreshing else { return }; refreshing=true; defer { refreshing=false }
+        let wanted=selected ?? ""
+        do {
+            let result=try await request(["action":"snapshot","meeting":wanted])
+            meetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
+            profiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
+            if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
+                selected=active.id
+                let seconds=active.capture["seconds"] as? Double ?? 0
+                let sources=active.capture["sources"] as? [String:Double] ?? [:]
+                activity=active.capture["state"] as? String=="capturing" ? "Kaydediliyor · \(Int(seconds)) sn · \(sources.keys.sorted().map { $0 == "mic" ? "Mikrofon" : "Sistem" }.joined(separator:" + "))" : "macOS izinleri ve ses aygıtı bekleniyor…"
+            }
+            if selected==nil { selected=meetings.first?.id }
+            if wanted==selected { rows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init) }
+        } catch { self.error=error.localizedDescription }
+    }
+    func launch(_ args:[String], complete:@escaping (Bool)->Void) {
+        guard job==nil else { return }
+        do {
+            try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true)
+            let log=dataDir.appendingPathComponent("last-job.log")
+            FileManager.default.createFile(atPath:log.path,contents:nil)
+            let handle=try FileHandle(forWritingTo:log)
+            let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            p.terminationHandler={ [weak self] process in
+                try? handle.close()
+                Task { @MainActor in
+                    guard let self=self else { return }; self.job=nil; self.busy=false
+                    if process.terminationStatus != 0 { self.error=(try? String(contentsOf:log,encoding:.utf8)).map { String($0.split(separator:"\n").last ?? "İşlem tamamlanamadı") } ?? "İşlem tamamlanamadı" }
+                    complete(process.terminationStatus==0); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
+                }
+            }
+            try p.run(); job=p; busy=true; error=""
+        } catch { self.error=error.localizedDescription; busy=false; recording=false }
+    }
+    func start() {
+        let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
+        recordingDir=dir; recording=true; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"
+        let name=title.isEmpty ? Date().formatted(date:.abbreviated,time:.shortened) : title
+        launch(["record",dir.path,"--live","--seconds","14400","--title",name]) { [weak self] ok in
+            guard let self=self else { return }; self.recording=false
+            let journal=(try? String(contentsOf:dir.appendingPathComponent("capture-native.jsonl"),encoding:.utf8)) ?? ""
+            if ok && journal.contains("\"chunk\"") { self.finalize(dir,name:name) } else if ok { self.activity="Kayıt iptal edildi · Ses alınmadı" } else { self.activity="Kayıt kesildi · Arşivden sesi kurtarabilirsiniz" }
+        }
+    }
+    func stop() { guard recording else { return }; activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
+    func finalize(_ dir:URL,name:String) {
+        activity="Son transkript ve konuşmacılar hazırlanıyor…"
+        launch(["finalize",dir.path,"--title",name]) { [weak self] ok in self?.activity=ok ? "Tamamlandı · İsimleri düzeltebilir ve ses profili kaydedebilirsiniz" : "Son işlem başarısız · Ses korunuyor"; self?.selected=nil }
+    }
+    func recover() { guard let m=meeting, let dir=m.metadata["capture_dir"] as? String else { return }; finalize(URL(fileURLWithPath:dir),name:m.title) }
+    func importAudio() {
+        let panel=NSOpenPanel(); panel.canChooseDirectories=false; panel.allowsMultipleSelection=false
+        if panel.runModal() == .OK, let url=panel.url {
+            activity="Dosya yazıya dönüştürülüyor…"
+            launch(["import",url.path,"--title",url.deletingPathExtension().lastPathComponent]) { [weak self] ok in self?.activity=ok ? "Dosya hazır" : "Dosya işlenemedi"; self?.selected=nil }
+        }
+    }
+    func saveLabel(enroll:Bool) async {
+        guard let row=editRow, let mid=selected else { return }
+        do {
+            _=try await request(["action":enroll ? "enroll":"label","meeting":mid,"segment":row.id,"name":editName,"confirmed_clean":clean])
+            editRow=nil; await refresh()
+        } catch { self.error=error.localizedDescription }
+    }
+    func saveText() async {
+        guard let row=editRow, let mid=selected else { return }
+        do { _=try await request(["action":"edit_text","meeting":mid,"segment":row.id,"text":editText]); editRow=nil; await refresh() } catch { self.error=error.localizedDescription }
+    }
+    func deleteProfile(_ name:String) async { do { _=try await request(["action":"delete_profile","name":name]); await refresh() } catch { self.error=error.localizedDescription } }
+    func export(_ format:String) async {
+        guard let mid=selected else { return }; let panel=NSSavePanel(); panel.nameFieldStringValue="Meeting.\(format)"
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { _=try await request(["action":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
+    }
+    func settings() async { do { vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""; showSettings=true } catch { self.error=error.localizedDescription } }
+    func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
+    func play(_ row:Row) {
+        guard let m=meeting else { return }
+        do {
+            var path=(m.metadata["paths"] as? [String:String])?[row.source]; var start=row.start
+            if path==nil, let dir=m.metadata["capture_dir"] as? String {
+                let base=URL(fileURLWithPath:dir); let native=base.appendingPathComponent("capture-native.jsonl")
+                let journal=FileManager.default.fileExists(atPath:native.path) ? native : base.appendingPathComponent("events.jsonl")
+                let lines=try String(contentsOf:journal,encoding:.utf8).split(separator:"\n")
+                for line in lines {
+                    if let d=try? JSONSerialization.jsonObject(with:Data(line.utf8)) as? [String:Any], d["source"] as? String==row.source, let a=d["start"] as? Double, let duration=d["duration"] as? Double, row.start>=a, row.start<a+duration { path=d["path"] as? String; start=row.start-a; break }
+                }
+            }
+            guard let path=path else { throw NSError(domain:"MeetingOS",code:1,userInfo:[NSLocalizedDescriptionKey:"Ses dosyası bulunamadı"]) }
+            player?.stop(); let p=try AVAudioPlayer(contentsOf:URL(fileURLWithPath:path)); player=p; p.currentTime=start; p.play()
+            Task { try? await Task.sleep(for:.seconds(max(0.1,row.end-row.start))); if self.player===p { p.stop() } }
+        } catch { self.error=error.localizedDescription }
+    }
+}
+
+func statusLabel(_ status:String)->String {
+    ["complete":"Hazır", "processing":"İşleniyor", "provisional":"Canlı kayıt", "incomplete":"Kurtarılabilir", "failed":"İşlem başarısız", "canceled":"İptal edildi"][status] ?? status
+}
+struct Content:View {
+    @StateObject var m=Model()
+    var body:some View {
+        NavigationSplitView {
+            VStack(alignment:.leading,spacing:14) {
+                Text("Meeting OS").font(.largeTitle.bold())
+                Text("Boran’ın toplantı hafızası").foregroundStyle(.secondary)
+                TextField("Toplantı adı",text:$m.title)
+                Button(action:{ m.recording ? m.stop() : m.start() }) { Label(m.recording ? "Kaydı bitir":"Yeni kayıt",systemImage:m.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity) }.buttonStyle(.borderedProminent).disabled(m.busy && !m.recording)
+                Button("Ses dosyası aç",action:m.importAudio).disabled(m.busy)
+                List(selection:$m.selected) { ForEach(m.meetings) { meeting in VStack(alignment:.leading,spacing:4) { Text(meeting.title).lineLimit(2); Text(statusLabel(meeting.status)+" · "+String(meeting.created.prefix(10))).font(.caption).foregroundStyle(.secondary) }.tag(meeting.id) } }
+                Button("Sözlük ve ses profilleri") { Task { await m.settings() } }
+            }.padding().navigationSplitViewColumnWidth(min:240,ideal:280)
+        } detail: {
+            VStack(alignment:.leading,spacing:0) {
+                HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Toplantılarınız burada").font(.title.bold()); Text(m.activity).font(.callout).foregroundStyle(.secondary) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Markdown") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
+                if let meeting=m.meeting, meeting.metadata["capture_dir"] != nil, meeting.status != "canceled", !m.busy { HStack { Text("Canlı kayıt geçicidir; son işlem ayrı ve kalıcı bir transkript oluşturur.").font(.caption); Spacer(); Button("Son transkripti oluştur / Kurtar",action:m.recover) }.padding(.horizontal,24).padding(.bottom,12) }
+                TextField("Metinde veya konuşmacılarda ara",text:$m.search).textFieldStyle(.roundedBorder).padding(.horizontal,24).padding(.bottom,16)
+                Divider()
+                if !m.error.isEmpty { HStack(alignment:.top) { Image(systemName:"exclamationmark.triangle"); Text(m.error).font(.caption).textSelection(.enabled); Spacer(); Button("Kapat") { m.error="" } }.padding().background(.orange.opacity(0.12)) }
+                ScrollView { LazyVStack(alignment:.leading,spacing:20) { ForEach(m.filteredRows) { row in HStack(alignment:.top,spacing:14) {
+                    Button { m.play(row) } label:{ VStack { Image(systemName:"play.circle"); Text(row.time).font(.caption.monospacedDigit()) } }.buttonStyle(.plain).help("Bu bölümü dinle").disabled(m.recording)
+                    VStack(alignment:.leading,spacing:7) { HStack { Text(row.label).font(.headline); Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Düzelt") { m.editRow=row; m.editName=row.name; m.editText=row.text; m.clean=false }.disabled(m.meeting?.status != "complete") }; Text(row.text).textSelection(.enabled).lineSpacing(4); if !row.flags.isEmpty { Text(row.notices).font(.caption2).foregroundStyle(.orange) } }
+                }.padding(16).background(.quaternary.opacity(0.3),in:RoundedRectangle(cornerRadius:12)) } }.padding(24)
+                    if m.rows.isEmpty { ContentUnavailableView("Dinlemeye hazır",systemImage:"waveform",description:Text("Bir toplantı kaydedin veya ses dosyası açın. Canlı metin, konuşmalar geldikçe burada görünür." )).padding(40) }
+                }
+                Divider(); HStack { Label("Yerel işleme",systemImage:"lock.shield"); Text("•"); Text("\(m.rows.count) bölüm"); Spacer(); Text("İsim düzeltmek ses profilini otomatik eğitmez.") }.font(.caption).foregroundStyle(.secondary).padding(12)
+            }.frame(minWidth:620)
+        }.frame(minWidth:940,minHeight:650)
+        .onChange(of:m.selected) { _,_ in m.rows=[]; Task { await m.refresh() } }
+        .sheet(item:$m.editRow) { row in VStack(alignment:.leading,spacing:18) { Text("Metin ve konuşmacı").font(.title2.bold()); TextEditor(text:$m.editText).frame(height:100).border(.quaternary); Button("Metni kaydet") { Task { await m.saveText() } }.disabled(m.editText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty); TextField("İsim",text:$m.editName); Button("Önce bölümü dinle") { m.play(row) }; Toggle("Dinledim: en az 3 saniye, tek kişi, temiz ses",isOn:$m.clean); Text("Profili kaydedersen sonraki toplantılarda bu sesle eşleşen kişiye isim önerilir. Belirsiz eşleşmeler isimsiz kalır.").font(.caption).foregroundStyle(.secondary); HStack { Button("Vazgeç") { m.editRow=nil }; Spacer(); Button("Yalnızca ismi kaydet") { Task { await m.saveLabel(enroll:false) } }.disabled(m.editName.trimmingCharacters(in:.whitespaces).isEmpty); Button("Ses profilini kaydet") { Task { await m.saveLabel(enroll:true) } }.disabled(!m.clean || m.editName.trimmingCharacters(in:.whitespaces).isEmpty) }; if !m.error.isEmpty { Text(m.error).foregroundStyle(.red).font(.caption) } }.padding(28).frame(width:540) }
+        .sheet(isPresented:$m.showSettings) { VStack(alignment:.leading,spacing:16) { Text("Sözlük ve ses profilleri").font(.title2.bold()); Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın."); TextEditor(text:$m.vocabulary).font(.body.monospaced()).frame(height:180).border(.quaternary); Text("Kaydedilmiş sesler").font(.headline); Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary); List(m.profiles) { p in HStack { VStack(alignment:.leading) { Text(p.name); Text("\(p.samples) örnek · \(p.model)").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("Profili sil",role:.destructive) { Task { await m.deleteProfile(p.name) } } } }.frame(height:160); HStack { Button("Veri klasörünü aç") { NSWorkspace.shared.open(m.dataDir) }; Spacer(); Button("Kaydet") { Task { await m.saveVocabulary() } }.buttonStyle(.borderedProminent) } }.padding(28).frame(width:600) }
+    }
+}
+@MainActor final class AppDelegate:NSObject,NSApplicationDelegate {
+    static weak var model:Model?
+    func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
+        guard let m=Self.model, m.job != nil else { return .terminateNow }
+        m.requestedQuit=true
+        if m.recording { m.stop() }
+        m.activity="İşlem güvenle tamamlandıktan sonra kapanacak…"
+        return .terminateLater
+    }
+}
+@main struct MeetingOSApp:App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    var body:some Scene { Window("Meeting OS",id:"main") { Content() }.windowStyle(.titleBar) }
+}

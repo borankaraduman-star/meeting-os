@@ -1,0 +1,13 @@
+{
+  "meeting": "e43d6f4f2e44",
+  "segments": [],
+  "turns": [],
+  "duration": 5.0,
+  "elapsed_seconds": 0.0033335420303046703,
+  "peak_rss_bytes": 309788672,
+  "memory_note": "sum of parent and largest child peak RSS; upper bound, not simultaneous Metal allocation",
+  "engine": "cpp",
+  "model": "../../models/cpp-turbo/ggml-large-v3-turbo-q5_0.bin",
+  "embedding_model": "resemblyzer:39373b86598fa3da",
+  "diarization": "cluster"
+}

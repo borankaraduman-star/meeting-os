@@ -1,0 +1,32 @@
+[
+  {
+    "name": "mlx-turbo",
+    "engine": "mlx",
+    "repo": "mlx-community/whisper-large-v3-turbo",
+    "revision": "a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb"
+  },
+  {
+    "name": "cpp-turbo",
+    "engine": "cpp",
+    "repo": "ggerganov/whisper.cpp",
+    "revision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+  },
+  {
+    "name": "mlx-large",
+    "engine": "mlx",
+    "repo": "mlx-community/whisper-large-v3-mlx",
+    "revision": "49e6aa286ad60c14352c404340ded53710378a11"
+  },
+  {
+    "name": "ecapa",
+    "engine": "ecapa",
+    "repo": "speechbrain/spkrec-ecapa-voxceleb",
+    "revision": "0f99f2d0ebe89ac095bcc5903c4dd8f72b367286"
+  },
+  {
+    "name": "whisper-turbo",
+    "engine": "whisper",
+    "url": "https://openaipublic.azureedge.net/main/whisper/models/aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a/large-v3-turbo.pt",
+    "sha256": "aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a"
+  }
+]

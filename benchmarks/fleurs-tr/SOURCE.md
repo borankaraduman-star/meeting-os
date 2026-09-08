@@ -1,0 +1,1 @@
+Google FLEURS Turkish test split, first 12 rows, CC-BY-4.0. https://huggingface.co/datasets/google/fleurs . Read speech; not meetings; speaker identity unavailable. Downloaded 2026-09-08. Reference uses raw_transcription.

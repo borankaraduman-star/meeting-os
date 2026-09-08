@@ -1,0 +1,13 @@
+{
+  "meeting": "fd6b02bacc39",
+  "segments": [],
+  "turns": [],
+  "duration": 5.0,
+  "elapsed_seconds": 0.006760917021892965,
+  "peak_rss_bytes": 5119361024,
+  "memory_note": "sum of parent and largest child peak RSS; upper bound, not simultaneous Metal allocation",
+  "engine": "whisper",
+  "model": "../../models/whisper-turbo/large-v3-turbo.pt",
+  "embedding_model": "resemblyzer:39373b86598fa3da",
+  "diarization": "cluster"
+}

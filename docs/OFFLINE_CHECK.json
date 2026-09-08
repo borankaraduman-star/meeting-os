@@ -1,0 +1,1 @@
+{"date":"2026-09-08","runtime":"Application Support/MeetingOS/python-3.12 + runtime-v0.1","network_policy":"sandbox-exec: allow default, deny network*","input":"FLEURS Turkish test sample 01 (public read speech)","engine":"MLX turbo + Sherpa + Resemblyzer","result":"success","note":"Process network blocked; user network settings unchanged; no outbound inference service"}

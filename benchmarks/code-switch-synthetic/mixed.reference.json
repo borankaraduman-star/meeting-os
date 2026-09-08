@@ -1,0 +1,29 @@
+{
+  "text": "İpek, ödeme adımını konuşalım. Let's check the funnel because conversion dropped after the rollout. Çağrı yarın feature flag durumunu kontrol edecek.",
+  "entities": [
+    "İpek",
+    "funnel",
+    "conversion",
+    "rollout",
+    "Çağrı",
+    "feature flag"
+  ],
+  "turns": [
+    [
+      0.0,
+      2.28475,
+      "tr-voice"
+    ],
+    [
+      2.48475,
+      5.798,
+      "en-voice"
+    ],
+    [
+      5.998,
+      9.205625,
+      "tr-voice"
+    ]
+  ],
+  "reference_note": "Synthetic voice-container boundaries, include within-utterance pauses; not human speech annotation"
+}

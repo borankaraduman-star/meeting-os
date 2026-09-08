@@ -1,0 +1,170 @@
+[
+  {
+    "embedding": "titanet-small.onnx",
+    "threshold": 0.5,
+    "case": "single",
+    "elapsed": 0.4074763330863789,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        16.686594009399414,
+        0
+      ]
+    ]
+  },
+  {
+    "embedding": "titanet-small.onnx",
+    "threshold": 0.5,
+    "case": "switch",
+    "elapsed": 0.016848500003106892,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        9.194093704223633,
+        1
+      ]
+    ]
+  },
+  {
+    "embedding": "titanet-small.onnx",
+    "threshold": 0.7,
+    "case": "single",
+    "elapsed": 0.37825270800385624,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        16.686594009399414,
+        0
+      ]
+    ]
+  },
+  {
+    "embedding": "titanet-small.onnx",
+    "threshold": 0.7,
+    "case": "switch",
+    "elapsed": 0.016123624984174967,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        9.194093704223633,
+        1
+      ]
+    ]
+  },
+  {
+    "embedding": "titanet-small.onnx",
+    "threshold": 0.9,
+    "case": "single",
+    "elapsed": 0.38138425000943244,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        16.686594009399414,
+        0
+      ]
+    ]
+  },
+  {
+    "embedding": "titanet-small.onnx",
+    "threshold": 0.9,
+    "case": "switch",
+    "elapsed": 0.015848833019845188,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        9.194093704223633,
+        1
+      ]
+    ]
+  },
+  {
+    "embedding": "eres2net.onnx",
+    "threshold": 0.5,
+    "case": "single",
+    "elapsed": 0.9905762090347707,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        16.686594009399414,
+        0
+      ]
+    ]
+  },
+  {
+    "embedding": "eres2net.onnx",
+    "threshold": 0.5,
+    "case": "switch",
+    "elapsed": 0.015924374922178686,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        9.194093704223633,
+        1
+      ]
+    ]
+  },
+  {
+    "embedding": "eres2net.onnx",
+    "threshold": 0.7,
+    "case": "single",
+    "elapsed": 0.9873917499789968,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        16.686594009399414,
+        0
+      ]
+    ]
+  },
+  {
+    "embedding": "eres2net.onnx",
+    "threshold": 0.7,
+    "case": "switch",
+    "elapsed": 0.015983040910214186,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        9.194093704223633,
+        1
+      ]
+    ]
+  },
+  {
+    "embedding": "eres2net.onnx",
+    "threshold": 0.9,
+    "case": "single",
+    "elapsed": 0.9561291249701753,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        16.686594009399414,
+        0
+      ]
+    ]
+  },
+  {
+    "embedding": "eres2net.onnx",
+    "threshold": 0.9,
+    "case": "switch",
+    "elapsed": 0.01584375009406358,
+    "speakers": 1,
+    "turns": [
+      [
+        0.03096874989569187,
+        9.194093704223633,
+        1
+      ]
+    ]
+  }
+]

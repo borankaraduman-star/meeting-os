@@ -1,0 +1,6 @@
+{"meeting": "89a8c7d67560", "capture_dir": "/private/var/folders/j4/lhwrshd95mx4dyzqsmz1x54h0000gn/T/tmpo4tuhnn1/capture", "status": "capturing"}
+{"meeting": "65b2c65fb651", "capture_dir": "/private/var/folders/j4/lhwrshd95mx4dyzqsmz1x54h0000gn/T/tmpsjm1h0vl/capture", "status": "capturing"}
+----------------------------------------------------------------------
+Ran 31 tests in 8.712s
+
+OK

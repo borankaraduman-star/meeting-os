@@ -1,0 +1,13 @@
+{
+  "meeting": "541d79ea91a4",
+  "segments": [],
+  "turns": [],
+  "duration": 5.0,
+  "elapsed_seconds": 0.0020812080474570394,
+  "peak_rss_bytes": 545456128,
+  "memory_note": "sum of parent and largest child peak RSS; upper bound, not simultaneous Metal allocation",
+  "engine": "mlx",
+  "model": "../../models/mlx-turbo",
+  "embedding_model": "ecapa:0575cb64845e6b9a",
+  "diarization": "cluster"
+}

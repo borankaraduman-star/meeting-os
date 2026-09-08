@@ -1,0 +1,100 @@
+{
+  "kind": "real",
+  "timeout_seconds": 7200,
+  "enrollment": [],
+  "cases": [
+    {
+      "id": "meeting-01-excerpt",
+      "session": "meeting-01",
+      "audio": "private/meeting-01.wav",
+      "reference": "private/meeting-01.reference.json",
+      "tags": [
+        "code-switch",
+        "names",
+        "pm-jargon"
+      ]
+    },
+    {
+      "id": "meeting-02-excerpt",
+      "session": "meeting-02",
+      "audio": "private/meeting-02.wav",
+      "reference": "private/meeting-02.reference.json",
+      "tags": [
+        "overlap",
+        "remote"
+      ]
+    },
+    {
+      "id": "meeting-03-excerpt",
+      "session": "meeting-03",
+      "audio": "private/meeting-03.wav",
+      "reference": "private/meeting-03.reference.json",
+      "tags": [
+        "held-out-speakers",
+        "noise"
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "name": "mlx-turbo-resemblyzer",
+      "options": [
+        "--engine",
+        "mlx",
+        "--model",
+        "../models/mlx-turbo"
+      ]
+    },
+    {
+      "name": "mlx-large-resemblyzer",
+      "options": [
+        "--engine",
+        "mlx",
+        "--model",
+        "../models/mlx-large"
+      ]
+    },
+    {
+      "name": "cpp-turbo-q5",
+      "options": [
+        "--engine",
+        "cpp",
+        "--model",
+        "../models/cpp-turbo/ggml-large-v3-turbo-q5_0.bin"
+      ]
+    },
+    {
+      "name": "whisper-cpu-turbo",
+      "options": [
+        "--engine",
+        "whisper",
+        "--model",
+        "../models/whisper-turbo/large-v3-turbo.pt"
+      ]
+    },
+    {
+      "name": "mlx-turbo-ecapa",
+      "options": [
+        "--model",
+        "../models/mlx-turbo",
+        "--embedding",
+        "ecapa",
+        "--embedding-model",
+        "../models/ecapa"
+      ]
+    }
+  ],
+  "optional_configs": [
+    {
+      "name": "mlx-turbo-community-1",
+      "options": [
+        "--model",
+        "../models/mlx-turbo",
+        "--diarization",
+        "pyannote",
+        "--diarization-model",
+        "../models/pyannote"
+      ]
+    }
+  ]
+}
