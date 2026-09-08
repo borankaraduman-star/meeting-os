@@ -33,7 +33,7 @@ Inspection opens regular files read-only through the capture directory descripto
 
 Tests use synthetic PCM, sparse oversized files, symlinks, a FIFO and temporary SQLite stores. Captured audio, user databases, models and microphone permissions are untouched. Native parser and filesystem latency are not a hard wall-time guarantee; this is a bounded local inspection, not a memory stress test.
 
-## Next retry transaction contract (not implemented)
+## Retry transaction contract (storage implemented; orchestration pending)
 
 Retry must acquire an exclusive attempt identity on the existing meeting, recheck owner status and audio availability, and stage inference output separately. It must never call the current finalize path, which creates another meeting. Original raw files and current segments stay intact until an atomic successful result commit. A crashed attempt can be retried with the same meeting/attempt state; no task, correction or profile enrollment writes occur as side effects.
 
@@ -42,3 +42,17 @@ Until stable segment reconciliation exists, meetings with text/speaker correctio
 Claude review accepted a concrete truncated-payload issue: a WAV with a valid header and ten missing payload bytes initially counted as available. The failing regression now passes after RIFF extent validation. Native parser TypeError is classified per chunk instead of aborting the scan. Inspection is confined to the supplied capture directory descriptor, not a hard-coded global recordings folder: the record CLI supports user-selected directories, and metadata establishes that root. It is not a sandbox for an attacker who can rewrite the local meeting database. No filesystem paths or raw errors are exported. Unknown reports may contain partial counters after interrupted inspection; consumers must honor status/issues and never infer completeness from counts alone. Journal byte limits also bound malformed events that do not enter the distinct-chunk set.
 
 Final C2a verification:116 Python tests passed after the RIFF bounds fix; git diff whitespace check passed. No native UI or model behavior changed, and no public release was created for this intermediate recovery checkpoint.
+
+## C2b internal retry storage
+
+`RetryStore` now implements begin/stage/finish/abort on the existing meeting. One running attempt per meeting is enforced by a partial unique index and SQLite write transactions. Begin requires a known live owner and refuses active/unknown previous owners; a confirmed dead attempt can be replaced. Old tokens cannot stage or commit after replacement. The original rows remain readable during staging; finish checks a snapshot of metadata/title/all segment columns and rechecks protected corrections, text edits, analyses/tasks and final segments before replacing anything.
+
+Stage sequence numbers are unique; identical repeats are no-ops and conflicting repeats fail. Finish requires the caller's explicit completed segment count and a contiguous sequence; it refuses empty or incomplete staging. All replacement inserts, meeting completion and attempt completion occur in one transaction. Repeating successful finish is a no-op. Abort preserves original segments. No task/profile enrollment or audio writes occur. Staging is limited to10000 segments,1MiB per serialized segment and32MiB total payload per attempt; failed/dead/successful attempt payloads are cleared when finalized/replaced/aborted.
+
+Tests cover linked analysis/final row refusal, edits and metadata/source changes during retry, simultaneous/unknown owners, duplicate/gapped staging, aborted attempts, SQL insertion failure after deletion, and abrupt owned child-process exit after staging and mid-commit. Reopening the temporary database retains original rows; a new attempt completes the same single meeting. These are transactional fault tests, not real-model or GUI acceptance.
+
+This class is not exposed to the production CLI/UI. The next checkpoint must inspect audio immediately before claiming/processing, keep assembly output in a separate attempt directory, supervise one inference process, and call finish only after the entire capture completes. Source-file identity/checksum revalidation is still required around that orchestration; a database snapshot alone does not detect changed audio. Existing `finalize` is unchanged and must not be used as the retry implementation. No retry button is enabled until the orchestration and cancellation tests pass.
+
+Claude independently reviewed retry ownership/idempotency/transactions and found no atomicity gaps. Its claimed missing audit for `Store.correct_segment` was contradicted by the full method: it already inserts into corrections. The small review excerpt had ended before that line; future compact reviews must include complete methods. A new preexisting segment-rename test confirms begin refuses replacement and preserves the name. No unnecessary change was made to correction logic. Empty-result commit remains deliberately unsupported: the future orchestrator must retain prior content and report no confirmed speech, not erase it based on an empty inference result.
+
+Final C2b verification:129 Python tests passed; diff whitespace check passed. Internal storage only, no native UI or production inference changes and no release publication.
