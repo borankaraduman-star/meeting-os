@@ -126,3 +126,9 @@ Codex implementation sequence:
 5. Claude receives the narrow diff and synthetic fault cases, reviews PID reuse/races, duplicate writes and privacy, and reports specific blockers. Codex resolves findings and runs relevant tests before checkpoint/release.
 
 C1 acceptance: reused PID cannot make an unrelated process a recovery target; inspection failure preserves unknown state; repeated recovery does not duplicate profiles/tasks; adversarial secrets in arbitrary metadata never appear in diagnostic output. GUI recovery integration is a subsequent checkpoint after the storage contract passes.
+
+## B2 / D harness checkpoint
+
+B2 implemented: bounded timestamp-aware alignment, conservative lag-trend fit, impulse abstention, speech-shaped controls and read-only file harness. Claude reviewed core and harness separately; malformed-input and fractional-timing regressions fixed. Natural/hardware echo detection remains inconclusive; no suppression or UI duplicate marker is enabled. See docs/ECHO_MEASUREMENT.md.
+
+D harness implemented: guarded staged capture runner and metadata-only interval coverage/gap/overlap/order metrics; fake subprocess success/failure and privacy/preservation tests. Actual hardware state/evidence and open acceptance are tracked in docs/CAPTURE_SOAK.md and docs/ACCEPTANCE_STATUS.md; do not treat a successful subprocess exit as a complete product acceptance pass.

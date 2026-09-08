@@ -1,0 +1,69 @@
+{
+  "run": {
+    "minutes_requested": 5,
+    "scope": "hardware_capture_only",
+    "status": "captured_pending_acceptance",
+    "resources": {
+      "peak_footprint_bytes": 20989056,
+      "samples": 2194,
+      "elapsed_seconds": 300.6976840829011
+    },
+    "timeline": {
+      "scope": "metadata_only",
+      "sources": {
+        "mic": {
+          "chunks": 26,
+          "first_start": 0.251771833980456,
+          "last_end": 300.50143850065894,
+          "covered_seconds": 300.24966666666666,
+          "gap_seconds": 1.1796785770457063e-11,
+          "overlap_seconds": 0.0,
+          "out_of_order_chunks": 0
+        },
+        "system": {
+          "chunks": 26,
+          "first_start": 0.14403195900376886,
+          "last_end": 300.46403195900376,
+          "covered_seconds": 300.32,
+          "gap_seconds": 0.0,
+          "overlap_seconds": 0.0,
+          "out_of_order_chunks": 0
+        }
+      }
+    }
+  },
+  "validation": {
+    "header_validation": {
+      "status": "available",
+      "available_chunks": 52,
+      "missing_chunks": 0,
+      "invalid_chunks": 0,
+      "sources": {
+        "mic": 26,
+        "system": 26
+      },
+      "issues": [],
+      "validation": "header_only"
+    },
+    "decoded_sources": {
+      "mic": {
+        "chunks": 26,
+        "frames": 14411984,
+        "nonzero_samples": 14411264,
+        "peak": 0.15993262827396393,
+        "samples": 14411984,
+        "rms": 0.005610252864690811
+      },
+      "system": {
+        "chunks": 26,
+        "frames": 14415360,
+        "nonzero_samples": 844196,
+        "peak": 0.8408349752426147,
+        "samples": 28830720,
+        "rms": 0.025311310381679913
+      }
+    },
+    "partial_files": 0,
+    "scope": "5_minute_capture_only_not_asr_or_natural_accuracy"
+  }
+}
