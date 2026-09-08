@@ -35,6 +35,8 @@ class Pipeline:
         batch_rows = None
         if provisional and getattr(self.asr,'engine',None)=='cpp' and getattr(self.asr,'batch_regions',False) is True and len(regions)>1:
             emit('transcribing',current=0,total=len(regions),source=source)
+            self.asr.batch_used=True
+            self.asr.batch_clip_count=len(regions)
             batch_rows=self.asr.transcribe_batch([audio[a:b] for a,b in regions])
             if len(batch_rows)!=len(regions):raise ValueError('ASR batch result count mismatch')
         for index,(begin,end) in enumerate(regions):

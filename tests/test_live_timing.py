@@ -14,7 +14,7 @@ class LiveTimingTests(unittest.TestCase):
    row=json.loads((root/'live-mic-timing.json').read_text())
    self.assertEqual(row['stages'],{'startup':1,'loading_models':2,'transcribing':3})
    self.assertEqual(row['elapsed_seconds'],6)
-   self.assertEqual(set(row),{'stages','elapsed_seconds','offset','source','updated_at','failed','cpp_threads'})
+   self.assertEqual(set(row),{'stages','elapsed_seconds','offset','source','updated_at','failed','cpp_threads','batch_used','batch_clip_count','flash_attention','gpu_requested'})
  def test_diagnostics_failure_does_not_mask_pipeline_error(self):
   from meeting_os.live_timing import observe_worker
   with tempfile.TemporaryDirectory() as tmp:

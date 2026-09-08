@@ -89,7 +89,9 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
                 check_pressure()
                 try:
                     if isolated:
-                        listing=subprocess.check_output(['/bin/ps','-axo','pid=,pgid='],text=True,timeout=2)
+                        # Keep this diagnostic helper out of an outer model group.
+                        # The bounded check_output still reaps it normally/on timeout.
+                        listing=subprocess.check_output(['/bin/ps','-axo','pid=,pgid='],text=True,timeout=2,start_new_session=True)
                         pids=[int(parts[0]) for line in listing.splitlines() if len(parts:=line.split())==2 and int(parts[1])==process.pid]
                         usage=footprint(os.getpid())
                         for pid in pids:

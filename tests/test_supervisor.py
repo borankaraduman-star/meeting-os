@@ -91,3 +91,13 @@ class SupervisorTests(unittest.TestCase):
             result=run_guarded([sys.executable,'-c','import time;time.sleep(.2)'])
         self.assertEqual(result['peak_footprint_bytes'],128*1024**2)
         self.assertGreater(result['samples'],0);self.assertGreater(result['elapsed_seconds'],0)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'Darwin protected diagnostic helpers')
+    def test_nested_monitoring_does_not_fail_on_protected_helpers(self):
+        from meeting_os.supervisor import run_guarded
+        # A real isolated worker repeatedly probes resources while its parent
+        # accounts the tree. Protected ps/sysctl helpers must not look like
+        # unmeasurable inference processes (the observed EPERM failure).
+        code="from meeting_os.resources import check_pressure,physical_memory; import time;\nfor _ in range(20): check_pressure(); physical_memory(); time.sleep(.02)"
+        result=run_guarded([sys.executable,'-c',code],timeout=10,isolated=True)
+        self.assertGreater(result['samples'],0)

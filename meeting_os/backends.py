@@ -11,6 +11,8 @@ class ASR:
     def __init__(self, engine='mlx', model=None, language='tr', vocabulary=(), cpp_bin='whisper-cli'):
         self.engine, self.language, self.cpp_bin = engine, language, cpp_bin
         self.cpp_threads = 2
+        self.flash_attention = True
+        self.use_gpu = False
         self.prompt = ', '.join(vocabulary)[:1000]
         self.model = str(Path(model).expanduser().resolve()) if model else None
         if not self.model or not Path(self.model).exists():
@@ -41,6 +43,8 @@ class ASR:
             sf.write(wav, audio, RATE, subtype='PCM_16')
             command = [self.cpp_bin, '-m', self.model, '-f', str(wav), '-l', self.language,
                        '-ojf', '-of', str(prefix), '-np', '-ng', '-t', str(self.cpp_threads), '--prompt', self.prompt]
+            if self.use_gpu:command.remove("-ng")
+            if not self.flash_attention:command.append("-nfa")
             run_guarded(command, timeout=600)
             data = json.loads(prefix.with_suffix('.json').read_text())
             return [{'start':s['offsets']['from']/1000, 'end':s['offsets']['to']/1000,
@@ -64,6 +68,8 @@ class ASR:
                 wav=root/f'input-{i}.wav';prefix=root/f'result-{i}'
                 sf.write(wav,audio,RATE,subtype='PCM_16');prefixes.append(prefix)
                 command.extend(['-f',str(wav),'-of',str(prefix)])
+            if self.use_gpu:command.remove("-ng")
+            if not self.flash_attention:command.append("-nfa")
             run_guarded(command,timeout=120)
             # Read all outputs before returning. Missing/corrupt output fails the batch.
             results=[]

@@ -48,3 +48,29 @@ class LowMemoryTests(unittest.TestCase):
         from meeting_os.resources import MemoryPressureError
         with patch('meeting_os.resources.check_pressure',side_effect=MemoryPressureError('pressure')),patch('meeting_os.cli.resolve_inference',side_effect=AssertionError('must not resolve or load models')):
             with self.assertRaises(MemoryPressureError):make_pipeline(None,None)
+    def test_attention_trial_only_adds_nfa_flag_to_cpu_command(self):
+        import json,numpy as np
+        from meeting_os.backends import ASR
+        with tempfile.TemporaryDirectory() as tmp:
+            model=Path(tmp)/'model';model.touch();commands=[]
+            def run(command,**kwargs):
+                commands.append(command.copy())
+                Path(command[command.index('-of')+1]).with_suffix('.json').write_text(json.dumps({'transcription':[]}))
+            with patch('meeting_os.backends.run_guarded',side_effect=run):
+                asr=ASR('cpp',model);asr.transcribe(np.zeros(16000));asr.flash_attention=False;asr.transcribe(np.zeros(16000))
+            self.assertNotIn('-nfa',commands[0]);self.assertIn('-nfa',commands[1])
+            for command in commands:
+                self.assertIn('-ng',command);self.assertEqual(command[command.index('-t')+1],'2')
+    def test_gpu_trial_only_removes_cpu_disable_flag(self):
+        import json,numpy as np
+        from meeting_os.backends import ASR
+        with tempfile.TemporaryDirectory() as tmp:
+            model=Path(tmp)/'model';model.touch();commands=[]
+            def run(command,**kwargs):
+                commands.append(command.copy())
+                Path(command[command.index('-of')+1]).with_suffix('.json').write_text(json.dumps({'transcription':[]}))
+            with patch('meeting_os.backends.run_guarded',side_effect=run):
+                asr=ASR('cpp',model);asr.transcribe(np.zeros(16000));asr.use_gpu=True;asr.transcribe(np.zeros(16000))
+            self.assertIn('-ng',commands[0]);self.assertNotIn('-ng',commands[1]);self.assertNotIn('-nfa',commands[1])
+            self.assertEqual(commands[1][commands[1].index('-m')+1],str(model.resolve()))
+            self.assertEqual(commands[1][commands[1].index('-t')+1],'2')

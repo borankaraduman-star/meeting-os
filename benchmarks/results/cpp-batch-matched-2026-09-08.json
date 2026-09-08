@@ -1,0 +1,26 @@
+{
+  "runs": [
+    {
+      "mode": "serial",
+      "seconds": 9.662214166950434
+    },
+    {
+      "mode": "batch",
+      "seconds": 9.34309508302249
+    },
+    {
+      "mode": "batch",
+      "seconds": 9.507684124982916
+    },
+    {
+      "mode": "serial",
+      "seconds": 10.001109250006266
+    }
+  ],
+  "exact_output_match": false,
+  "reference_outputs_distinct": true,
+  "clips": 2,
+  "audio_seconds": 5.598,
+  "quality_limit": "Output equality is not WER/DER validation against human reference.",
+  "binary_sha256": "73585768fac415f55f3a3165fb7e87f58965b267a90c385451d6e12f4de771ef"
+}

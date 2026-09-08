@@ -17,3 +17,18 @@ class BenchmarkTests(unittest.TestCase):
    self.assertTrue(module.competing_job())
   with patch.object(module.subprocess,'check_output',return_value='python scripts/benchmark-cpp-batch.py'):
    self.assertFalse(module.competing_job())
+ def test_attention_comparison_is_matched_and_restores_setting(self):
+  class Fake:
+   flash_attention=False
+   def __init__(self):self.flags=[]
+   def transcribe(self,x):self.flags.append(self.flash_attention);return [{'text':'same'}]
+  asr=Fake();report=module.compare_attention(asr,[np.zeros(16000)])
+  self.assertEqual(asr.flags,[True,False,False,True]);self.assertFalse(asr.flash_attention)
+  self.assertTrue(report['exact_output_match'])
+ def test_attention_setting_restored_after_failure(self):
+  class Fake:
+   flash_attention=False
+   def transcribe(self,x):raise ValueError('failure')
+  asr=Fake()
+  with self.assertRaises(ValueError):module.compare_attention(asr,[np.zeros(16000)])
+  self.assertFalse(asr.flash_attention)

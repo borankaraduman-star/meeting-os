@@ -19,8 +19,14 @@ class IsolatedLivePipeline:
 def main():
     data=json.loads(Path(sys.argv[1]).read_text())
     from .live_timing import observe_worker
-    with observe_worker(data):
-        process_request(data)
+    from .live_tuning import revision,disable_trial
+    data['_tuning_revision']=revision(data)
+    try:
+        with observe_worker(data):
+            process_request(data)
+    except BaseException:
+        disable_trial(data)
+        raise
 
 def process_request(data):
     from .audio_probe import digital_silence_duration
@@ -34,11 +40,20 @@ def process_request(data):
     store=Store(args.db)
     try:
         pipeline=make_pipeline(args,store)
-        from .live_tuning import cpp_threads
+        from .live_tuning import cpp_threads,batch_regions,no_flash_attention,cpp_gpu
         data['_cpp_threads']=cpp_threads(data)
         if getattr(pipeline.asr,'engine',None)=='cpp':
             pipeline.asr.cpp_threads=data['_cpp_threads']
-        rows,turns,duration=pipeline.process(data['path'],data['source'],data['offset'],data['provisional'])
+            pipeline.asr.batch_regions=batch_regions(data)
+            pipeline.asr.flash_attention=not no_flash_attention(data)
+            data["_flash_attention"]=pipeline.asr.flash_attention
+            pipeline.asr.use_gpu=cpp_gpu(data)
+            data["_gpu_requested"]=pipeline.asr.use_gpu
+        try:
+            rows,turns,duration=pipeline.process(data['path'],data['source'],data['offset'],data['provisional'])
+        finally:
+            data['_batch_used']=getattr(pipeline.asr,'batch_used',False) is True
+            data['_batch_clip_count']=getattr(pipeline.asr,'batch_clip_count',0) if data['_batch_used'] else 0
         Path(sys.argv[2]).write_text(json.dumps({'segments':[r.to_dict() for r in rows],'turns':turns,'duration':duration}))
     finally:store.close()
 

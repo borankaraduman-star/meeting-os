@@ -31,7 +31,8 @@ def observe_worker(data):
             temp=target.with_name(target.name+f'.{os.getpid()}.tmp')
             row={'stages':totals,'elapsed_seconds':max(0,last-started),'source':source,
                  'offset':data.get('offset',0),'updated_at':time.time(),'failed':failed,
-                 'cpp_threads':data.get('_cpp_threads',2)}
+                 'cpp_threads':data.get('_cpp_threads',2),'batch_used':data.get('_batch_used',False),
+                 'batch_clip_count':data.get('_batch_clip_count',0),'flash_attention':data.get('_flash_attention',True),'gpu_requested':data.get('_gpu_requested',False)}
             try:
                 temp.write_text(json.dumps(row));temp.replace(target)
             except OSError:

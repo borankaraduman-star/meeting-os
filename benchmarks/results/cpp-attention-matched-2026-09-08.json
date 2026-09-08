@@ -1,0 +1,26 @@
+{
+  "runs": [
+    {
+      "mode": "flash",
+      "seconds": 9.374341375078075
+    },
+    {
+      "mode": "non_flash",
+      "seconds": 11.483269582968205
+    },
+    {
+      "mode": "non_flash",
+      "seconds": 12.858340125065297
+    },
+    {
+      "mode": "flash",
+      "seconds": 13.166499083046801
+    }
+  ],
+  "exact_output_match": false,
+  "reference_outputs_distinct": true,
+  "clips": 2,
+  "audio_seconds": 5.598,
+  "quality_limit": "Output equality is not WER/DER validation against human reference.",
+  "binary_sha256": "73585768fac415f55f3a3165fb7e87f58965b267a90c385451d6e12f4de771ef"
+}
