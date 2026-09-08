@@ -24,6 +24,21 @@ class Pipeline:
         self.asr, self.diarizer, self.store = asr, diarizer, store
         self.identity_threshold, self.identity_margin = identity_threshold, identity_margin
     def process(self, path, source='system', offset=0, provisional=False, bounded_final=False):
+        if bounded_final and provisional:raise ValueError('Bounded final reader is not a live experiment')
+        if provisional and getattr(getattr(self.diarizer,"embedder",None),"isolated_final",False) is True:
+            import tempfile
+            from pathlib import Path
+            import soundfile as sf
+            # Live capture chunks are bounded; retain the original mono/resample
+            # operation, then let sequential workers share a private FLOAT WAV.
+            info=sf.info(path)
+            if info.frames/info.samplerate>60:raise ValueError('Live chunk exceeds 60 seconds')
+            audio=read_audio(path)
+            if not len(audio):return [],[],0
+            with tempfile.TemporaryDirectory(prefix='meeting-os-live-pcm-') as tmp:
+                pcm=Path(tmp)/'audio.wav';sf.write(pcm,audio,RATE,subtype='FLOAT');del audio
+                with sf.SoundFile(pcm) as reader:
+                    return self._process(pcm,source,offset,provisional,reader)
         if not bounded_final:return self._process(path,source,offset,provisional)
         if provisional:raise ValueError('Bounded final reader is not a live experiment')
         import soundfile as sf
@@ -75,7 +90,15 @@ class Pipeline:
             emit('transcribing',current=0,total=len(regions),source=source)
             self.asr.batch_used=True
             self.asr.batch_clip_count=len(regions)
-            batch_rows=self.asr.transcribe_batch([audio[a:b] for a,b in regions])
+            if reader is None:clips=[audio[a:b] for a,b in regions]
+            else:
+                clips=[]
+                for a,b in regions:
+                    reader.seek(a);clip=reader.read(b-a,dtype='float32')
+                    if len(clip)!=b-a:raise ValueError('Live audio became truncated')
+                    clips.append(clip)
+            batch_rows=self.asr.transcribe_batch(clips)
+            del clips
             if len(batch_rows)!=len(regions):raise ValueError('ASR batch result count mismatch')
         for index,(begin,end) in enumerate(regions):
             emit("transcribing",current=index,total=len(regions),source=source)

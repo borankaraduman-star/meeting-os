@@ -1,0 +1,278 @@
+{
+  "before": {
+    "mode": "before",
+    "complete": false,
+    "stages": [
+      {
+        "stage": "loading_models",
+        "elapsed": 0.009179583052173257,
+        "parent_footprint": 12386784,
+        "torch_loaded": false
+      },
+      {
+        "stage": "reading_audio",
+        "elapsed": 1.8472025420051068,
+        "parent_footprint": 248988584,
+        "torch_loaded": true
+      },
+      {
+        "stage": "vad",
+        "elapsed": 1.855948582990095,
+        "parent_footprint": 253658024,
+        "torch_loaded": true
+      },
+      {
+        "stage": "diarizing",
+        "elapsed": 2.022203917033039,
+        "parent_footprint": 266798016,
+        "torch_loaded": true
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 3.0570433750981465,
+        "parent_footprint": 266945472,
+        "torch_loaded": true
+      }
+    ],
+    "elapsed_seconds": 3.5484862501034513
+  },
+  "after": {
+    "mode": "after",
+    "complete": true,
+    "resources": {
+      "peak_footprint_bytes": 1290750592,
+      "samples": 189,
+      "elapsed_seconds": 22.485181124997325
+    },
+    "stages": [
+      {
+        "stage": "loading_models",
+        "elapsed": 0.006656915997155011,
+        "parent_footprint": 12452320,
+        "torch_loaded": false
+      },
+      {
+        "stage": "reading_audio",
+        "elapsed": 0.7029935410246253,
+        "parent_footprint": 84640416,
+        "torch_loaded": false
+      },
+      {
+        "stage": "vad",
+        "elapsed": 0.7032904999796301,
+        "parent_footprint": 84656800,
+        "torch_loaded": false
+      },
+      {
+        "stage": "diarizing",
+        "elapsed": 2.6532984579680488,
+        "parent_footprint": 84820640,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 3.6284050409449264,
+        "parent_footprint": 84935328,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 9.682959915953688,
+        "parent_footprint": 85033632,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 14.636475957930088,
+        "parent_footprint": 85050016,
+        "torch_loaded": false
+      },
+      {
+        "stage": "identifying",
+        "elapsed": 19.828471290995367,
+        "parent_footprint": 85050016,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 22.30623441596981,
+        "parent_footprint": 85131960,
+        "torch_loaded": false
+      }
+    ],
+    "segments": 3,
+    "turns": 3,
+    "audio_seconds": 12.0,
+    "elapsed_seconds": 22.30730391596444
+  },
+  "asr_entry_parent_reduction_bytes": 182010144,
+  "asr_entry_parent_reduction_fraction": 0.6818251781397513,
+  "original_counts": {
+    "segments": 270,
+    "asr_checkpoints": 101
+  },
+  "five_minute_preflight": [
+    {
+      "mode": "live",
+      "target_seconds": 300,
+      "complete": false,
+      "state": "terminal",
+      "failure": "ResourceProbeError",
+      "simulation": true,
+      "capture_validation": false,
+      "completed_chunks": 1,
+      "segments": 0,
+      "speaker_labels": [],
+      "lag_seconds": [],
+      "wall_seconds": 12.215159750077873,
+      "accuracy": null,
+      "reason": "No human reference",
+      "profiles": "isolated empty test store; no auto-enrollment",
+      "started_at": 1788907271.836426,
+      "start_parent_footprint_bytes": 83575360,
+      "start_pressure": 1,
+      "live_worker_resources": [
+        {
+          "peak_footprint_bytes": 92816392,
+          "samples": 1,
+          "elapsed_seconds": 0.1301195410778746
+        }
+      ],
+      "processed_source_seconds": {
+        "system": 12.06338091706857
+      }
+    },
+    {
+      "mode": "batch",
+      "target_seconds": 300,
+      "complete": false,
+      "state": "terminal",
+      "failure": "MemoryPressureError",
+      "simulation": false,
+      "capture_validation": false,
+      "completed_chunks": 0,
+      "segments": 0,
+      "speaker_labels": [],
+      "lag_seconds": [],
+      "wall_seconds": 2.1970316669903696,
+      "accuracy": null,
+      "reason": "No human reference",
+      "profiles": "isolated empty test store; no auto-enrollment",
+      "started_at": 1788907286.1527271,
+      "start_parent_footprint_bytes": 83493440,
+      "start_pressure": 1,
+      "rtf": 0.007323438889967899,
+      "end_parent_footprint_bytes": 91652768,
+      "end_pressure": 2,
+      "sources_unchanged": true,
+      "test_segments_saved": 0,
+      "test_profiles_saved": 0
+    }
+  ],
+  "scope": "No ASR checkpoint reads in comparisons. Same12s audio before/after, decoder/models unchanged. Before failed so no native output equality or successful total-peak comparison. After short run success does not prove30minute acceptance. Failed-run rtf values are elapsed/target only, NOT processing throughput.",
+  "bounded_probe": {
+    "monitor-lifecycle.json": {
+      "kind": "bounded own Python child lifecycle probe; no audio/models",
+      "resources": {
+        "peak_footprint_bytes": 21070784,
+        "samples": 9,
+        "elapsed_seconds": 1.071927124983631
+      },
+      "complete": true,
+      "probe_failures": [
+        {
+          "pid": 86844,
+          "errno": 3,
+          "failure": "ResourceProbeError",
+          "process_snapshot": ""
+        },
+        {
+          "pid": 86852,
+          "errno": 3,
+          "failure": "ResourceProbeError",
+          "process_snapshot": ""
+        },
+        {
+          "pid": 86867,
+          "errno": 3,
+          "failure": "ResourceProbeError",
+          "process_snapshot": ""
+        },
+        {
+          "pid": 86875,
+          "errno": 3,
+          "failure": "ResourceProbeError",
+          "process_snapshot": ""
+        }
+      ]
+    },
+    "monitor-live-topology.json": {
+      "kind": "12s existing-audio replay with resource error diagnostics; not30min acceptance",
+      "complete": false,
+      "failure": "MemoryPressureError",
+      "failure_detail": "Mac bellek bask\u0131s\u0131 alt\u0131nda. A\u011f\u0131r uygulamalar\u0131 kapat\u0131p yeniden deneyin; ses dosyalar\u0131 korunuyor.",
+      "probe_failures": [
+        {
+          "pid": 87523,
+          "errno": 3,
+          "failure": "ResourceProbeError",
+          "process_snapshot": ""
+        }
+      ]
+    },
+    "shared-pressure.json": {
+      "pressure": 2,
+      "largest_measurable": [
+        {
+          "pid": 79340,
+          "process": "com.apple.Virtualization.VirtualMachine",
+          "footprint_bytes": 2009189688
+        },
+        {
+          "pid": 3171,
+          "process": "Codex (Renderer)",
+          "footprint_bytes": 1273023944
+        },
+        {
+          "pid": 54296,
+          "process": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 381585424
+        },
+        {
+          "pid": 54293,
+          "process": "Google Chrome Helper (Renderer)",
+          "footprint_bytes": 369315032
+        },
+        {
+          "pid": 3170,
+          "process": "Codex (Renderer)",
+          "footprint_bytes": 328091832
+        },
+        {
+          "pid": 2597,
+          "process": "ChatGPT",
+          "footprint_bytes": 301812784
+        },
+        {
+          "pid": 3148,
+          "process": "codex",
+          "footprint_bytes": 296061208
+        },
+        {
+          "pid": 2960,
+          "process": "Codex (Service)",
+          "footprint_bytes": 295896504
+        }
+      ],
+      "scope": "shared-system snapshot, no process stopped; not complete total memory accounting"
+    }
+  },
+  "lower_memory_candidate": {
+    "name": "whisper-small-q5_1",
+    "local": false,
+    "download_mib": 181,
+    "source": "https://huggingface.co/ggerganov/whisper.cpp",
+    "downloaded": false,
+    "measured": false
+  }
+}

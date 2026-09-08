@@ -48,7 +48,7 @@ def make_pipeline(args,store):
     with contextlib.redirect_stdout(sys.stderr):
         asr=ASR(args.engine,args.model,args.language,vocabulary,args.cpp_bin)
         from .resources import low_memory_mac
-        if low_memory_mac() and getattr(args,'command',None)=='retry' and args.engine=='cpp' and args.diarization=='sherpa' and args.embedding=='resemblyzer':
+        if low_memory_mac() and getattr(args,'command',None) in ('retry','record') and args.engine=='cpp' and args.diarization=='sherpa' and args.embedding=='resemblyzer':
             from .final_identity import FinalEmbedder
             emb=FinalEmbedder(args.embedding_model)
         else:emb=Embedder(args.embedding,args.embedding_model)
