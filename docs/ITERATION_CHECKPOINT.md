@@ -1,3 +1,7 @@
+## Latest: Opus review timed out; Fable review still verified live
+
+Opus session80775 TERMINAL after600s timeout, stdout/stderr both empty; no completed review or confirmed subagent result. Fable session95385/PID49368 confirmed live at7m20s, no report yet; poll same handle, do not duplicate. Latest real retry78649 terminal during assembly; no active native recovery. Implementation/tests/evidence committed through2ae1a14. Goal remains incomplete.
+
 ## Latest: thread-budget real retry terminal at admission
 
 Session78649 parent51998/child52001 terminal exit75 after7.42s, OS pressure2, sampled peak96,781,344bytes. Progress file appeared by terminal inspection: assembly, before model phases.270 original segments and69ASR checkpoints retained. No blind restart under pressure. Evidence real-thread-budget-admission-2026-09-09.json. Identity thread fix e372c4a verified by31tests and native vector parity; full meeting remains incomplete. Claude reviews still pending; revalidate80775/95385.
