@@ -1,3 +1,7 @@
+## Active recovery / next bounded experiment
+
+Real meeting 553993e7544a recovery started through installed UI. Parent 40778 / worker 40784 were alive; progressed from diarization to 391-region transcription. Revalidate current state before acting. Backup: data directory `before-recovery-553993e7544a.sqlite`. Numeric watch: `build/recovery-watch.json`. No second inference while recovery runs. `CPP_WINDOW_EXPERIMENT.md` documents prepared benchmark and Claude review; native window comparison remains pending.
+
 ## Latest checkpoint: matched CPU experiments completed
 
 See `CPP_MATCHED_2026-09-08.md`. Batch benefit ~4%, structured outputs differ; non-flash not faster. Defaults unchanged. Fixed actual protected-ps footprint admission failure without loosening model guards. No live GPU or expired tuning profile. Next: evaluate encoder amortization on bounded fixtures and finish real-meeting recovery safely. Goal incomplete.
