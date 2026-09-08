@@ -1,0 +1,155 @@
+{
+  "kind": "real",
+  "timeout_seconds": 120,
+  "cases": [
+    {
+      "id": "fleurs-tr-2004-0",
+      "session": "fleurs-test-2004-0",
+      "audio": "00.wav",
+      "reference": "00.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1660-1",
+      "session": "fleurs-test-1660-1",
+      "audio": "01.wav",
+      "reference": "01.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1692-2",
+      "session": "fleurs-test-1692-2",
+      "audio": "02.wav",
+      "reference": "02.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1711-3",
+      "session": "fleurs-test-1711-3",
+      "audio": "03.wav",
+      "reference": "03.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1689-4",
+      "session": "fleurs-test-1689-4",
+      "audio": "04.wav",
+      "reference": "04.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1747-5",
+      "session": "fleurs-test-1747-5",
+      "audio": "05.wav",
+      "reference": "05.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1684-6",
+      "session": "fleurs-test-1684-6",
+      "audio": "06.wav",
+      "reference": "06.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1884-7",
+      "session": "fleurs-test-1884-7",
+      "audio": "07.wav",
+      "reference": "07.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1908-8",
+      "session": "fleurs-test-1908-8",
+      "audio": "08.wav",
+      "reference": "08.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1729-9",
+      "session": "fleurs-test-1729-9",
+      "audio": "09.wav",
+      "reference": "09.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-1716-10",
+      "session": "fleurs-test-1716-10",
+      "audio": "10.wav",
+      "reference": "10.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-2002-11",
+      "session": "fleurs-test-2002-11",
+      "audio": "11.wav",
+      "reference": "11.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "name": "CPP turbo q5_0 tr vocabulary off",
+      "options": [
+        "--engine",
+        "cpp",
+        "--model",
+        "../../models/cpp-turbo/ggml-large-v3-turbo-q5_0.bin",
+        "--language",
+        "tr",
+        "--diarization",
+        "sherpa",
+        "--vocabulary",
+        "empty-vocabulary.txt"
+      ]
+    }
+  ]
+}

@@ -49,3 +49,9 @@ Corrected checkpoint, final task plan:
 Claude recommends a fixed-model vocabulary-off ablation on identical references, unchanged WER normalization, followed by separately annotated held-out human meeting/code-switching audio. Entity recall alone cannot identify false entity introductions.
 
 Review correction: Claude speculated that the vocabulary was likely built from these FLEURS references. Inspection shows the existing list contains Boran/İpek/Çağrı/Gökçe and PM terms, not Meşhed/Schlegel/Upolu/nispeten, and dates to the initial implementation commit `71ab43c`. Reference-derived vocabulary provenance is not established and must not be asserted. The set is nevertheless already inspected, so a future generalization claim still requires held-out data.
+
+## Vocabulary-off ablation, partial
+
+The same model/configuration with a deliberately empty vocabulary completed 8/12 cases. OS memory pressure then rose to level 2: one active job was stopped (sampled peak 1,211,108,016 bytes below 3.5 GiB child budget), and three later cases failed admission. No guard was relaxed or heavy retry started. Matched completed subset: 137 reference words, vocabulary on 8 edits versus off 9 edits. See `benchmarks/results-cpp-tr-no-vocabulary/paired-summary.json`. This partial one-edit difference does not justify a default change or establish name/code-switching precision. Four deferred cases remain open.
+
+The harness currently continues after a resource failure, producing further admission failures. Before larger repeat runs, add an explicit deferred/resource-stop outcome so this does not become an automated retry loop. Preserve completed evidence and count availability separately.

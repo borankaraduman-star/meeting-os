@@ -1,3 +1,7 @@
+## Latest: vocabulary ablation paused under OS pressure
+
+8/12 vocabulary-off human cases completed; same paired cases have 8 edits with vocabulary and 9 without. Four pressure failures retained, no promotion/retry under elevated pressure. See `TURKISH_PRECISION_CHECKPOINT.md`. Claude reviewed same-speaker contiguous-window candidate: guard entire span, preserve real time, and validate speaker embeddings/identity as well as text. Next: make benchmark resource-stop/deferred handling explicit, finish ablation when safe, then test conservative windows without cross-speaker/identity regression. Goal remains incomplete.
+
 ## Latest: deferred human baseline cases completed
 
 Current CPP q5_0 CPU2 with existing vocabulary now has one successful result per 12 public FLEURS cases: 14/244 edits, 5.74% weighted WER. Two original OS-pressure failures retained (14 attempts total); no memory guard changes. See `TURKISH_PRECISION_CHECKPOINT.md` and `benchmarks/results-cpp-tr-current/completed-summary.json`. Proper names and spelling/number formatting contribute errors. No meeting accuracy or long-run stability claim. Next: fixed vocabulary on/off and independently annotated held-out human names/code-switching; real meeting recovery and live latency remain open.

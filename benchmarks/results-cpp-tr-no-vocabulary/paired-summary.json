@@ -1,0 +1,29 @@
+{
+  "status": "partial_resource_interruption",
+  "attempted_cases": 12,
+  "completed_cases": 8,
+  "pressure_failures": 4,
+  "reference_words": 137,
+  "vocabulary_on_errors": 8,
+  "vocabulary_off_errors": 9,
+  "vocabulary_on_sha256": "99207c9fc47f0e7c8acc5b506705de4b5ffc766fe0e02cfa96fa6f90fdf18a05",
+  "paired_cases": [
+    "fleurs-tr-2004-0",
+    "fleurs-tr-1660-1",
+    "fleurs-tr-1692-2",
+    "fleurs-tr-1711-3",
+    "fleurs-tr-1689-4",
+    "fleurs-tr-1747-5",
+    "fleurs-tr-1684-6",
+    "fleurs-tr-1884-7"
+  ],
+  "decision": "Keep default; insufficient partial evidence to promote a change",
+  "limitations": [
+    "8 paired read-speech cases only, not meetings",
+    "Four resource failures retained; no automatic heavy retry under elevated pressure",
+    "Not a vocabulary-entity precision or recall benchmark",
+    "No statistical significance conclusion"
+  ],
+  "vocabulary_on_wer": 0.058394160583941604,
+  "vocabulary_off_wer": 0.06569343065693431
+}
