@@ -99,3 +99,28 @@ Cycle 2 COMPLETE — recording navigation (same 1.0.1 source package refreshed)
 - Next useful cycle: stale/missing cross-meeting evidence feedback and search
   persistence on ordinary sidebar navigation; assess with fictional fixtures.
   No duplicate Claude process remains. Heartbeat should remain active to 09:00.
+
+
+Cycle 3 COMPLETE — source navigation and search reset
+- Stable segment ID, scoped to selected meeting, replaces quote-prefix navigation.
+  Pending cross-meeting evidence resolves after matching snapshot. Missing/deleted
+  source clears focus and shows explicit warning; changed text shows current row
+  with a warning. Evidence identities now include meeting to avoid cross-library
+  SwiftUI collisions. Clicking evidence opens source; playback is explicit there.
+- Ordinary selection synchronously clears rows, analysis, search and evidence
+  focus/pending. Removed delayed SwiftUI onChange clearing, which could wipe rows
+  already fetched. Search edits and leaving Transcript cancel pending evidence.
+- Added focused-row view and "Tüm konuşmayı göster" escape button.
+- Three Swift tests failed first for changed quotes, duplicate quotes, deleted
+  segment; all seven Swift tests passed after stable-ID fix. Native build passed.
+- CUA: type PRD in sprint then select FLEURS -> search empty, FLEURS row visible.
+  From FLEURS open Boran task source -> sprint selected, exact row only; clear
+  focus -> all five fictional rows visible. Screenshot visually inspected.
+- Claude checkpoint saved CLAUDE_NIGHT_EVIDENCE_REVIEW.md. #1 accepted: keep pending
+  when source absent in processing/provisional meeting; no premature deletion
+  warning. #2 obsolete: cycle2 one-shot recording policy already cancels on user
+  selection. #3 search cancellation already implemented, tab cancellation added.
+- Limit: missing/deleted/duplicate scenarios verified at resolver unit level,
+  not by mutating user's stored meeting data. No real-meeting quality claims.
+- Next useful cycle: empty transcript search feedback, state loading/error clarity
+  and final documentation consistency. Continue compact Claude code-only review.

@@ -3,7 +3,8 @@ import AppKit
 
 struct Evidence:Identifiable {
     let segment:Int; let quote:String; let start:Double; let speaker:String; let meeting:String; let meetingTitle:String
-    var id:String { "\(segment):\(quote)" }
+    var id:String { "\(meeting):\(segment):\(quote)" }
+    func destination(in rows:[Row])->Row? { rows.first { $0.id==segment } }
     init(_ d:[String:Any]) { segment=d["segment_id"] as? Int ?? d["id"] as? Int ?? 0; quote=d["quote"] as? String ?? d["text"] as? String ?? ""; start=d["start"] as? Double ?? 0; speaker=d["speaker"] as? String ?? d["speaker_name"] as? String ?? ""; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "" }
 }
 struct Insight:Identifiable {
@@ -61,9 +62,26 @@ extension Model {
         }
     }
     func openEvidence(_ e:Evidence) {
-        if !e.meeting.isEmpty && e.meeting != selected { selected=e.meeting; tab="transcript"; search=String(e.quote.prefix(40));return }
-        if meeting?.metadata["text_only"] as? Bool == true { tab="transcript"; search=String(e.quote.prefix(40));return }
-        if let row=rows.first(where:{$0.id==e.segment}) { tab="transcript"; search=String(row.text.prefix(40)); play(row) } else { error="Kaynak konuşma bulunamadı. Transkripti kontrol edin." }
+        if !e.meeting.isEmpty && !meetings.contains(where: { $0.id==e.meeting }) {
+            error="Kaynak toplantı bulunamadı."; return
+        }
+        if !e.meeting.isEmpty { selected=e.meeting }
+        tab="transcript"; search=""; error=""; pendingEvidence=e
+        if !rows.isEmpty { resolvePendingEvidence() }
+        else { Task { await refresh() } }
+    }
+    func resolvePendingEvidence() {
+        guard let e=pendingEvidence else { return }
+        guard e.meeting.isEmpty || e.meeting==selected else { pendingEvidence=nil; return }
+        if e.destination(in:rows)==nil && ["processing","provisional"].contains(meeting?.status ?? "") { return }
+        pendingEvidence=nil
+        if let row=e.destination(in:rows) {
+            focusedSegment=row.id
+            if !row.text.contains(e.quote) { error="Kaynak metin değişmiş. Güncel konuşma bölümü gösteriliyor." }
+        } else {
+            focusedSegment=nil
+            error="Kaynak konuşma bulunamadı. Tüm transkript gösteriliyor; analiz güncel olmayabilir."
+        }
     }
 }
 
