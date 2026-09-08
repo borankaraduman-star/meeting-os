@@ -237,55 +237,6 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 func statusLabel(_ status:String)->String {
     ["not_started":"Kayıt başlayamadı", "pending_finalization":"Son işlem bekliyor", "capture_unknown":"Kayıt durumu belirsiz", "capturing":"Kaydediliyor", "complete":"Hazır", "processing":"İşleniyor", "provisional":"Canlı kayıt", "incomplete":"Kurtarılabilir", "failed":"İşlem başarısız", "canceled":"İptal edildi"][status] ?? status
 }
-struct MeetingContent:View {
-    @StateObject var m=Model()
-    var body:some View {
-        NavigationSplitView {
-            VStack(alignment:.leading,spacing:14) {
-                HStack(spacing:11) { Image(systemName:"waveform").font(.system(size:23,weight:.semibold)).foregroundStyle(MeetingStyle.accent).frame(width:45,height:45).background(MeetingStyle.accent.opacity(0.13),in:RoundedRectangle(cornerRadius:14));VStack(alignment:.leading,spacing:3) { Text("Meeting OS").font(.system(size:23,weight:.bold,design:.rounded));Text("Boran’ın toplantı hafızası").font(.caption).foregroundStyle(.secondary) } }.padding(.bottom,12)
-                TextField("Toplantıya bir ad ver",text:$m.title).textFieldStyle(.roundedBorder)
-                Button(action:{ m.recording ? m.stop() : m.start() }) { Label(RecoveryPresentation.recordingLabel(recording:m.recording,jobKind:m.jobKind),systemImage:m.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity) }.buttonStyle(.borderedProminent).controlSize(.large).tint(m.recording ? .red:MeetingStyle.accent).disabled(m.busy && !m.recording)
-                Button(action:m.importAudio) { Label("Ses dosyası aç",systemImage:"square.and.arrow.down").frame(maxWidth:.infinity) }.controlSize(.large).disabled(m.busy)
-                HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(m.meetings.count)").monospacedDigit().font(.caption) }.foregroundStyle(.secondary).padding(.top,14)
-                List(selection:$m.selected) { ForEach(m.meetings) { meeting in MeetingLibraryRow(meeting:meeting).tag(meeting.id) } }.listStyle(.sidebar)
-                ApplicationActivityView(model:m)
-                if m.canCancelJob { Button("İşlemi iptal et",action:m.cancelJob).disabled(m.jobCanceled) }
-                Button { Task { await m.exportDiagnostics() } } label: { Label("Tanılama raporu kaydet",systemImage:"doc.badge.gearshape") }.buttonStyle(.plain).font(.caption)
-                Divider()
-                Button { Task { await m.settings() } } label:{ Label("Sözlük ve ses profilleri",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.buttonStyle(.plain).font(.callout).padding(.vertical,8)
-            }.padding().navigationSplitViewColumnWidth(min:240,ideal:280)
-        } detail: {
-            VStack(alignment:.leading,spacing:0) {
-                HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Bir sonraki iyi fikri kaçırmayın.").font(.system(size:27,weight:.bold,design:.rounded)).lineLimit(2); HStack(spacing:6) { Circle().fill(MeetingStyle.statusColor(m.meeting?.displayStatus ?? "")).frame(width:6,height:6);Text(m.meeting.map { statusLabel($0.displayStatus) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary) }.padding(.top,5) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Özet ve görevler (Markdown)") { Task { await m.export("analysis.md") } }; Button("Transkript (Markdown)") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
-                if let meeting=m.meeting, meeting.metadata["capture_dir"] is String, !["complete","canceled"].contains(meeting.status), !m.busy {
-                    HStack {
-                        Text(RecoveryPresentation.canRetry(status:meeting.status,hasCapture:!meeting.captureSourcesEmpty,owner:meeting.recoveryState) ? "Kurtarma aynı toplantıyı günceller; işlem bitene kadar önceki metin korunur." : (meeting.displayStatus == "not_started" ? "Ses alınamadı. macOS izinlerini kontrol edip yeni kayıt başlatın." : "İşlem sürüyor veya durumu doğrulanamıyor. Kayıt değiştirilmedi.")).font(.caption)
-                        Spacer()
-                        if RecoveryPresentation.canRetry(status:meeting.status,hasCapture:!meeting.captureSourcesEmpty,owner:meeting.recoveryState) { Button(meeting.displayStatus == "pending_finalization" ? "Transkripti tamamla" : "Toplantıyı kurtar",action:m.recover) }
-                    }.padding(.horizontal,24).padding(.bottom,12)
-                }
-                if m.meeting?.metadata["text_only"] as? Bool == true { Text("Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8) }
-                MeetingNavigation(model:m).padding(.horizontal,24).padding(.bottom,18)
-                if m.tab=="transcript" { HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Bu konuşmada ara",text:$m.search).textFieldStyle(.plain); if m.focusedSegment != nil { Button("Tüm konuşmayı göster") { m.focusedSegment=nil } } }.padding(11).meetingCard().padding(.horizontal,24).padding(.bottom,16) }
-                if m.tab=="transcript", m.pendingEvidence != nil { HStack { ProgressView().controlSize(.small);Text("Kaynak bölümü bekleniyor…").font(.callout);Spacer();Button("Vazgeç") { m.pendingEvidence=nil } }.padding(.horizontal,24).padding(.bottom,12) }
-                Divider()
-                if !m.error.isEmpty { HStack(alignment:.top) { Image(systemName:"exclamationmark.triangle"); Text(m.error).font(.caption).textSelection(.enabled); Spacer(); Button("Kapat") { m.error="" } }.padding().background(.orange.opacity(0.12)) }
-                if m.tab=="analysis" { AnalysisView(m:m) } else if m.tab=="actions" { ActionsView(m:m) } else if m.tab=="memory" { MemoryView(m:m) } else {
-                ScrollView { LazyVStack(alignment:.leading,spacing:20) { ForEach(m.filteredRows) { row in HStack(alignment:.top,spacing:14) {
-                    Button { m.play(row) } label:{ VStack(spacing:8) { Image(systemName:"play.circle.fill").font(.title2).foregroundStyle(MeetingStyle.accent); Text(row.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }.frame(width:48) }.buttonStyle(.plain).help("Bu bölümü dinle").disabled(m.recording || m.meeting?.metadata["text_only"] as? Bool == true)
-                    VStack(alignment:.leading,spacing:7) { HStack { Text(row.label).font(.headline); Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Düzelt") { m.editRow=row; m.editName=row.name; m.editText=row.text; m.clean=false }.disabled(m.meeting?.status != "complete") }; Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6); if !row.flags.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) } }
-                }.padding(20).meetingCard() } }.padding(24)
-                    if m.filteredRows.isEmpty { TranscriptEmptyView(model:m).padding(32) }
-                }
-                }
-                Divider(); HStack { Label("Yerel işleme",systemImage:"lock.shield"); Text("•"); Text("\(m.rows.count) bölüm"); Spacer(); Text("İsim düzeltmek ses profilini otomatik eğitmez.") }.font(.caption).foregroundStyle(.secondary).padding(12)
-            }.frame(minWidth:660).background(MeetingStyle.canvas)
-        }.frame(minWidth:1000,minHeight:720).tint(MeetingStyle.accent)
-        .onChange(of:m.selected) { _,_ in Task { await m.refresh() } }
-        .sheet(item:$m.editRow) { row in VStack(alignment:.leading,spacing:18) { Text("Metin ve konuşmacı").font(.title2.bold()); TextEditor(text:$m.editText).frame(height:100).border(.quaternary); Button("Metni kaydet") { Task { await m.saveText() } }.disabled(m.editText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty); TextField("İsim",text:$m.editName); Button("Önce bölümü dinle") { m.play(row) }; Toggle("Dinledim: en az 3 saniye, tek kişi, temiz ses",isOn:$m.clean); Text("Profili kaydedersen sonraki toplantılarda bu sesle eşleşen kişiye isim önerilir. Belirsiz eşleşmeler isimsiz kalır.").font(.caption).foregroundStyle(.secondary); HStack { Button("Vazgeç") { m.editRow=nil }; Spacer(); Button("Yalnızca ismi kaydet") { Task { await m.saveLabel(enroll:false) } }.disabled(m.editName.trimmingCharacters(in:.whitespaces).isEmpty); Button("Ses profilini kaydet") { Task { await m.saveLabel(enroll:true) } }.disabled(!m.clean || m.editName.trimmingCharacters(in:.whitespaces).isEmpty) }; if !m.error.isEmpty { Text(m.error).foregroundStyle(.red).font(.caption) } }.padding(28).frame(width:540) }
-        .sheet(isPresented:$m.showSettings) { VStack(alignment:.leading,spacing:16) { Text("Sözlük ve ses profilleri").font(.title2.bold()); Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın."); TextEditor(text:$m.vocabulary).font(.body.monospaced()).frame(height:180).border(.quaternary); Text("Kaydedilmiş sesler").font(.headline); Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary); List(m.profiles) { p in HStack { VStack(alignment:.leading) { Text(p.name); Text("\(p.samples) örnek · \(p.model)").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("Profili sil",role:.destructive) { Task { await m.deleteProfile(p.name) } } } }.frame(height:160); HStack { Button("Veri klasörünü aç") { NSWorkspace.shared.open(m.dataDir) }; Spacer(); Button("Kaydet") { Task { await m.saveVocabulary() } }.buttonStyle(.borderedProminent) } }.padding(28).frame(width:600) }
-    }
-}
 @MainActor final class AppDelegate:NSObject,NSApplicationDelegate {
     static weak var model:Model?
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
@@ -298,5 +249,5 @@ struct MeetingContent:View {
 }
 @main struct MeetingOSApp:App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    var body:some Scene { Window("Meeting OS",id:"main") { MeetingContent() }.windowStyle(.titleBar) }
+    var body:some Scene { Window("Meeting OS",id:"main") { MeetingContent() }.windowStyle(.titleBar).defaultSize(width:1100,height:780) }
 }

@@ -1,0 +1,75 @@
+{
+  "implementation": "Claude Code Sonnet; Codex integration, small usability refinements and live QA",
+  "window_checks": [
+    {
+      "requested": "900x620",
+      "actual": [
+        900,
+        652
+      ],
+      "required_controls": 11,
+      "violations": []
+    },
+    {
+      "requested": "1000x720",
+      "actual": [
+        1000,
+        720
+      ],
+      "required_controls": 11,
+      "violations": []
+    },
+    {
+      "requested": "1280x900",
+      "actual": [
+        1280,
+        900
+      ],
+      "required_controls": 11,
+      "violations": []
+    }
+  ],
+  "tab_checks": [
+    {
+      "tab": "transcript",
+      "violations": []
+    },
+    {
+      "tab": "analysis",
+      "violations": []
+    },
+    {
+      "tab": "actions",
+      "violations": []
+    },
+    {
+      "tab": "memory",
+      "violations": []
+    }
+  ],
+  "live_recording": {
+    "meeting": "d08b3e0ef93f",
+    "status": "complete",
+    "stopped": true,
+    "native_errors": 0,
+    "record_control_visible_and_enabled_while_other_meeting_and_actions_tab_selected": true,
+    "sources": {
+      "mic": 24.78933333333333,
+      "system": 24.84
+    },
+    "renewed_permission_prompt": false
+  },
+  "visual_checks": [
+    "dark 900x652, 1000x720, 1280x900",
+    "light 1000x720 via process-only NSRequiresAquaSystemAppearance argument",
+    "search no-match state after explicit AX focus",
+    "settings and edit sheets fit and explicit cancel buttons dismiss"
+  ],
+  "business_logic_unchanged": true,
+  "swift_tests": 15,
+  "limitations": [
+    "Smallest outer window is 900x652 because the native titlebar adds 32px to the 620px content minimum.",
+    "Long error detail is height-capped in code; no injected long-error visual test.",
+    "No claim of comprehensive accessibility or every possible dataset/device layout."
+  ]
+}

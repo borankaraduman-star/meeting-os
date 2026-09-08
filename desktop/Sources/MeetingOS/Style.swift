@@ -5,6 +5,10 @@ enum MeetingStyle {
     static let accent=Color(red:0.20,green:0.68,blue:0.57)
     static let surface=Color(nsColor:.controlBackgroundColor)
     static let canvas=Color(nsColor:.windowBackgroundColor)
+    static let sidebarWidth:CGFloat=264
+    static let minDetailWidth:CGFloat=640
+    static let minWindowWidth:CGFloat=900
+    static let minWindowHeight:CGFloat=620
     static func statusColor(_ status:String)->Color {
         switch status { case "complete":return accent;case "failed","not_started","capturing":return .red;case "processing","provisional","incomplete","pending_finalization","capture_unknown":return .orange;default:return .secondary }
     }
@@ -23,7 +27,7 @@ struct SmallMetric:View {
 struct MeetingNavigation:View {
     @ObservedObject var model:Model
     let tabs=[("transcript","Transkript","waveform"),("analysis","Özet","text.alignleft"),("actions","Görevlerim","checklist"),("memory","Hafıza","sparkle.magnifyingglass")]
-    var body:some View { HStack(spacing:5) { ForEach(tabs,id:\.0) { key,title,icon in Button { model.tab=key } label:{ HStack(spacing:7) { Image(systemName:icon);Text(title).fontWeight(model.tab==key ? .semibold:.medium) }.font(.callout).frame(maxWidth:.infinity).padding(.vertical,10).contentShape(Rectangle()) }.buttonStyle(.plain).foregroundStyle(model.tab==key ? Color.primary:Color.secondary).background(model.tab==key ? MeetingStyle.surface:Color.clear,in:RoundedRectangle(cornerRadius:10)).overlay(alignment:.bottom) { if model.tab==key { Capsule().fill(MeetingStyle.accent).frame(width:24,height:2).offset(y:3) } }.accessibilityAddTraits(model.tab==key ? .isSelected:[]) } }.padding(5).background(.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:14)).accessibilityElement(children:.contain).accessibilityLabel("Toplantı görünümleri") }
+    var body:some View { HStack(spacing:5) { ForEach(tabs,id:\.0) { key,title,icon in Button { model.tab=key } label:{ HStack(spacing:7) { Image(systemName:icon);Text(title).fontWeight(model.tab==key ? .semibold:.medium) }.font(.callout).frame(maxWidth:.infinity).padding(.vertical,10).contentShape(Rectangle()) }.buttonStyle(.plain).foregroundStyle(model.tab==key ? Color.primary:Color.secondary).background(model.tab==key ? MeetingStyle.surface:Color.clear,in:RoundedRectangle(cornerRadius:10)).overlay(alignment:.bottom) { if model.tab==key { Capsule().fill(MeetingStyle.accent).frame(width:24,height:2).offset(y:3) } }.accessibilityIdentifier("tab-\(key)").accessibilityLabel(title).accessibilityAddTraits(model.tab==key ? .isSelected:[]) } }.padding(5).background(.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:14)).accessibilityElement(children:.contain).accessibilityLabel("Toplantı görünümleri") }
 }
 struct MeetingLibraryRow:View {
     let meeting:Meeting
