@@ -1,3 +1,7 @@
+## Latest: real retry passed diarization then stopped at ASR6/392; checkpoint design reviewed
+
+Session27125,parent82437/worker82448 is TERMINAL exit75. Full mic diarization completed; transcribing progress6/392 before OS pressure after253.23s, sampled tree peak2.13GB.270original segments remain; one private workspace cleaned, no running retry from this attempt. Numeric result `benchmarks/results/real-file-handoff-retry-2026-09-08.json`; progress/logs under `build/recovery-file-*`. Window AX query during run succeeded in.50s (limited responsiveness observation). Next implement retry-only raw-ASR checkpoints per `ASR_CHECKPOINT_PLAN.md`, reviewed by actual Claude, before repeating expensive lost work. No checkpoint cache implemented yet; no full meeting completion or live latency acceptance.
+
 ## Latest: long attempt terminal; file handoff now frees parent audio before diarization
 
 Session27868 exited75 after107.17s in isolated diarization (sampled tree peak1.91GB); original270segments preserved, one dead-owner retry workspace cleaned. No running recovery from that attempt. Bounded-final path now releases mmap afterVAD and sends existing private snapshot path to child, with shape/frame and file-change checks.26tests passed; native13turns identical; synthetic3154s parent-at-diarization footprint280MB→78MB. Claude review covered private-file mutation assumptions. Full long-record validation after this additional change remains pending. Do not restart from old PIDs or old running watch notes below.

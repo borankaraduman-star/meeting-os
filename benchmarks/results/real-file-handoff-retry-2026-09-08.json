@@ -1,0 +1,23 @@
+{
+  "status": "terminal",
+  "exit_code": 75,
+  "elapsed_seconds": 253.22618145798333,
+  "sampled_peak_footprint_bytes": 2125843816,
+  "failure_kind": "MemoryPressureError",
+  "last_progress": {
+    "stage": "transcribing",
+    "current": 6,
+    "total": 392,
+    "source": "mic",
+    "updated_at": 1788899469.151775
+  },
+  "segments_preserved": 270,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "full_diarization_completed": true,
+  "full_transcription_completed": false
+}
