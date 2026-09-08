@@ -1,0 +1,43 @@
+{
+  "kind": "real",
+  "timeout_seconds": 120,
+  "cases": [
+    {
+      "id": "fleurs-tr-1716-10",
+      "session": "fleurs-test-1716-10",
+      "audio": "10.wav",
+      "reference": "10.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    },
+    {
+      "id": "fleurs-tr-2002-11",
+      "session": "fleurs-test-2002-11",
+      "audio": "11.wav",
+      "reference": "11.json",
+      "tags": [
+        "human",
+        "read-speech",
+        "Turkish"
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "name": "CPP turbo q5_0 tr current",
+      "options": [
+        "--engine",
+        "cpp",
+        "--model",
+        "../../models/cpp-turbo/ggml-large-v3-turbo-q5_0.bin",
+        "--language",
+        "tr",
+        "--diarization",
+        "sherpa"
+      ]
+    }
+  ]
+}

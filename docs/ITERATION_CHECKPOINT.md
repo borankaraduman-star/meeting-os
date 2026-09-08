@@ -1,3 +1,11 @@
+## Latest: deferred human baseline cases completed
+
+Current CPP q5_0 CPU2 with existing vocabulary now has one successful result per 12 public FLEURS cases: 14/244 edits, 5.74% weighted WER. Two original OS-pressure failures retained (14 attempts total); no memory guard changes. See `TURKISH_PRECISION_CHECKPOINT.md` and `benchmarks/results-cpp-tr-current/completed-summary.json`. Proper names and spelling/number formatting contribute errors. No meeting accuracy or long-run stability claim. Next: fixed vocabulary on/off and independently annotated held-out human names/code-switching; real meeting recovery and live latency remain open.
+
+## Latest: Claude precision ownership and partial human baseline
+
+See `TURKISH_PRECISION_CHECKPOINT.md`. Actual Claude Code reviewed public evidence and owns bounded precision/model experiment selection; the existing 20-minute heartbeat carries this role. Current CPP/vocabulary baseline: 10/12 FLEURS cases succeeded, 2 OS-pressure failures. Successful subset WER 11/186 (5.91%), not a full-suite or meeting score. No model promotion. Next: safely complete deferred cases, then vocabulary precision/recall and held-out human code-switching. Long meeting recovery remains incomplete. Recheck process ownership and OS pressure before any native run.
+
 ## Latest: CPP word times retained with conservative fallback
 
 Shared serial/batch parser added; original text preserved, heuristic timing recorded in metrics, corrupt structural output fails atomically. See `CPP_WORD_TIMESTAMPS.md`. Native repeated window test ~4x faster but only 11/22 words timed; no unrestricted merge promotion. Next: same-detected-speaker-only VAD grouping with overlap/unknown guards, then native check. Long real-meeting recovery still incomplete; no active audio job.

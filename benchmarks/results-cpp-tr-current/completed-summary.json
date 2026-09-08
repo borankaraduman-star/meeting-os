@@ -1,0 +1,97 @@
+{
+  "dataset": "Google FLEURS Turkish test, first 12 human read-speech cases",
+  "engine": "cpp",
+  "model": "large-v3-turbo q5_0",
+  "cpu_threads": 2,
+  "vocabulary": "existing vocabulary.txt enabled",
+  "selection": "Initial success per case, plus successful retry of each failed case; no successful result replaced",
+  "attempts": 14,
+  "successful_cases": 12,
+  "initial_pressure_failures": 2,
+  "reference_words": 244,
+  "word_errors": 14,
+  "weighted_wer": 0.05737704918032787,
+  "initial_report": "../results-cpp-tr-current/report.json",
+  "retry_report": "../results-cpp-tr-deferred/report.json",
+  "limitations": [
+    "Small read-speech set, not meetings",
+    "Initial pressure failures retained; successful retry does not establish long-run stability",
+    "No gold entity universe, code-switching meeting or speaker identity score",
+    "Historical MLX runs use different runtime/settings; not a controlled model ranking"
+  ],
+  "cases": [
+    {
+      "case": "fleurs-tr-2004-0",
+      "reference_words": 21,
+      "word_errors": 4,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1660-1",
+      "reference_words": 14,
+      "word_errors": 1,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1692-2",
+      "reference_words": 12,
+      "word_errors": 1,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1711-3",
+      "reference_words": 24,
+      "word_errors": 0,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1689-4",
+      "reference_words": 26,
+      "word_errors": 1,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1747-5",
+      "reference_words": 7,
+      "word_errors": 0,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1684-6",
+      "reference_words": 16,
+      "word_errors": 1,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1884-7",
+      "reference_words": 17,
+      "word_errors": 0,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1908-8",
+      "reference_words": 11,
+      "word_errors": 0,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1729-9",
+      "reference_words": 38,
+      "word_errors": 3,
+      "retried": false
+    },
+    {
+      "case": "fleurs-tr-1716-10",
+      "reference_words": 43,
+      "word_errors": 2,
+      "retried": true
+    },
+    {
+      "case": "fleurs-tr-2002-11",
+      "reference_words": 15,
+      "word_errors": 1,
+      "retried": true
+    }
+  ],
+  "vocabulary_sha256": "99207c9fc47f0e7c8acc5b506705de4b5ffc766fe0e02cfa96fa6f90fdf18a05"
+}
