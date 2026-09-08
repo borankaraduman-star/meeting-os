@@ -71,7 +71,7 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
             def canceled(sig,frame):raise RuntimeError('İşlem iptal edildi; ses korunuyor')
             for sig in (signal.SIGINT,signal.SIGTERM):
                 old_handlers[sig]=signal.signal(sig,canceled)
-        start=time.monotonic()
+        start=time.monotonic();peak=0;samples=0
         try:
             while process.poll() is None:
                 if cancel_requested and cancel_requested():raise RuntimeError("Canlı metin işlemi durduruldu; ses korunuyor")
@@ -94,6 +94,7 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
                 except RuntimeError:
                     if process.poll() is not None:break
                     raise
+                peak=max(peak,usage);samples+=1
                 if usage>budget:
                     raise RuntimeError('Yerel model bellek sınırını aştı; ses korunuyor')
                 time.sleep(.1)
@@ -116,3 +117,5 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
             process.wait()
             close_lifeline(guardian,lifeline)
             for sig,handler in old_handlers.items():signal.signal(sig,handler)
+
+        return {"peak_footprint_bytes":peak if samples else None,"samples":samples,"elapsed_seconds":time.monotonic()-start}

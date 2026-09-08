@@ -85,3 +85,9 @@ class SupervisorTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'süre'):
             run_guarded([sys.executable,'-c','import time;time.sleep(10)'],timeout=.2,isolated=True,on_failure=on_failure)
         self.assertEqual(len(called),1)
+    def test_success_returns_sampled_footprint_and_elapsed(self):
+        from meeting_os.supervisor import run_guarded
+        with patch('meeting_os.supervisor.footprint',return_value=64*1024**2):
+            result=run_guarded([sys.executable,'-c','import time;time.sleep(.2)'])
+        self.assertEqual(result['peak_footprint_bytes'],128*1024**2)
+        self.assertGreater(result['samples'],0);self.assertGreater(result['elapsed_seconds'],0)
