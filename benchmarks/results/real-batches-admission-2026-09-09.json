@@ -1,0 +1,102 @@
+{
+  "pid": 54542,
+  "state": "terminal",
+  "started_at": 1788903760.4161909,
+  "commit": "c338b7f",
+  "exit": 75,
+  "ended_at": 1788903775.625215,
+  "session": 75501,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "failure": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 54542,
+      "child_pid": 54545,
+      "sampled_peak_footprint_bytes": 105055264,
+      "samples": 127,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 15.164793375064619
+    }
+  ],
+  "stage": {
+    "stage": "assembling",
+    "current": 0,
+    "total": 0,
+    "source": "",
+    "updated_at": 1788903771.0426
+  },
+  "idle_pressure_window": {
+    "samples": [
+      {
+        "at": 1788903573.002244,
+        "pressure": 1
+      },
+      {
+        "at": 1788903575.00961,
+        "pressure": 1
+      },
+      {
+        "at": 1788903577.0198872,
+        "pressure": 1
+      },
+      {
+        "at": 1788903579.026882,
+        "pressure": 1
+      },
+      {
+        "at": 1788903581.035563,
+        "pressure": 1
+      },
+      {
+        "at": 1788903583.0460281,
+        "pressure": 1
+      },
+      {
+        "at": 1788903585.054301,
+        "pressure": 1
+      },
+      {
+        "at": 1788903587.0645602,
+        "pressure": 1
+      },
+      {
+        "at": 1788903589.069856,
+        "pressure": 1
+      },
+      {
+        "at": 1788903591.0765262,
+        "pressure": 1
+      },
+      {
+        "at": 1788903593.08579,
+        "pressure": 1
+      },
+      {
+        "at": 1788903595.088963,
+        "pressure": 1
+      },
+      {
+        "at": 1788903597.093451,
+        "pressure": 1
+      },
+      {
+        "at": 1788903599.099908,
+        "pressure": 1
+      },
+      {
+        "at": 1788903601.108782,
+        "pressure": 1
+      }
+    ],
+    "scope": "28s idle OS pressure observation; no inference started",
+    "all_normal": true
+  },
+  "scope": "Resource stop during assembly before model phases; idle normal pressure did not guarantee sustained admission. No model or live latency acceptance."
+}
