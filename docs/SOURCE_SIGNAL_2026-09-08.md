@@ -27,3 +27,9 @@ After pressure returned normal, four read-only samples over30s all showed level1
 Read macOS SDK CoreAudio process-property definitions locally, queried process objects using AudioObjectGetPropertyData. Four snapshots over30s:28 process objects,0 active output streams,1 active input stream,0 query errors. This supports system-silent/mic-signal being consistent with no playback on this Mac at those moments; it does not identify which external device plays the meeting, prove no local playback at other times, or test capture against known local audio. No audio route/permission changes made. Numeric survey in ~/Library/Caches/MeetingOS/source-signal-ui/audio-io-survey.jsonl.
 
 Next: preserve active user recording; finish explicit deferred-preview/error coverage and verified finalization. Install/visually verify new source labels only at safe idle, with stable signing. Batch comparison still default-off and unrun on real clips. Do not claim real-time accuracy or product completion.
+
+## Full stopped-capture decode audit
+
+Capture 743E719D-C735-46CF-8E5D-BEBBDC2BF89B, same-meeting recovery 553993e7544a. Every sample of all 526 WAVs was decoded in 65,536-frame blocks; no model was loaded. Numeric report: `benchmarks/results/real-capture-signal-audit-2026-09-08.json`.
+
+Mic: 263 nonzero chunks, summed duration 3153.675s, RMS .013868, peak .388879; no clipped (abs >= .999) or nonfinite samples. System: all 263 chunks exactly zero, summed duration 3153.7s. No file size/mtime changed during inspection. This verifies source sample content and decodability, not timeline alignment or recognition accuracy. Combined with earlier no-local-output observations, external playback entering microphone is consistent; the audit cannot identify the physical playback device. The app must not imply successful system-sound content capture for this recording.

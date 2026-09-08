@@ -1,0 +1,28 @@
+{
+  "capture": "743E719D-C735-46CF-8E5D-BEBBDC2BF89B",
+  "validation": "decoded all samples, bounded blocks; no model",
+  "sources": {
+    "mic": {
+      "chunks": 263,
+      "duration_seconds_sum": 3153.674666666667,
+      "samples": 151376384,
+      "rms": 0.013868280277089095,
+      "peak": 0.3888791799545288,
+      "clipped_fraction": 0.0,
+      "nonfinite_samples": 0,
+      "digital_zero_chunks": 0,
+      "changed_files": []
+    },
+    "system": {
+      "chunks": 263,
+      "duration_seconds_sum": 3153.7,
+      "samples": 302755200,
+      "rms": 0.0,
+      "peak": 0.0,
+      "clipped_fraction": 0.0,
+      "nonfinite_samples": 0,
+      "digital_zero_chunks": 263,
+      "changed_files": []
+    }
+  }
+}
