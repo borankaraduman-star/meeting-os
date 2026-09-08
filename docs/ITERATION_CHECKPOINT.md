@@ -1,3 +1,7 @@
+## Latest: CPP word times retained with conservative fallback
+
+Shared serial/batch parser added; original text preserved, heuristic timing recorded in metrics, corrupt structural output fails atomically. See `CPP_WORD_TIMESTAMPS.md`. Native repeated window test ~4x faster but only 11/22 words timed; no unrestricted merge promotion. Next: same-detected-speaker-only VAD grouping with overlap/unknown guards, then native check. Long real-meeting recovery still incomplete; no active audio job.
+
 ## Latest: native short check passed; live window candidate ~4x faster
 
 Native old/bounded-final equality passed (9.4s fixture, full dictionaries identical, ~1.47 GiB sampled tree peak). Long recovery remains stopped, original 270 segments preserved. Window benchmark completed: ~22s serial vs ~5.5s window, synthetic WER .1818 vs 0; timed_words=0 makes timing gate unverified. Found CPP adapter discards real token timestamps; native JSON probe confirms valid subword offsets, zero-duration tokens and specials. Next: conservative CPP word reconstruction + approximate timing flags + speaker-boundary tests before live window promotion. Failure telemetry added for next long retry. Goal incomplete.

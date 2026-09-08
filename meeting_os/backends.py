@@ -47,9 +47,8 @@ class ASR:
             if not self.flash_attention:command.append("-nfa")
             run_guarded(command, timeout=600)
             data = json.loads(prefix.with_suffix('.json').read_text())
-            return [{'start':s['offsets']['from']/1000, 'end':s['offsets']['to']/1000,
-                     'text':s['text'], 'words':[], 'confidence_unavailable':True}
-                    for s in data['transcription']]
+            from .cpp_words import parse_transcription
+            return parse_transcription(data)
 
     def transcribe_batch(self, clips):
         """Bounded sequential multi-file cpp pass; each result remains clip-local.
@@ -75,7 +74,6 @@ class ASR:
             results=[]
             for prefix in prefixes:
                 data=json.loads(prefix.with_suffix('.json').read_text())
-                results.append([{'start':s['offsets']['from']/1000,'end':s['offsets']['to']/1000,
-                                 'text':s['text'],'words':[],'confidence_unavailable':True}
-                                for s in data['transcription']])
+                from .cpp_words import parse_transcription
+                results.append(parse_transcription(data))
             return results

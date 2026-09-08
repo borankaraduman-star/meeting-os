@@ -76,6 +76,7 @@ class Pipeline:
                 text = row['text'].strip()
                 if b <= a or not text: continue
                 metrics = {k:row[k] for k in ('avg_logprob','no_speech_prob','compression_ratio','temperature') if k in row}
+                if row.get('word_timing'):metrics['word_timing']=row['word_timing']
                 flags = ['provisional'] if provisional else []
                 if metrics.get('avg_logprob',0) < -0.8: flags.append('low_asr_confidence')
                 if metrics.get('no_speech_prob',0) > 0.5: flags.append('possible_non_speech')

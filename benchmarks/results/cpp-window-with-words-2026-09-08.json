@@ -1,0 +1,42 @@
+{
+  "runs": [
+    {
+      "mode": "serial",
+      "seconds": 23.127875375095755,
+      "wer": 0.18181818181818182,
+      "timed_words": 21,
+      "word_time_bounds_violations": 0,
+      "words_in_inserted_gaps": 0
+    },
+    {
+      "mode": "window",
+      "seconds": 6.185927291051485,
+      "wer": 0.0,
+      "timed_words": 11,
+      "word_time_bounds_violations": 0,
+      "words_in_inserted_gaps": 0
+    },
+    {
+      "mode": "window",
+      "seconds": 5.9708478330867365,
+      "wer": 0.0,
+      "timed_words": 11,
+      "word_time_bounds_violations": 0,
+      "words_in_inserted_gaps": 0
+    },
+    {
+      "mode": "serial",
+      "seconds": 24.87545037502423,
+      "wer": 0.18181818181818182,
+      "timed_words": 21,
+      "word_time_bounds_violations": 0,
+      "words_in_inserted_gaps": 0
+    }
+  ],
+  "normalized_text_match": false,
+  "clips": 4,
+  "audio_seconds": 10.805625,
+  "window_seconds": 11.405625,
+  "quality_limit": "Synthetic script WER only when supplied; timing bounds/gap checks are not aligned-reference timestamp accuracy or speaker DER.",
+  "binary_sha256": "73585768fac415f55f3a3165fb7e87f58965b267a90c385451d6e12f4de771ef"
+}
