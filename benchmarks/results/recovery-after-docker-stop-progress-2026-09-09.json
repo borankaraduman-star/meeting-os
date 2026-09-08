@@ -1,0 +1,23 @@
+{
+  "observed_at": 1788906282.186993,
+  "state": "running",
+  "session": 93757,
+  "pid": 72833,
+  "progress": {
+    "stage": "transcribing",
+    "current": 78,
+    "total": 392,
+    "source": "mic",
+    "updated_at": 1788906279.045689
+  },
+  "docker_vm_exited": true,
+  "pressure_at_observation": 1,
+  "stopped_containers": [
+    "anonim-feedback-arsiv-claude-pg",
+    "purodak-split-api-postgres-1",
+    "purodak-split-api-redis-1",
+    "homeassistant"
+  ],
+  "deleted_data": false,
+  "scope": "passed previous first-new-ASR blocker; not full recording completion"
+}

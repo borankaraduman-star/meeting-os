@@ -1,0 +1,7 @@
+{
+  "experiment": "standalone public3s CPP after graceful idle development DB shutdown",
+  "started_at": 1788906170.2283661,
+  "complete": false,
+  "failure": "MemoryPressureError",
+  "elapsed_seconds": 0.6233238329878077
+}
