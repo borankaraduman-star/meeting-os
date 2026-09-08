@@ -6,6 +6,10 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
+## Open-lid microphone retest
+
+User opened lid and switched output from Bluetooth to built-in MacBook Air speakers. Read-only device inspection confirmed built-in input/output and open lid. Fresh13s actual capture: microphone RMS0.01748, system RMS0.11246, both separate channels. Guarded CPU pipeline transcribed microphone audio in7.11s, correctly recovering the played Turkish opening (product meeting, payment error, conversion drop). No audio settings changed in this final retest. Built-in microphone path now validated on this short controlled sample; natural live conversation, echo handling and long recordings still need testing. Local evidence: concept-test/builtin-retest-* under MeetingOS cache. No audio/transcripts published.
+
 ## Latest shipped checkpoint: 1.0.5
 
 Read [RELIABILITY_1.0.5](RELIABILITY_1.0.5.md) first. CPU default integrated import15.45s passed;40s live capture passed; second capture finalize19.52s passed and persistent synthetic identity matched0.971–0.986. Independent process-group supervisor and parent-death guardians implemented for inference and recording;87 Python and9 Swift tests passed. Closed lid is the actual reason the default built-in microphone is unavailable; native UI now warns. Automatic analysis deferred on16GiB. Small1.7B model failed semantic and staged quote-validation tests; NOT selected.4B prefill/KV memory experiment also failed and was reverted. Prioritize a lower-overhead quality-preserving analysis runtime/model, diagnostics, recovery UX, and then natural meeting benchmarks. Do not repeat completed baseline work or failed identical model tests.
