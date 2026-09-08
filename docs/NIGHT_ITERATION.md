@@ -124,3 +124,23 @@ Cycle 3 COMPLETE — source navigation and search reset
   not by mutating user's stored meeting data. No real-meeting quality claims.
 - Next useful cycle: empty transcript search feedback, state loading/error clarity
   and final documentation consistency. Continue compact Claude code-only review.
+
+
+Cycle 4 COMPLETE — informative empty states
+- No-match transcript search now explains the empty result and offers show-all.
+  Selected empty meetings distinguish processing/provisional, failed/incomplete,
+  canceled, complete-empty and no selection; refresh button for selected meeting.
+- Pending evidence is published and shows a waiting indicator with Cancel.
+- Claude reviewed only code (CLAUDE_NIGHT_EMPTY_REVIEW.md). Both empty-state
+  findings addressed. Its assertion that typing leaves focusedSegment active is
+  obsolete: search.didSet already cancels both focus and pending evidence.
+- Native release build passed in 5.05s. CUA screenshots verified no-match state
+  and canceled fixture. Show-all cleared search; selecting canceled fixture showed
+  zero rows and correct explanation. No data edits or new audio recordings.
+- No extra tests for this reversible presentation-only change; existing seven
+  Swift tests last passed cycle3, Python62 last passed cycle1. Do not describe
+  these as freshly rerun this cycle.
+- Next: header activity remains globally "Hazır" on canceled meeting while main
+  panel correctly says canceled. Consider separating selected meeting status from
+  ongoing background job status, without hiding active recording. Also check docs
+  version/link consistency before morning delivery. Avoid scope expansion.

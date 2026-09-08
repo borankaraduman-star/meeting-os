@@ -47,7 +47,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
     let runtime:Runtime; let dataDir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS")
     @Published var focusedSegment:Int?
-    var pendingEvidence:Evidence?
+    @Published var pendingEvidence:Evidence?
     var recordingNavigation=RecordingNavigation()
     var requestedQuit=false
     var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
@@ -200,6 +200,7 @@ struct MeetingContent:View {
                 if m.meeting?.metadata["text_only"] as? Bool == true { Text("Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8) }
                 MeetingNavigation(model:m).padding(.horizontal,24).padding(.bottom,18)
                 if m.tab=="transcript" { HStack { Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Bu konuşmada ara",text:$m.search).textFieldStyle(.plain); if m.focusedSegment != nil { Button("Tüm konuşmayı göster") { m.focusedSegment=nil } } }.padding(11).meetingCard().padding(.horizontal,24).padding(.bottom,16) }
+                if m.tab=="transcript", m.pendingEvidence != nil { HStack { ProgressView().controlSize(.small);Text("Kaynak bölümü bekleniyor…").font(.callout);Spacer();Button("Vazgeç") { m.pendingEvidence=nil } }.padding(.horizontal,24).padding(.bottom,12) }
                 Divider()
                 if !m.error.isEmpty { HStack(alignment:.top) { Image(systemName:"exclamationmark.triangle"); Text(m.error).font(.caption).textSelection(.enabled); Spacer(); Button("Kapat") { m.error="" } }.padding().background(.orange.opacity(0.12)) }
                 if m.tab=="analysis" { AnalysisView(m:m) } else if m.tab=="actions" { ActionsView(m:m) } else if m.tab=="memory" { MemoryView(m:m) } else {
@@ -207,7 +208,7 @@ struct MeetingContent:View {
                     Button { m.play(row) } label:{ VStack(spacing:8) { Image(systemName:"play.circle.fill").font(.title2).foregroundStyle(MeetingStyle.accent); Text(row.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }.frame(width:48) }.buttonStyle(.plain).help("Bu bölümü dinle").disabled(m.recording || m.meeting?.metadata["text_only"] as? Bool == true)
                     VStack(alignment:.leading,spacing:7) { HStack { Text(row.label).font(.headline); Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Düzelt") { m.editRow=row; m.editName=row.name; m.editText=row.text; m.clean=false }.disabled(m.meeting?.status != "complete") }; Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6); if !row.flags.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) } }
                 }.padding(20).meetingCard() } }.padding(24)
-                    if m.rows.isEmpty { ContentUnavailableView("Dinlemeye hazır",systemImage:"waveform",description:Text("Bir toplantı kaydedin veya ses dosyası açın. Canlı metin, konuşmalar geldikçe burada görünür." )).padding(40) }
+                    if m.filteredRows.isEmpty { TranscriptEmptyView(model:m).padding(32) }
                 }
                 }
                 Divider(); HStack { Label("Yerel işleme",systemImage:"lock.shield"); Text("•"); Text("\(m.rows.count) bölüm"); Spacer(); Text("İsim düzeltmek ses profilini otomatik eğitmez.") }.font(.caption).foregroundStyle(.secondary).padding(12)

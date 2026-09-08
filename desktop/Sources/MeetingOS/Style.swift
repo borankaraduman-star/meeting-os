@@ -37,3 +37,38 @@ struct TaskStatusBadge:View {
     var color:Color { switch state { case "done":return MeetingStyle.accent;case "in_progress":return .blue;default:return .secondary } }
     var body:some View { Label(label,systemImage:icon).font(.caption.weight(.medium)).foregroundStyle(color).padding(.horizontal,9).padding(.vertical,5).background(color.opacity(0.09),in:Capsule()).fixedSize() }
 }
+
+struct TranscriptEmptyView:View {
+    @ObservedObject var model:Model
+    var title:String {
+        if !model.rows.isEmpty { return model.focusedSegment == nil ? "Eşleşen konuşma bulunamadı":"Kaynak bölümü görünmüyor" }
+        switch model.meeting?.status {
+        case "processing","provisional":return "Konuşma bölümleri bekleniyor"
+        case "failed","incomplete":return "Transkript tamamlanamadı"
+        case "canceled":return "Kayıt iptal edildi"
+        case "complete":return "Gösterilecek konuşma bölümü yok"
+        default:return "Dinlemeye hazır"
+        }
+    }
+    var detail:String {
+        if !model.rows.isEmpty { return "Başka bir kelime deneyin veya tüm konuşmayı gösterin." }
+        switch model.meeting?.status {
+        case "processing","provisional":return "Bu toplantı henüz nihai değil. Kullanılabilir bölümler geldikçe burada görünür."
+        case "failed","incomplete":return "İşlem durumunu ve varsa hata bilgisini kontrol edin. Kayıt arşivi varsa üstteki kurtarma seçeneğini kullanabilirsiniz."
+        case "canceled":return "Bu toplantı için şu anda gösterilecek bir konuşma bölümü yok. Yeni bir kayıt başlatabilir veya ses dosyası açabilirsiniz."
+        case "complete":return "Bu toplantının metni şu anda boş görünüyor. Yenileyerek tekrar kontrol edebilirsiniz."
+        default:return "Bir toplantı seçin, kayıt başlatın veya ses dosyası açın."
+        }
+    }
+    var body:some View {
+        ContentUnavailableView {
+            Label(title,systemImage:model.rows.isEmpty ? "waveform":"magnifyingglass")
+        } description: { Text(detail) } actions: {
+            if !model.rows.isEmpty {
+                Button("Tüm konuşmayı göster") { model.search="";model.focusedSegment=nil;model.pendingEvidence=nil }
+            } else if model.selected != nil {
+                Button("Yenile") { Task { await model.refresh() } }
+            }
+        }
+    }
+}
