@@ -144,3 +144,20 @@ Cycle 4 COMPLETE — informative empty states
   panel correctly says canceled. Consider separating selected meeting status from
   ongoing background job status, without hiding active recording. Also check docs
   version/link consistency before morning delivery. Avoid scope expansion.
+
+
+Cycle 5 COMPLETE — separate meeting and application status
+- Header uses selected meeting status and appropriate color; background activity
+  moved into persistent sidebar card, preserving completion/export messages.
+- Recording card label is neutral "Kayıt oturumu" (does not claim capture already
+  started while permissions pending). Busy progress remains visible. Idle nonempty
+  error uses warning icon and "Kontrol gerekiyor"; main error banner retained.
+- Claude checkpoint CLAUDE_NIGHT_STATUS_REVIEW.md: #1 addressed with neutral label,
+  #2 addressed using actual error state, not brittle text parsing. No live shortcut
+  added (existing library selection remains available).
+- CUA verified canceled fixture header "İptal edildi" alongside separately labeled
+  application status. Native build passed; final warning treatment rebuilt below.
+- TESLIM updated to 1.0.1 and distinguishes Python62 / Swift7 prior passing tests.
+- Next cycle should prioritize final broad regression and delivery documentation,
+  inspect remaining concrete correctness risks rather than extend UI indefinitely.
+  No natural 3–5-meeting, long capture or GUI permission validation claimed.
