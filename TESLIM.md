@@ -39,3 +39,5 @@ başka Mac için noter onaylı tek dosya kurulum paketi değildir.
 kaynak bölümüne geçiş, kayıt sırasında geçmiş toplantıyı inceleme ve boş arama
 ekranları iyileştirildi. Seçili toplantının durumu ile uygulama işlemi ayrı görünür.
 Döngü bazında doğrulama ve sınırlar [gece çalışma kaydında](docs/NIGHT_ITERATION.md).
+
+Son gece teslimi: [8 Eylül sabah raporu](docs/MORNING_DELIVERY.md).
