@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from .metrics import text_metrics,diarization_error
+from .metrics import text_metrics,diarization_error,entity_precision_metrics
 from .store import Store
 
 def validate_manifest(manifest):
@@ -42,6 +42,11 @@ def identity_metrics(reference,segments,known):
 def benchmark(manifest_path,output_dir):
     manifest_path=Path(manifest_path).resolve(); root=manifest_path.parent
     manifest=validate_manifest(json.loads(manifest_path.read_text()))
+    references={}
+    for case in manifest['cases']:
+        ref=json.loads((root/case['reference']).read_text())
+        entity_precision_metrics('', '', ref.get('entity_universe'))
+        references[case['reference']]=ref
     output_dir=Path(output_dir).resolve()
     output_dir.mkdir(parents=True,exist_ok=True)
     results=[]
@@ -61,7 +66,7 @@ def benchmark(manifest_path,output_dir):
             for sample in manifest.get('enrollment',[]):
                 store.enroll(sample['name'],sample['vector'],sample['model'],sample['duration'],sample['session'])
             store.close()
-            audio=(root/case['audio']).resolve(); reference=json.loads((root/case['reference']).read_text())
+            audio=(root/case['audio']).resolve(); reference=references[case['reference']]
             options=config.get('options',[])
             forbidden={'--db','--output'}
             if forbidden.intersection(options): raise ValueError('Benchmark owns output and DB paths')
@@ -77,7 +82,7 @@ def benchmark(manifest_path,output_dir):
             if code==0:
                 result=json.loads(result_path.read_text())
                 hyp=' '.join(s['text'] for s in result['segments'])
-                entry.update(text_metrics(reference['text'],hyp,reference.get('entities',[])))
+                entry.update(text_metrics(reference['text'],hyp,reference.get('entities',[]), entity_universe=reference.get('entity_universe')))
                 entry['hypothesis']=hyp
                 entry['rtf']=entry['wall_seconds']/result['duration'] if result['duration'] else None
                 entry['peak_rss_bytes']=result['peak_rss_bytes']
@@ -94,9 +99,9 @@ def benchmark(manifest_path,output_dir):
             results.append(entry)
             (output_dir/'report.json').write_text(json.dumps({'kind':manifest['kind'],'results':results},ensure_ascii=False,indent=2,allow_nan=False))
     (output_dir/'report.json').write_text(json.dumps({'kind':manifest['kind'],'results':results},ensure_ascii=False,indent=2,allow_nan=False))
-    lines=[f'# Meeting OS benchmark — {manifest["kind"]}', '', 'Synthetic runs only validate plumbing; they do not establish meeting accuracy.' if manifest['kind']=='synthetic' else 'Real human audio evaluation (see manifest tags: read speech is not a meeting). Rates are fractions.', '', '| Config | Case | WER | Entity recall | RTF incl. startup | Peak RSS GB | Status |','|---|---|---:|---:|---:|---:|---|']
+    lines=[f'# Meeting OS benchmark — {manifest["kind"]}', '', 'Synthetic runs only validate plumbing; they do not establish meeting accuracy.' if manifest['kind']=='synthetic' else 'Real human audio evaluation (see manifest tags: read speech is not a meeting). Rates are fractions.', '', '| Config | Case | WER | Entity recall | Entity precision (closed set) | RTF incl. startup | Peak RSS GB | Status |','|---|---|---:|---:|---:|---:|---:|---|']
     def number(value): return '—' if value is None else f'{value:.3f}'
     for r in results:
-        lines.append(f'| {r["config"]} | {r["case"]} | {number(r.get("wer"))} | {number(r.get("entity_recall"))} | {number(r.get("rtf"))} | {number(r["peak_rss_bytes"]/1e9) if r.get("peak_rss_bytes") is not None else "—"} | {r["status"]} |')
+        lines.append(f'| {r["config"]} | {r["case"]} | {number(r.get("wer"))} | {number(r.get("entity_recall"))} | {number(r.get("entity_precision"))} | {number(r.get("rtf"))} | {number(r["peak_rss_bytes"]/1e9) if r.get("peak_rss_bytes") is not None else "—"} | {r["status"]} |')
     (output_dir/'REPORT.md').write_text('\n'.join(lines)+'\n')
     return {'report':str(output_dir/'REPORT.md'),'runs':sum(r['status']!='deferred' for r in results),'failed':sum(r['status']=='failed' for r in results),'deferred':sum(r['status']=='deferred' for r in results)}

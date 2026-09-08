@@ -18,7 +18,7 @@ class ResourceStopTests(unittest.TestCase):
         from subprocess import CompletedProcess
         from meeting_os.benchmark import benchmark
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d); (root/'ref.json').write_text('{"text":"test"}')
+            root=Path(d); (root/'ref.json').write_text('{"text":"test","entity_universe":["test","Boran"]}')
             manifest={'kind':'real','cases':[{'id':str(i),'session':str(i),'audio':'unused.wav','reference':'ref.json'} for i in range(2)],'configs':[{'name':'a'},{'name':'b'}]}
             (root/'manifest.json').write_text(json.dumps(manifest))
             def worker(cmd, **kwargs):
@@ -38,6 +38,9 @@ class ResourceStopTests(unittest.TestCase):
             self.assertIsNone(report['results'][2]['exit_code'])
             self.assertNotIn('wer',report['results'][2])
             self.assertEqual(report['results'][0]['wer'],0)
+            self.assertEqual(report['results'][0]['entity_precision'],1)
+            self.assertEqual(report['results'][0]['entity_universe_size'],2)
+            self.assertIn('Entity precision (closed set)',(root/'out/REPORT.md').read_text())
             self.assertTrue((root/'out/00-00/result.json').exists())
 
     def test_cli_resource_failure_has_distinct_exit_code(self):
