@@ -84,6 +84,7 @@ struct ApplicationActivityView:View {
                 else { Image(systemName:"info.circle").foregroundStyle(.secondary) }
                 Text(model.recording ? "Kayıt oturumu":model.busy ? "İşlem sürüyor":model.error.isEmpty ? "Son durum":"Kontrol gerekiyor").font(.caption.weight(.semibold))
             }
+            if model.busy && !model.jobProgress.isEmpty { Text(model.jobProgress).font(.caption.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
             Text(model.activity).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
         }.padding(12).frame(maxWidth:.infinity,alignment:.leading).meetingCard()
     }

@@ -6,6 +6,8 @@ class LocalLLM:
     def __init__(self,path=DEFAULT_MODEL):
         self.path=Path(path).resolve()
         if not (self.path/'config.json').is_file(): raise ValueError('Yerel analiz modeli eksik. models fetch analysis-qwen3 komutunu çalıştırın.')
+        from .resources import configure_mlx
+        configure_mlx()
         from mlx_lm import load
         with contextlib.redirect_stdout(sys.stderr): self.model,self.tokenizer=load(str(self.path),tokenizer_config={'trust_remote_code':False})
         metadata=self.path/'meeting-os-model.json'

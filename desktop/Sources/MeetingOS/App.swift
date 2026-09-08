@@ -49,12 +49,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var focusedSegment:Int?
     @Published var pendingEvidence:Evidence?
     var recordingNavigation=RecordingNavigation()
+    @Published var jobProgress=""
+    var progressURL:URL?;var jobStarted:Date?
+    var resourceStopMessage=""
+    var pressureSource:DispatchSourceMemoryPressure?
     var requestedQuit=false
     var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
     init() {
         let url=Bundle.main.resourceURL!.appendingPathComponent("runtime.json")
         runtime=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
         AppDelegate.model=self
+        let pressure=DispatchSource.makeMemoryPressureSource(eventMask:[.warning,.critical],queue:.main)
+        pressure.setEventHandler { [weak self] in Task { @MainActor in self?.stopForResources() } }
+        pressure.resume();pressureSource=pressure
         timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true) { [weak self] _ in Task { @MainActor in await self?.refresh() } }
         Task { await refresh() }
     }
@@ -64,7 +71,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let rt=runtime
         return try await Task.detached { try invoke(rt,req) }.value
     }
+    func stopForResources() {
+        guard let process=job, resourceStopMessage.isEmpty else { return }
+        resourceStopMessage="Bellek baskısı nedeniyle işlem durduruldu. Kaynak ses korunuyor; ağır uygulamaları kapatıp yeniden deneyin."
+        error=resourceStopMessage
+        if recording { stop() } else { process.terminate() }
+    }
     func refresh() async {
+        if let process=job, let bytes=ResourceGuard.footprint(pid:process.processIdentifier), bytes>ResourceGuard.budget(physical:ProcessInfo.processInfo.physicalMemory) { stopForResources() }
+        if job != nil, let started=jobStarted {
+            let elapsed=Int(Date().timeIntervalSince(started))
+            let progress=progressURL.flatMap { try? Data(contentsOf:$0) }.flatMap { try? JSONDecoder().decode(JobProgress.self,from:$0) }
+            jobProgress=(progress?.label ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"
+        }
         guard !refreshing else { return }; refreshing=true
         let wanted=selected ?? ""
         defer {
@@ -93,13 +112,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let log=dataDir.appendingPathComponent("last-job.log")
             FileManager.default.createFile(atPath:log.path,contents:nil)
             let handle=try FileHandle(forWritingTo:log)
-            let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            resourceStopMessage=""
+            let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
+            progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor"
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }; p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 Task { @MainActor in
-                    guard let self=self else { return }; self.job=nil; self.busy=false
-                    if process.terminationStatus != 0 { self.error=(try? String(contentsOf:log,encoding:.utf8)).map { String($0.split(separator:"\n").last ?? "İşlem tamamlanamadı") } ?? "İşlem tamamlanamadı" }
-                    complete(process.terminationStatus==0); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
+                    guard let self=self else { return }; self.job=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress)
+                    if process.terminationStatus != 0 { self.error=self.resourceStopMessage.isEmpty ? (try? String(contentsOf:log,encoding:.utf8)).map { String($0.split(separator:"\n").last ?? "İşlem tamamlanamadı") } ?? "İşlem tamamlanamadı" : self.resourceStopMessage }
+                    complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }
             try p.run(); job=p; busy=true; error=""

@@ -1,7 +1,7 @@
 # Meeting OS — Boran’ın yerel toplantı hafızası
 
 Mac uygulaması ve CLI: ayrı mikrofon/sistem sesi, canlı Türkçe transkript,
-toplantı sonunda daha güçlü modelle nihai metin, konuşmacı ayrımı ve kalıcı ses
+toplantı sonunda nihai metin, konuşmacı ayrımı ve kalıcı ses
 profilleri. Yerel özet, karar, risk, açık soru ve görev çıkarımı; Boran’ın görev
 kuyruğu; kaynaklı arşiv araması ve görev taslakları. Varsayılan işleme bu Mac’te
 yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktur.
@@ -22,7 +22,7 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    **Meeting OS** için açılır. İzin değişikliğinden sonra uygulamayı yeniden açın.
 2. Mikrofon ve sistem sesi ayrı WAV dosyalarına kaydedilir. Canlı metin geçicidir;
    kayıt devam ederken anonim konuşmacıların numaraları kalıcı kimlik değildir.
-3. **Kaydı bitir** sesi kapatır, bekleyen parçaları işler ve büyük modelle nihai
+3. **Kaydı bitir** sesi kapatır, bekleyen parçaları işler ve yerel modelle nihai
    transkripti ayrı bir arşiv kaydı olarak oluşturur. Canlı kayıt kurtarma için korunur.
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
@@ -158,3 +158,13 @@ runtime klasörlerini silmeyin. Veri/üçüncü taraf kaynakları
 CPU Whisper karşılaştırma ağırlığı disk alanı için kaldırılmıştır; sonuçları
 korunur ve `models fetch whisper-turbo` ile yeniden indirilebilir. Canlı/nihai
 MLX, konuşmacı ve yerel analiz modelleri bu Mac’te hazırdır.
+
+## 1.0.3 bellek koruması
+
+16 GB Mac için canlı ve nihai transkript varsayılanı `mlx-turbo` oldu. Büyük
+Whisper modeli 32 GB altında yüklenmez. Bu bir hız/bellek–doğruluk tercihidir;
+büyük modelle aynı doğruluk garanti edilmez. MLX önbelleği 64 MB ile sınırlandı.
+Uygulama kendi işinin fiziksel bellek kullanımını ve macOS bellek uyarılarını
+izler; kaynak baskısında işi durdurur. Kayıt sürüyorsa önce normal kapanış ister;
+hâlihazırdaki model çağrısı dönerken gecikme olabilir. İşletim sistemi veya diğer
+uygulamaların neden olduğu tüm bellek sorunlarını engelleme garantisi değildir.

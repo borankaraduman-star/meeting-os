@@ -1,4 +1,4 @@
-# Meeting OS 1.0.2 teslimi
+# Meeting OS 1.0.3 teslimi
 
 **Aç:** [Meeting OS.command](Meeting%20OS.command)
 
@@ -44,3 +44,6 @@ Son gece teslimi: [8 Eylül sabah raporu](docs/MORNING_DELIVERY.md).
 
 1.0.2: Yeni Mac’te Meeting OS.command ilk kurulumu başlatır. Eski 1.0.1
 başlatıcısı yalnızca önceden kurulmuş uygulamayı açıyordu.
+
+1.0.3: 16 GB Mac için varsayılan model turbo; bellek koruması ve işlem ilerlemesi
+eklendi. [Çökme analizi ve doğrulama](docs/CRASH_RECOVERY_1.0.3.md).

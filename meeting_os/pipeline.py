@@ -3,6 +3,7 @@ import numpy as np
 from .audio import RATE, read_audio, speech_regions
 from .types import Segment
 from .speakers import speaker_at
+from .progress import emit
 
 def split_by_speaker(row, offset, turns):
     words = row.get('words', [])
@@ -23,14 +24,19 @@ class Pipeline:
         self.asr, self.diarizer, self.store = asr, diarizer, store
         self.identity_threshold, self.identity_margin = identity_threshold, identity_margin
     def process(self, path, source='system', offset=0, provisional=False):
+        emit("reading_audio",source=source)
         audio = read_audio(path)
+        emit("vad",source=source)
         regions = speech_regions(audio)
         if not regions: return [], [], len(audio)/RATE
+        emit("diarizing",source=source)
         turns = self.diarizer.turns(audio,source)
         result = []
-        for begin,end in regions:
+        for index,(begin,end) in enumerate(regions):
+            emit("transcribing",current=index,total=len(regions),source=source)
             raw_rows = self.asr.transcribe(audio[begin:end])
             rows = [part for row in raw_rows for part in split_by_speaker(row, begin/RATE, turns)]
+            emit("identifying",current=index,total=len(regions),source=source)
             for row in rows:
                 a = max(begin/RATE, begin/RATE+float(row['start']))
                 b = min(end/RATE, begin/RATE+float(row['end']))
@@ -55,4 +61,5 @@ class Pipeline:
                 metrics['identity'] = identity
                 words = [{**w,'start':float(w['start'])+begin/RATE+offset,'end':float(w['end'])+begin/RATE+offset} for w in row.get('words',[])]
                 result.append(Segment(a+offset,b+offset,text,source,speaker,identity['name'],metrics,flags,words,vector,self.diarizer.embedder.model_id))
+        emit("transcribing",current=len(regions),total=len(regions),source=source)
         return result, [(a+offset,b+offset,s) for a,b,s in turns],len(audio)/RATE

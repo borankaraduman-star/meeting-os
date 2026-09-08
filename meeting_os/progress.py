@@ -1,0 +1,16 @@
+"""Local job progress; no transcript or audio content is written here."""
+import json,os,time
+from pathlib import Path
+
+def emit(stage,current=0,total=0,source=''):
+    target=os.environ.get('MEETING_OS_PROGRESS_PATH')
+    if not target:return
+    path=Path(target); temp=path.with_name(path.name+'.tmp')
+    event={'stage':stage,'current':current,'total':total,'source':source,'updated_at':time.time()}
+    try:
+        path.parent.mkdir(parents=True,exist_ok=True)
+        temp.write_text(json.dumps(event));temp.replace(path)
+    except OSError:
+        # Progress display must never interrupt recording or inference.
+        try:temp.unlink(missing_ok=True)
+        except OSError:pass

@@ -32,3 +32,22 @@ class LiveTests(unittest.TestCase):
             self.assertEqual(db.meetings()[0]['status'],'incomplete')
             self.assertIn('capture_dir',db.meetings()[0]['metadata'])
             db.close()
+    def test_stop_skips_queued_live_inference_but_keeps_capture_journal(self):
+        import signal,time,json,sys
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); ready=root/'ready'; binary=root/'recorder'
+            binary.write_text('#!/usr/bin/env python3\nimport signal,time,json\nfrom pathlib import Path\nsignal.signal(signal.SIGINT,lambda *a:exit(0))\nprint(json.dumps({"event":"chunk","path":"saved.wav","source":"system","start":0}),flush=True)\nPath('+repr(str(ready))+').write_text("ready")\ntime.sleep(20)\n')
+            binary.chmod(0o700);db=Store(root/'db');calls=[]
+            class Pipe:
+                def process(self,*a):calls.append(a);return [],[],1
+            def factory():
+                deadline=time.monotonic()+5
+                while not ready.exists():
+                    if time.monotonic()>deadline:raise RuntimeError('recorder did not start')
+                    time.sleep(.01)
+                signal.getsignal(signal.SIGINT)(signal.SIGINT,None)
+                return Pipe()
+            record(binary,root/'capture',20,12,store=db,pipeline_factory=factory)
+            self.assertEqual(calls,[])
+            self.assertIn('saved.wav',(root/'capture/events.jsonl').read_text())
+            self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()

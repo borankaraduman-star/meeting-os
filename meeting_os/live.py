@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from .progress import emit
 
 def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None):
     directory=Path(directory).resolve()
@@ -40,7 +41,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     def stop(sig,frame):
         nonlocal stopping
         if not stopping:
-            stopping=True; process.send_signal(signal.SIGINT)
+            stopping=True
+            if process.poll() is None: process.send_signal(signal.SIGINT)
+            emit("stopping_capture")
             print('Stopping capture; draining finalized chunks...',flush=True)
     signal.signal(signal.SIGINT,stop)
     try:
@@ -50,6 +53,11 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             event=pending.get()
             if event is None: break
             if pipeline is None: print(json.dumps(event),flush=True); continue
+            if stopping:
+                # Completed chunks are already durable in the capture journal.
+                # Finalize processes all audio, so do not redo a queued live pass.
+                emit("stopping_capture")
+                continue
             try:
                 rows,_,_=pipeline.process(event['path'],event['source'],event['start'],True)
                 for row in rows:

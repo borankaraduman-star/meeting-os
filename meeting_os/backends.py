@@ -13,6 +13,9 @@ class ASR:
         self.model = str(Path(model).expanduser().resolve()) if model else None
         if not self.model or not Path(self.model).exists():
             raise ValueError('A local model path is required. Run models fetch first.')
+        if engine=='mlx':
+            from .resources import check_asr_model,configure_mlx
+            check_asr_model(self.model);configure_mlx()
         self.loaded = None
         if engine == 'whisper':
             import whisper
@@ -23,7 +26,11 @@ class ASR:
             condition_on_previous_text=False, temperature=0.0)
         if self.engine == 'mlx':
             import mlx_whisper
-            return mlx_whisper.transcribe(audio, path_or_hf_repo=self.model, **options)['segments']
+            from .resources import check_pressure
+            import mlx.core as mx
+            check_pressure()
+            try:return mlx_whisper.transcribe(audio, path_or_hf_repo=self.model, **options)['segments']
+            finally:mx.clear_cache()
         if self.engine == 'whisper':
             return self.loaded.transcribe(audio, fp16=False, **options)['segments']
         if self.engine != 'cpp': raise ValueError('Unknown ASR engine')

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+from .progress import emit
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path.home()/'Library/Application Support/MeetingOS'
@@ -26,6 +27,7 @@ def inference_options(parser):
     parser.add_argument('--cpp-bin',default=str(ROOT/'build/whisper-cpp/bin/whisper-cli') if (ROOT/'build/whisper-cpp/bin/whisper-cli').exists() else 'whisper-cli')
 
 def make_pipeline(args,store):
+    emit("loading_models")
     from .backends import ASR
     from .speakers import Embedder,Diarizer
     from .pipeline import Pipeline
@@ -40,21 +42,23 @@ def make_pipeline(args,store):
 
 def run_transcribe(args,store,paths=None):
     import time, resource
+    started=time.monotonic()
     pipe=make_pipeline(args,store)
     paths=paths or {args.source:str(args.audio)}
     mid=store.create_meeting(args.title,{'paths':paths,'engine':args.engine,'model':args.model,'diarization':args.diarization})
-    started=time.monotonic(); all_turns=[]; duration=0
+    all_turns=[]; duration=0
     try:
         for source,path in paths.items():
             with contextlib.redirect_stdout(sys.stderr): rows,turns,seconds=pipe.process(path,source)
             duration=max(duration,seconds); all_turns.extend(turns)
             for row in rows: store.add_segment(mid,row)
         store.status(mid,'complete')
+        emit('complete')
     except BaseException:
         store.status(mid,'failed'); raise
     result={'meeting':mid,'segments':store.segments(mid),'turns':all_turns,'duration':duration,
             'elapsed_seconds':time.monotonic()-started,'peak_rss_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss + resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
-            'memory_note':'sum of parent and largest child peak RSS; upper bound, not simultaneous Metal allocation',
+            'memory_note':'RSS only; not total unified-memory footprint or an upper bound for Metal/compressed memory',
             'engine':args.engine,'model':args.model,'embedding_model':pipe.diarizer.embedder.model_id,'diarization':args.diarization}
     if args.output: args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False))
     return result
@@ -66,9 +70,9 @@ def parser():
     sub.add_parser('doctor')
     models=sub.add_parser('models'); m=models.add_subparsers(dest='action',required=True)
     m.add_parser('list'); f=m.add_parser('fetch'); f.add_argument('name'); f.add_argument('--root',type=Path,default=ROOT/'models'); f.add_argument('--revision',default='main')
-    i=sub.add_parser('import'); i.add_argument('audio',type=Path); i.add_argument('--title',default='Imported meeting'); i.add_argument('--output',type=Path); inference_options(i); i.set_defaults(model=str(ROOT/'models/mlx-large'))
+    i=sub.add_parser('import'); i.add_argument('audio',type=Path); i.add_argument('--title',default='Imported meeting'); i.add_argument('--output',type=Path); inference_options(i); i.set_defaults(model=str(ROOT/'models/mlx-turbo'))
     t=sub.add_parser('transcribe'); t.add_argument('audio',type=Path); t.add_argument('--source',choices=['mic','system'],default='system'); t.add_argument('--title',default='Imported meeting'); t.add_argument('--output',type=Path); inference_options(t)
-    f=sub.add_parser('finalize'); f.add_argument('directory',type=Path); f.add_argument('--title',default='Final meeting'); f.add_argument('--output',type=Path); inference_options(f); f.set_defaults(model=str(ROOT/'models/mlx-large'))
+    f=sub.add_parser('finalize'); f.add_argument('directory',type=Path); f.add_argument('--title',default='Final meeting'); f.add_argument('--output',type=Path); inference_options(f); f.set_defaults(model=str(ROOT/'models/mlx-turbo'))
     r=sub.add_parser('record'); r.add_argument('directory',type=Path); r.add_argument('--seconds',type=float,default=3600); r.add_argument('--chunk-seconds',type=float,default=12); r.add_argument('--live',action='store_true'); r.add_argument('--title',default='Live meeting'); r.add_argument('--capture-bin',default=str(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture')); inference_options(r)
     sub.add_parser('meetings')
     s=sub.add_parser('show'); s.add_argument('meeting'); s.add_argument('--json',action='store_true')
@@ -139,6 +143,7 @@ def main():
             elif args.command=='transcribe': output(run_transcribe(args,store))
             elif args.command=='finalize':
                 from .audio import assemble_capture
+                emit("assembling")
                 output(run_transcribe(args,store,assemble_capture(args.directory)))
             elif args.command=='record':
                 from .live import record
