@@ -1,0 +1,168 @@
+{
+  "model_download": {
+    "name": "cpp-small-q5_1",
+    "engine": "cpp",
+    "repo": "ggerganov/whisper.cpp",
+    "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "path": "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/cpp-small-q5_1/ggml-small-q5_1.bin",
+    "bytes": 190085487,
+    "sha256": "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+    "experimental": true,
+    "default_changed": false
+  },
+  "turbo_previous_same12s": {
+    "mode": "after",
+    "complete": true,
+    "resources": {
+      "peak_footprint_bytes": 1290750592,
+      "samples": 189,
+      "elapsed_seconds": 22.485181124997325
+    },
+    "stages": [
+      {
+        "stage": "loading_models",
+        "elapsed": 0.006656915997155011,
+        "parent_footprint": 12452320,
+        "torch_loaded": false
+      },
+      {
+        "stage": "reading_audio",
+        "elapsed": 0.7029935410246253,
+        "parent_footprint": 84640416,
+        "torch_loaded": false
+      },
+      {
+        "stage": "vad",
+        "elapsed": 0.7032904999796301,
+        "parent_footprint": 84656800,
+        "torch_loaded": false
+      },
+      {
+        "stage": "diarizing",
+        "elapsed": 2.6532984579680488,
+        "parent_footprint": 84820640,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 3.6284050409449264,
+        "parent_footprint": 84935328,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 9.682959915953688,
+        "parent_footprint": 85033632,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 14.636475957930088,
+        "parent_footprint": 85050016,
+        "torch_loaded": false
+      },
+      {
+        "stage": "identifying",
+        "elapsed": 19.828471290995367,
+        "parent_footprint": 85050016,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 22.30623441596981,
+        "parent_footprint": 85131960,
+        "torch_loaded": false
+      }
+    ],
+    "segments": 3,
+    "turns": 3,
+    "audio_seconds": 12.0,
+    "elapsed_seconds": 22.30730391596444
+  },
+  "small_same12s": {
+    "model": "small-q5_1",
+    "complete": true,
+    "started_at": 1788907710.926635,
+    "starting_pressure": 1,
+    "parent_start_footprint": 10715592,
+    "source": "same12s mic chunk as prior turbo run; no ASR checkpoint reads",
+    "resources": {
+      "peak_footprint_bytes": 806734104,
+      "samples": 91,
+      "elapsed_seconds": 11.009643500088714
+    },
+    "mode": "small",
+    "stages": [
+      {
+        "stage": "loading_models",
+        "elapsed": 0.0057990000350400805,
+        "parent_footprint": 12403168,
+        "torch_loaded": false
+      },
+      {
+        "stage": "reading_audio",
+        "elapsed": 0.8421538750408217,
+        "parent_footprint": 84689568,
+        "torch_loaded": false
+      },
+      {
+        "stage": "vad",
+        "elapsed": 0.8424088750034571,
+        "parent_footprint": 84722336,
+        "torch_loaded": false
+      },
+      {
+        "stage": "diarizing",
+        "elapsed": 2.841609250055626,
+        "parent_footprint": 84886176,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 3.734163000015542,
+        "parent_footprint": 85000864,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 5.727002416038886,
+        "parent_footprint": 85033632,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 7.18939620803576,
+        "parent_footprint": 85050016,
+        "torch_loaded": false
+      },
+      {
+        "stage": "identifying",
+        "elapsed": 8.842141916044056,
+        "parent_footprint": 85066400,
+        "torch_loaded": false
+      },
+      {
+        "stage": "transcribing",
+        "elapsed": 10.842788083013147,
+        "parent_footprint": 85197496,
+        "torch_loaded": false
+      }
+    ],
+    "segments": 4,
+    "turns": 3,
+    "audio_seconds": 12.0,
+    "elapsed_seconds": 10.844209791044705,
+    "ending_pressure": 1,
+    "ended_at": 1788907721.950031
+  },
+  "peak_reduction_bytes": 484016488,
+  "duration_ratio_small_over_turbo": 0.4896399739403933,
+  "accuracy": null,
+  "quality_note": "No human reference. Both outputs show uncertain/different first-phrase tokens; later clauses similar, punctuation and segment boundaries differ. Same speaker label S0; not cross-meeting identity acceptance. No English/code-switch example in this12s clip.",
+  "private_output_locations": [
+    "build/live-isolation-native/after-private-output.json",
+    "build/small-model-native/small-private-output.json"
+  ],
+  "default_changed": false,
+  "cache_note": "No ASR checkpoint reads; prior Turbo trial precedes current Small trial, not randomized or simultaneous environment."
+}

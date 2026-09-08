@@ -1,0 +1,113 @@
+{
+  "runs": [
+    {
+      "mode": "live",
+      "target_seconds": 300,
+      "complete": false,
+      "state": "terminal",
+      "failure": "ResourceProbeError",
+      "simulation": true,
+      "capture_validation": false,
+      "completed_chunks": 1,
+      "segments": 0,
+      "speaker_labels": [],
+      "lag_seconds": [],
+      "wall_seconds": 12.213870167033747,
+      "accuracy": null,
+      "reason": "No human reference",
+      "profiles": "isolated empty test store; no auto-enrollment",
+      "started_at": 1788907745.395419,
+      "start_parent_footprint_bytes": 83411520,
+      "start_pressure": 1,
+      "live_worker_resources": [
+        {
+          "peak_footprint_bytes": 92750856,
+          "samples": 1,
+          "elapsed_seconds": 0.12850900006014854
+        }
+      ],
+      "processed_source_seconds": {
+        "system": 12.06338091706857
+      }
+    },
+    {
+      "mode": "batch",
+      "target_seconds": 300,
+      "complete": true,
+      "state": "terminal",
+      "resources": {
+        "peak_footprint_bytes": 851233072,
+        "samples": 1103,
+        "elapsed_seconds": 137.43566545797512
+      },
+      "simulation": false,
+      "capture_validation": false,
+      "completed_chunks": 0,
+      "segments": 68,
+      "speaker_labels": [
+        "mic:S0",
+        "mic:S1",
+        "mic:S3",
+        "mic:S4",
+        "mic:S5",
+        "mic:unknown"
+      ],
+      "lag_seconds": [],
+      "wall_seconds": 136.25883808301296,
+      "accuracy": null,
+      "reason": "No human reference",
+      "profiles": "isolated empty test store; no auto-enrollment",
+      "started_at": 1788907766.667231,
+      "start_parent_footprint_bytes": 83608128,
+      "start_pressure": 1,
+      "processed_source_seconds": {
+        "mic": 300.0,
+        "system": 300.0
+      },
+      "rtf": 0.4541961269433765,
+      "end_parent_footprint_bytes": 92422864,
+      "end_pressure": 1,
+      "sources_unchanged": true,
+      "test_segments_saved": 68,
+      "test_profiles_saved": 0
+    },
+    {
+      "mode": "batch",
+      "target_seconds": 1800,
+      "complete": false,
+      "state": "terminal",
+      "failure": "MemoryPressureError",
+      "simulation": false,
+      "capture_validation": false,
+      "completed_chunks": 0,
+      "segments": 0,
+      "speaker_labels": [],
+      "lag_seconds": [],
+      "wall_seconds": 0,
+      "accuracy": null,
+      "reason": "No human reference",
+      "profiles": "isolated empty test store; no auto-enrollment",
+      "started_at": 1788907904.1896992
+    }
+  ],
+  "full30_files": {
+    "mic-full.wav": {
+      "bytes": 115200080,
+      "frames": 28800000,
+      "samplerate": 16000,
+      "duration": 1800.0
+    },
+    "system-full.wav": {
+      "bytes": 115200080,
+      "frames": 28800000,
+      "samplerate": 16000,
+      "duration": 1800.0
+    }
+  },
+  "original_counts": {
+    "segments": 270,
+    "asr_checkpoints": 101
+  },
+  "raw_recording_wav_files": 526,
+  "scope": "Full5min batch success. Live fatal resource-read error unresolved;30min batch did not complete. Failed-run target-based RTF is not throughput. Outer live peak omits nested model group; use successful per-worker peak only where available."
+}
