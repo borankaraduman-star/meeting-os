@@ -4,7 +4,7 @@
   "results": [
     {
       "threshold": 0.7,
-      "elapsed": 3.963579957955517,
+      "elapsed": 4.257633541943505,
       "speaker_count": 6,
       "turn_majority_correct": 11,
       "turns_total": 12,
@@ -181,7 +181,7 @@
     },
     {
       "threshold": 0.9,
-      "elapsed": 3.9161134170135483,
+      "elapsed": 4.062237625010312,
       "speaker_count": 4,
       "turn_majority_correct": 12,
       "turns_total": 12,

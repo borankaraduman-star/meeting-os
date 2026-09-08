@@ -5,6 +5,6 @@
   "sources": 2,
   "chunks": 1800,
   "reconstructed_frames_per_source": 172800000,
-  "elapsed_seconds": 3.606216875021346,
+  "elapsed_seconds": 3.2514159589773044,
   "scope": "Accelerated WAV reconstruction; not a 3-hour hardware or ASR soak test"
 }

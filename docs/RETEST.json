@@ -1,0 +1,98 @@
+{
+  "tested_at": "2026-09-08T01:42:10.367030+00:00",
+  "unit_tests": 31,
+  "gui_capture": "OS consent still pending; cancel verified; no permission bypass",
+  "hardware_runs": [
+    {
+      "name": "retest-hardware",
+      "sources": {
+        "mic": {
+          "chunks": 4,
+          "recorded_seconds": 19.992416666666667,
+          "channels": 1,
+          "sample_rate": 48000,
+          "max_chunk_boundary_gap_seconds": 8.785505656305759e-11
+        },
+        "system": {
+          "chunks": 5,
+          "recorded_seconds": 20.08,
+          "channels": 2,
+          "sample_rate": 48000,
+          "max_chunk_boundary_gap_seconds": 0.0
+        }
+      },
+      "clean_stop": true,
+      "unfinished_wav_files": 0,
+      "final_duration_seconds": 20.3085,
+      "final_processing_seconds": 8.739283542032354,
+      "public_system_audio_text_metrics": {
+        "wer": 0.19047619047619047,
+        "raw_wer": 0.2,
+        "cer": 0.09649122807017543,
+        "reference_words": 21,
+        "word_errors": 4,
+        "insertions": null,
+        "entity_recall": null,
+        "entity_found": 0,
+        "entity_total": 0
+      },
+      "name_error": "Meşhed misrecognized",
+      "scope": "Real device capture of public FLEURS playback. Mic frames captured; microphone speech intelligibility not tested."
+    },
+    {
+      "name": "retest-live-hardware",
+      "sources": {
+        "mic": {
+          "chunks": 5,
+          "recorded_seconds": 34.99466666666666,
+          "channels": 1,
+          "sample_rate": 48000,
+          "max_chunk_boundary_gap_seconds": 8.568079579163168e-11
+        },
+        "system": {
+          "chunks": 5,
+          "recorded_seconds": 35.06,
+          "channels": 2,
+          "sample_rate": 48000,
+          "max_chunk_boundary_gap_seconds": 0.0
+        }
+      },
+      "clean_stop": true,
+      "unfinished_wav_files": 0,
+      "final_duration_seconds": 35.334,
+      "final_processing_seconds": 8.408500791992992,
+      "public_system_audio_text_metrics": {
+        "wer": 0.19047619047619047,
+        "raw_wer": 0.2,
+        "cer": 0.09649122807017543,
+        "reference_words": 21,
+        "word_errors": 4,
+        "insertions": null,
+        "entity_recall": null,
+        "entity_found": 0,
+        "entity_total": 0
+      },
+      "name_error": "Meşhed misrecognized",
+      "scope": "Real device capture of public FLEURS playback. Mic frames captured; microphone speech intelligibility not tested."
+    }
+  ],
+  "live": {
+    "segments": 2,
+    "max_lag_seconds": 5.095128207970411,
+    "final_status": "complete",
+    "final_backlog_chunks": 0
+  },
+  "identity": {
+    "clean_correct": 24,
+    "clean_trials": 24,
+    "noise20db_false_reject": 13,
+    "noise20db_false_accept": 0,
+    "scope": "Public audiobook voices, six known/two unknown; disjoint utterances; not Turkish real meetings"
+  },
+  "diarization": {
+    "speakers": 4,
+    "majority_correct": 12,
+    "turns": 12,
+    "scope": "Constructed sequence of public human voices; not natural meeting DER"
+  }
+}

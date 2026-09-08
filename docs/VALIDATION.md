@@ -1,5 +1,7 @@
 # Meeting OS — doğrulama raporu, 8 Eylül 2026
 
+**Yeni:** Gerçek cihazla 20/35 sn kayıt ve canlı→final yeniden testi: [RETEST.md](RETEST.md).
+
 Teslim: çalışan yerel Mac uygulaması, CLI, kayıt yardımcısı, model adaptörleri,
 SQLite ses hafızası, benchmark araçları ve kaynak kod. M4 / 16 GB, macOS 26.5.2.
 Gerçek kullanıcı toplantısı verilmedi; aşağıdaki testleri toplantı kalitesi veya
