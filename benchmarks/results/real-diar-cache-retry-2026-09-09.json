@@ -1,0 +1,43 @@
+{
+  "session": 57037,
+  "state": "terminal",
+  "exit_code": 75,
+  "failures": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 9007,
+      "child_pid": 27893,
+      "sampled_peak_footprint_bytes": 1197525272,
+      "samples": 61,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 7.115851124981418
+    },
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 8996,
+      "child_pid": 9007,
+      "sampled_peak_footprint_bytes": 1663126552,
+      "samples": 5082,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 658.3195894159144
+    }
+  ],
+  "progress": {
+    "stage": "transcribing",
+    "current": 56,
+    "total": 392,
+    "source": "mic",
+    "updated_at": 1788901652.940267
+  },
+  "asr_cache_rows": 56,
+  "diar_cache_rows": 1,
+  "original_segments": 270,
+  "verified_asr_hits": 10,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "scope": "actual real recording; diarization persisted but actual diarization cache reuse pending; full finalization incomplete"
+}

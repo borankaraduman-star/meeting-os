@@ -1,3 +1,7 @@
+## Latest: real retry terminal at56/392;56ASR outputs and full diarization preserved
+
+Session57037,parent8996/worker9007 is TERMINAL exit75 after658.32s OS pressure, sampled outer tree peak1.663GB. Ten previous ASR hits+46new results, no cache errors.56ASR rows and1diarization row persist;270original provisional segments preserved. Targeted cleanup removed one dead-owner private workspace. Real full-diarization cache hit remains to verify on the next safe retry; full meeting not finished. Evidence benchmarks/results/real-diar-cache-retry-2026-09-09.json. OS pressure2at final measurement; do not blindly restart under pressure.
+
 ## Latest: real ASR cache reuse verified; diarization cached; retry still active
 
 Session57037,parent8996/worker9007 was confirmed running. Full mic diarization completed and one diarization checkpoint exists. All ten prior ASR outputs were cache hits (zero errors); new processing reached16/392 at last observation.270original segments unchanged. This proves actual ASR resume and diarization cache population, not a real diarization cache hit or full recovery. Logs/progress build/recovery-diar-cache.*, observation build/recovery-diar-cache-watch.json. Revalidate the live session before any restart or code edit. Do not edit checkpoint identity inputs while it runs.
