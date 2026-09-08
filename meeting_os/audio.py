@@ -3,6 +3,8 @@ from pathlib import Path
 from functools import lru_cache
 import json
 import math
+import shutil
+import errno
 import numpy as np
 import soundfile as sf
 from scipy.signal import resample_poly
@@ -47,8 +49,20 @@ def assemble_capture(directory):
     for source in ('mic', 'system'):
         chunks = sorted((e for e in events if e['source'] == source), key=lambda e:e['start'])
         if not chunks: continue
+        # Float output preserves capture peaks; reserve disk before creating it.
+        frames_needed = 0
+        for event in chunks:
+            path = Path(event['path']).resolve()
+            if path.parent != directory: raise ValueError('Chunk must be inside capture directory')
+            start = round(float(event['start'])*RATE)
+            if start < 0: raise ValueError('Negative capture timestamp')
+            info = sf.info(path)
+            frames_needed = max(frames_needed, start+math.ceil(info.frames*RATE/info.samplerate))
+        required = frames_needed*4+4096+100*1024**2
+        if shutil.disk_usage(directory).free < required:
+            raise OSError(errno.ENOSPC, 'Insufficient disk space for assembled float audio')
         target = directory/f'{source}-full.wav'
-        with sf.SoundFile(target, 'w', samplerate=RATE, channels=1, subtype='PCM_16') as out:
+        with sf.SoundFile(target, 'w', samplerate=RATE, channels=1, subtype='FLOAT') as out:
             cursor = 0
             for e in chunks:
                 path = Path(e['path']).resolve()

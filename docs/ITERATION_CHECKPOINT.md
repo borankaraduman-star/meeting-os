@@ -1,3 +1,7 @@
+## Latest: float audio fidelity fix implemented and checked
+
+Assembly and CPP single/batch temporary WAVs now preserve float32 samples rather than clipping/quantizing to PCM16. Added output-space preflight with 100MiB reserve; float temp disk cost doubles. Reproduction failed before fix, 25 relevant tests pass. Installed CPP read 3s public FLOAT WAV and returned text; hardware test assembly retains all 20 over-unity system samples. See `FLOAT_AUDIO_FIDELITY.md`. No accuracy gain claimed; prior WER scores predate format change. Claude call did not yield a review. Real meeting recovery and live latency still incomplete.
+
 ## Latest: known local Turkish playback captured in both-channel hardware test
 
 18s signed helper capture and afplay completed without permission error, ~19.7MiB sampled capture tree footprint. Mic and system nonzero, all samples finite. System/reference correlation peak .306 vs <=.02984 at offsets >100ms away supports actual local playback capture. Numeric evidence in `benchmarks/results/local-playback-capture-2026-09-08.json`; raw recordings ignored/local. Short capture only; no ASR or long-run stability claim. Found 20 mono16k system samples >1 before PCM16 assembly; amplitude policy remains to inspect through CPP export. Real meeting recovery still incomplete, 270 original segments preserved. No active capture from this test. Goal remains active.

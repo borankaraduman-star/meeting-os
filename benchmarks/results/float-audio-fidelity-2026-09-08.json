@@ -1,0 +1,26 @@
+{
+  "native": {
+    "input": "public FLEURS Turkish first case, first 3s",
+    "format": "float32 WAV",
+    "native_completed": true,
+    "segments": 1,
+    "nonempty_text": true,
+    "wall_seconds": 4.861905707977712,
+    "scope": "installed CPP decoder compatibility, not accuracy improvement"
+  },
+  "real_capture_assembly": {
+    "mic": {
+      "peak": 0.23950181901454926,
+      "samples_over_unity": 0,
+      "format": "FLOAT",
+      "frames": 292149
+    },
+    "system": {
+      "peak": 1.0567010641098022,
+      "samples_over_unity": 20,
+      "format": "FLOAT",
+      "frames": 291436
+    }
+  },
+  "scope": "Intermediate PCM fidelity and native format compatibility; no recognition accuracy improvement claimed"
+}

@@ -40,7 +40,7 @@ class ASR:
         if self.engine != 'cpp': raise ValueError('Unknown ASR engine')
         with tempfile.TemporaryDirectory(prefix='meeting-os-') as tmp:
             wav = Path(tmp)/'input.wav'; prefix = Path(tmp)/'result'
-            sf.write(wav, audio, RATE, subtype='PCM_16')
+            sf.write(wav, audio, RATE, subtype='FLOAT')
             command = [self.cpp_bin, '-m', self.model, '-f', str(wav), '-l', self.language,
                        '-ojf', '-of', str(prefix), '-np', '-ng', '-t', str(self.cpp_threads), '--prompt', self.prompt]
             if self.use_gpu:command.remove("-ng")
@@ -65,7 +65,7 @@ class ASR:
             command=[self.cpp_bin,'-m',self.model,'-l',self.language,'-ojf','-np','-ng','-t',str(self.cpp_threads),'--prompt',self.prompt]
             for i,audio in enumerate(clips):
                 wav=root/f'input-{i}.wav';prefix=root/f'result-{i}'
-                sf.write(wav,audio,RATE,subtype='PCM_16');prefixes.append(prefix)
+                sf.write(wav,audio,RATE,subtype='FLOAT');prefixes.append(prefix)
                 command.extend(['-f',str(wav),'-of',str(prefix)])
             if self.use_gpu:command.remove("-ng")
             if not self.flash_attention:command.append("-nfa")
