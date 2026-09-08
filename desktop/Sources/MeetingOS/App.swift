@@ -40,12 +40,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[]; @Published var profiles:[Profile]=[]
-    @Published var selected:String?; @Published var search=""; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged() } } }; @Published var search=""; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
     @Published var tab="transcript"; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
     @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
     let runtime:Runtime; let dataDir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS")
+    var recordingNavigation=RecordingNavigation()
     var requestedQuit=false
     var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
     init() {
@@ -62,19 +63,24 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         return try await Task.detached { try invoke(rt,req) }.value
     }
     func refresh() async {
-        guard !refreshing else { return }; refreshing=true; defer { refreshing=false }
+        guard !refreshing else { return }; refreshing=true
         let wanted=selected ?? ""
+        defer {
+            refreshing=false
+            // A selection change during an awaited snapshot must load immediately.
+            if wanted != (selected ?? "") { Task { await self.refresh() } }
+        }
         do {
             let result=try await request(["action":"snapshot","meeting":wanted])
             meetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
             profiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
-                selected=active.id
+                if let target=recordingNavigation.resolve(active:active.id) { selected=target }
                 let seconds=active.capture["seconds"] as? Double ?? 0
                 let sources=active.capture["sources"] as? [String:Double] ?? [:]
                 activity=active.capture["state"] as? String=="capturing" ? "Kaydediliyor · \(Int(seconds)) sn · \(sources.keys.sorted().map { $0 == "mic" ? "Mikrofon" : "Sistem" }.joined(separator:" + "))" : "macOS izinleri ve ses aygıtı bekleniyor…"
             }
-            if selected==nil { selected=meetings.first?.id }
+            if selected==nil && !recording { selected=meetings.first?.id }
             if wanted==selected { rows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
     }
@@ -95,19 +101,21 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 }
             }
             try p.run(); job=p; busy=true; error=""
-        } catch { self.error=error.localizedDescription; busy=false; recording=false }
+        } catch { self.error=error.localizedDescription; busy=false; recording=false; recordingNavigation.cancel() }
     }
     func start() {
+        guard job==nil else { return }
+        recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"
         let name=title.isEmpty ? Date().formatted(date:.abbreviated,time:.shortened) : title
         launch(["record",dir.path,"--live","--seconds","14400","--title",name]) { [weak self] ok in
-            guard let self=self else { return }; self.recording=false
+            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel()
             let journal=(try? String(contentsOf:dir.appendingPathComponent("capture-native.jsonl"),encoding:.utf8)) ?? ""
             if ok && journal.contains("\"chunk\"") { self.finalize(dir,name:name) } else if ok { self.activity="Kayıt iptal edildi · Ses alınmadı" } else { self.activity="Kayıt kesildi · Arşivden sesi kurtarabilirsiniz" }
         }
     }
-    func stop() { guard recording else { return }; activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
+    func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
     func finalize(_ dir:URL,name:String) {
         activity="Son transkript ve konuşmacılar hazırlanıyor…"
         let result=dataDir.appendingPathComponent("final-\(UUID().uuidString).json")

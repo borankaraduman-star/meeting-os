@@ -75,3 +75,27 @@ Cycle 1 COMPLETE — release 1.0.1
 - Then consider stale/missing cross-meeting evidence feedback, long text and
   empty/error states. Read current git status and avoid duplicate reviews.
 - Heartbeat verified ACTIVE, every 20 minutes, cutoff 09:00 Istanbul today.
+
+
+Cycle 2 COMPLETE — recording navigation (same 1.0.1 source package refreshed)
+- Extracted RecordingNavigation one-shot policy. Initial live-meeting selection
+  consumes intent; user selection before discovery cancels it. stop/completion/
+  launch failure cancel it; start is guarded against a running job.
+- Capture status still updates while browsing past meetings; default selection
+  does not cancel pending live discovery when starting with an empty library.
+- Snapshot finally schedules a fresh read if selection changed across await,
+  instead of waiting for the next 2-second poll. Intelligence already checks mid.
+- Four Swift XCTest cases first failed against extracted old repeated-selection
+  behavior, then all passed. Logs: Cache/MeetingOS/night-navigation-{red,green}.log.
+  Run with `swift test --package-path desktop`. No Python behavior changed.
+- Native release built; CUA reopened current app and verified normal transcript
+  display. Live ambient recording was not performed; OS consent remains pending.
+- Claude review saved CLAUDE_NIGHT_NAVIGATION_REVIEW.md. #1 reviewed pre-wiring
+  code: actual implementation wires begin/cancel and selection didSet. #2 accepted:
+  immediate follow-up snapshot added. #3 not reproduced: every returned meeting
+  must match current unique capture_dir; an old session cannot match a new UUID;
+  stop cancels intent and job guard prevents overlapping start. New session absent
+  in an old snapshot simply waits for next snapshot; no wrong meeting selected.
+- Next useful cycle: stale/missing cross-meeting evidence feedback and search
+  persistence on ordinary sidebar navigation; assess with fictional fixtures.
+  No duplicate Claude process remains. Heartbeat should remain active to 09:00.
