@@ -11,7 +11,7 @@ import subprocess
 import uuid
 
 import soundfile as sf
-from .openrouter import OpenRouterClient, STT_MODEL, _consent
+from .openrouter import OpenRouterClient, STT_MODEL, _consent, validate_stt_model
 from .progress import emit
 from .types import Segment
 
@@ -45,8 +45,8 @@ def digest_file(path):
     return h.hexdigest()
 
 
-def transcribe_prepared(store,mid,path,turns,client,*,consent=False):
-    _consent(consent)
+def transcribe_prepared(store,mid,path,turns,client,*,consent=False,model=STT_MODEL):
+    _consent(consent);validate_stt_model(model)
     info=sf.info(path)
     if info.samplerate!=16000 or info.channels!=1 or not 0<info.duration<=14400:
         raise ValueError('Ses mono 16 kHz ve en fazla dört saat olmalı')
@@ -55,11 +55,13 @@ def transcribe_prepared(store,mid,path,turns,client,*,consent=False):
     signature=digest_file(path)
     store.db.executescript('''CREATE TABLE IF NOT EXISTS cloud_sources(meeting TEXT PRIMARY KEY REFERENCES meetings(id), digest TEXT, plan TEXT);
         CREATE TABLE IF NOT EXISTS cloud_chunks(meeting TEXT REFERENCES meetings(id), position INTEGER, usage TEXT, PRIMARY KEY(meeting,position));''')
+    if 'model' not in {r[1] for r in store.db.execute('PRAGMA table_info(cloud_sources)')}:
+        with store.db:store.db.execute("ALTER TABLE cloud_sources ADD COLUMN model TEXT NOT NULL DEFAULT 'openai/gpt-transcribe'")
     plan=json.dumps(spans)
     old=store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
-    if old and (old['digest']!=signature or old['plan']!=plan):raise ValueError('Kaynak ses veya konuşmacı planı değişti; devam edilmedi')
+    if old and (old['digest']!=signature or old['plan']!=plan or old['model']!=model):raise ValueError('Kaynak ses veya konuşmacı planı değişti; devam edilmedi')
     if not old:
-        with store.db:store.db.execute('INSERT INTO cloud_sources VALUES(?,?,?)',(mid,signature,plan))
+        with store.db:store.db.execute('INSERT INTO cloud_sources(meeting,digest,plan,model) VALUES(?,?,?,?)',(mid,signature,plan,model))
     done={r[0] for r in store.db.execute('SELECT position FROM cloud_chunks WHERE meeting=?',(mid,))}
     with sf.SoundFile(path) as f:
         for i,(a,b,speaker) in enumerate(spans):
@@ -68,11 +70,11 @@ def transcribe_prepared(store,mid,path,turns,client,*,consent=False):
             f.seek(round(a*16000));audio=f.read(round(b*16000)-round(a*16000),dtype='float32')
             if not len(audio):raise ValueError('Ses parçası boş')
             data=io.BytesIO();sf.write(data,audio,16000,format='WAV',subtype='PCM_16')
-            result=client.transcribe(data.getvalue(),'wav',model=STT_MODEL,consent=True)
+            result=client.transcribe(data.getvalue(),'wav',model=model,consent=True)
             flags=['cloud_transcript','coarse_timing','confidence_unavailable','speaker_unverified']
             if speaker=='unknown':flags.append('speaker_ambiguous')
             text=result['text'].strip()
-            segment=Segment(a,b,text,'system',speaker,metrics={'provider':'openrouter','model':STT_MODEL,'usage':result['usage']},flags=flags)
+            segment=Segment(a,b,text,'system',speaker,metrics={'provider':'openrouter','model':model,'usage':result['usage']},flags=flags)
             # One transaction: never checkpoint a result without its transcript.
             with store.db:
                 if text:
@@ -84,7 +86,7 @@ def transcribe_prepared(store,mid,path,turns,client,*,consent=False):
     return spans
 
 
-def import_file(store,path,title,data_dir,*,consent=False,resume=None,client=None):
+def import_file(store,path,title,data_dir,*,consent=False,resume=None,client=None,model=None):
     _consent(consent)
     if not isinstance(title,str) or not title.strip() or len(title)>200:raise ValueError('Toplantı başlığı gerekli (en fazla 200 karakter)')
     client=client or OpenRouterClient()  # Fail on missing key before local inference or new meeting.
@@ -98,15 +100,19 @@ def import_file(store,path,title,data_dir,*,consent=False,resume=None,client=Non
             row=store.db.execute('SELECT * FROM meetings WHERE id=?',(resume,)).fetchone()
             if not row:raise ValueError('Toplantı bulunamadı')
             metadata=json.loads(row['metadata'])
-            if metadata.get('engine')!='openrouter' or metadata.get('model')!=STT_MODEL:raise ValueError('Bu toplantı GPT Transcribe ile oluşturulmamış')
+            if metadata.get('engine')!='openrouter':raise ValueError('Bu toplantı OpenRouter ile oluşturulmamış')
+            stored_model=validate_stt_model(metadata.get('model'))
+            if model is not None and model!=stored_model:raise ValueError('Devam ederken model değiştirilemez; farklı model için yeni toplantı oluşturun')
+            model=stored_model
             mid=resume;target=Path(metadata['paths']['system'])
             if row['status']=='complete':return {'meeting':mid,'segments':len(store.segments(mid))}
         else:
+            model=validate_stt_model(model or STT_MODEL)
             path=Path(path).resolve(strict=True)
             if not path.is_file():raise ValueError('Ses dosyası bulunamadı')
             folder=data_dir/'imports'/uuid.uuid4().hex;folder.mkdir(parents=True,mode=0o700)
             target=folder/'audio.wav'
-            metadata={'engine':'openrouter','model':STT_MODEL,'diarization':'sherpa','paths':{'system':str(target)},'cloud_upload_authorized':True}
+            metadata={'engine':'openrouter','model':model,'diarization':'sherpa','paths':{'system':str(target)},'cloud_upload_authorized':True}
             mid=store.create_meeting(title.strip(),metadata)
         metadata.update(current_job_metadata())
         with store.db:store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
@@ -127,7 +133,7 @@ def import_file(store,path,title,data_dir,*,consent=False,resume=None,client=Non
                 from .isolated_diarization import isolated_file_turns
                 root=Path(__file__).resolve().parents[1]/'models/sherpa'
                 turns=isolated_file_turns(target,'system',root,.9,info.frames)
-            transcribe_prepared(store,mid,target,turns,client,consent=True)
+            transcribe_prepared(store,mid,target,turns,client,consent=True,model=model)
             # Existing voice identity remains local; no automatic profile enrollment.
             emit('identifying')
             from .final_identity import FinalEmbedder
@@ -143,6 +149,6 @@ def import_file(store,path,title,data_dir,*,consent=False,resume=None,client=Non
                 with store.db:store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',
                     (identity['name'],json.dumps(row,ensure_ascii=False),row['id'],mid))
             store.status(mid,'complete');emit('complete')
-            return {'meeting':mid,'segments':len(store.segments(mid)),'duration':info.duration,'model':STT_MODEL}
+            return {'meeting':mid,'segments':len(store.segments(mid)),'duration':info.duration,'model':model}
         except BaseException:
             store.status(mid,'incomplete');raise

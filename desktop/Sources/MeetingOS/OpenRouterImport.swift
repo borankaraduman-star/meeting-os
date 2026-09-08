@@ -18,9 +18,17 @@ enum OpenRouterCredential {
     static func failure(_ message:String)->NSError { NSError(domain:"MeetingOS.OpenRouter",code:1,userInfo:[NSLocalizedDescriptionKey:message]) }
 }
 
+struct OpenRouterModelOption:Identifiable,Decodable {
+    let id:String
+    let name:String
+    let pricing:String
+}
+
 struct OpenRouterImportView:View {
     @ObservedObject var model:Model
     @Environment(\.dismiss) private var dismiss
+    @State private var models:[OpenRouterModelOption]=[]
+    @State private var selectedModel="openai/gpt-transcribe"
     @State private var key=""
     @State private var path:URL?
     @State private var title=""
@@ -33,8 +41,19 @@ struct OpenRouterImportView:View {
     }
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
-            Text("OpenRouter · GPT Transcribe").font(.title2.bold())
+            Text("OpenRouter · Ses transkripsiyonu").font(.title2.bold())
             Text("Türkçe ses → transkript. Konuşmacı ayrımı ve ses profilleri Mac’te işlenir. Özet, karar ve görevleri işlem bitince Özet sekmesinden bu Mac’te hazırlayabilirsiniz.").foregroundStyle(.secondary)
+            if models.isEmpty { Text("Model listesi yükleniyor…").font(.caption) }
+            else {
+                Picker("Transkripsiyon modeli",selection:$selectedModel) {
+                    ForEach(models) { option in Text(option.name).tag(option.id) }
+                }.accessibilityIdentifier("openRouterModelPicker")
+            }
+            HStack {
+                Text(models.first(where:{$0.id==selectedModel})?.pricing ?? "").font(.caption)
+                Spacer()
+                if let url=URL(string:"https://openrouter.ai/"+selectedModel) { Link("Model ve fiyat",destination:url).font(.caption) }
+            }
             HStack {
                 SecureField("OpenRouter API anahtarı",text:$key)
                 Button("Anahtarı kaydet") {
@@ -53,25 +72,36 @@ struct OpenRouterImportView:View {
                 }
                 Text(path?.lastPathComponent ?? "Dosya seçilmedi").lineLimit(2).foregroundStyle(.secondary)
             }
-            Text("Ücretli API: katalog fiyatı $0.0045/dakika; 30–40 dakika yaklaşık $0.135–$0.18 transkripsiyon bedeli. Gerçek ücret kullanıma bağlıdır. ChatGPT aboneliği API kredisi değildir.").font(.callout)
+            Text("Ücretli API. Ücret seçilen model, sağlayıcı ve kullanıma bağlıdır. ChatGPT aboneliği API kredisi değildir.").font(.callout)
             Text("Konuşmacı etiketleri tahminidir; isimleri düzeltebilirsiniz. Zamanlar konuşma parçası sınırlarıdır. Özel kelime ipuçları bu bağlantıda doğrulanmadığından gönderilmez.").font(.caption).foregroundStyle(.secondary)
-            Toggle("Seçtiğim sesin OpenRouter üzerinden OpenAI’ye gönderilmesini ve API ücretini kabul ediyorum.",isOn:$consent)
+            Toggle("Seçtiğim sesin OpenRouter üzerinden seçili modelin sağlayıcısına gönderilmesini ve API ücretini kabul ediyorum.",isOn:$consent)
+            if let original=model.meeting?.metadata["model"] as? String,resumable != nil {
+                Text("Seçili işlemin modeli: \(models.first(where:{$0.id==original})?.name ?? original). Devam etmek için bu modeli seçin; farklı modelle denemek yeni toplantı oluşturur.").font(.caption).foregroundStyle(.secondary)
+            }
             if !message.isEmpty { Text(message).font(.callout).textSelection(.enabled) }
             HStack {
                 Button("Vazgeç") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                if let mid=resumable { Button("Seçili işlemi sürdür") { start(resume:mid) }.disabled(!consent || model.busy) }
+                if let mid=resumable { Button("Seçili işlemi sürdür") { start(resume:mid) }.disabled(!consent || model.busy || selectedModel != model.meeting?.metadata["model"] as? String) }
                 Button("Yükle ve yazıya çevir") { start(resume:nil) }.buttonStyle(.borderedProminent)
-                    .disabled(!consent || path==nil || title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.busy)
+                    .disabled(!consent || models.isEmpty || path==nil || title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.busy)
             }
         }.padding(24).frame(width:640)
+        .task {
+            do {
+                let response=try await model.request(["action":"openrouter_models"])
+                let data=try JSONSerialization.data(withJSONObject:response["models"] ?? [])
+                models=try JSONDecoder().decode([OpenRouterModelOption].self,from:data)
+                guard models.contains(where:{$0.id==selectedModel}) else { throw OpenRouterCredential.failure("Varsayılan model listede yok.") }
+            } catch { message=error.localizedDescription;models=[] }
+        }
     }
     private func start(resume:String?) {
-        guard consent,!model.busy else { return }
+        guard consent,!model.busy,models.contains(where:{$0.id==selectedModel}) else { return }
         let result=model.dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
-        var args=["openrouter-import","--allow-upload","--title",title.isEmpty ? "OpenRouter toplantısı":title,"--output",result.path]
+        var args=["openrouter-import","--allow-upload","--model",selectedModel,"--title",title.isEmpty ? "OpenRouter toplantısı":title,"--output",result.path]
         if let resume { args += ["--resume",resume] } else if let path { args.append(path.path) } else { return }
-        model.activity="Konuşmacılar yerelde ayrılıyor; GPT Transcribe hazırlanıyor…"
+        model.activity="Konuşmacılar yerelde ayrılıyor; seçilen transkripsiyon modeli hazırlanıyor…"
         model.launch(args) { [weak model] ok in
             guard let model else { return }
             if ok,let mid=model.resultMeeting(result) {

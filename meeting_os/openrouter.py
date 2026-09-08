@@ -9,6 +9,19 @@ import urllib.error
 import urllib.request
 
 STT_MODEL = 'openai/gpt-transcribe'
+STT_MODELS = (
+    {'id':'openai/gpt-transcribe','name':'GPT Transcribe','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18'},
+    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında'},
+    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında'},
+    {'id':'openai/whisper-large-v3','name':'Whisper Large V3','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında'},
+    {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında'},
+)
+
+def validate_stt_model(model):
+    if model not in {m['id'] for m in STT_MODELS}:
+        raise OpenRouterError('Desteklenmeyen transkripsiyon modeli; model otomatik değiştirilmedi.')
+    return model
+
 KEYCHAIN_SERVICE = 'local.boran.meeting-os.openrouter'
 
 class OpenRouterError(ValueError): pass
@@ -67,7 +80,7 @@ class OpenRouterClient:
         return result
 
     def transcribe(self, audio, format, *, model=STT_MODEL, consent=False, language='tr'):
-        _consent(consent);_model(model)
+        _consent(consent);validate_stt_model(model)
         if not isinstance(audio,bytes) or not 0<len(audio)<=self.MAX_AUDIO_BYTES:
             raise OpenRouterError('Ses parçası boş veya 8 MiB sınırını aşıyor.')
         if format not in ('wav','mp3','flac','m4a','ogg','webm','aac'):

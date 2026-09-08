@@ -102,7 +102,7 @@ struct DetailView:View {
             }
             if let meeting=model.meeting,meeting.metadata["engine"] as? String=="openrouter" {
                 HStack {
-                    Text("GPT Transcribe · OpenRouter | Konuşmacı ayrımı bu Mac’te").font(.caption).foregroundStyle(.secondary)
+                    Text("\(meeting.metadata["model"] as? String ?? "") · OpenRouter | Konuşmacı ayrımı bu Mac’te").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if meeting.status != "complete" { Button("İşlemi sürdür") { model.showOpenRouter=true }.disabled(model.busy || meeting.recoveryState=="active") }
                 }.padding(.horizontal,24).padding(.bottom,8)

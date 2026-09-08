@@ -88,4 +88,20 @@ class OpenRouterTests(unittest.TestCase):
         client=self.client({'choices':[{'finish_reason':'length','message':{'content':'partial'}}]})
         with self.assertRaises(OpenRouterError):client.analysis('openai/gpt-5.6-luna',consent=True).complete('s','u')
 
+    def test_every_advertised_model_is_sent_exactly_and_unknown_is_blocked(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            listing=dispatch({'action':'openrouter_models'},Path(tmp)/'db.sqlite')
+        self.assertEqual(listing['default'],'openai/gpt-transcribe')
+        self.assertEqual(len(listing['models']),5)
+        for option in listing['models']:
+            client=self.client({'text':'Test'})
+            client.transcribe(b'RIFF','wav',model=option['id'],consent=True)
+            self.assertEqual(json.loads(self.requests[0][0].data)['model'],option['id'])
+        client=self.client({'text':'Test'})
+        with self.assertRaises(OpenRouterError):client.transcribe(b'RIFF','wav',model='openai/not-supported',consent=True)
+        self.assertEqual(self.requests,[])
+
 if __name__=='__main__':unittest.main()

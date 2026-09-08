@@ -63,3 +63,26 @@ class CloudImportTests(unittest.TestCase):
                 import_file(store,None,'Test',root/'data',consent=True,resume=mid,client=client)
                 self.assertEqual(client.transcribe.call_count,1)
             store.close()
+
+    def test_model_change_cannot_reuse_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'audio.wav';sf.write(path,np.zeros(16000*4),16000,subtype='FLOAT')
+            store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('Test')
+            client=Mock();client.transcribe.return_value={'text':'Test','usage':{}}
+            transcribe_prepared(store,mid,path,[(0,4,'S0')],client,consent=True,model='openai/gpt-4o-mini-transcribe')
+            self.assertEqual(client.transcribe.call_args.kwargs['model'],'openai/gpt-4o-mini-transcribe')
+            self.assertEqual(store.segments(mid)[0]['metrics']['model'],'openai/gpt-4o-mini-transcribe')
+            with self.assertRaises(ValueError):
+                transcribe_prepared(store,mid,path,[(0,4,'S0')],client,consent=True,model='openai/gpt-transcribe')
+            self.assertEqual(client.transcribe.call_count,1)
+            store.close()
+
+    def test_legacy_checkpoint_is_bound_to_gpt_transcribe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'audio.wav';sf.write(path,np.zeros(16000*4),16000,subtype='FLOAT')
+            store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('Test')
+            store.db.execute('CREATE TABLE cloud_sources(meeting TEXT PRIMARY KEY,digest TEXT,plan TEXT)')
+            client=Mock();client.transcribe.return_value={'text':'Test','usage':{}}
+            transcribe_prepared(store,mid,path,[(0,4,'S0')],client,consent=True)
+            self.assertEqual(store.db.execute('SELECT model FROM cloud_sources').fetchone()[0],'openai/gpt-transcribe')
+            store.close()

@@ -191,4 +191,4 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 
 ### İsteğe bağlı OpenRouter transkripsiyonu
 
-Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla `openai/gpt-transcribe` kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
+Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).

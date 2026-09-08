@@ -72,6 +72,9 @@ def dispatch(request, db=None):
         return {'diagnostics_saved':True}
     with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as store:
         action=request['action']
+        if action=='openrouter_models':
+            from .openrouter import STT_MODELS,STT_MODEL
+            return {'models':STT_MODELS,'default':STT_MODEL,'verified_at':'2026-09-09'}
         if action in ('transcript_preview','transcript_import'):
             from .transcript_import import preview,save
             return preview(request.get('text')) if action=='transcript_preview' else save(store,request.get('title'),request.get('text'))

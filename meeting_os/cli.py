@@ -127,7 +127,7 @@ def parser():
     e=sub.add_parser('enroll'); e.add_argument('meeting'); e.add_argument('segment',type=int); e.add_argument('name'); e.add_argument('--confirmed-clean',action='store_true',required=True,help='Confirm listening to the segment: one speaker, no overlap/echo, >=3s speech')
     profiles=sub.add_parser('profiles'); profiles.add_argument('--delete')
     b=sub.add_parser('benchmark'); b.add_argument('manifest',type=Path); b.add_argument('--output',type=Path,required=True)
-    a=sub.add_parser('openrouter-import'); a.add_argument('audio',type=Path,nargs='?'); a.add_argument('--title',default='OpenRouter toplantısı'); a.add_argument('--resume'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('openrouter-import'); a.add_argument('audio',type=Path,nargs='?'); a.add_argument('--title',default='OpenRouter toplantısı'); a.add_argument('--resume'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--output',type=Path)
     a=sub.add_parser('analyze'); a.add_argument('meeting'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path)
     a=sub.add_parser('actions'); a.add_argument('--owner'); a.add_argument('--meeting')
     a=sub.add_parser('action-update'); a.add_argument('task'); a.add_argument('--state',choices=['open','in_progress','done','dismissed']); a.add_argument('--title'); a.add_argument('--owner'); a.add_argument('--due-text')
@@ -199,7 +199,7 @@ def main(supervised=False):
             elif args.command=='openrouter-import':
                 from .cloud_import import import_file
                 if not args.resume and args.audio is None:raise ValueError('Ses dosyası seçin')
-                result=import_file(store,args.audio,args.title,DATA_DIR,consent=args.allow_upload,resume=args.resume)
+                result=import_file(store,args.audio,args.title,DATA_DIR,consent=args.allow_upload,resume=args.resume,model=args.model)
                 if args.output:args.output.write_text(json.dumps(result,ensure_ascii=False))
                 output(result)
             elif args.command=='import':
