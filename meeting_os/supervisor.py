@@ -55,7 +55,7 @@ def close_lifeline(guardian,write_fd):
         except subprocess.TimeoutExpired:guardian.kill();guardian.wait()
 
 
-def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_failure=None, handle_signals=True, cancel_requested=None):
+def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_failure=None, handle_signals=True, cancel_requested=None, output_stream=None, failure_details=True):
     """Run a direct native child (which must not daemonize/spawn workers).
 
     The caller remains outside the native call. Temporary logs avoid pipe
@@ -64,7 +64,7 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
     check_pressure()
     budget=min(int(3.5*GIB),max(GIB,physical_memory()//4))
     with tempfile.TemporaryFile() as log:
-        process=subprocess.Popen(command,stdout=None if passthrough else log,stderr=None if passthrough else log,start_new_session=isolated)
+        process=subprocess.Popen(command,stdout=output_stream if output_stream is not None else (None if passthrough else log),stderr=None if passthrough else log,start_new_session=isolated)
         guardian,lifeline=open_lifeline(process) if isolated else (None,None)
         old_handlers={}
         if isolated and handle_signals:
@@ -98,7 +98,7 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
                     raise RuntimeError('Yerel model bellek sınırını aştı; ses korunuyor')
                 time.sleep(.1)
             if process.returncode:
-                if passthrough:raise ChildFailure(process.returncode)
+                if passthrough or not failure_details:raise ChildFailure(process.returncode)
                 log.seek(0,2);size=log.tell();log.seek(max(0,size-2000))
                 detail=log.read().decode('utf-8',errors='replace')
                 raise RuntimeError(f'Yerel model başarısız (exit={process.returncode}): {detail}')

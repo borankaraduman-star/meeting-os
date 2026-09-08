@@ -12,7 +12,7 @@ The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.
 
 ## A2.1 runtime qualification
 
-Completed weight-free qualification of pinned llama.cpp b10853 for candidate Qwen3-4B-Instruct-2507 GGUF Q4_K_S. See docs/candidates/ANALYSIS_CPU_QUALIFICATION.md and pinned JSON. Official runtime archive SHA verified; native help/version and analysis schema conversion passed. Model metadata pinned but weights NOT downloaded/evaluated; default unchanged. Claude reviewed design. Next checkpoint: disk/pressure check, single pinned file download with streamed SHA verification, experimental adapter/fake tests and one supervised short development case. Do not repeat runtime discovery or touch held-out cases prematurely.
+Pinned llama.cpp b10853 and Qwen3-4B-Instruct-2507 GGUF Q4_K_S downloaded and SHA-verified. Experimental adapter/fake tests added, never wired to defaults. Native tokenizer worked; single fictional cancel fixture generation was aborted on OS memory pressure after7.196s. Normal pressure restored; no output/semantic score or held-out evaluation. Candidate fails current resource gate; do not repeat unchanged. Peak footprint was not persisted. See docs/candidates/ANALYSIS_CPU_QUALIFICATION.md. 96 Python tests passed after the change. Claude compact review completed; native error-detail leakage fixed with a regression test. CLI concerns rejected against pinned help; tokenizer/completion parity remains unverified. Next prioritize model-free recovery/diagnostics and echo; another model family only with a justified lower-resource hypothesis, keeping the two-family cap.
 
 ## Open-lid microphone retest
 

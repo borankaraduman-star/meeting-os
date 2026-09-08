@@ -39,9 +39,9 @@ Acceptance: false task/owner/date pairings fail automatic checks; source/evidenc
 
 Files: meeting_os/llm.py, meeting_os/models.py, docs/MODEL_LOCK.json, scripts/benchmark-analysis.py; new backend adapter/tests only if measured necessary.
 Consumes A1 gates; produces same `LocalLLM.complete(system,user,max_tokens,schema)` contract and provenance/model revision.
-- [ ] Profile runtime overhead without loaded weights; select at most two justified candidates, first a CPU runtime retaining the proven4B model family.
-- [ ] Pin model/runtime revision, license, download checksum/source; download is allowed, hosted inference is not.
-- [ ] Test one short case under supervisor; abort candidate on pressure. No automatic retry of the same failed workload.
+- [x] Profile runtime overhead without loaded weights; select at most two justified candidates, first a CPU runtime retaining the proven4B model family.
+- [ ] Pin model/runtime revision, license, download checksum/source; revisions and checksums verified, model license recorded; runtime license confirmation remains before redistribution.
+- [x] Test one short case under supervisor; aborted candidate on pressure after7.196s. No automatic retry of the same failed workload. Runtime license confirmation remains required before redistribution.
 - [ ] Run development cases, then frozen held-out cases; Claude independently examines synthetic outputs.
 - [ ] Only integrate a candidate passing resource, evidence and semantic gates. Leave manual/deferred analysis when none passes.
 - [ ] Test app-visible cancellation, errors and preserved transcript before release.
@@ -107,3 +107,20 @@ Each checkpoint: reproduce → implement → relevant tests → compact Claude r
 90 Python tests passed. New regression checks failed before implementation and pass afterward. A nonexistent benchmark case exits before loading a model. Benchmark execution now uses the process supervisor. Frozen cases: benchmarks/analysis-heldout-v1/cases.json and manifest.json. Claude authored12 cases, Codex reviewed and documented three pre-freeze clarifications; no model candidate has been evaluated on this set yet. A1 complete; A2 is next.
 
 A2 primary runtime reference: https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md . JSON-schema support is a subset; verify the application's schema constraints against a pinned runtime rather than assuming equivalent enforcement. Model artifact/revision selection is still pending.
+
+## Resource-gate scheduling update
+
+A2.2 CPU4B candidate failed pressure admission during generation. Keep analysis manual/deferred and stop this candidate here; do not interpret the remaining quality boxes as permission to retry. Codex next implements C's process-identity/recovery and allowlisted diagnostics with temporary databases/fake processes, then B's raw-preserving echo measurements. Claude reviews those compact changes and adversarial fixtures independently. D follows passing recovery/echo gates; E remains dependent on real consented data and human labels. This reorders independent work to keep progressing without further model pressure on the shared Mac.
+
+### C1 concrete next checkpoint and Claude handoff
+
+Observed callsites: `run_transcribe` stores only worker_pid; `live.record_live` stores capture_dir/provisional without an owner identity; interrupted CLI cleanup matches PID alone. `Store` has no startup recovery classifier. Address these together, without touching the real user database in tests.
+
+Codex implementation sequence:
+1. Add a process-identity helper using PID plus kernel process start timestamp (including subsecond precision), and boot identity where available. Unknown/unreadable identity must return unknown, never dead. Add fake-provider tests for alive, dead, reused PID and denied inspection.
+2. Persist identity at job creation for live/import/finalize; use matching identity for cleanup. Preserve compatibility with historical PID-only rows: classify conservatively as requiring review, not automatically stale.
+3. Add a read-only recovery listing that distinguishes active, interrupted and unknown rows and reports finalized capture availability locally. Apply state transitions transactionally only after rechecking identity; never signal processes from recovery. Idempotent retry must retain original meeting and corrections, with an explicit policy for replacing provisional segments before enabling UI retry.
+4. Add diagnostics with a fixed schema of versions, numeric stage/resource counters and enumerated error codes. Build from structured records, never scrub arbitrary logs and call them safe. No paths, titles, names, text, audio, tokens or URLs. Write local JSON with private permissions; no network.
+5. Claude receives the narrow diff and synthetic fault cases, reviews PID reuse/races, duplicate writes and privacy, and reports specific blockers. Codex resolves findings and runs relevant tests before checkpoint/release.
+
+C1 acceptance: reused PID cannot make an unrelated process a recovery target; inspection failure preserves unknown state; repeated recovery does not duplicate profiles/tasks; adversarial secrets in arbitrary metadata never appear in diagnostic output. GUI recovery integration is a subsequent checkpoint after the storage contract passes.

@@ -57,3 +57,22 @@ class SupervisorTests(unittest.TestCase):
                     time.sleep(.05)
             finally:
                 if parent.poll() is None:parent.kill();parent.wait()
+
+    def test_output_stream_separates_stdout_and_failure_stderr(self):
+        from meeting_os.supervisor import run_guarded
+        with tempfile.TemporaryFile() as output:
+            run_guarded([sys.executable,'-c','import sys;print("result");print("diagnostic",file=sys.stderr)'],output_stream=output)
+            output.seek(0)
+            self.assertEqual(output.read(),b'result\n')
+        with tempfile.TemporaryFile() as output:
+            with self.assertRaisesRegex(RuntimeError,'diagnostic'):
+                run_guarded([sys.executable,'-c','import sys;print("partial");print("diagnostic",file=sys.stderr);sys.exit(3)'],output_stream=output)
+            output.seek(0)
+            self.assertEqual(output.read(),b'partial\n')
+
+    def test_native_failure_details_can_be_excluded(self):
+        from meeting_os.supervisor import run_guarded, ChildFailure
+        with self.assertRaises(ChildFailure) as caught:
+            run_guarded([sys.executable,'-c','import sys;print("PRIVATE_TRANSCRIPT",file=sys.stderr);sys.exit(3)'],failure_details=False)
+        self.assertNotIn('PRIVATE_TRANSCRIPT',str(caught.exception))
+        self.assertEqual(caught.exception.code,3)
