@@ -65,7 +65,7 @@ Files: meeting_os/store.py, meeting_os/live.py, meeting_os/supervisor.py, meetin
 - [x] Reproduce crash leftovers with fake processes and temporary DBs.
 - [x] Distinguish stale processing jobs using PID, microsecond kernel start timestamp and boot UUID; native identity exercised on this Mac, unknown states preserved. Read-only recovery CLI plus transactional mark, no signals.
 - [ ] Expose recoverable finalized audio and idempotent retry without duplicate task/profile writes.
-- [ ] Export only allowlisted versions, stage/resource counters and sanitized error codes. Exclude audio, transcript, names, credentials, paths revealing personal data and signed URLs.
+- [x] Export only allowlisted versions, stage/resource counters and sanitized error codes. Diagnostics CLI implements current snapshot with private no-overwrite export; no DB/raw logs/audio/transcripts/names/credentials/paths/URLs. Independent Claude review and privacy tests passed. GUI integration pending.
 - [ ] Claude reviews the allowlist and fault-injection results; test restart during finalization/analysis and interrupted download.
 
 ### D: Long recording, devices and installer

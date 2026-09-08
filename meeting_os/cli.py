@@ -94,6 +94,7 @@ def parser():
     p.add_argument('--db',type=Path,default=DATA_DIR/'meeting-os.sqlite')
     sub=p.add_subparsers(dest='command',required=True)
     sub.add_parser('doctor')
+    diagnostic=sub.add_parser('diagnostics'); diagnostic.add_argument('--output',type=Path); diagnostic.add_argument('--progress',type=Path)
     models=sub.add_parser('models'); m=models.add_subparsers(dest='action',required=True)
     m.add_parser('list'); f=m.add_parser('fetch'); f.add_argument('name'); f.add_argument('--root',type=Path,default=ROOT/'models'); f.add_argument('--revision',default='main')
     i=sub.add_parser('import'); i.add_argument('audio',type=Path); i.add_argument('--title',default='Imported meeting'); i.add_argument('--output',type=Path); inference_options(i)
@@ -138,6 +139,13 @@ def main(supervised=False):
         if args.command=='models':
             from .models import CATALOG,fetch
             output(CATALOG if args.action=='list' else {'path':fetch(args.name,args.root,args.revision)})
+            return
+        if args.command=='diagnostics':
+            from .diagnostics import collect,export_report
+            report=collect(args.output.parent if args.output else ROOT,args.progress)
+            if args.output:
+                export_report(args.output,report);output({'diagnostics_saved':True})
+            else:output(report)
             return
         if args.command=='doctor':
             import platform, importlib.util
