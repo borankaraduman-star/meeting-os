@@ -1,5 +1,9 @@
 # Local reliability iteration — 2026-09-08
 
+## Active work plan
+
+Follow docs/superpowers/plans/2026-09-08-meeting-os-acceptance.md as the current ordered plan. Codex implements/tests; Claude independently reviews and authors adversarial fixtures. A1 completed:90 tests pass and12 independent fictional cases frozen in benchmarks/analysis-heldout-v1. Next execute A2 lower-overhead local analysis; B echo, C recovery/diagnostics, D long/device/installer and E natural meetings follow. Historical sections below are evidence, not instructions to redo completed work.
+
 User authorized continued local testing and improvement with Claude Code. Codex implements; Claude reviews compact code-only checkpoints using the existing Max session. No paid API, private audio/transcripts, outbound messages, or OS permission bypass.
 
 ## Safety baseline

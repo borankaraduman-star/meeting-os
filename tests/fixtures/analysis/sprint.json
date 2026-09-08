@@ -1,13 +1,60 @@
 {
- "title":"Kurgu test — Sprint planı",
- "segments":[
- {"speaker":"Boran","text":"Onboarding için scope'u daraltmaya karar verdik. Bu sprint yalnızca e-posta doğrulama ekranını çıkaracağız. Ben PRD taslağını yarın hazırlayacağım."},
- {"speaker":"Ece","text":"Tamam, ben kabul kriterlerini cuma gününe kadar yazacağım. Payment migration bu sprint yapılmayacak, onu iptal ettik."},
- {"speaker":"Can","text":"Backend latency hâlâ p95 iki saniye. Bu, onboarding dönüşümünü düşürebilir. Deployment için feature flag hazır mı?"},
- {"speaker":"Boran","text":"Henüz bilmiyoruz. Can'ın feature flag işini üstlendiğine dair bir karar yok. Araştırsak mı diye konuştuk ama kimse üstlenmedi."},
- {"speaker":null,"text":"Ben test senaryolarını hazırlayacağım. Tarih söyleyemiyorum."}
- ],
- "expected_actions":3,
- "forbidden_action_terms":["migration","feature flag"],
- "expected_owners":["Boran","Ece",null]
+  "title": "Kurgu test — Sprint planı",
+  "segments": [
+    {
+      "speaker": "Boran",
+      "text": "Onboarding için scope'u daraltmaya karar verdik. Bu sprint yalnızca e-posta doğrulama ekranını çıkaracağız. Ben PRD taslağını yarın hazırlayacağım."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Tamam, ben kabul kriterlerini cuma gününe kadar yazacağım. Payment migration bu sprint yapılmayacak, onu iptal ettik."
+    },
+    {
+      "speaker": "Can",
+      "text": "Backend latency hâlâ p95 iki saniye. Bu, onboarding dönüşümünü düşürebilir. Deployment için feature flag hazır mı?"
+    },
+    {
+      "speaker": "Boran",
+      "text": "Henüz bilmiyoruz. Can'ın feature flag işini üstlendiğine dair bir karar yok. Araştırsak mı diye konuştuk ama kimse üstlenmedi."
+    },
+    {
+      "speaker": null,
+      "text": "Ben test senaryolarını hazırlayacağım. Tarih söyleyemiyorum."
+    }
+  ],
+  "expected_actions": 3,
+  "forbidden_action_terms": [
+    "migration",
+    "feature flag"
+  ],
+  "expected_owners": [
+    "Boran",
+    "Ece",
+    null
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "PRD"
+      ],
+      "owner": "Boran",
+      "due_text": "yarın"
+    },
+    {
+      "title_terms": [
+        "kabul",
+        "kriter"
+      ],
+      "owner": "Ece",
+      "due_text": "cuma gününe kadar"
+    },
+    {
+      "title_terms": [
+        "test",
+        "senaryo"
+      ],
+      "owner": null,
+      "due_text": null
+    }
+  ]
 }

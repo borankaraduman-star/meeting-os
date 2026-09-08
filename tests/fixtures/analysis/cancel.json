@@ -1,1 +1,25 @@
-{"title":"Kurgu test — İptal ve öneri","segments":[{"speaker":"Boran","text":"Ben migration planını yarın yazacağım."},{"speaker":"Ece","text":"Hayır, migration tamamen iptal edildi. Planı yazmayacağız."},{"speaker":"Boran","text":"Tamam, vazgeçtik. İpek demo hazırlasa mı? Bu yalnızca bir öneri; İpek burada değil ve işi kabul etmedi. Önceki raporu dün bitirdik."}],"expected_actions":0,"forbidden_action_terms":["migration","demo","rapor"],"expected_owners":[]}
+{
+  "title": "Kurgu test — İptal ve öneri",
+  "segments": [
+    {
+      "speaker": "Boran",
+      "text": "Ben migration planını yarın yazacağım."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Hayır, migration tamamen iptal edildi. Planı yazmayacağız."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Tamam, vazgeçtik. İpek demo hazırlasa mı? Bu yalnızca bir öneri; İpek burada değil ve işi kabul etmedi. Önceki raporu dün bitirdik."
+    }
+  ],
+  "expected_actions": 0,
+  "forbidden_action_terms": [
+    "migration",
+    "demo",
+    "rapor"
+  ],
+  "expected_owners": [],
+  "expected_action_fields": []
+}
