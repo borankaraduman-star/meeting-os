@@ -26,5 +26,12 @@
     }
   ],
   "progress_file_exists": true,
-  "scope": "Resource stop before first reported phase; no model acceptance evidence."
+  "scope": "Resource stop during assembly before model phases; no model acceptance evidence.",
+  "stage": {
+    "stage": "assembling",
+    "current": 0,
+    "total": 0,
+    "source": "",
+    "updated_at": 1788903479.328099
+  }
 }

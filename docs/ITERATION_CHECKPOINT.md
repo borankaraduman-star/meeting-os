@@ -1,6 +1,6 @@
 ## Latest: thread-budget real retry terminal at admission
 
-Session78649 parent51998/child52001 terminal exit75 after7.42s, OS pressure2, sampled peak96,781,344bytes. No progress file/model-stage evidence.270 original segments and69ASR checkpoints retained. No blind restart under pressure. Evidence real-thread-budget-admission-2026-09-09.json. Identity thread fix e372c4a verified by31tests and native vector parity; full meeting remains incomplete. Claude reviews still pending; revalidate80775/95385.
+Session78649 parent51998/child52001 terminal exit75 after7.42s, OS pressure2, sampled peak96,781,344bytes. Progress file appeared by terminal inspection: assembly, before model phases.270 original segments and69ASR checkpoints retained. No blind restart under pressure. Evidence real-thread-budget-admission-2026-09-09.json. Identity thread fix e372c4a verified by31tests and native vector parity; full meeting remains incomplete. Claude reviews still pending; revalidate80775/95385.
 
 ## Latest: identity thread budget verified; separated retry stopped before models
 
