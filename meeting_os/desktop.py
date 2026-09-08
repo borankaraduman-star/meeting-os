@@ -20,7 +20,7 @@ def export_text(rows, kind):
     return '\n\n'.join(f"**{timestamp(r['start'], '.')} · {r['speaker_name'] or r['speaker']}**\n\n{r['text']}" for r in rows)+'\n'
 
 
-def capture_state(metadata):
+def capture_state(metadata, include_signal=False):
     directory=metadata.get('capture_dir')
     if not directory: return None
     path=Path(directory)/'capture-native.jsonl'
@@ -38,7 +38,12 @@ def capture_state(metadata):
     for e in events:
         if e.get('event') in ('started','chunk'): state='capturing'
         elif e.get('event') in ('error','stopped'):state=e['event']
-    return {'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
+    result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
+    if include_signal:
+        from .source_signal import inspect_signal
+        latest={e.get('source'):e for e in events if e.get('event')=='chunk'}
+        result['signals']={source:inspect_signal(latest[source].get('path',''),directory) if source in latest else {'state':'unavailable'} for source in ('mic','system')}
+    return result
 
 
 def capture_presentation(status, owner, capture, metadata=None):
@@ -82,8 +87,10 @@ def dispatch(request, db=None):
             meetings=store.meetings()
             for m in meetings:
                 from .recovery import metadata,classify
-                m['metadata']=metadata(m); m['capture']=capture_state(m['metadata'])
+                m['metadata']=metadata(m)
                 m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in ('processing','provisional','incomplete','failed') else m['status']
+                live=m['recovery_state']=='active' and m['metadata'].get('provisional') is True and not m['metadata'].get('retry_attempt')
+                m['capture']=capture_state(m['metadata'],include_signal=live)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
             return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(request.get('meeting',''))}
         if action=='label':

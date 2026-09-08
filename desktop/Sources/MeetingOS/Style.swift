@@ -96,7 +96,8 @@ struct ApplicationActivityView:View {
             }
             if model.busy && !model.jobProgress.isEmpty { Text(model.jobProgress).font(.caption.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
             if !model.microphoneHint.isEmpty { Label(model.microphoneHint,systemImage:"mic.slash").font(.caption).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
-            Text(model.activity).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            Text(model.activity).font(.caption).foregroundStyle(.secondary).lineLimit(4).fixedSize(horizontal:false,vertical:true)
+                .help("Sistem kanalı bu Mac’in ses çıkışını kaydeder. Başka bir cihazdan çalınan ses mikrofondan alınır. Sinyal ölçümü, konuşma algılandığı anlamına gelmez.")
         }.padding(12).frame(maxWidth:.infinity,alignment:.leading).meetingCard()
     }
 }

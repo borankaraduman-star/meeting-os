@@ -103,9 +103,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             profiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
-                let seconds=active.capture["seconds"] as? Double ?? 0
-                let sources=active.capture["sources"] as? [String:Double] ?? [:]
-                activity=active.capture["state"] as? String=="capturing" ? "Kaydediliyor · \(Int(seconds)) sn · \(sources.keys.sorted().map { $0 == "mic" ? "Mikrofon" : "Sistem" }.joined(separator:" + "))" : "macOS izinleri ve ses aygıtı bekleniyor…"
+                activity=CaptureSignalPresentation.label(active.capture)
             }
             if selected==nil && !recording { selected=meetings.first?.id }
             if wanted==selected { rows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); resolvePendingEvidence(); try await refreshIntelligence(wanted) }

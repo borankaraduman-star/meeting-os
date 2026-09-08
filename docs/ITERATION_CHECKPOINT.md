@@ -10,7 +10,13 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
-## Current checkpoint — batch candidate tested, native comparison deferred by active recording
+## Current checkpoint — source signals live in bridge; presentation tested, UI install pending
+
+Source RMS/peak/silence/age now in bridge only for active provisional owner (no retry/history scans); actual bridge measured.122s, mic signal/system silent. Claude authored3-line formatter;19 isolated Swift tests pass after Codex fixed JSON0/1 boolean bridging and an inconsistent infinity fixture.16 Python tests pass. App source integrated, installed app NOT rebuilt/restarted; full build/visual checks pending idle. See SOURCE_SIGNAL_2026-09-08.md.
+
+CRITICAL new evidence: pressure briefly reached2; guard killed first isolated test attempt, user recorder kept writing. Existing live loop skipped124 chunks on pressure errors; all124 raw file paths still exist but preview is incomplete. Do NOT call reduced backlog an optimization success. Pressure later stable1 over30s and at end; formatter-only test passed. No claim on full decoded integrity/final processing. CoreAudio four snapshots:28 objects,0 active output/1 input,0errors; consistent with no local audio playback at those times, not permission failure proof. Next prioritize deferred-preview coverage and final recovery once recording ends; keep user capture untouched. Batch candidate remains OFF.
+
+## Historical checkpoint — batch candidate tested, native comparison deferred by active recording
 
 Added default-OFF, provisional-only separate-file cpp batching to avoid repeated model initialization without splicing audio.16 targeted tests pass; Claude reviewed compact candidate. Source pin supports multi-input and context reset, but installed-binary ordering/isolation/speed not yet verified. Matched ABBA benchmark script refuses active Meeting OS audio jobs and bounds a future run to180s/12s total audio; actual current invocation deferred before model load. Current recording remains untouched and uses serial2-thread CPU; no batch caller enabled. See follow-up in LIVE_OPTIMIZATION_LOOP_2026-09-08.md. Still pursue full live lag/source visibility goal, not just green unit tests. Check real processes; do not wait on stale artifacts or restart user capture.
 
