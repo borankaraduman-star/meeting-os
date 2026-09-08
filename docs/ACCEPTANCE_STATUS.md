@@ -1,3 +1,21 @@
+# Active optimization acceptance — 2026-09-09
+
+This section supersedes the older CPU-recovery snapshot below for the current live-optimization objective. Historical sections are retained as dated evidence, not proof that later work passed acceptance.
+
+| Requirement | Current verified evidence | Remaining acceptance |
+|---|---|---|
+| Real meeting completion | 3153.7s mic VAD completed; regenerated snapshot reused1diarization and69ASR checkpoints. Original270 provisional segments preserved after guarded failure. | Complete remaining ASR and final identity/transaction; latest full trial stopped on first new ASR region under OS pressure. |
+| Live latency | Experimental bounded same-speaker grouping has short synthetic evidence; first real chunk had no eligible grouping. | Sustained real live backlog/latency improvement is unproven; grouping remains off by default. |
+| Mic/system visibility | Real archived mic nonzero, all263 system chunks digitally zero. Separate18s local playback test captured both channels. | Long live source visibility, device transitions and full recording stability. Short playback is not proof of audio in the archived silent channel. |
+| Memory and recording safety | Mapped final VAD, bounded silence gate, isolated final identity, bounded identity batches; exact public fixture comparisons and relevant tests. Raw recording and successful checkpoints retained. | Current shared OS pressure prevents standalone decoder admission before model launch. Do not relax guards or terminate unrelated active apps/services. |
+| Claude collaboration | Actual Fable5.1/max bounded reviews completed, including mapped-VAD review39042 exit0; findings checked against source and dispositions recorded. | No review substitutes for real full-record or human accuracy acceptance. |
+
+Latest blocker revalidation: OS pressure2; process listing showed no MeetingCapture, meeting_os recording/finalization/retry/live worker, whisper-cli or Claude print job. Working tree clean before this documentation update. Repeated pressure across the resumed attempt, standalone admission attempt and current continuation prevents further native acceptance without external headroom. No model is left running or waiting. See real-mapped-vad-retry-2026-09-09.json and idle-pressure-admission-2026-09-09.json under benchmarks/results.
+
+Cross-meeting identity and Turkish names/jargon/code-switch accuracy still need independent human-labeled meeting references. No perfect-product or full-goal completion claim.
+
+---
+
 # Current acceptance status —2026-09-08
 
 This is the current overview; older checkpoint paragraphs document historical states. Implemented code and controlled tests are not natural-meeting acceptance.
