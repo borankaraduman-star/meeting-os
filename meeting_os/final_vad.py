@@ -35,7 +35,9 @@ def main():
     with sf.SoundFile(path) as f:
         if f.samplerate!=16000 or f.channels!=1 or f.subtype!='FLOAT' or f.frames!=frames:raise ValueError('Invalid VAD snapshot')
     from scipy.io import wavfile
-    # Map the existing immutable WAV rather than allocating decoded PCM.
+    # Map the private assembled WAV rather than allocating decoded PCM.
+    # Copy-on-write is not an external-write snapshot; pre/post signatures
+    # check inode, size and nanosecond mtime/ctime before accepting output.
     # SciPy uses writable copy-on-write storage: Torch can share this view
     # without allowing writes through to the source. Keep it alive for VAD.
     with warnings.catch_warnings():

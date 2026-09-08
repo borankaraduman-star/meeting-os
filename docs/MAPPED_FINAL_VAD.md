@@ -6,6 +6,6 @@ The final worker now validates the same SoundFile header and uses scipy.io.wavfi
 
 Tests validate exact sample bits including WAV metadata offsets, invalid headers/mappings, mutations/no output, warning propagation, bounded allocations and gate behavior. Native95.58s public human constructed fixture produces exactly the same13sample spans. Sampled outer footprint319,767,896→309,003,608bytes; elapsed1.96→1.31s in one baseline-then-mapped run. These short single-order observations are not a full-meeting memory/latency claim. Clean file-backed pages remain reclaimable; model memory and overall OS pressure still apply. Evidence mapped-vad-native-2026-09-09.json.
 
-Real long acceptance pending. Source-only implementation delegated locally; native validation performed by Codex. Do not treat this as Claude review until an actual review is recorded.
+Full transcript acceptance remains pending. Source-only implementation delegated locally; native validation performed by Codex. Actual Claude Fable 5.1/max review completed successfully; see FABLE_MAPPED_VAD_REVIEW.md for verified dispositions.
 
 Real trial41036 subsequently completed full mic VAD, regenerated-snapshot diarization cache hit1 and69ASR hits, then stopped on the first new ASR region underOSpressure at26.22s, sampled974,014,792bytes. This establishes full-record VAD execution and exact cache-key region reuse for69regions; it does not establish complete transcript/identity or live latency.48 related tests passed. Evidence real-mapped-vad-retry-2026-09-09.json.
