@@ -1,0 +1,13 @@
+{
+  "meeting": "553993e7544a",
+  "status": "incomplete",
+  "exit_code": 75,
+  "failure_kind": "MemoryPressureError",
+  "phase": "model_loading",
+  "elapsed_seconds": 9.769274582969956,
+  "sampled_peak_footprint_bytes": 239764776,
+  "budget_bytes": 3758096384,
+  "preserved_segments": 270,
+  "private_workspaces_cleaned": 1,
+  "long_bounded_asr_validated": false
+}

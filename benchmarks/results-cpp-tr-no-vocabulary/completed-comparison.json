@@ -1,0 +1,82 @@
+{
+  "status": "complete_with_retries",
+  "dataset": "12 public human FLEURS Turkish read-speech cases",
+  "reference_words": 244,
+  "vocabulary_on_word_errors": 14,
+  "vocabulary_off_word_errors": 17,
+  "vocabulary_on_wer": 0.05737704918032787,
+  "vocabulary_off_wer": 0.06967213114754098,
+  "on_attempts": 14,
+  "off_attempts": 16,
+  "on_resource_failures": 2,
+  "off_resource_failures": 4,
+  "selection": "First successful result per case; failed attempts retained separately",
+  "off_reports": [
+    "report.json",
+    "../results-cpp-tr-no-vocabulary-deferred/report.json"
+  ],
+  "on_summary": "../results-cpp-tr-current/completed-summary.json",
+  "decision": "Keep existing vocabulary; small observed difference, not evidence of meeting/generalized entity precision",
+  "cases": [
+    {
+      "case": "fleurs-tr-2004-0",
+      "off_word_errors": 4,
+      "reference_words": 21
+    },
+    {
+      "case": "fleurs-tr-1660-1",
+      "off_word_errors": 1,
+      "reference_words": 14
+    },
+    {
+      "case": "fleurs-tr-1692-2",
+      "off_word_errors": 2,
+      "reference_words": 12
+    },
+    {
+      "case": "fleurs-tr-1711-3",
+      "off_word_errors": 0,
+      "reference_words": 24
+    },
+    {
+      "case": "fleurs-tr-1689-4",
+      "off_word_errors": 1,
+      "reference_words": 26
+    },
+    {
+      "case": "fleurs-tr-1747-5",
+      "off_word_errors": 0,
+      "reference_words": 7
+    },
+    {
+      "case": "fleurs-tr-1684-6",
+      "off_word_errors": 1,
+      "reference_words": 16
+    },
+    {
+      "case": "fleurs-tr-1884-7",
+      "off_word_errors": 0,
+      "reference_words": 17
+    },
+    {
+      "case": "fleurs-tr-1908-8",
+      "off_word_errors": 0,
+      "reference_words": 11
+    },
+    {
+      "case": "fleurs-tr-1729-9",
+      "off_word_errors": 5,
+      "reference_words": 38
+    },
+    {
+      "case": "fleurs-tr-1716-10",
+      "off_word_errors": 2,
+      "reference_words": 43
+    },
+    {
+      "case": "fleurs-tr-2002-11",
+      "off_word_errors": 1,
+      "reference_words": 15
+    }
+  ]
+}

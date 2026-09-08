@@ -63,3 +63,9 @@ CLI resource failures (`MemoryPressureError`, `ResourceProbeError`, `JobMemoryLi
 The return summary distinguishes attempted `runs`, `failed`, and `deferred`. The benchmark CLI still emits its report summary normally; callers must inspect these counts rather than interpreting report-generation exit 0 as all cases passing. Existing saved reports are unchanged. Regression coverage exercises a completed result followed by a resource stop across configurations, resource CLI exit classification, and ordinary failure continuation. Resource limits and model defaults are unchanged.
 
 Claude review of this resource-stop patch was attempted through the subscription CLI with code-only context, but timed out after 120 seconds. No completed review or approval is claimed. Local diff review and tests passed; independent Claude review remains pending.
+
+## Completed vocabulary comparison after bounded retry
+
+The four deferred no-vocabulary cases completed with unchanged guards. Across all 12 identical references (244 words): vocabulary on 14 edits (5.74%), off 17 edits (6.97%). The existing vocabulary is retained. This is a small read-speech ablation; it does not establish held-out meeting or entity precision. On took 14 attempts including two resource failures; off took 16 attempts including four resource failures. First successful results only, no replacement of completed results. Raw failed runs remain preserved. See `benchmarks/results-cpp-tr-no-vocabulary/completed-comparison.json`.
+
+Claude's bounded follow-up on the resource-stop design completed (description-only review, not full code approval). Relevant limits: report-generation exit 0 requires callers to inspect failure/deferred counts; 75 is a conservative resource-stop convention, not proof of an underlying exception when received from a child; resume uses a separately derived manifest/output directory. The regression test does cover prior success preservation and cross-config deferral.

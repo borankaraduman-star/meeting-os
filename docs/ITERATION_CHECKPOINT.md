@@ -1,3 +1,9 @@
+## Latest: full vocabulary ablation complete; real retry stopped at admission/loading
+
+All 12 paired public human references: current vocabulary 14/244 edits (5.74%), off 17/244 (6.97%). Keep current vocabulary; no meeting-generalization claim. On/off each required resource retries; raw attempts preserved. Real bounded-final retry session 79872, parent 70131/worker 70142 is TERMINAL exit75 after 9.77s, MemoryPressureError, sampled peak 239,764,776 bytes. It failed during model loading before meaningful ASR, so does not validate the long bounded-final path. OS pressure rose from 1 to 2. Dead-owner cleanup removed exactly one private retry snapshot; original 270 segments and raw recordings preserved, meeting incomplete. Do not restart from these stale PIDs/session.
+
+Accessible-process footprint survey after failure: Virtualization VM ~2.26GiB, Codex Renderer ~1.28GiB, Java ~1.09GiB. 221 processes were unavailable; this is not a complete system accounting or proof which app caused pressure. No unrelated processes terminated. Next: robust long-record progress/resumption and safe real-record validation; live window/source acceptance still open. Goal remains active.
+
 ## Latest: benchmark resource-stop implemented
 
 CLI resource failures use exit 75; benchmark stops dispatching and explicitly defers all remaining cases/configs, preserving prior successes and the actual failed attempt. Deferred cases carry null exit/no metrics and create no database or worker. No automatic retry or guard relaxation. Targeted benchmark, resource, supervisor, low-memory and retry tests passed. Four vocabulary-off cases still require measurement; no new native inference during this change. See `TURKISH_PRECISION_CHECKPOINT.md`. Real meeting recovery, conservative-window latency and live source validation remain open.
