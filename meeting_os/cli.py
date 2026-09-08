@@ -60,7 +60,7 @@ def run_transcribe(args,store,paths=None):
     return result
 
 def parser():
-    p=argparse.ArgumentParser(description='Meeting OS V0.1 — local Turkish meeting ear')
+    p=argparse.ArgumentParser(description='Meeting OS V1 — local Turkish meetings and memory')
     p.add_argument('--db',type=Path,default=DATA_DIR/'meeting-os.sqlite')
     sub=p.add_subparsers(dest='command',required=True)
     sub.add_parser('doctor')
@@ -77,6 +77,14 @@ def parser():
     e=sub.add_parser('enroll'); e.add_argument('meeting'); e.add_argument('segment',type=int); e.add_argument('name'); e.add_argument('--confirmed-clean',action='store_true',required=True,help='Confirm listening to the segment: one speaker, no overlap/echo, >=3s speech')
     profiles=sub.add_parser('profiles'); profiles.add_argument('--delete')
     b=sub.add_parser('benchmark'); b.add_argument('manifest',type=Path); b.add_argument('--output',type=Path,required=True)
+    a=sub.add_parser('analyze'); a.add_argument('meeting'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('actions'); a.add_argument('--owner'); a.add_argument('--meeting')
+    a=sub.add_parser('action-update'); a.add_argument('task'); a.add_argument('--state',choices=['open','in_progress','done','dismissed']); a.add_argument('--title'); a.add_argument('--owner'); a.add_argument('--due-text')
+    a=sub.add_parser('prepare'); a.add_argument('task'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('handoff'); a.add_argument('task'); a.add_argument('path',type=Path)
+    a=sub.add_parser('search'); a.add_argument('query'); a.add_argument('--speaker')
+    a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path)
+    sub.add_parser('mcp')
     return p
 
 def main():
@@ -93,7 +101,7 @@ def main():
                 'capture_binary':(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture').exists(),
                 'ffmpeg':shutil.which('ffmpeg'),'whisper_cpp':str(ROOT/'build/whisper-cpp/bin/whisper-cli') if (ROOT/'build/whisper-cpp/bin/whisper-cli').exists() else shutil.which('whisper-cli'),
                 'offline':os.environ['HF_HUB_OFFLINE'],
-                'packages':{name:importlib.util.find_spec(name) is not None for name in ['mlx_whisper','resemblyzer','silero_vad','sherpa_onnx','speechbrain','pyannote','whisper']},
+                'packages':{name:importlib.util.find_spec(name) is not None for name in ['mlx_whisper','resemblyzer','silero_vad','sherpa_onnx','speechbrain','pyannote','whisper','mlx_lm','outlines']},
                 'models':[str(x) for x in (ROOT/'models').glob('*/meeting-os-model.json')],
                 'permissions':'Run record to request macOS microphone and screen/system-audio access. Never bypassed.'})
             return
@@ -103,7 +111,22 @@ def main():
         from .store import Store
         store=Store(args.db)
         try:
-            if args.command=='import':
+            if args.command in ('analyze','prepare','ask','handoff','actions','action-update','search','mcp'):
+                from . import assistant
+                from .memory import Memory
+                if args.command=='analyze':result=assistant.analyze(store,args.meeting,force=args.force)
+                elif args.command=='prepare':result=assistant.prepare(store,args.task,force=args.force)
+                elif args.command=='ask':result=assistant.ask(store,args.question)
+                elif args.command=='handoff':result=assistant.handoff(store,args.task,args.path)
+                elif args.command=='actions':result=Memory(store).actions(args.owner,args.meeting)
+                elif args.command=='action-update':result=Memory(store).update_action(args.task,{k:getattr(args,k) for k in ('state','title','owner','due_text') if getattr(args,k) is not None})
+                elif args.command=='search':result=Memory(store).search(args.query,speaker=args.speaker)
+                else:
+                    from .mcp import serve
+                    serve(store);return
+                if getattr(args,'output',None):args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2))
+                output(result)
+            elif args.command=='import':
                 import subprocess, uuid
                 if not args.audio.is_file(): raise ValueError('Audio file not found')
                 dest=DATA_DIR/'imports'/uuid.uuid4().hex

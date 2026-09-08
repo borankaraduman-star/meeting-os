@@ -47,6 +47,15 @@ def dispatch(request, db=None):
         if action in ('label','edit_text','enroll'):
             row=store.db.execute('SELECT status FROM meetings WHERE id=?',(request['meeting'],)).fetchone()
             if not row or row['status']!='complete': raise ValueError('Önce nihai transkriptin tamamlanmasını bekleyin')
+        from .memory import Memory
+        from .assistant import drafts,handoff,route,edit_draft
+        memory=Memory(store)
+        if action=='intelligence':
+            return {'analysis':memory.latest(request.get('meeting','')),'tasks':[{**t,'route':route(t['title'])} for t in memory.actions()], 'drafts':drafts(store)}
+        if action=='draft_update':return edit_draft(store,request['draft'],request['text'])
+        if action=='action_update':return memory.update_action(request['task'],request['changes'])
+        if action=='search_memory':return {'hits':memory.search(request['query'],speaker=request.get('speaker'))}
+        if action=='handoff':return handoff(store,request['task'],request['path'])
         if action=='snapshot':
             meetings=store.meetings()
             for m in meetings:
@@ -61,6 +70,19 @@ def dispatch(request, db=None):
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action=='export_analysis':
+            current=memory.latest(request['meeting'])
+            if not current:raise ValueError('Önce toplantıyı analiz edin')
+            lines=['# Toplantı özeti', 'Güncel değil; kaynak değişti.' if current['stale'] else 'Model çıkarımı; kaynaklarla kontrol edin.', 'Analiz sürümü: '+str(current['id'])]
+            for key,label in [('summary','Özet'),('decisions','Kararlar'),('risks','Riskler'),('questions','Açık sorular')]:
+                lines+=['\n## '+label]
+                for item in current['payload'].get(key,[]):
+                    lines+=['- '+item['text']]
+                    lines+=['  - Kaynak #'+str(e['segment_id'])+' ('+timestamp(e['start'],'.')+'): '+e['quote'] for e in item['evidence']]
+            lines+=['\n## Görevler']
+            for t in memory.actions(meeting=request['meeting']):
+                lines+=['- '+t['title']+' | '+(t['owner'] or 'Belirsiz')+' | '+(t['due_text'] or 'Tarih yok')+' | '+t['state']+(' | GÜNCEL DEĞİL' if t['stale'] else '')]
+            Path(request['path']).write_text('\n'.join(lines),encoding='utf-8');return {'path':request['path']}
         if action=='export':
             rows=store.segments(request['meeting'])
             path=Path(request['path']); path.write_text(export_text(rows,request['format']))

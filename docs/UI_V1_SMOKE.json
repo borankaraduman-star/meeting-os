@@ -1,0 +1,15 @@
+{
+  "tested_at": "2026-09-08T02:17:21.260764+00:00",
+  "fixture_meeting": "4e1bd2a33dab",
+  "fixture_is_fictional_text_not_audio": true,
+  "checks": {
+    "analysis_tabs_visible": true,
+    "boran_filter_one_action": true,
+    "task_state_survived_app_restart": true,
+    "draft_edit_audit_recorded": true,
+    "gui_handoff_file_created": true,
+    "memory_search_results_visible": true,
+    "local_memory_answer_with_citations_visible": true
+  },
+  "method": "CUA native accessibility interactions; final summary screenshot visually inspected. App relaunched; no OS permission prompt bypass. No external messages."
+}

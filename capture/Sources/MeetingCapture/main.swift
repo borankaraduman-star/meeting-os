@@ -93,6 +93,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
         try queue.sync { for writer in writers.values { try writer.finish() } }
     }
     func getFailure() -> Error? { queue.sync { failure } }
+    func fail(_ error:Error) { queue.sync { failure=error } }
 }
 
 func option(_ key: String) -> String? {
@@ -101,6 +102,11 @@ func option(_ key: String) -> String? {
     return args[i+1]
 }
 
+func remainingBytes(_ directory:URL) -> Int64? {
+    let values=try? FileManager.default.attributesOfFileSystem(forPath:directory.path)
+    return (values?[.systemFreeSize] as? NSNumber)?.int64Value
+}
+func diskError() -> NSError { NSError(domain:"MeetingCapture",code:6,userInfo:[NSLocalizedDescriptionKey:"Disk alanı azaldı. Ses dosyaları korundu; devam etmek için yer açın."]) }
 func run() async throws {
     if CommandLine.arguments.contains("--help") {
         print("MeetingCapture --output DIR [--seconds 60] [--chunk-seconds 12] [--self-test]")
@@ -129,6 +135,7 @@ func run() async throws {
         }
         return
     }
+    if let available=remainingBytes(directory), available < 1_200_000_000 { throw diskError() }
     guard await AVCaptureDevice.requestAccess(for: .audio) else {
         throw NSError(domain:"MeetingCapture", code:2, userInfo:[NSLocalizedDescriptionKey:"Microphone access denied. Enable MeetingCapture in System Settings > Privacy & Security > Microphone."])
     }
@@ -164,7 +171,14 @@ func run() async throws {
         sigint.setEventHandler(handler:stop); sigterm.setEventHandler(handler:stop)
         let deadline = Date().addingTimeInterval(max(1,duration))
         timer.schedule(deadline:.now()+0.25, repeating:0.25)
-        timer.setEventHandler { if Date() >= deadline || capture.getFailure() != nil { stop() } }
+        var diskCheck=Date.distantPast
+        timer.setEventHandler {
+            if Date().timeIntervalSince(diskCheck)>5 {
+                diskCheck=Date()
+                if let available=remainingBytes(directory), available < 1_000_000_000 { capture.fail(diskError()) }
+            }
+            if Date() >= deadline || capture.getFailure() != nil { stop() }
+        }
         sigint.resume(); sigterm.resume(); timer.resume()
     }
     try await stream.stopCapture()

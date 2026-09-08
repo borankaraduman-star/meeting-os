@@ -44,5 +44,12 @@
     "engine": "whisper",
     "url": "https://openaipublic.azureedge.net/main/whisper/models/aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a/large-v3-turbo.pt",
     "sha256": "aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a"
+  },
+  "analysis-qwen3": {
+    "name": "analysis-qwen3",
+    "engine": "llm",
+    "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+    "revision": "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
+    "path": "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/analysis-qwen3"
   }
 }

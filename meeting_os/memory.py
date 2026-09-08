@@ -1,0 +1,71 @@
+"""Versioned analysis and durable task state on the existing local SQLite store."""
+import json,hashlib,uuid
+from datetime import datetime,timezone
+from .intelligence import fingerprint
+from .metrics import normalize
+
+def now():return datetime.now(timezone.utc).isoformat()
+class Memory:
+    def __init__(self,store):
+        self.store=store;self.db=store.db
+        self.db.executescript('''
+        CREATE TABLE IF NOT EXISTS analyses(id INTEGER PRIMARY KEY,meeting TEXT REFERENCES meetings(id),input_hash TEXT,model TEXT,payload TEXT,created TEXT);
+        CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,meeting TEXT REFERENCES meetings(id),analysis INTEGER REFERENCES analyses(id),input_hash TEXT,title TEXT,owner TEXT,due_text TEXT,state TEXT,payload TEXT,user_edited INTEGER DEFAULT 0,created TEXT,updated TEXT);
+        CREATE TABLE IF NOT EXISTS task_edits(id INTEGER PRIMARY KEY,task TEXT,previous TEXT,replacement TEXT,created TEXT);
+        CREATE TABLE IF NOT EXISTS draft_edits(id INTEGER PRIMARY KEY,draft TEXT,previous TEXT,replacement TEXT,created TEXT);
+        CREATE TABLE IF NOT EXISTS drafts(id TEXT PRIMARY KEY,task TEXT,input_hash TEXT,task_hash TEXT,kind TEXT,text TEXT,created TEXT);
+        CREATE INDEX IF NOT EXISTS analyses_meeting ON analyses(meeting,id);
+        ''')
+    def current_hash(self,mid):return fingerprint(self.store.display_segments(mid))
+    def latest(self,mid):
+        row=self.db.execute('SELECT * FROM analyses WHERE meeting=? ORDER BY id DESC LIMIT 1',(mid,)).fetchone()
+        if not row:return None
+        d=dict(row);d['payload']=json.loads(d['payload']);d['stale']=d['input_hash']!=self.current_hash(mid);return d
+    def save_analysis(self,mid,input_hash,model,record):
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            if self.current_hash(mid)!=input_hash:raise ValueError('Transkript analiz sırasında değişti; yeniden analiz edin')
+            aid=self.db.execute('INSERT INTO analyses(meeting,input_hash,model,payload,created) VALUES(?,?,?,?,?)',(mid,input_hash,model,json.dumps(record,ensure_ascii=False),now())).lastrowid
+            for item in record['actions']:
+                stable=json.dumps([mid,normalize(item['title']),[(e['segment_id'],e['quote']) for e in item['evidence']]],ensure_ascii=False,sort_keys=True)
+                tid=hashlib.sha256(stable.encode()).hexdigest()[:20]
+                self.db.execute('''INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,created,updated) VALUES(?,?,?,?,?,?,?,'open',?,?,?)
+                ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=excluded.payload,title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
+        return self.latest(mid)
+    def actions(self,owner=None,meeting=None):
+        result=[];hashes={};latest_ids={r['meeting']:r['id'] for r in self.db.execute('SELECT meeting,MAX(id) AS id FROM analyses GROUP BY meeting')}
+        for row in self.db.execute('SELECT tasks.*,meetings.title AS meeting_title FROM tasks JOIN meetings ON meetings.id=tasks.meeting ORDER BY tasks.created DESC'):
+            d=dict(row)
+            if owner and normalize(d['owner'] or '')!=normalize(owner):continue
+            if meeting and d['meeting']!=meeting:continue
+            d['payload']=json.loads(d['payload']);mid=d['meeting']
+            if mid not in hashes:hashes[mid]=self.current_hash(mid)
+            d['stale']=d['input_hash']!=hashes[mid] or d['analysis']!=latest_ids.get(mid);result.append(d)
+        return result
+    def task(self,tid):
+        rows=[r for r in self.actions() if r['id']==tid]
+        if not rows:raise ValueError('Görev bulunamadı')
+        return rows[0]
+    def update_action(self,tid,changes):
+        if not changes or set(changes)-{'state','title','owner','due_text'}:raise ValueError('Geçersiz görev değişikliği')
+        if 'state' in changes and changes['state'] not in ('open','in_progress','done','dismissed'):raise ValueError('Geçersiz görev durumu')
+        for key in ('title','owner','due_text'):
+            if key in changes:
+                if changes[key] is not None and (not isinstance(changes[key],str) or len(changes[key])>1600):raise ValueError('Geçersiz görev alanı')
+                if key=='title' and not (changes[key] or '').strip():raise ValueError('Görev başlığı boş olamaz')
+        old=self.task(tid)
+        with self.db:
+            self.db.execute('UPDATE tasks SET '+','.join(k+'=?' for k in changes)+',user_edited=1,updated=? WHERE id=?',(*changes.values(),now(),tid))
+            self.db.execute('INSERT INTO task_edits(task,previous,replacement,created) VALUES(?,?,?,?)',(tid,json.dumps(old,ensure_ascii=False),json.dumps(changes,ensure_ascii=False),now()))
+        return self.task(tid)
+    def search(self,query,limit=20,speaker=None):
+        tokens=normalize(query).split()[:12]
+        if not tokens:return []
+        rows=self.db.execute("SELECT segments.id,meeting,meetings.title AS meeting_title,start,end,speaker,speaker_name,json_extract(payload,'$.text') AS text FROM segments JOIN meetings ON meetings.id=segments.meeting WHERE meetings.status='complete' ORDER BY meetings.created DESC,start")
+        found=[]
+        for r in rows:
+            d=dict(r)
+            if speaker and normalize(d['speaker_name'] or '')!=normalize(speaker):continue
+            score=sum(t in normalize(d['text']) for t in tokens)
+            if score:d['score']=score;found.append(d)
+        return sorted(found,key=lambda x:x['score'],reverse=True)[:min(max(1,limit),50)]

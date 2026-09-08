@@ -1,0 +1,7 @@
+{
+ "meeting":"Replace with meeting ID; annotate independently by listening",
+ "actions":[{"id":"a1","title":"PRD taslağını hazırlamak","owner":"Boran","due_text":"yarın"}],
+ "matches":[{"predicted":0,"reference":"a1"}],
+ "unsupported_summary_indices":[],
+ "instructions":"Zero-based predicted action/summary indices. Only match when human-reviewed meaning is equivalent. Include every true accepted task in actions, including tasks the model missed. Mark all unsupported summary bullets. Example only, not a scored real meeting."
+}

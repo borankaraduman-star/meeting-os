@@ -1,0 +1,29 @@
+{
+  "python": "3.12.14",
+  "machine": "arm64",
+  "macos": "26.5.2",
+  "capture_binary": true,
+  "ffmpeg": "/opt/homebrew/bin/ffmpeg",
+  "whisper_cpp": "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/build/whisper-cpp/bin/whisper-cli",
+  "offline": "1",
+  "packages": {
+    "mlx_whisper": true,
+    "resemblyzer": true,
+    "silero_vad": true,
+    "sherpa_onnx": true,
+    "speechbrain": true,
+    "pyannote": false,
+    "whisper": true,
+    "mlx_lm": true,
+    "outlines": true
+  },
+  "models": [
+    "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/analysis-qwen3/meeting-os-model.json",
+    "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/mlx-turbo/meeting-os-model.json",
+    "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/sherpa/meeting-os-model.json",
+    "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/cpp-turbo/meeting-os-model.json",
+    "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/mlx-large/meeting-os-model.json",
+    "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/models/ecapa/meeting-os-model.json"
+  ],
+  "permissions": "Run record to request macOS microphone and screen/system-audio access. Never bypassed."
+}

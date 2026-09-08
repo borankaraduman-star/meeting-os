@@ -1,0 +1,29 @@
+{
+  "meeting": "c7d6158b81be",
+  "model": "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
+  "actions": 3,
+  "boran_actions": 1,
+  "draft_text": "# PRD taslağını hazırla\n\nİncelenecek çalışma taslağı · otomatik gönderilmedi.\n\nSahip: Boran\n\nKaynakta söylenen tarih: yarın\n\n## Başlık\n\nPRD (Product Requirements Document) Taslağı – Onboarding Sürecinde E-Posta Doğrulama Ekranı Sürümü\n\n## Amaç\n\nBu PRD taslağı, onboarding sürecinde kullanıcıların e-posta doğrulama adımıyla ilgili kullanıcı deneyimini tanımlamak ve geliştirme ekibine yönelik teknik ve iş süreçleri için temel bir çerçeve sunmaktır. Amaç, mevcut onboarding akışında sadeleştirilmiş bir süreç oluşturarak, geliştirme süresini kısaltmak ve kullanıcı deneyimini daha odaklanmış hâle getirmektir.\n\n## Açık noktalar\n\n- E-posta doğrulama ekranı, kullanıcıların mevcut onboarding akışında hangi adımda yer alıyor?\n\n## Kaynak\n\n> Ben PRD taslağını yarın hazırlayacağım.",
+  "answer": {
+    "answer": "Boran, PRD taslağını yarın hazırlayacağına dair bir açıklama yaptı. Bu, PRD taslağının bir e-posta doğrulama ekranı ile ilgili olacağını gösterir. Örnek · Kurgu sprint'te bu karar, onboarding için scope'u daraltma kararı olarak belirtilmiştir.",
+    "evidence": [
+      {
+        "segment_id": 1,
+        "quote": "Onboarding için scope'u daraltmaya karar verdik. Bu sprint yalnızca e-posta doğrulama ekranını çıkaracağız. Ben PRD taslağını yarın hazırlayacağım.",
+        "start": 0.0,
+        "source": "archive",
+        "speaker": "Boran",
+        "meeting": "c7d6158b81be",
+        "meeting_title": "Örnek · Kurgu sprint (ses kaydı değildir)"
+      }
+    ],
+    "abstained": false,
+    "retrieval": "local lexical search, up to 12 excerpts"
+  },
+  "manual_state_persisted": true,
+  "draft_stale_after_progress_change": false,
+  "handoff_sent": false,
+  "elapsed_seconds": 90.46994391700719,
+  "scope": "Fictional text input; actual local model and SQLite, not audio/real meeting quality",
+  "postprocess_validation": "The observed capped 400-character field was passed through the final sentence-completion guard; model output otherwise unchanged."
+}

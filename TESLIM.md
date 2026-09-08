@@ -1,24 +1,35 @@
-# Meeting OS teslimi
+# Meeting OS V1 teslimi
 
 **Aç:** [Meeting OS.command](Meeting%20OS.command)
 
-Bu Mac için uygulama, modeller ve kalıcı Python ortamı hazır. İlk çalıştırmada
-macOS mikrofon/sistem sesi izinlerini tamamlayın. İzin penceresi otomasyonla
-geçilmedi; arayüzden gerçek kayıt testi bu adımda kaldı.
+Bu Mac’te uygulama, yerel modeller ve Python ortamı hazırdır. Sesin üzerine
+özet, kararlar, riskler, açık sorular, görevler ve toplantı hafızası eklendi.
 
-- Ayrı mic/system kayıt, canlı metin, büyük modelle final transkript.
-- Metin/isim düzeltme, sesi dinleme, kalıcı profil ve sonraki kayıtta isim eşleştirme.
-- Yerel arşiv, arama, özel sözlük, dosya içe aktarma, JSON/SRT/Markdown export.
-- Bağımsız ses günlüğü, kesilen kayıt kurtarma, test/benchmark araçları.
-- 31 test geçti; 24 Türkçe insan sesi STT koşusu başarılı. Küçük okuma setinde
-  final model WER %8,2. Gerçek toplantı doğruluğu henüz ölçülmedi.
+- Ayrı mikrofon/sistem kaydı, canlı Türkçe metin, nihai transkript, kalıcı ses kimliği.
+- Otomatik yerel toplantı analizi; her madde kaynak konuşmaya bağlı.
+- Boran’ın görevleri; sahip/tarih/başlık ve durum düzenleme, geçmişin korunması.
+- Yerel görev taslağı, taslak düzenleme, Codex/Claude Code/ChatGPT için dosya paketi.
+- Toplantılar arası arama, kaynaklı yerel yanıt ve isteğe bağlı salt okunur MCP.
+- Metin/ses profili düzeltme, özel sözlük, kayıt kurtarma, Markdown/SRT/JSON export.
 
-[Kullanım ve kurulum](README.md) · [Ölçümler ve sınırlar](docs/VALIDATION.md) ·
-[3–5 toplantı benchmark rehberi](docs/BENCHMARK.md)
+62 otomatik test geçti. Üç kurgu analiz senaryosu gerçek yerel modelde geçti;
+iptal/öneri, bilinmeyen sahip, söylenen tarih ve gömülü saldırı talimatları test edildi.
+Özet/görev/draft/hafıza arayüzleri, yerel dışa aktarım ve kayıtların yeniden
+okunması ayrıca kontrol edildi. Detaylar [V1 doğrulama raporunda](docs/VALIDATION_V1.md).
 
-Claude Code mimari ve adversarial review yaptı; implementasyon Codex’te kaldı.
-API kredisi kullanılmadı, ücretli inference veya toplantı verisini dışarı gönderen
-aksiyon eklenmedi. Ses profilleri yalnızca açıkça kaydettiğiniz temiz örneklerle oluşur.
+İlk macOS mikrofon/sistem sesi izni kullanıcı etkileşimi gerektirir. Önceki CLI
+cihaz kayıtları başarılıdır; GUI’nin kendi izin akışı henüz tamamlanmadı ve
+izinler otomasyonla aşılmadı. Doğal 3–5 toplantıyla kalite ölçümü yapılmadı;
+[benchmark araçları](docs/BENCHMARK.md) hazırdır. Akustik echo cancellation yoktur.
+Özet ve görevler model çıkarımıdır; kaynak alıntıları anlamsal hataları tamamen
+engellemez. Taslakları kullanmadan önce inceleyin.
 
-Yerel uygulama ad-hoc imzalıdır; başka Mac’e taşımak için kaynak ve kurulum
-scriptleri kullanılır. Akustik echo cancellation yoktur; kulaklık önerilir.
+[Kullanım / kurulum](README.md) · [V1 komutları ve MCP](docs/V1_USAGE.md)
+
+Claude Code iki kod checkpoint’i ve mimari inceleme yaptı; Codex implementasyonu
+ve testleri yürüttü. Ücretli API, otomatik mesaj/ticket/takvim aksiyonu veya
+özel toplantı metinlerini dışarı gönderen işlem yapılmadı. Elle dışa aktarılan
+paketi başka uygulamada kullanma kararı kullanıcıdadır.
+
+Bu teslim yerel ad-hoc imzalı Mac uygulaması + kaynak/runtime/model düzenidir;
+başka Mac için noter onaylı tek dosya kurulum paketi değildir.

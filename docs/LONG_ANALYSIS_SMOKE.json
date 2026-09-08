@@ -1,0 +1,48 @@
+{
+  "summary_bullets_before": 6,
+  "summary_bullets_after": 3,
+  "summary": [
+    {
+      "text": "Onboarding kapsamında yalnızca e-posta doğrulama var.",
+      "evidence": [
+        {
+          "segment_id": 1,
+          "quote": "Onboarding kapsamında yalnızca e-posta doğrulama var.",
+          "start": 0,
+          "source": "system",
+          "speaker": "S0"
+        }
+      ],
+      "needs_review": false
+    },
+    {
+      "text": "Mobil uygulama sonraki sprintte ele alınacak.",
+      "evidence": [
+        {
+          "segment_id": 2,
+          "quote": "Mobil uygulama sonraki sprintte ele alınacak.",
+          "start": 10,
+          "source": "system",
+          "speaker": "S0"
+        }
+      ],
+      "needs_review": false
+    },
+    {
+      "text": "Payment migration iptal edildi.",
+      "evidence": [
+        {
+          "segment_id": 6,
+          "quote": "Payment migration iptal edildi.",
+          "start": 50,
+          "source": "system",
+          "speaker": "S0"
+        }
+      ],
+      "needs_review": false
+    }
+  ],
+  "later_cancellation_removed": true,
+  "elapsed_seconds": 11.050634582992643,
+  "scope": "Actual local model on constructed long-gap source excerpts, not a full natural meeting"
+}

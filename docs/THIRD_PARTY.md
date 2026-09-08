@@ -41,3 +41,15 @@ dağıtmaz. Bu Mac’te indirilen ağırlıklar `models/` altında kalır.
 
 CC-BY-4.0 metni: https://creativecommons.org/licenses/by/4.0/ .
 Test verilerinden kimlik güvenilirliği veya toplantı doğruluğu garantisi çıkarılmaz.
+
+## V1 yerel analiz
+
+- Qwen3-4B-Instruct-2507: Qwen Team; MLX 4-bit dönüşümü mlx-community.
+  https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit — Apache-2.0.
+  Sabit revision `docs/MODEL_LOCK.json` içinde. Yaklaşık 2,1 GB yerel ağırlık;
+  model kaynak arşivine gömülmez.
+- MLX-LM 0.31.3: https://github.com/ml-explore/mlx-lm — MIT.
+- Outlines 1.3.3 / outlines-core 0.2.14: https://github.com/dottxt-ai/outlines — Apache-2.0.
+  Yerel token üretimine JSON kısıtı uygular; barındırılmış servis kullanılmaz.
+- `tests/fixtures/analysis` kurgu metinleri bu proje için yazılmıştır; gerçek
+  toplantı, müşteri veya kişi beyanları değildir. Örnek adlar test amaçlıdır.

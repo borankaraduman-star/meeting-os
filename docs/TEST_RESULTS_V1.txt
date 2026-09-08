@@ -1,0 +1,69 @@
+test_no_words_preserves_text (test_alignment.AlignmentTests.test_no_words_preserves_text) ... ok
+test_word_splits_at_speaker_change (test_alignment.AlignmentTests.test_word_splits_at_speaker_change) ... ok
+test_analysis_write_detects_changed_source_atomically (test_assistant.AssistantTests.test_analysis_write_detects_changed_source_atomically) ... ok
+test_bounded_draft_does_not_publish_cut_off_clause (test_assistant.AssistantTests.test_bounded_draft_does_not_publish_cut_off_clause) ... ok
+test_cached_analysis_avoids_model_call (test_assistant.AssistantTests.test_cached_analysis_avoids_model_call) ... ok
+test_completed_task_cannot_be_handed_off (test_assistant.AssistantTests.test_completed_task_cannot_be_handed_off) ... ok
+test_draft_becomes_stale_after_manual_edit (test_assistant.AssistantTests.test_draft_becomes_stale_after_manual_edit) ... ok
+test_draft_cache_and_progress_do_not_waste_model_calls (test_assistant.AssistantTests.test_draft_cache_and_progress_do_not_waste_model_calls) ... ok
+test_draft_edit_is_audited (test_assistant.AssistantTests.test_draft_edit_is_audited) ... ok
+test_empty_search_abstains_without_loading_model (test_assistant.AssistantTests.test_empty_search_abstains_without_loading_model) ... ok
+test_fabricated_draft_date_is_rejected (test_assistant.AssistantTests.test_fabricated_draft_date_is_rejected) ... ok
+test_handoff_has_only_selected_context_and_no_sending (test_assistant.AssistantTests.test_handoff_has_only_selected_context_and_no_sending) ... ok
+test_mcp_does_not_expose_audio_paths_or_embeddings (test_assistant.AssistantTests.test_mcp_does_not_expose_audio_paths_or_embeddings) ... ok
+test_mcp_protocol_read_only_and_malformed_input (test_assistant.AssistantTests.test_mcp_protocol_read_only_and_malformed_input) ... ok
+test_prepare_rechecks_competing_draft_inside_transaction (test_assistant.AssistantTests.test_prepare_rechecks_competing_draft_inside_transaction) ... ok
+test_qa_rejects_fabricated_quotes (test_assistant.AssistantTests.test_qa_rejects_fabricated_quotes) ... ok
+test_removed_action_in_new_version_is_stale_even_if_source_same (test_assistant.AssistantTests.test_removed_action_in_new_version_is_stale_even_if_source_same) ... ok
+test_source_edit_blocks_draft_and_handoff (test_assistant.AssistantTests.test_source_edit_blocks_draft_and_handoff) ... ok
+test_summary_export_contains_tasks_and_sources (test_assistant.AssistantTests.test_summary_export_contains_tasks_and_sources) ... ok
+test_task_state_audit_and_desktop_bridge (test_assistant.AssistantTests.test_task_state_audit_and_desktop_bridge) ... ok
+test_truncated_draft_retries_without_partial_save (test_assistant.AssistantTests.test_truncated_draft_retries_without_partial_save) ... ok
+test_identity_false_accept (test_benchmark.BenchmarkTests.test_identity_false_accept) ... ok
+test_leakage_rejected (test_benchmark.BenchmarkTests.test_leakage_rejected) ... ok
+test_missing_identity_not_zero (test_benchmark.BenchmarkTests.test_missing_identity_not_zero) ... ok
+test_native_journal_recovers_without_python_journal (test_capture_state.CaptureStateTests.test_native_journal_recovers_without_python_journal) ... ok
+test_ambiguous_identity_abstains (test_core.CoreTests.test_ambiguous_identity_abstains) ... ok
+test_bad_enrollment_rejected (test_core.CoreTests.test_bad_enrollment_rejected) ... ok
+test_correction_does_not_train (test_core.CoreTests.test_correction_does_not_train) ... ok
+test_der_permutation_and_overlap (test_core.CoreTests.test_der_permutation_and_overlap) ... ok
+test_empty_reference_false_positive (test_core.CoreTests.test_empty_reference_false_positive) ... ok
+test_turkish_and_entities (test_core.CoreTests.test_turkish_and_entities) ... ok
+test_unknown_and_model_isolation (test_core.CoreTests.test_unknown_and_model_isolation) ... ok
+test_one_misclustered_segment_can_be_corrected (test_corrections.CorrectionTests.test_one_misclustered_segment_can_be_corrected) ... ok
+test_desktop_rejects_edits_to_processing_meeting (test_desktop.DesktopTests.test_desktop_rejects_edits_to_processing_meeting) ... ok
+test_enrollment_rejects_short_context (test_desktop.DesktopTests.test_enrollment_rejects_short_context) ... ok
+test_snapshot_labels_and_export_do_not_leak_embeddings (test_desktop.DesktopTests.test_snapshot_labels_and_export_do_not_leak_embeddings) ... ok
+test_text_edits_preserve_original_and_do_not_train (test_desktop.DesktopTests.test_text_edits_preserve_original_and_do_not_train) ... ok
+test_timestamp_rounding (test_desktop.DesktopTests.test_timestamp_rounding) ... ok
+test_duplicate_match_rejected (test_evaluation.EvaluationTests.test_duplicate_match_rejected) ... ok
+test_empty_denominators_not_perfect (test_evaluation.EvaluationTests.test_empty_denominators_not_perfect) ... ok
+test_false_positive_and_owner_error_are_visible (test_evaluation.EvaluationTests.test_false_positive_and_owner_error_are_visible) ... ok
+test_bad_evidence_is_rejected (test_intelligence.IntelligenceTests.test_bad_evidence_is_rejected) ... ok
+test_named_implicit_first_person_future_is_owned (test_intelligence.IntelligenceTests.test_named_implicit_first_person_future_is_owned) ... ok
+test_status_and_manual_edits_survive_repeat_and_source_changes_stale (test_intelligence.IntelligenceTests.test_status_and_manual_edits_survive_repeat_and_source_changes_stale) ... ok
+test_uncertain_source_requires_review (test_intelligence.IntelligenceTests.test_uncertain_source_requires_review) ... ok
+test_unknown_owner_and_invented_deadline_abstain (test_intelligence.IntelligenceTests.test_unknown_owner_and_invented_deadline_abstain) ... ok
+test_capture_error_marks_incomplete (test_live.LiveTests.test_capture_error_marks_incomplete) ... {"meeting": "f10e592bf952", "capture_dir": "/private/var/folders/j4/lhwrshd95mx4dyzqsmz1x54h0000gn/T/tmppjw34et3/capture", "status": "capturing"}
+ok
+test_model_warmup_failure_leaves_recoverable_meeting (test_live.LiveTests.test_model_warmup_failure_leaves_recoverable_meeting) ... {"meeting": "5fe4f1efdf09", "capture_dir": "/private/var/folders/j4/lhwrshd95mx4dyzqsmz1x54h0000gn/T/tmpvf19jmr2/capture", "status": "capturing"}
+ok
+test_no_overwrite (test_live.LiveTests.test_no_overwrite) ... ok
+test_later_cancellation_removes_existing_task (test_long_analysis.LongAnalysisTests.test_later_cancellation_removes_existing_task) ... ok
+test_long_segment_splitting_preserves_entire_text (test_long_analysis.LongAnalysisTests.test_long_segment_splitting_preserves_entire_text) ... ok
+test_short_title_retraction_is_not_skipped (test_long_analysis.LongAnalysisTests.test_short_title_retraction_is_not_skipped) ... ok
+test_summary_reduction_keeps_original_quotes (test_long_analysis.LongAnalysisTests.test_summary_reduction_keeps_original_quotes) ... ok
+test_native_pcm_writer (test_native.NativeCaptureTests.test_native_pcm_writer) ... ok
+test_capture_preserves_offsets_and_separate_sources (test_pipeline.PipelineTests.test_capture_preserves_offsets_and_separate_sources) ... ok
+test_overlapping_turns_ambiguous (test_pipeline.PipelineTests.test_overlapping_turns_ambiguous) ... ok
+test_silence_skips_models (test_pipeline.PipelineTests.test_silence_skips_models) ... ok
+test_timestamps_and_no_training (test_pipeline.PipelineTests.test_timestamps_and_no_training) ... ok
+test_conflicting_centroid_abstains (test_regressions.RegressionTests.test_conflicting_centroid_abstains) ... ok
+test_missing_binary_does_not_leave_processing (test_regressions.RegressionTests.test_missing_binary_does_not_leave_processing) ... ok
+test_short_tail_uses_full_context (test_regressions.RegressionTests.test_short_tail_uses_full_context) ... ok
+test_global_clusters_reset_and_stay_inside_audio (test_sherpa.SherpaRegression.test_global_clusters_reset_and_stay_inside_audio) ... ok
+
+----------------------------------------------------------------------
+Ran 62 tests in 8.967s
+
+OK

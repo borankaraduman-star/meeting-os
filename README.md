@@ -1,9 +1,10 @@
-# Meeting OS — Boran’ın yerel toplantı kulağı
+# Meeting OS — Boran’ın yerel toplantı hafızası
 
 Mac uygulaması ve CLI: ayrı mikrofon/sistem sesi, canlı Türkçe transkript,
 toplantı sonunda daha güçlü modelle nihai metin, konuşmacı ayrımı ve kalıcı ses
-profilleri. Metin, ses ve profiller bu Mac’te kalır. Özet, agent routing veya
-ücretli inference API’si yoktur.
+profilleri. Yerel özet, karar, risk, açık soru ve görev çıkarımı; Boran’ın görev
+kuyruğu; kaynaklı arşiv araması ve görev taslakları. Varsayılan işleme bu Mac’te
+yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktur.
 
 ## Bu Mac’te aç
 
@@ -22,7 +23,10 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    transkripti ayrı bir arşiv kaydı olarak oluşturur. Canlı kayıt kurtarma için korunur.
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
-5. Aynı kişinin sonraki toplantılarda tanınması için en az 3 saniyelik temiz,
+5. **Özet ve kararlar** ekranında her maddenin kaynak alıntısını kontrol edin.
+   Kayıt son işlemi ve dosya içe aktarımı bittiğinde yerel analiz otomatik başlar.
+   İsim/metin düzeltince analiz eski işaretlenir; **Analizi güncelle** seçin.
+6. Aynı kişinin sonraki toplantılarda tanınması için en az 3 saniyelik temiz,
    tek konuşmacılı bir bölümü dinleyin; temiz ses onayını işaretleyip **Ses
    profilini kaydet** seçin. İsim düzeltmek tek başına profil eğitmez. Gürültülü,
    çakışan veya kısa bağlamlı örnekler reddedilir. Aynı adlı farklı kişilere
@@ -34,6 +38,32 @@ filtreler. Markdown, SRT ve JSON dışa aktarımı vardır; JSON export ses vekt
 içermez. **Sözlük ve ses profilleri** bölümünde kişi adlarını ve PM terimlerini
 satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.
 
+## Özet, görevler ve hafıza
+
+**Görevlerim**: Boran’a atanmış, bu toplantıya ait veya bütün görevleri görün.
+Başlık/sahip/tarihi düzenleyin; Açık / Devam ediyor / Tamamlandı / Kaldırıldı
+seçin. Yeniden analiz elle düzenlemeleri ve görev durumunu sıfırlamaz. Sonraki
+analizin desteklemediği görevler güncel değil diye işaretlenir; silinmez.
+Belirsiz sahiplik boş bırakılır. Tarihler kayıtta söylendiği gibi gösterilir;
+“yarın” otomatik takvim tarihine çevrilmez. İsimlerin doğru olması görev
+sahipliğinin doğruluğunu etkiler.
+
+**Taslak hazırla** yalnızca seçilen görevin kanıtlarını kullanarak bu Mac’te
+incelemeniz için metin üretir. Taslak öneridir; gerçek dünya işi tamamlanmış
+sayılmaz. **Codex / Claude Code / ChatGPT için paket kaydet** kaynaklar, görev ve
+varsa güncel taslağı bir Markdown dosyasına yazar. Hiçbir agente kendiliğinden
+mesaj göndermez veya iş başlatmaz. Başka uygulamaya dosyayı verdiğinizde o
+uygulamanın veri politikası geçerlidir. Codex ve Claude abonelikleri API
+kredisi olarak kullanılmaz.
+
+**Hafıza** tüm tamamlanmış toplantılarda anahtar kelime arar. **Kayıtlardan
+yanıtla** en fazla 12 ilgili bölümle yerel, alıntılı bir yanıt üretir. Yeterli
+kaynak yoksa yanıt vermekten kaçınır. Arama sözcük tabanlıdır; anlamca benzer
+ama farklı kelimelerle yazılmış bütün kayıtları bulma garantisi yoktur.
+
+**Dışa aktar → Özet ve görevler** paylaşmaya hazır yerel Markdown üretir.
+Salt okunur MCP bağlantısı için [V1 kullanım rehberi](docs/V1_USAGE.md).
+
 ## Model seçimi ve ölçülmüş kalite
 
 - Canlı STT: **MLX Whisper large-v3-turbo**.
@@ -41,6 +71,7 @@ satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.
 - Konuşma bölgeleri: **Silero VAD**.
 - Nihai konuşmacı ayrımı: **sherpa-onnx, pyannote segmentation 3.0 + TitaNet-small**.
 - Kalıcı kişi eşleştirme: **Resemblyzer**, model sürümüne bağlı SQLite profilleri.
+- Yerel analiz: **Qwen3-4B-Instruct-2507, MLX 4-bit**; JSON yapısı üretim sırasında sınırlandırılır, kaynak alıntıları ayrıca doğrulanır.
 - Whisper CPU, whisper.cpp ve ECAPA karşılaştırma için CLI’de bulunur.
 
 M4 / 16 GB üzerinde 12 Türkçe insan okuma kaydında kelime hata oranı büyük
@@ -59,7 +90,8 @@ kapanmamış son parça kurtarılamayabilir. Uygulamadan normal çıkış, sürm
 kaydın kapanmasını ve son işlemin tamamlanmasını bekler.
 
 Arayüzde kayıt üst sınırı 4 saattir. WAV kayıt yaklaşık 2 GB/saat alan
-kullanabilir; boş disk alanını buna göre ayırın. Kulaklık kullanımı önerilir:
+kullanabilir; boş disk alanını buna göre ayırın. Kaydedici 1,2 GB altında
+başlamaz, yaklaşık 1 GB kaldığında kapanmış parçaları koruyarak durur. Kulaklık kullanımı önerilir:
 akustik echo cancellation yoktur; hoparlör sesi mikrofona geri girerse çift
 metin/konuşmacı karışıklığı olabilir. Diğer uygulamaların sistem sesi de alınır.
 Ekran kareleri saklanmaz. Çakışan konuşmaların tüm kelimelerini kurtarma,
@@ -81,6 +113,11 @@ Proje klasöründen:
 .venv/bin/python -m meeting_os label-segment MEETING_ID SEGMENT_ID 'İpek'
 .venv/bin/python -m meeting_os enroll MEETING_ID SEGMENT_ID 'İpek' --confirmed-clean
 .venv/bin/python -m meeting_os profiles
+.venv/bin/python -m meeting_os analyze MEETING_ID
+.venv/bin/python -m meeting_os actions --owner Boran
+.venv/bin/python -m meeting_os prepare TASK_ID
+.venv/bin/python -m meeting_os handoff TASK_ID /local/path/task.md
+.venv/bin/python -m meeting_os ask "onboarding PRD"
 .venv/bin/python -m meeting_os benchmark benchmarks/manifest.example.json --output /local/path/results
 ```
 
@@ -111,3 +148,7 @@ Uygulama yerel ad-hoc imzalıdır; başka Mac’lere notarize edilmiş tek dosya
 kurulum paketi değildir. App bundle bu yerel çalışma ortamını kullanır; proje ve
 runtime klasörlerini silmeyin. Veri/üçüncü taraf kaynakları
 [THIRD_PARTY.md](docs/THIRD_PARTY.md) içindedir.
+
+CPU Whisper karşılaştırma ağırlığı disk alanı için kaldırılmıştır; sonuçları
+korunur ve `models fetch whisper-turbo` ile yeniden indirilebilir. Canlı/nihai
+MLX, konuşmacı ve yerel analiz modelleri bu Mac’te hazırdır.

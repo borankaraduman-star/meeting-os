@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import json
 CATALOG = {
+    'analysis-qwen3': ('llm', 'mlx-community/Qwen3-4B-Instruct-2507-4bit'),
     'sherpa': ('onnx', 'k2-fsa/sherpa-onnx official releases'),
     'whisper-turbo': ('whisper', 'turbo'),
     'mlx-turbo': ('mlx', 'mlx-community/whisper-large-v3-turbo'),

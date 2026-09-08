@@ -43,6 +43,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var selected:String?; @Published var search=""; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
+    @Published var tab="transcript"; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
+    @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
     let runtime:Runtime; let dataDir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS")
     var requestedQuit=false
     var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
@@ -73,7 +75,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 activity=active.capture["state"] as? String=="capturing" ? "Kaydediliyor · \(Int(seconds)) sn · \(sources.keys.sorted().map { $0 == "mic" ? "Mikrofon" : "Sistem" }.joined(separator:" + "))" : "macOS izinleri ve ses aygıtı bekleniyor…"
             }
             if selected==nil { selected=meetings.first?.id }
-            if wanted==selected { rows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init) }
+            if wanted==selected { rows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
     }
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
@@ -108,14 +110,22 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func stop() { guard recording else { return }; activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
     func finalize(_ dir:URL,name:String) {
         activity="Son transkript ve konuşmacılar hazırlanıyor…"
-        launch(["finalize",dir.path,"--title",name]) { [weak self] ok in self?.activity=ok ? "Tamamlandı · İsimleri düzeltebilir ve ses profili kaydedebilirsiniz" : "Son işlem başarısız · Ses korunuyor"; self?.selected=nil }
+        let result=dataDir.appendingPathComponent("final-\(UUID().uuidString).json")
+        launch(["finalize",dir.path,"--title",name,"--output",result.path]) { [weak self] ok in
+            guard let self=self else { return }
+            if ok, let mid=self.resultMeeting(result) { self.selected=mid; self.analyzeMeeting(mid) } else { self.activity="Son işlem başarısız · Ses korunuyor" }
+        }
     }
     func recover() { guard let m=meeting, let dir=m.metadata["capture_dir"] as? String else { return }; finalize(URL(fileURLWithPath:dir),name:m.title) }
     func importAudio() {
         let panel=NSOpenPanel(); panel.canChooseDirectories=false; panel.allowsMultipleSelection=false
         if panel.runModal() == .OK, let url=panel.url {
             activity="Dosya yazıya dönüştürülüyor…"
-            launch(["import",url.path,"--title",url.deletingPathExtension().lastPathComponent]) { [weak self] ok in self?.activity=ok ? "Dosya hazır" : "Dosya işlenemedi"; self?.selected=nil }
+            let result=dataDir.appendingPathComponent("import-\(UUID().uuidString).json")
+            launch(["import",url.path,"--title",url.deletingPathExtension().lastPathComponent,"--output",result.path]) { [weak self] ok in
+                guard let self=self else { return }
+                if ok, let mid=self.resultMeeting(result) { self.selected=mid;self.analyzeMeeting(mid) } else { self.activity="Dosya işlenemedi" }
+            }
         }
     }
     func saveLabel(enroll:Bool) async {
@@ -133,7 +143,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func export(_ format:String) async {
         guard let mid=selected else { return }; let panel=NSSavePanel(); panel.nameFieldStringValue="Meeting.\(format)"
         guard panel.runModal() == .OK, let url=panel.url else { return }
-        do { _=try await request(["action":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
+        do { _=try await request(["action":format=="analysis.md" ? "export_analysis":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
     }
     func settings() async { do { vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""; showSettings=true } catch { self.error=error.localizedDescription } }
     func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
@@ -174,21 +184,25 @@ struct Content:View {
             }.padding().navigationSplitViewColumnWidth(min:240,ideal:280)
         } detail: {
             VStack(alignment:.leading,spacing:0) {
-                HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Toplantılarınız burada").font(.title.bold()); Text(m.activity).font(.callout).foregroundStyle(.secondary) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Markdown") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
+                HStack { VStack(alignment:.leading) { Text(m.meeting?.title ?? "Toplantılarınız burada").font(.title.bold()); Text(m.activity).font(.callout).foregroundStyle(.secondary) }; Spacer(); if m.busy { ProgressView().controlSize(.small) }; Menu("Dışa aktar") { Button("Özet ve görevler (Markdown)") { Task { await m.export("analysis.md") } }; Button("Transkript (Markdown)") { Task { await m.export("md") } }; Button("Altyazı (SRT)") { Task { await m.export("srt") } }; Button("JSON") { Task { await m.export("json") } } }.disabled(m.selected==nil) }.padding(24)
                 if let meeting=m.meeting, meeting.metadata["capture_dir"] != nil, meeting.status != "canceled", !m.busy { HStack { Text("Canlı kayıt geçicidir; son işlem ayrı ve kalıcı bir transkript oluşturur.").font(.caption); Spacer(); Button("Son transkripti oluştur / Kurtar",action:m.recover) }.padding(.horizontal,24).padding(.bottom,12) }
-                TextField("Metinde veya konuşmacılarda ara",text:$m.search).textFieldStyle(.roundedBorder).padding(.horizontal,24).padding(.bottom,16)
+                if m.meeting?.metadata["text_only"] as? Bool == true { Text("Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8) }
+                Picker("Görünüm",selection:$m.tab) { Text("Transkript").tag("transcript");Text("Özet ve kararlar").tag("analysis");Text("Görevlerim").tag("actions");Text("Hafıza").tag("memory") }.pickerStyle(.segmented).padding(.horizontal,24).padding(.bottom,12)
+                if m.tab=="transcript" { TextField("Metinde veya konuşmacılarda ara",text:$m.search).textFieldStyle(.roundedBorder).padding(.horizontal,24).padding(.bottom,16) }
                 Divider()
                 if !m.error.isEmpty { HStack(alignment:.top) { Image(systemName:"exclamationmark.triangle"); Text(m.error).font(.caption).textSelection(.enabled); Spacer(); Button("Kapat") { m.error="" } }.padding().background(.orange.opacity(0.12)) }
+                if m.tab=="analysis" { AnalysisView(m:m) } else if m.tab=="actions" { ActionsView(m:m) } else if m.tab=="memory" { MemoryView(m:m) } else {
                 ScrollView { LazyVStack(alignment:.leading,spacing:20) { ForEach(m.filteredRows) { row in HStack(alignment:.top,spacing:14) {
-                    Button { m.play(row) } label:{ VStack { Image(systemName:"play.circle"); Text(row.time).font(.caption.monospacedDigit()) } }.buttonStyle(.plain).help("Bu bölümü dinle").disabled(m.recording)
+                    Button { m.play(row) } label:{ VStack { Image(systemName:"play.circle"); Text(row.time).font(.caption.monospacedDigit()) } }.buttonStyle(.plain).help("Bu bölümü dinle").disabled(m.recording || m.meeting?.metadata["text_only"] as? Bool == true)
                     VStack(alignment:.leading,spacing:7) { HStack { Text(row.label).font(.headline); Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Düzelt") { m.editRow=row; m.editName=row.name; m.editText=row.text; m.clean=false }.disabled(m.meeting?.status != "complete") }; Text(row.text).textSelection(.enabled).lineSpacing(4); if !row.flags.isEmpty { Text(row.notices).font(.caption2).foregroundStyle(.orange) } }
                 }.padding(16).background(.quaternary.opacity(0.3),in:RoundedRectangle(cornerRadius:12)) } }.padding(24)
                     if m.rows.isEmpty { ContentUnavailableView("Dinlemeye hazır",systemImage:"waveform",description:Text("Bir toplantı kaydedin veya ses dosyası açın. Canlı metin, konuşmalar geldikçe burada görünür." )).padding(40) }
                 }
+                }
                 Divider(); HStack { Label("Yerel işleme",systemImage:"lock.shield"); Text("•"); Text("\(m.rows.count) bölüm"); Spacer(); Text("İsim düzeltmek ses profilini otomatik eğitmez.") }.font(.caption).foregroundStyle(.secondary).padding(12)
             }.frame(minWidth:620)
         }.frame(minWidth:940,minHeight:650)
-        .onChange(of:m.selected) { _,_ in m.rows=[]; Task { await m.refresh() } }
+        .onChange(of:m.selected) { _,_ in m.rows=[]; m.analysis=nil; Task { await m.refresh() } }
         .sheet(item:$m.editRow) { row in VStack(alignment:.leading,spacing:18) { Text("Metin ve konuşmacı").font(.title2.bold()); TextEditor(text:$m.editText).frame(height:100).border(.quaternary); Button("Metni kaydet") { Task { await m.saveText() } }.disabled(m.editText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty); TextField("İsim",text:$m.editName); Button("Önce bölümü dinle") { m.play(row) }; Toggle("Dinledim: en az 3 saniye, tek kişi, temiz ses",isOn:$m.clean); Text("Profili kaydedersen sonraki toplantılarda bu sesle eşleşen kişiye isim önerilir. Belirsiz eşleşmeler isimsiz kalır.").font(.caption).foregroundStyle(.secondary); HStack { Button("Vazgeç") { m.editRow=nil }; Spacer(); Button("Yalnızca ismi kaydet") { Task { await m.saveLabel(enroll:false) } }.disabled(m.editName.trimmingCharacters(in:.whitespaces).isEmpty); Button("Ses profilini kaydet") { Task { await m.saveLabel(enroll:true) } }.disabled(!m.clean || m.editName.trimmingCharacters(in:.whitespaces).isEmpty) }; if !m.error.isEmpty { Text(m.error).foregroundStyle(.red).font(.caption) } }.padding(28).frame(width:540) }
         .sheet(isPresented:$m.showSettings) { VStack(alignment:.leading,spacing:16) { Text("Sözlük ve ses profilleri").font(.title2.bold()); Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın."); TextEditor(text:$m.vocabulary).font(.body.monospaced()).frame(height:180).border(.quaternary); Text("Kaydedilmiş sesler").font(.headline); Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary); List(m.profiles) { p in HStack { VStack(alignment:.leading) { Text(p.name); Text("\(p.samples) örnek · \(p.model)").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("Profili sil",role:.destructive) { Task { await m.deleteProfile(p.name) } } } }.frame(height:160); HStack { Button("Veri klasörünü aç") { NSWorkspace.shared.open(m.dataDir) }; Spacer(); Button("Kaydet") { Task { await m.saveVocabulary() } }.buttonStyle(.borderedProminent) } }.padding(28).frame(width:600) }
     }

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "meeting-os": {
+      "command": "/Users/boran/Library/Application Support/MeetingOS/repo-v0.1/.venv/bin/python",
+      "args": [
+        "-m",
+        "meeting_os",
+        "mcp"
+      ],
+      "env": {
+        "HF_HUB_OFFLINE": "1",
+        "HF_HUB_DISABLE_TELEMETRY": "1"
+      }
+    }
+  }
+}

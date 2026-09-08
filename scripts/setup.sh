@@ -11,7 +11,7 @@ if [ ! -x .venv/bin/python ]; then
   "${MEETING_OS_PYTHON:-python3.12}" -m venv .venv
 fi
 .venv/bin/python -m pip install -r requirements-macos-tested.txt
-.venv/bin/python -m pip install -e '.[mlx,speakers]'
+.venv/bin/python -m pip install -e '.[mlx,speakers,analysis]'
 .venv/bin/python scripts/fetch-recommended.py
 scripts/build-capture.sh
 scripts/build-desktop.sh

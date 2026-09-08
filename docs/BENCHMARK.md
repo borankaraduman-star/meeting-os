@@ -60,3 +60,23 @@ canlı sürdürülebilir RTF <1. Küçük veri seti istatistiksel garanti vermez
 Eşikler tutmuyorsa unknown tercih edin; otomatik isimlendirmeyi daha yüksek
 eşikle sınırlandırın. V0.1'i günlük kullanıma hazır ilan etmeden uzun kayıt,
 Bluetooth değişimi, ekran kilidi, uyku/uyanma ve disk dolmasını manuel deneyin.
+
+## Özet ve görevler için V1 ölçümü
+
+Her toplantıdaki kabul edilmiş görevleri önce kayıttan bağımsız olarak
+referanslayın. Modelin kaçırdıklarını da ekleyin. Ardından model çıktısı ile
+anlamca eşleşen görevleri insan kontrolüyle eşleyin;
+`benchmarks/analysis-reference.example.json` biçimi bunu açıkça kaydeder.
+Tahmin numaraları sıfırdan başlar. Desteksiz özet maddelerini de işaretleyin.
+
+```sh
+.venv/bin/python -m meeting_os analyze MEETING_ID --output /local/analysis.json
+.venv/bin/python scripts/evaluate-analysis.py /local/analysis.json /local/reference.json --output /local/score.json
+```
+
+Görev precision/recall/F1, eşleşen görevlerde sahip ve söylenen tarih doğruluğu,
+desteksiz özet oranı raporlanır. Aynı referans/tahmin iki kez eşlenemez. Boş
+paydalar null'dır, başarı sayılmaz. 3–5 toplantının TP/FP/FN sayıları birleştirilip
+micro precision/recall hesaplanabilir; toplantı başına skorları ayrıca saklayın.
+Özeti modelin kendisine puanlatmak yerine kaydı bilen bir insan değerlendirsin.
+İsim düzeltmeden önce/sonra sonuçları ayrı koşu olarak kaydedin.
