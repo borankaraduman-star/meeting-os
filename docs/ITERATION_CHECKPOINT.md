@@ -1,3 +1,7 @@
+## Latest: thread-budget real retry terminal at admission
+
+Session78649 parent51998/child52001 terminal exit75 after7.42s, OS pressure2, sampled peak96,781,344bytes. No progress file/model-stage evidence.270 original segments and69ASR checkpoints retained. No blind restart under pressure. Evidence real-thread-budget-admission-2026-09-09.json. Identity thread fix e372c4a verified by31tests and native vector parity; full meeting remains incomplete. Claude reviews still pending; revalidate80775/95385.
+
 ## Latest: identity thread budget verified; separated retry stopped before models
 
 Final identity worker now sets Torch threads to one before encoder construction, matching the prior post-Silero process.31 relevant tests pass; native10s public fixture yields two vectors with zero difference vs stored full-pipeline baseline. Evidence identity-thread-budget-native-2026-09-09.json. Latest real session63599 is terminal exit75 after6.60s during assembly (98MB sampled), before new model phases.270 original segments and69 completed ASR outputs preserved; one dead-owner private workspace cleaned. Evidence real-separated-admission-2026-09-09.json. Fable95385 and Opus80775 still confirmed running at this checkpoint; no review conclusions yet. Full recovery/live latency acceptance remains open.

@@ -1,0 +1,30 @@
+{
+  "pid": 51998,
+  "state": "terminal",
+  "started_at": 1788903472.9214542,
+  "commit": "e372c4a",
+  "exit": 75,
+  "ended_at": 1788903480.387295,
+  "session": 78649,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "failure": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 51998,
+      "child_pid": 52001,
+      "sampled_peak_footprint_bytes": 96781344,
+      "samples": 63,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 7.422848624992184
+    }
+  ],
+  "progress_file_exists": true,
+  "scope": "Resource stop before first reported phase; no model acceptance evidence."
+}
