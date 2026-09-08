@@ -36,7 +36,9 @@ class Pipeline:
 
     def _process(self,path,source,offset,provisional,reader=None):
         emit("reading_audio",source=source)
-        if reader is None:audio=read_audio(path)
+        deferred = reader is not None and getattr(getattr(self.diarizer,"embedder",None),"isolated_final",False) is True
+        if deferred:audio=None
+        elif reader is None:audio=read_audio(path)
         else:
             import mmap
             # The ndarray owns the mapping via .base. Let reference ownership
@@ -45,10 +47,13 @@ class Pipeline:
             if len(reader.read(out=audio))!=len(audio):raise ValueError('Final audio became truncated')
             for start in range(0,len(audio),65536):
                 if not np.isfinite(audio[start:start+65536]).all():raise ValueError('Audio contains non-finite samples')
-        duration=len(audio)/RATE
+        duration=(reader.frames if reader is not None else len(audio))/RATE
         emit("vad",source=source)
-        regions = speech_regions(audio)
-        if not regions: return [], [], len(audio)/RATE
+        if deferred:
+            from .final_vad import isolated_regions
+            regions=isolated_regions(path,reader.frames)
+        else:regions = speech_regions(audio)
+        if not regions: return [], [], duration
         emit("diarizing",source=source)
         if reader is not None and getattr(self.diarizer,'isolate_sherpa',False) is True:
             audio=None  # Retry owns the file; avoid keeping a second full recording.
@@ -64,6 +69,7 @@ class Pipeline:
             regions = group_regions(regions, turns)
             window_counts = {(a,b):sum(a<=x and y<=b for x,y in original_regions) for a,b in regions}
         result = []
+        pending_identity = []
         batch_rows = None
         if provisional and getattr(self.asr,'engine',None)=='cpp' and getattr(self.asr,'batch_regions',False) is True and len(regions)>1:
             emit('transcribing',current=0,total=len(regions),source=source)
@@ -79,7 +85,7 @@ class Pipeline:
                 if len(clip)!=end-begin:raise ValueError('Final audio became truncated')
             raw_rows = batch_rows[index] if batch_rows is not None else self.asr.transcribe(clip)
             rows = [part for row in raw_rows for part in split_by_speaker(row, begin/RATE, turns)]
-            emit("identifying",current=index,total=len(regions),source=source)
+            if not deferred:emit("identifying",current=index,total=len(regions),source=source)
             for row in rows:
                 a = max(begin/RATE, begin/RATE+float(row['start']))
                 b = min(end/RATE, begin/RATE+float(row['end']))
@@ -103,10 +109,19 @@ class Pipeline:
                     flags.append('short_context_diarization')
                 if ambiguous: flags.append('speaker_ambiguous')
                 # Never enroll an ASR segment that crosses speaker boundaries.
-                vector = None if ambiguous else self.diarizer.embedder.embed(clip[max(0,round(a*RATE)-begin):round(b*RATE)-begin])
+                vector = None if ambiguous or deferred else self.diarizer.embedder.embed(clip[max(0,round(a*RATE)-begin):round(b*RATE)-begin])
                 identity = self.store.identify(vector,self.diarizer.embedder.model_id,self.identity_threshold,self.identity_margin) if vector is not None else {'name':None,'similarity':None,'margin':None}
                 metrics['identity'] = identity
                 words = [{**w,'start':float(w['start'])+begin/RATE+offset,'end':float(w['end'])+begin/RATE+offset} for w in row.get('words',[])]
                 result.append(Segment(a+offset,b+offset,text,source,speaker,identity['name'],metrics,flags,words,vector,self.diarizer.embedder.model_id))
+                if deferred and not ambiguous:
+                    pending_identity.append((result[-1],(begin+max(0,round(a*RATE)-begin),min(end,round(b*RATE)))))
+        if deferred and pending_identity:
+            emit('identifying',current=0,total=len(pending_identity),source=source)
+            vectors=self.diarizer.embedder.embed_file(path,[span for _,span in pending_identity])
+            if len(vectors)!=len(pending_identity):raise ValueError('Incomplete final identity batch')
+            for (segment,_),vector in zip(pending_identity,vectors):
+                identity=self.store.identify(vector,self.diarizer.embedder.model_id,self.identity_threshold,self.identity_margin) if vector is not None else {'name':None,'similarity':None,'margin':None}
+                segment.embedding=vector;segment.speaker_name=identity['name'];segment.metrics['identity']=identity
         emit("transcribing",current=len(regions),total=len(regions),source=source)
         return result, [(a+offset,b+offset,s) for a,b,s in turns],duration

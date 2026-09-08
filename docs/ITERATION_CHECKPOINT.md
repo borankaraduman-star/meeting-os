@@ -1,3 +1,7 @@
+## Latest: final VAD and identity isolation implemented; native parity verified; reviews running
+
+30tests and native10s complete-pipeline parity pass;95sVAD13sample spans identical. Parent beforeASR268MB→93MB, Torch absent; short end-to-end12.43→14.34s (slower). Needed VAD isolation too: initial embedding-only attribution missed Silero importsTorch. See ISOLATED_IDENTITY_PLAN.md. No live path changes.69realASR outputs and schema2diar cache preserved; no active long retry currently. Opus/max source review session80775 at ~/Library/Caches/MeetingOS/opus-final-phase-review; Fable5.1/max precision review session95385 at ~/Library/Caches/MeetingOS/fable-precision-review. Revalidate process handles, inspect actual findings before claiming review complete. User now prefers Fable/max and useful subagents; heartbeat updated accordingly. Full real retry acceptance remains next.
+
 ## Latest: canonical retry terminal69/392; measured embedding residency overlap
 
 Session91879,parent33865/worker33878 TERMINAL exit75/OSpressure after382.39s;69ASR rows, two diar rows (schema1+2),270original segments preserved, one private workspace cleaned. Real schema2 cache read was separately verified; regenerated-snapshot full retry hit still pending. Evidence benchmarks/results/real-canonical-retry-2026-09-09.json. New fresh-process probe finds eager Resemblyzer adds170,164,560bytes before ASR; next implement isolated final identity phase per ISOLATED_IDENTITY_PLAN.md, reviewed with actual Claude. This is a plan, not an installed optimization. Goal incomplete.

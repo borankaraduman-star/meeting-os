@@ -1,0 +1,34 @@
+{
+  "duration": 10.0,
+  "segments": 3,
+  "turns": 2,
+  "exact_nonvector_segment_match": true,
+  "max_vector_differences": [
+    0.0,
+    0.0
+  ],
+  "baseline_asr_parent_footprints": [
+    268403624,
+    298566688,
+    302138400
+  ],
+  "isolated_asr_parent_footprints": [
+    92897952,
+    93029024,
+    93127352
+  ],
+  "isolated_parent_torch_loaded": false,
+  "resources": {
+    "baseline": {
+      "peak_footprint_bytes": 313247232,
+      "samples": 114,
+      "elapsed_seconds": 12.429561750032008
+    },
+    "isolated": {
+      "peak_footprint_bytes": 104137856,
+      "samples": 131,
+      "elapsed_seconds": 14.33645591698587
+    }
+  },
+  "scope": "10s public speech full VAD/Sherpa/CPP/identity pipeline, 2 non-null embeddings; isolated mode slower in this short case, measured parent residency lower; not long-run total-memory or live acceptance"
+}

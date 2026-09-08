@@ -1,0 +1,14 @@
+{
+  "baseline_bytes": 75334184,
+  "proxy_bytes": 76874280,
+  "eager_embedding_bytes": 245941088,
+  "proxy_avoids_torch_import": true,
+  "max_vector_absolute_differences": [
+    0.0,
+    0.0
+  ],
+  "same_identity_decisions": true,
+  "worker_seconds": 1.5052222080994397,
+  "short_span_none": true,
+  "scope": "public speech native vector comparison; one fixture profile, not real identity accuracy or full retry acceptance"
+}
