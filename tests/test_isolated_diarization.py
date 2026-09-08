@@ -69,3 +69,18 @@ class IsolatedDiarizationTests(unittest.TestCase):
                     else:self.assertEqual(isolated_file_turns(wav,'mic',Path('/models'),.9,16000),[(0,1,'mic:S0')])
             with self.assertRaises(ValueError):isolated_file_turns(wav,'mic',Path('/models'),.9,32000)
             self.assertTrue(wav.exists())
+
+    def test_owned_worker_audio_avoids_copy_but_default_remains_defensive(self):
+        from types import SimpleNamespace
+        from meeting_os.speakers import Diarizer
+        audio=np.ones(16000,dtype=np.float32);shared=[]
+        class Native:
+            def __init__(self,cfg):pass
+            def process(self,value):
+                shared.append(np.shares_memory(value,audio))
+                return SimpleNamespace(sort_by_start_time=lambda:[])
+        diar=object.__new__(Diarizer);diar.mode='sherpa';diar.isolate_sherpa=False;diar.sherpa_config=None
+        with patch.dict('sys.modules',{'sherpa_onnx':SimpleNamespace(OfflineSpeakerDiarization=Native)}):
+            diar.turns(audio,'mic')
+            diar.turns(audio,'mic',owned_audio=True)
+        self.assertEqual(shared,[False,True])

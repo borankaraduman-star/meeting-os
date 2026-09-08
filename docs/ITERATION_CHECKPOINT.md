@@ -1,3 +1,7 @@
+## Latest: remove redundant worker-owned float32 audio copy
+
+Isolated Sherpa worker now explicitly passes its exclusively owned sf.read array without a second float32 copy. Other callers retain defensive copying.19 relevant tests pass; native95.58s fixture retains exactly13 turns/four speakers. A3154s fake-native allocation probe measures481,837,920→279,528,120 bytes (~193MiB saved); this is not full-inference peak or accuracy improvement. Evidence: `benchmarks/results/owned-diarization-audio-2026-09-08.json`. Latest long retry session95292 is TERMINAL exit75 during diarization after101.49s, sampled tree peak1.708GB, before this change. Zero ASR cache entries;270original segments remain, one private workspace cleaned. Full long recovery, held-out meeting precision and live acceptance remain open.
+
 ## Latest: retry-only CPP checkpoints implemented and native reuse verified
 
 ASR raw rows persist per meeting with exact PCM/model/binary/options/code identity and payload checksum. Only completed outputs stored; global64MiB/4096-entry LRU, 2MiB entry bound. Original transcript transaction unchanged; speaker identity recomputed.32 tests passed; native3s public audio computed once and reused exactly by a fresh wrapper. Actual Claude review completed. See `ASR_CHECKPOINT_PLAN.md`. No real long cache exists yet; previous terminal attempt at6/392 predates cache. Next guarded long retry must populate it, preserving270original segments until full success. Goal active; no live speed gain or final meeting completion claimed.

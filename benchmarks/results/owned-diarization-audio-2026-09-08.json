@@ -1,0 +1,31 @@
+{
+  "seconds": 3154,
+  "scope": "fake native process; isolates one redundant numpy allocation, not full real inference footprint",
+  "runs": [
+    {
+      "owned": false,
+      "footprint_bytes": 481837920,
+      "shares_memory": false
+    },
+    {
+      "owned": true,
+      "footprint_bytes": 279528120,
+      "shares_memory": true
+    }
+  ],
+  "native_resources": {
+    "peak_footprint_bytes": 615286824,
+    "samples": 43,
+    "elapsed_seconds": 5.097135832998902
+  },
+  "native_equality": {
+    "seconds": 95.58,
+    "turns": 13,
+    "speakers": 4,
+    "exact_match": true
+  },
+  "tests": {
+    "passed": 19
+  },
+  "limits": "Allocation probe uses fake native processing, not full long inference. Native equality verified only on short public fixture. Long real retry before this fix stopped in diarization with OS pressure; zero ASR checkpoints and 270 original segments preserved."
+}

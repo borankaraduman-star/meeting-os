@@ -63,7 +63,7 @@ def main():
     audio,rate=sf.read(args.audio,dtype='float32')
     if rate!=RATE or audio.ndim!=1 or not all(np.isfinite(audio[a:a+65536]).all() for a in range(0,len(audio),65536)):raise ValueError('Invalid worker audio')
     from .speakers import Diarizer
-    turns=Diarizer(None,'sherpa',args.model,args.threshold).turns(audio,args.source)
+    turns=Diarizer(None,'sherpa',args.model,args.threshold).turns(audio,args.source,owned_audio=True)
     Path(args.output).write_text(json.dumps(turns,allow_nan=False))
 
 if __name__=='__main__':main()

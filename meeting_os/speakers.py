@@ -71,14 +71,15 @@ class Diarizer:
         from .isolated_diarization import isolated_file_turns
         return isolated_file_turns(path,source,self.sherpa_root,self.threshold,frames)
 
-    def turns(self, audio, source):
+    def turns(self, audio, source, *, owned_audio=False):
         if self.mode == 'sherpa' and self.isolate_sherpa:
             from .isolated_diarization import isolated_turns
             return isolated_turns(audio,source,self.sherpa_root,self.threshold)
         if self.mode == 'sherpa':
             import sherpa_onnx as sherpa
             # Fresh clustering for each finalized recording; IDs are recording-local.
-            output = sherpa.OfflineSpeakerDiarization(self.sherpa_config).process(audio.astype(np.float32)).sort_by_start_time()
+            samples = np.ascontiguousarray(audio,dtype=np.float32) if owned_audio else audio.astype(np.float32)
+            output = sherpa.OfflineSpeakerDiarization(self.sherpa_config).process(samples).sort_by_start_time()
             duration = len(audio)/RATE
             return [(max(0,float(t.start)), min(duration,float(t.end)), f'{source}:S{t.speaker}')
                     for t in output if min(duration,float(t.end)) > max(0,float(t.start))]
