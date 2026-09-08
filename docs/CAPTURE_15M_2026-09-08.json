@@ -1,0 +1,84 @@
+{
+  "run": {
+    "minutes_requested": 15,
+    "scope": "hardware_capture_only",
+    "status": "captured_pending_acceptance",
+    "resources": {
+      "peak_footprint_bytes": 21005440,
+      "samples": 6362,
+      "elapsed_seconds": 901.1166167909978
+    },
+    "timeline": {
+      "scope": "metadata_only",
+      "sources": {
+        "mic": {
+          "chunks": 76,
+          "first_start": 0.22249508369714022,
+          "last_end": 900.4784950836971,
+          "covered_seconds": 900.256,
+          "gap_seconds": 0.0,
+          "overlap_seconds": 0.0,
+          "out_of_order_chunks": 0
+        },
+        "system": {
+          "chunks": 76,
+          "first_start": 0.1303298749262467,
+          "last_end": 900.4503298749263,
+          "covered_seconds": 900.32,
+          "gap_seconds": 0.0,
+          "overlap_seconds": 0.0,
+          "out_of_order_chunks": 0
+        }
+      }
+    }
+  },
+  "validation": {
+    "header_validation": {
+      "status": "available",
+      "available_chunks": 152,
+      "missing_chunks": 0,
+      "invalid_chunks": 0,
+      "sources": {
+        "mic": 76,
+        "system": 76
+      },
+      "issues": [],
+      "validation": "header_only"
+    },
+    "decoded_sources": {
+      "mic": {
+        "chunks": 76,
+        "frames": 43212288,
+        "nonzero_samples": 43212288,
+        "peak": 0.6200154423713684,
+        "samples": 43212288,
+        "rms": 0.006897597605718021,
+        "sample_rates": [
+          48000
+        ],
+        "channel_counts": [
+          1
+        ]
+      },
+      "system": {
+        "chunks": 76,
+        "frames": 43215360,
+        "nonzero_samples": 0,
+        "peak": 0.0,
+        "samples": 86430720,
+        "rms": 0.0,
+        "sample_rates": [
+          48000
+        ],
+        "channel_counts": [
+          2
+        ]
+      }
+    },
+    "partial_files": 0,
+    "native_stopped": true,
+    "source_metadata_unchanged": true,
+    "scope": "15_minute_capture_only_not_asr_or_natural_accuracy",
+    "original_supervisor_and_native_pids_absent": true
+  }
+}
