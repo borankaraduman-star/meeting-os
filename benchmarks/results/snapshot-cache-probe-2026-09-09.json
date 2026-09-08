@@ -1,0 +1,48 @@
+{
+  "runs": [
+    {
+      "mode": "uncached",
+      "completed_chunks": 526,
+      "total_chunks": 526,
+      "copied_bytes": 1818680832,
+      "elapsed_seconds": 9.763944250065833,
+      "all_completed_hashes_match": true,
+      "complete": true,
+      "supervisor": {
+        "session": 96061,
+        "exit": 0,
+        "sampled_peak_footprint_bytes": 25772992,
+        "elapsed_seconds": 9.835162332979962
+      }
+    },
+    {
+      "mode": "normal",
+      "completed_chunks": 425,
+      "total_chunks": 526,
+      "copied_bytes": 1471692800,
+      "elapsed_seconds": 4.811217917012982,
+      "all_completed_hashes_match": true,
+      "complete": false,
+      "supervisor": {
+        "session": 48441,
+        "exit": 1,
+        "failure": "worker MemoryPressureError surfaced as ChildFailure",
+        "sampled_peak_footprint_bytes": 25723840,
+        "elapsed_seconds": 4.887452790979296
+      }
+    }
+  ],
+  "order": [
+    "uncached",
+    "normal"
+  ],
+  "source": "same526realcapturechunks",
+  "copied_hashes_match": true,
+  "private_destinations_removed": true,
+  "limits": [
+    "Single-order sequential comparison on shared Mac; not randomized causal proof.",
+    "Copy plus destination hash verification only; no assembly/models/transcript commit.",
+    "Per-file F_NOCACHE verified from local SDK sys/fcntl.h; no global OS setting or app default changed.",
+    "Normal run incomplete; do not compare full-run throughput directly."
+  ]
+}

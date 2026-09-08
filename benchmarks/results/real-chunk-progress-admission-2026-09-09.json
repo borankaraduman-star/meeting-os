@@ -1,0 +1,30 @@
+{
+  "pid": 56733,
+  "state": "terminal",
+  "started_at": 1788904097.368429,
+  "commit": "a582611",
+  "exit": 75,
+  "ended_at": 1788904105.316916,
+  "session": 31459,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "failure": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 56733,
+      "child_pid": 56736,
+      "sampled_peak_footprint_bytes": 36570048,
+      "samples": 67,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 7.905141209019348
+    }
+  ],
+  "stage": null,
+  "scope": "No first process(work) progress; failure during pre-model retry preparation. File-cache contribution is a hypothesis only."
+}
