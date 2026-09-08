@@ -1,3 +1,5 @@
+> Superseded for the new overnight request: see NIGHT_ITERATION.md. Heartbeat reactivated until 2026-09-08 09:00 Europe/Istanbul.
+
 # Meeting OS checkpoint — V1
 
 Repo: `/Users/boran/Library/Application Support/MeetingOS/repo-v0.1`.

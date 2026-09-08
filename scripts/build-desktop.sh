@@ -18,7 +18,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Meeting OS</string>
 <key>CFBundleExecutable</key><string>MeetingOS</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0.0</string>
+<key>CFBundleShortVersionString</key><string>1.0.1</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>NSMicrophoneUsageDescription</key><string>Meeting OS toplantı mikrofonunu yalnızca bu Mac üzerinde kaydeder ve yazıya dönüştürür.</string>
 <key>NSScreenCaptureUsageDescription</key><string>Meeting OS toplantı sistem sesini yerel olarak kaydeder. Ekran görüntüsü saklanmaz.</string>

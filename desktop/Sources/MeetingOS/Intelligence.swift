@@ -13,7 +13,7 @@ struct Insight:Identifiable {
 }
 struct ActionItem:Identifiable {
     let id:String; let title:String; let owner:String; let due:String; let state:String; let meeting:String; let meetingTitle:String; let stale:Bool; let route:String; let evidence:[Evidence]
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; owner=d["owner"] as? String ?? ""; due=d["due_text"] as? String ?? ""; state=d["state"] as? String ?? "open"; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? ""; stale=d["stale"] as? Bool ?? false; route=d["route"] as? String ?? ""; evidence=((d["payload"] as? [String:Any])?["evidence"] as? [[String:Any]] ?? []).map(Evidence.init) }
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; owner=d["owner"] as? String ?? ""; due=d["due_text"] as? String ?? ""; state=d["state"] as? String ?? "open"; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? ""; stale=d["stale"] as? Bool ?? false; route=d["route"] as? String ?? ""; evidence=((d["payload"] as? [String:Any])?["evidence"] as? [[String:Any]] ?? []).map { Evidence($0.merging(["meeting":d["meeting"] as? String ?? "", "meeting_title":d["meeting_title"] as? String ?? ""]) { _,new in new }) } }
 }
 struct DraftItem:Identifiable { let id:String; let task:String; let text:String; let stale:Bool
     init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; task=d["task"] as? String ?? ""; text=d["text"] as? String ?? ""; stale=d["stale"] as? Bool ?? false }
@@ -63,25 +63,26 @@ extension Model {
     func openEvidence(_ e:Evidence) {
         if !e.meeting.isEmpty && e.meeting != selected { selected=e.meeting; tab="transcript"; search=String(e.quote.prefix(40));return }
         if meeting?.metadata["text_only"] as? Bool == true { tab="transcript"; search=String(e.quote.prefix(40));return }
-        if let row=rows.first(where:{$0.id==e.segment}) { play(row) }
+        if let row=rows.first(where:{$0.id==e.segment}) { tab="transcript"; search=String(row.text.prefix(40)); play(row) } else { error="Kaynak konuşma bulunamadı. Transkripti kontrol edin." }
     }
 }
 
 struct EvidenceView:View {
     @ObservedObject var m:Model; let evidence:[Evidence]
-    var body:some View { ForEach(evidence) { e in Button { m.openEvidence(e) } label:{ HStack(alignment:.top) { Image(systemName:"quote.bubble"); Text("\(e.meetingTitle.isEmpty ? e.speaker : e.meetingTitle) · \(Int(e.start)/60):\(String(format:"%02d",Int(e.start)%60)) — \(e.quote)").multilineTextAlignment(.leading).textSelection(.enabled) } }.buttonStyle(.plain).disabled(e.meeting.isEmpty && m.meeting?.metadata["text_only"] as? Bool == true).font(.caption).foregroundStyle(.secondary).padding(.top,3) } }
+    var body:some View { ForEach(evidence) { e in Button { m.openEvidence(e) } label:{ HStack(alignment:.top,spacing:10) { Image(systemName:"quote.opening").foregroundStyle(MeetingStyle.accent);VStack(alignment:.leading,spacing:5) { HStack { Text(e.meetingTitle.isEmpty ? e.speaker:e.meetingTitle).fontWeight(.medium).lineLimit(1);Spacer();Text("\(Int(e.start)/60):\(String(format:"%02d",Int(e.start)%60))").monospacedDigit();Image(systemName:"arrow.up.right").font(.system(size:9)) };Text(e.quote).lineLimit(3).multilineTextAlignment(.leading).lineSpacing(3) } }.font(.caption).foregroundStyle(.secondary).padding(11).frame(maxWidth:.infinity,alignment:.leading).background(MeetingStyle.accent.opacity(0.065),in:RoundedRectangle(cornerRadius:9)).contentShape(Rectangle()) }.buttonStyle(.plain).help("Kaynak konuşmayı göster veya dinle").padding(.top,3) } }
 }
 struct AnalysisView:View {
     @ObservedObject var m:Model
     let categories=[("summary","Özet"),("decisions","Kararlar"),("risks","Riskler"),("questions","Açık sorular")]
     var body:some View { ScrollView { VStack(alignment:.leading,spacing:20) {
-        HStack { Text("Toplantının özü").font(.title2.bold());Spacer();Button(m.analysis == nil ? "Özet ve görevleri hazırla":"Analizi güncelle") { m.analyzeMeeting() }.disabled(m.busy || m.meeting?.status != "complete") }
-        Text("Her madde kaynak konuşmaya bağlıdır. Alıntıya dokunarak dinleyin; çıkarımları kullanmadan önce kontrol edin.").foregroundStyle(.secondary)
+        HStack { Text("Toplantının özü").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Button(m.analysis == nil ? "Özet ve görevleri hazırla":"Analizi güncelle") { m.analyzeMeeting() }.disabled(m.busy || m.meeting?.status != "complete") }
+        Text("Kararlar, açık noktalar ve sonraki adımlar. Her maddeyi kaynak konuşmayla birlikte gözden geçirin.").font(.callout).foregroundStyle(.secondary)
+        HStack(spacing:12) { SmallMetric(value:"\(m.rows.count)",label:"Konuşma bölümü",icon:"waveform");SmallMetric(value:"\(m.actions.filter { $0.meeting==m.selected && !$0.stale && !["done","dismissed"].contains($0.state) }.count)",label:"Açık görev",icon:"checklist");SmallMetric(value:m.analysis == nil ? "Bekliyor":m.analysis?["stale"] as? Bool == true ? "Güncelle":"Hazır",label:"Toplantı özeti",icon:"text.badge.checkmark") }
         if m.analysis?["stale"] as? Bool == true { Label("Metin veya isimler değişti. Bu analiz güncel değil; yeniden hazırlayın.",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
         if let payload=m.analysis?["payload"] as? [String:Any] {
             ForEach(categories,id:\.0) { key,label in VStack(alignment:.leading,spacing:10) { Text(label).font(.headline);let items=(payload[key] as? [[String:Any]] ?? []).map(Insight.init)
                 if items.isEmpty { Text("Kayıtlarda açık bir madde bulunmadı.").foregroundStyle(.secondary) }
-                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).textSelection(.enabled);if item.review { Text("Kaynak ses belirsiz; kontrol edin.").font(.caption).foregroundStyle(.orange) };EvidenceView(m:m,evidence:item.evidence) }.padding(14).frame(maxWidth:.infinity,alignment:.leading).background(.quaternary.opacity(0.3),in:RoundedRectangle(cornerRadius:10)) }
+                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled);if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
             } }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout)
         } else { ContentUnavailableView("Henüz analiz yok",systemImage:"text.bubble",description:Text("Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }
@@ -93,13 +94,14 @@ struct ActionsView:View {
     @State var filter="boran";@State var edit:ActionItem?;@State var title="";@State var owner="";@State var due=""
     var visible:[ActionItem] { m.actions.filter { filter=="all" || (filter=="boran" ? $0.owner.lowercased(with:Locale(identifier:"tr_TR"))=="boran" : $0.meeting==m.selected) } }
     var body:some View { VStack(alignment:.leading) {
+        HStack { Text("Sonraki adımlar").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)
         Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri").tag("boran");Text("Bu toplantı").tag("meeting");Text("Tüm görevler").tag("all") }.pickerStyle(.segmented).padding()
         ScrollView { LazyVStack(alignment:.leading,spacing:18) {
             if visible.isEmpty { ContentUnavailableView("Görev bulunamadı",systemImage:"checklist",description:Text("İsimsiz görevler Tüm görevler altında görünür. Sahipliği kaynakla doğrulayarak düzeltebilirsiniz.")) }
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
-                Text(item.title).font(.headline).textSelection(.enabled)
+                HStack(alignment:.top) { Text(item.title).font(.headline).strikethrough(["done","dismissed"].contains(item.state)).textSelection(.enabled);Spacer();TaskStatusBadge(state:item.state) }
                 Text("\(item.owner.isEmpty ? "Sahibi belirsiz" : item.owner) · \(item.due.isEmpty ? "Tarih belirtilmedi" : item.due) · \(item.meetingTitle)").font(.caption).foregroundStyle(.secondary)
-                if item.stale { Text("Kaynak değişti · Görevi yeniden doğrulayın").foregroundStyle(.orange) }
+                if item.stale { Label("Kaynak değişti · Görevi yeniden doğrulayın",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
                 HStack { Picker("Durum",selection:Binding(get:{item.state},set:{value in Task { await m.updateAction(item,changes:["state":value]) }})) { Text("Açık").tag("open");Text("Devam ediyor").tag("in_progress");Text("Tamamlandı").tag("done");Text("Kaldırıldı").tag("dismissed") }.frame(width:220)
                     Button("Düzenle") { edit=item;title=item.title;owner=item.owner;due=item.due }
                     Spacer()
@@ -107,14 +109,14 @@ struct ActionsView:View {
                 EvidenceView(m:m,evidence:item.evidence)
                 HStack { Button(m.drafts.contains { $0.task==item.id && !$0.stale } ? "Taslağı yeniden hazırla":"Taslak hazırla") { m.prepareAction(item,force:m.drafts.contains { $0.task==item.id && !$0.stale }) }.disabled(m.busy || item.stale || ["done","dismissed"].contains(item.state));Button("\(item.route) için paket kaydet") { Task { await m.exportHandoff(item) } }.disabled(item.stale || ["done","dismissed"].contains(item.state)) }
                 ForEach(m.drafts.filter {$0.task==item.id}.prefix(1)) { draft in DisclosureGroup(draft.stale ? "Güncel olmayan taslak":"İncelenecek taslak · gönderilmedi") { VStack(alignment:.leading) { Text(draft.text).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(.top,8);Button("Taslağı düzenle") { draftEdit=draft;draftText=draft.text }.disabled(draft.stale) } } }
-            }.padding(18).background(.quaternary.opacity(0.3),in:RoundedRectangle(cornerRadius:12)) }
+            }.padding(20).meetingCard() }
         }.padding(24) }
     }.sheet(item:$draftEdit) { draft in VStack(alignment:.leading,spacing:16) { Text("Taslağı düzenle").font(.title2.bold());TextEditor(text:$draftText).frame(height:340);HStack { Button("Vazgeç") { draftEdit=nil };Spacer();Button("Kaydet") { Task { do { _=try await m.request(["action":"draft_update","draft":draft.id,"text":draftText]);try await m.refreshIntelligence(m.selected ?? "");draftEdit=nil } catch { m.error=error.localizedDescription } } } } }.padding(24).frame(width:650) }.sheet(item:$edit) { item in VStack(alignment:.leading,spacing:16) { Text("Görevi düzenle").font(.title2.bold());TextField("Görev",text:$title);TextField("Sahibi",text:$owner);TextField("Kaynakta geçen tarih",text:$due);Text("Otomatik çıkarım öneridir. Sahip ve tarihi kaynak konuşmayla doğrulayın.").font(.caption).foregroundStyle(.secondary);HStack { Button("Vazgeç") { edit=nil };Spacer();Button("Kaydet") { Task { await m.updateAction(item,changes:["title":title,"owner":owner,"due_text":due]);edit=nil } }.disabled(title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty) } }.padding(24).frame(width:500) } }
 }
 struct MemoryView:View {
     @ObservedObject var m:Model
     var body:some View { VStack(alignment:.leading,spacing:16) {
-        Text("Toplantı hafızası").font(.title2.bold());Text("Anahtar kelimelerle bütün toplantılarda arayın veya kaynaklı bir yanıt hazırlatın.").foregroundStyle(.secondary)
+        Label("Toplantı hafızası",systemImage:"sparkle.magnifyingglass").font(.system(size:23,weight:.bold,design:.rounded));Text("Anahtar kelimelerle bütün toplantılarda arayın veya kaynaklı bir yanıt hazırlatın.").foregroundStyle(.secondary)
         HStack { TextField("Örn. onboarding PRD",text:$m.memoryQuery).onSubmit { Task { await m.memorySearch() } };Button("Ara") { Task { await m.memorySearch() } };Button("Kayıtlardan yanıtla",action:m.askMemory).disabled(m.busy || m.memoryQuery.isEmpty) }
         ScrollView { VStack(alignment:.leading,spacing:18) { if !m.answer.isEmpty { Text(m.answer).textSelection(.enabled);EvidenceView(m:m,evidence:m.answerEvidence);Divider() };EvidenceView(m:m,evidence:m.hits) }.frame(maxWidth:.infinity,alignment:.leading) }
     }.padding(24) }
