@@ -134,3 +134,32 @@ print(json.dumps({'event':'chunk','source':'system','path':str(path),'start':0,'
             with patch('sys.argv',['meeting_os','--db',str(dbpath),'retry',mid]),patch('meeting_os.cli.make_pipeline',return_value=Pipe()),contextlib.redirect_stdout(io.StringIO()):main(supervised=True)
             db=Store(dbpath);self.assertEqual(len(db.meetings()),1);self.assertEqual(db.meetings()[0]['id'],mid)
             self.assertEqual(db.meetings()[0]['status'],'complete');self.assertEqual(db.segments(mid)[0]['text'],'final fixture');db.close()
+
+    def test_cli_retry_checkpoints_survive_failed_attempt_and_preserve_original(self):
+        import numpy as np
+        from unittest.mock import patch
+        from meeting_os.cli import run_retry,parser
+        from tests.test_asr_checkpoints import Backend
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);db,mid,capture,retry=self.setup_capture(root)
+            for name in ('model','binary'):(root/name).write_bytes(b'fixture')
+            (root/'binary').chmod(0o700)
+            class Pipe:
+                def __init__(self,b):self.asr=b
+                def process(self,*args,**kwargs):
+                    self.asr.transcribe(np.zeros(16000,dtype=np.float32))
+                    self.asr.transcribe(np.ones(16000,dtype=np.float32)*.1)
+                    return [Segment(0,.01,'new','system')],[],.01
+            failing=Backend(root);original=failing.transcribe
+            def compute(a):
+                if a[0]>0:raise RuntimeError('interrupted')
+                return original(a)
+            failing.transcribe=compute
+            args=parser().parse_args(['retry',mid])
+            with patch('meeting_os.cli.make_pipeline',return_value=Pipe(failing)):
+                with self.assertRaises(RuntimeError):run_retry(args,db)
+            self.assertEqual(db.segments(mid)[0]['text'],'old')
+            resumed=Backend(root)
+            with patch('meeting_os.cli.make_pipeline',return_value=Pipe(resumed)):run_retry(args,db)
+            self.assertEqual(resumed.calls,[float(np.float32(.1))])
+            self.assertEqual(db.segments(mid)[0]['text'],'new');db.close()

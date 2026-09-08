@@ -1,3 +1,7 @@
+## Latest: retry-only CPP checkpoints implemented and native reuse verified
+
+ASR raw rows persist per meeting with exact PCM/model/binary/options/code identity and payload checksum. Only completed outputs stored; global64MiB/4096-entry LRU, 2MiB entry bound. Original transcript transaction unchanged; speaker identity recomputed.32 tests passed; native3s public audio computed once and reused exactly by a fresh wrapper. Actual Claude review completed. See `ASR_CHECKPOINT_PLAN.md`. No real long cache exists yet; previous terminal attempt at6/392 predates cache. Next guarded long retry must populate it, preserving270original segments until full success. Goal active; no live speed gain or final meeting completion claimed.
+
 ## Latest: real retry passed diarization then stopped at ASR6/392; checkpoint design reviewed
 
 Session27125,parent82437/worker82448 is TERMINAL exit75. Full mic diarization completed; transcribing progress6/392 before OS pressure after253.23s, sampled tree peak2.13GB.270original segments remain; one private workspace cleaned, no running retry from this attempt. Numeric result `benchmarks/results/real-file-handoff-retry-2026-09-08.json`; progress/logs under `build/recovery-file-*`. Window AX query during run succeeded in.50s (limited responsiveness observation). Next implement retry-only raw-ASR checkpoints per `ASR_CHECKPOINT_PLAN.md`, reviewed by actual Claude, before repeating expensive lost work. No checkpoint cache implemented yet; no full meeting completion or live latency acceptance.

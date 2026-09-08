@@ -88,6 +88,9 @@ def run_retry(args,store):
         emit('assembling')
         paths=assemble_capture(work)
         pipe=make_pipeline(args,store)
+        if getattr(getattr(pipe,'asr',None),'engine',None)=='cpp':
+            from .asr_checkpoints import CheckpointASR
+            pipe.asr=CheckpointASR(pipe.asr,store,args.meeting)
         for source,path in sorted(paths.items()):
             with contextlib.redirect_stdout(sys.stderr):rows,_,_=pipe.process(path,source,bounded_final=True)
             yield from rows

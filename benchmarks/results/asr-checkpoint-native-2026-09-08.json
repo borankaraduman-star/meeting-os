@@ -1,0 +1,10 @@
+{
+  "scope": "3s public Turkish audio; reuse validation, not inference speedup",
+  "native_calls": 1,
+  "rows_equal": true,
+  "first_seconds": 4.648985084029846,
+  "cached_seconds_excluding_identity_hashing": 0.0005080839619040489,
+  "resumed_hits": 1,
+  "resumed_misses": 0,
+  "segments": 1
+}
