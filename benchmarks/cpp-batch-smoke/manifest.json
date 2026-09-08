@@ -1,0 +1,34 @@
+{
+  "kind": "synthetic; no private meeting data",
+  "source": "../code-switch-synthetic/mixed.wav",
+  "source_sha256": "a6cad86fad164730dcb87fb8ceaad9bd697e8b4748785c3ed3e4094d5d11ff67",
+  "cases": [
+    {
+      "audio": "clip-1.wav",
+      "source_start": 0.0,
+      "source_end": 2.28475,
+      "script": "İpek, ödeme adımını konuşalım.",
+      "synthetic_voice": "tr-voice"
+    },
+    {
+      "audio": "clip-2.wav",
+      "source_start": 2.48475,
+      "source_end": 5.798,
+      "script": "Let's check the funnel because conversion dropped after the rollout.",
+      "synthetic_voice": "en-voice"
+    },
+    {
+      "audio": "clip-3.wav",
+      "source_start": 5.998,
+      "source_end": 9.205625,
+      "script": "Çağrı yarın feature flag durumunu kontrol edecek.",
+      "synthetic_voice": "tr-voice"
+    },
+    {
+      "audio": "clip-4.wav",
+      "script": "",
+      "kind": "digital_silence"
+    }
+  ],
+  "note": "Existing TTS script/voice-container boundaries, not human annotations. Silence clip checks for cross-file leakage. No native ASR benchmark executed yet."
+}

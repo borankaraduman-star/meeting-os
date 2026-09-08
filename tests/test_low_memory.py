@@ -43,3 +43,8 @@ class LowMemoryTests(unittest.TestCase):
                 Path(command[command.index('-of')+1]).with_suffix('.json').write_text(json.dumps({'transcription':[]}))
             with patch('meeting_os.backends.run_guarded',side_effect=run):
                 asr=ASR('cpp',model);asr.cpp_threads=4;asr.transcribe(np.zeros(16000))
+    def test_pressure_gate_runs_before_pipeline_or_model_resolution(self):
+        from meeting_os.cli import make_pipeline
+        from meeting_os.resources import MemoryPressureError
+        with patch('meeting_os.resources.check_pressure',side_effect=MemoryPressureError('pressure')),patch('meeting_os.cli.resolve_inference',side_effect=AssertionError('must not resolve or load models')):
+            with self.assertRaises(MemoryPressureError):make_pipeline(None,None)

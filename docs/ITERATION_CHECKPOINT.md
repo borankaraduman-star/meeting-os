@@ -10,7 +10,13 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
-## Current checkpoint — source signals live in bridge; presentation tested, UI install pending
+## Current checkpoint — preview-only failure no longer blocks final handoff
+
+Future recorder separates preview failures from native capture errors, journals known missing chunks, and returns provisional receipt for healthy audio so existing UI can run full retry. Failed error-journal write remains incomplete/nonzero. Claude reviewed;73 targeted Python and21 isolated Swift tests pass. Bridge currently reports124 known preview failures; new UI fourth-line warning still awaits idle signed build. Early make_pipeline pressure admission added. See PREVIEW_RECOVERY_2026-09-08.md. Synthetic4-clip/10.8s ABBA fixture ready; native batch comparison still OFF/unrun.
+
+Current old user recorder46784 remains active and cannot use the new recorder flow. When it exits, verify actual capture state and no competing inference, then recover same meeting553993e7544a normally. Do not restart it or count preview gaps as speedup. Remaining meaningful validation requires safe idle: native matched benchmark, same-meeting finalization, full signed app build/visual check. No perfection or real-time acceptance claim; avoid inventing unrelated features while waiting.
+
+## Historical checkpoint — source signals live in bridge; presentation tested, UI install pending
 
 Source RMS/peak/silence/age now in bridge only for active provisional owner (no retry/history scans); actual bridge measured.122s, mic signal/system silent. Claude authored3-line formatter;19 isolated Swift tests pass after Codex fixed JSON0/1 boolean bridging and an inconsistent infinity fixture.16 Python tests pass. App source integrated, installed app NOT rebuilt/restarted; full build/visual checks pending idle. See SOURCE_SIGNAL_2026-09-08.md.
 

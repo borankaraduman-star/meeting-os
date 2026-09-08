@@ -238,3 +238,15 @@ final class CaptureSignalJSONTests: XCTestCase {
         XCTAssertTrue(result.contains("Mikrofon: Sinyal var"))
     }
 }
+
+final class CapturePreviewWarningTests: XCTestCase {
+    func testKnownMissingPreviewIsExplicit() {
+        let value=CaptureSignalPresentation.label(["state":"capturing","seconds":30,"preview":["has_known_failures":true]])
+        XCTAssertTrue(value.contains("Canlı metin eksik"))
+    }
+    func testNoKnownFailureDoesNotClaimFullTranscript() {
+        let value=CaptureSignalPresentation.label(["state":"capturing","preview":["has_known_failures":false]])
+        XCTAssertFalse(value.contains("Canlı metin eksik"))
+        XCTAssertFalse(value.contains("tamamlandı"))
+    }
+}

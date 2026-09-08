@@ -27,7 +27,9 @@ public enum CaptureSignalPresentation {
         let mic = describeSignal(signals, key: "mic")
         let system = describeSignal(signals, key: "system")
 
-        return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)"
+        let missingPreview = (capture["preview"] as? [String: Any])?["has_known_failures"] as? Bool == true
+        let warning = missingPreview ? "\nCanlı metin eksik" : ""
+        return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)" + warning
     }
 
     private static func describeSignal(_ signals: [String: Any]?, key: String) -> String {

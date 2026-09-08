@@ -37,6 +37,8 @@ def resolve_inference(args):
 
 
 def make_pipeline(args,store):
+    from .resources import check_pressure
+    check_pressure()
     resolve_inference(args)
     emit("loading_models")
     from .backends import ASR

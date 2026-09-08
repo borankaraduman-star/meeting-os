@@ -91,6 +91,9 @@ def dispatch(request, db=None):
                 m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in ('processing','provisional','incomplete','failed') else m['status']
                 live=m['recovery_state']=='active' and m['metadata'].get('provisional') is True and not m['metadata'].get('retry_attempt')
                 m['capture']=capture_state(m['metadata'],include_signal=live)
+                if live and m['capture'] is not None:
+                    from .preview_failures import summarize
+                    m['capture']['preview']=summarize(m['metadata']['capture_dir'],DATA_DIR/'last-job.log' if db is None else None)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
             return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(request.get('meeting',''))}
         if action=='label':

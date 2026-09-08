@@ -17,7 +17,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     if (directory/'events.jsonl').exists(): raise ValueError('Use a new capture directory; existing recordings are never overwritten')
-    pending=queue.Queue(); errors=[]; captured=[0]
+    pending=queue.Queue(); errors=[]; captured=[0]; preview_failed=0
     capture_failed=threading.Event()
     from .recovery import current_job_metadata
     mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True}) if store else None
@@ -27,7 +27,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             try:
                 with tempfile.NamedTemporaryFile(mode='w',dir=target.parent,prefix='.meeting-os-record-',delete=False) as out:
                     temp=Path(out.name)
-                    json.dump({'meeting':mid,'capture_dir':str(directory),'status':status,'finalized_chunks':captured[0]},out)
+                    json.dump({'meeting':mid,'capture_dir':str(directory),'status':status,'finalized_chunks':captured[0],'preview_failed_chunks':preview_failed},out)
                     out.flush();os.fsync(out.fileno())
                 temp.replace(target)
             finally:
@@ -101,7 +101,13 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
                 print(json.dumps({'backlog_chunks':pending.qsize()}),flush=True)
             except Exception as exc:
                 if stopping:continue
-                errors.append(str(exc))
+                from .preview_failures import record_failure
+                preview_failed+=1
+                if not record_failure(directory,event):
+                    message="Canlı metin hata günlüğü yazılamadı; ses arşivini kontrol edin"
+                    if message not in errors:errors.append(message)
+                # Preview failures do not invalidate captured audio. Keep the
+                # normal completion receipt so the UI can run the full final pass.
                 print(json.dumps({'error':str(exc),'chunk':event['path'],'recover':'finalize capture directory'}),flush=True)
         try: code=process.wait(timeout=15)
         except subprocess.TimeoutExpired:
