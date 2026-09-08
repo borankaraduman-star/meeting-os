@@ -17,6 +17,7 @@ struct MeetingContent:View {
         .frame(minWidth:MeetingStyle.minWindowWidth,minHeight:MeetingStyle.minWindowHeight)
         .tint(MeetingStyle.accent)
         .onChange(of:m.selected) { _,_ in Task { await m.refresh() } }
+        .sheet(isPresented:$m.showOpenRouter) { OpenRouterImportView(model:m) }
         .sheet(item:$m.editRow) { row in EditSegmentSheet(model:m,row:row) }
         .sheet(isPresented:$m.showSettings) { SettingsSheet(model:m) }
         .sheet(isPresented:$m.showTranscriptImport) { TranscriptImportSheet(model:m) }
@@ -47,6 +48,7 @@ struct SidebarView:View {
                     .controlSize(.large).disabled(model.busy)
                     .accessibilityIdentifier("importButton")
                     .accessibilityLabel("Ses dosyası aç")
+                Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
                 Button { model.showTranscriptImport=true } label: { Label("ChatGPT metni aktar",systemImage:"doc.text.badge.plus").frame(maxWidth:.infinity) }
                     .controlSize(.large).disabled(model.busy)
                     .accessibilityIdentifier("transcriptImportButton")
@@ -97,6 +99,13 @@ struct DetailView:View {
             }
             if model.meeting?.metadata["text_only"] as? Bool == true {
                 Text(model.meeting?.metadata["imported_from"] as? String == "chatgpt_manual" ? "ChatGPT’den elle aktarılan metin · Ses kaydı ve doğrulanmış ses profili içermez" : "Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8)
+            }
+            if let meeting=model.meeting,meeting.metadata["engine"] as? String=="openrouter" {
+                HStack {
+                    Text("GPT Transcribe · OpenRouter | Konuşmacı ayrımı bu Mac’te").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if meeting.status != "complete" { Button("İşlemi sürdür") { model.showOpenRouter=true }.disabled(model.busy || meeting.recoveryState=="active") }
+                }.padding(.horizontal,24).padding(.bottom,8)
             }
             MeetingNavigation(model:model).padding(.horizontal,24).padding(.bottom,16)
             if model.tab=="transcript" {

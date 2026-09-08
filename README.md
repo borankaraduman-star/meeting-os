@@ -188,3 +188,7 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 16 GB Mac'te özet/görev analizi otomatik başlamaz; Analiz sekmesinden isteğe bağlı çalıştırılır ve bellek korumasına tabidir. Bu bilgisayarın mevcut yükünde büyük özet modeli bellek baskısına takıldı; küçük model kalite testini geçmediği için varsayılan yapılmadı.
 
 [Bu Mac'te ölçülen sonuçlar](docs/RELIABILITY_1.0.5.md).
+
+### İsteğe bağlı OpenRouter transkripsiyonu
+
+Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla `openai/gpt-transcribe` kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
