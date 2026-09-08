@@ -136,19 +136,29 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"
         let name=title.isEmpty ? Date().formatted(date:.abbreviated,time:.shortened) : title
-        launch(["record",dir.path,"--live","--seconds","14400","--title",name]) { [weak self] ok in
+        let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
+        launch(["record",dir.path,"--live","--seconds","14400","--title",name,"--output",receipt.path]) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel()
-            let journal=(try? String(contentsOf:dir.appendingPathComponent("capture-native.jsonl"),encoding:.utf8)) ?? ""
-            if ok && journal.contains("\"chunk\"") { self.finalize(dir,name:name) } else if ok { self.activity="Kayıt iptal edildi · Ses alınmadı" } else { self.activity="Kayıt kesildi · Arşivden sesi kurtarabilirsiniz" }
+            let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
+            try? FileManager.default.removeItem(at:receipt)
+            if !ok { self.activity="Kayıt tamamlanamadı · Arşivdeki kayıt durumunu kontrol edin" }
+            else if let mid=RecordingCompletion.retryMeeting(result,capture:dir.path) {
+                if self.requestedQuit { self.activity="Kayıt saklandı · Son işlemi arşivden başlatabilirsiniz" }
+                else { self.finishRecordedMeeting(mid) }
+            } else if ok && result["status"] as? String == "canceled" { self.activity="Kayıt iptal edildi · Ses alınmadı" }
+            else { self.activity="Kayıt saklandı · Son işlem otomatik başlatılamadı" }
         }
     }
     func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
-    func finalize(_ dir:URL,name:String) {
-        activity="Son transkript ve konuşmacılar hazırlanıyor…"
-        let result=dataDir.appendingPathComponent("final-\(UUID().uuidString).json")
-        launch(["finalize",dir.path,"--title",name,"--output",result.path]) { [weak self] ok in
+    func finishRecordedMeeting(_ mid:String) {
+        activity="Aynı toplantının son transkripti hazırlanıyor…"
+        launch(["retry",mid]) { [weak self] ok in
             guard let self=self else { return }
-            if ok, let mid=self.resultMeeting(result) { self.selected=mid; self.analyzeAutomatically(mid) } else { self.activity="Son işlem başarısız · Ses korunuyor" }
+            if ok {
+                if self.requestedQuit { self.activity="Transkript hazır" }
+                else { self.analyzeAutomatically(mid) }
+            }
+            else { self.activity=self.jobCanceled ? "İşlem durduruldu · Kaynak kayıt korunuyor" : "Son işlem başarısız · Önceki metin ve ses korunuyor" }
         }
     }
     var canCancelJob:Bool { RecoveryPresentation.canCancel(jobKind:jobKind,running:job?.isRunning == true,requested:jobCanceled) }

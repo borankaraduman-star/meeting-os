@@ -100,7 +100,7 @@ def parser():
     i=sub.add_parser('import'); i.add_argument('audio',type=Path); i.add_argument('--title',default='Imported meeting'); i.add_argument('--output',type=Path); inference_options(i)
     t=sub.add_parser('transcribe'); t.add_argument('audio',type=Path); t.add_argument('--source',choices=['mic','system'],default='system'); t.add_argument('--title',default='Imported meeting'); t.add_argument('--output',type=Path); inference_options(t)
     f=sub.add_parser('finalize'); f.add_argument('directory',type=Path); f.add_argument('--title',default='Final meeting'); f.add_argument('--output',type=Path); inference_options(f)
-    r=sub.add_parser('record'); r.add_argument('directory',type=Path); r.add_argument('--seconds',type=float,default=3600); r.add_argument('--chunk-seconds',type=float,default=12); r.add_argument('--live',action='store_true'); r.add_argument('--title',default='Live meeting'); r.add_argument('--capture-bin',default=str(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture')); inference_options(r)
+    r=sub.add_parser('record'); r.add_argument('directory',type=Path); r.add_argument('--output',type=Path); r.add_argument('--seconds',type=float,default=3600); r.add_argument('--chunk-seconds',type=float,default=12); r.add_argument('--live',action='store_true'); r.add_argument('--title',default='Live meeting'); r.add_argument('--capture-bin',default=str(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture')); inference_options(r)
     retry=sub.add_parser('retry'); retry.add_argument('meeting'); inference_options(retry)
     sub.add_parser('meetings')
     recovery=sub.add_parser('recovery'); recovery.add_argument('--mark-interrupted',metavar='MEETING'); recovery.add_argument('--audio',action='store_true',help='Inspect finalized capture headers without loading audio or models')
@@ -197,7 +197,7 @@ def main(supervised=False):
                 from .live import record
                 from .live_worker import IsolatedLivePipeline
                 factory=(lambda: IsolatedLivePipeline(args)) if args.live else None
-                record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory)
+                record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory,result_path=args.output)
             elif args.command=='retry': output(run_retry(args,store))
             elif args.command=='meetings': output(store.meetings())
             elif args.command=='recovery':

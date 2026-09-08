@@ -113,3 +113,24 @@ retry_capture(RetryStore(db),sys.argv[2],current_job_metadata()['worker_identity
                 return [Segment(0,.01,'new','system')]
             with self.assertRaisesRegex(ValueError,'directory changed'):retry_capture(retry,mid,self.owner,process)
             self.assertEqual(db.segments(mid)[0]['text'],'old');db.close()
+    def test_record_receipt_then_cli_retry_keeps_one_meeting(self):
+        import contextlib,io
+        from unittest.mock import patch
+        from meeting_os.cli import main
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);helper=root/'capture-helper';capture=root/'capture';receipt=root/'record.json';dbpath=root/'db'
+            helper.write_text('''#!/usr/bin/env python3
+import sys,json,wave
+from pathlib import Path
+root=Path(sys.argv[2]);path=root/'system-0.wav'
+with wave.open(str(path),'wb') as out:
+ out.setnchannels(1);out.setsampwidth(2);out.setframerate(16000);out.writeframes(b'\\0\\0'*160)
+print(json.dumps({'event':'chunk','source':'system','path':str(path),'start':0,'duration':.01}),flush=True)
+''');helper.chmod(0o700)
+            with patch('sys.argv',['meeting_os','--db',str(dbpath),'record',str(capture),'--seconds','1','--capture-bin',str(helper),'--output',str(receipt)]),contextlib.redirect_stdout(io.StringIO()):main(supervised=True)
+            mid=json.loads(receipt.read_text())['meeting']
+            class Pipe:
+                def process(self,path,source):return [Segment(0,.01,'final fixture',source)],[],.01
+            with patch('sys.argv',['meeting_os','--db',str(dbpath),'retry',mid]),patch('meeting_os.cli.make_pipeline',return_value=Pipe()),contextlib.redirect_stdout(io.StringIO()):main(supervised=True)
+            db=Store(dbpath);self.assertEqual(len(db.meetings()),1);self.assertEqual(db.meetings()[0]['id'],mid)
+            self.assertEqual(db.meetings()[0]['status'],'complete');self.assertEqual(db.segments(mid)[0]['text'],'final fixture');db.close()

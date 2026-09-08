@@ -72,3 +72,26 @@ class LiveTests(unittest.TestCase):
             self.assertLess(time.monotonic()-started,1.2)
             self.assertEqual(db.meetings()[0]['status'],'incomplete')
             self.assertTrue((root/'capture/events.jsonl').exists());db.close()
+    def test_completed_capture_receipt_uses_original_meeting_id(self):
+        import json
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.recorder(root,json.dumps({'event':'chunk','path':'fictional.wav','source':'system','start':0}))
+            db=Store(root/'db');receipt=root/'completion.json'
+            mid=record(binary,root/'capture',1,1,store=db,result_path=receipt)
+            result=json.loads(receipt.read_text())
+            self.assertEqual(result['meeting'],mid);self.assertEqual(result['finalized_chunks'],1)
+            self.assertEqual(result['status'],'provisional');self.assertEqual(len(db.meetings()),1)
+            self.assertEqual(receipt.stat().st_mode&0o777,0o600);db.close()
+    def test_capture_failure_does_not_publish_completion_receipt(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.recorder(root,'{"event":"error","message":"synthetic"}')
+            db=Store(root/'db');receipt=root/'completion.json'
+            with self.assertRaises(RuntimeError):record(binary,root/'capture',1,1,store=db,result_path=receipt)
+            self.assertFalse(receipt.exists());self.assertEqual(db.meetings()[0]['status'],'incomplete');db.close()
+    def test_receipt_write_failure_keeps_capture_and_single_meeting(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.recorder(root,'{"event":"chunk","path":"fixture.wav","source":"system","start":0}')
+            db=Store(root/'db')
+            with self.assertRaises(OSError):record(binary,root/'capture',1,1,store=db,result_path=root/'missing-parent/receipt.json')
+            self.assertTrue((root/'capture/events.jsonl').exists());self.assertEqual(len(db.meetings()),1)
+            self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()

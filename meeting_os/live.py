@@ -4,6 +4,7 @@ import os
 import queue
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -12,13 +13,25 @@ from .supervisor import open_lifeline,close_lifeline
 
 CAPTURE_STOP_GRACE_SECONDS = 15.0
 
-def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None):
+def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None, result_path=None):
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     if (directory/'events.jsonl').exists(): raise ValueError('Use a new capture directory; existing recordings are never overwritten')
     pending=queue.Queue(); errors=[]; captured=[0]
     from .recovery import current_job_metadata
     mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True}) if store else None
+    def completed(status):
+        if result_path is not None:
+            target=Path(result_path);temp=None
+            try:
+                with tempfile.NamedTemporaryFile(mode='w',dir=target.parent,prefix='.meeting-os-record-',delete=False) as out:
+                    temp=Path(out.name)
+                    json.dump({'meeting':mid,'capture_dir':str(directory),'status':status,'finalized_chunks':captured[0]},out)
+                    out.flush();os.fsync(out.fileno())
+                temp.replace(target)
+            finally:
+                if temp is not None:temp.unlink(missing_ok=True)
+        return mid
     try:
         process=subprocess.Popen([str(Path(binary).resolve()),'--output',str(directory),'--seconds',str(seconds),'--chunk-seconds',str(chunk_seconds)],stdout=subprocess.PIPE,text=True,start_new_session=True)
     except Exception:
@@ -89,7 +102,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             process.kill(); code=process.wait(); errors.append('Capture did not exit')
         if stopping and not errors and captured[0]==0 and code in (0,-2,-15):
             if store: store.status(mid,'canceled')
-            return mid
+            return completed('canceled')
         if code: errors.append(f'Capture exited {code}')
         if store: store.status(mid,'incomplete' if errors else 'provisional')
         if errors: raise RuntimeError('; '.join(errors))
@@ -104,4 +117,4 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             except subprocess.TimeoutExpired: process.kill(); process.wait()
         thread.join(timeout=5); process.stdout.close()
         close_lifeline(guardian,lifeline)
-    return mid
+    return completed('provisional')
