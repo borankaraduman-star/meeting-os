@@ -19,6 +19,7 @@ struct MeetingContent:View {
         .onChange(of:m.selected) { _,_ in Task { await m.refresh() } }
         .sheet(item:$m.editRow) { row in EditSegmentSheet(model:m,row:row) }
         .sheet(isPresented:$m.showSettings) { SettingsSheet(model:m) }
+        .sheet(isPresented:$m.showTranscriptImport) { TranscriptImportSheet(model:m) }
     }
 }
 
@@ -46,6 +47,9 @@ struct SidebarView:View {
                     .controlSize(.large).disabled(model.busy)
                     .accessibilityIdentifier("importButton")
                     .accessibilityLabel("Ses dosyası aç")
+                Button { model.showTranscriptImport=true } label: { Label("ChatGPT metni aktar",systemImage:"doc.text.badge.plus").frame(maxWidth:.infinity) }
+                    .controlSize(.large).disabled(model.busy)
+                    .accessibilityIdentifier("transcriptImportButton")
             }.padding(18)
             HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(model.meetings.count)").monospacedDigit().font(.caption) }
                 .foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,6)
@@ -92,7 +96,7 @@ struct DetailView:View {
                 RecoveryBanner(model:model,meeting:meeting)
             }
             if model.meeting?.metadata["text_only"] as? Bool == true {
-                Text("Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8)
+                Text(model.meeting?.metadata["imported_from"] as? String == "chatgpt_manual" ? "ChatGPT’den elle aktarılan metin · Ses kaydı ve doğrulanmış ses profili içermez" : "Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8)
             }
             MeetingNavigation(model:model).padding(.horizontal,24).padding(.bottom,16)
             if model.tab=="transcript" {
@@ -217,14 +221,20 @@ struct EditSegmentSheet:View {
                 TextEditor(text:$model.editText).frame(height:100).border(.quaternary)
                 Button("Metni kaydet") { Task { await model.saveText() } }.disabled(model.editText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
                 TextField("İsim",text:$model.editName).accessibilityIdentifier("editSpeakerNameField")
+                if model.meeting?.metadata["text_only"] as? Bool != true {
                 Button("Önce bölümü dinle") { model.play(row) }
                 Toggle("Dinledim: en az 3 saniye, tek kişi, temiz ses",isOn:$model.clean)
                 Text("Profili kaydedersen sonraki toplantılarda bu sesle eşleşen kişiye isim önerilir. Belirsiz eşleşmeler isimsiz kalır.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Bu toplantı yalnızca metin içerir. İsim düzeltmesi ses profili oluşturmaz.").font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     Button("Vazgeç") { model.editRow=nil }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelEditButton")
                     Spacer()
                     Button("Yalnızca ismi kaydet") { Task { await model.saveLabel(enroll:false) } }.disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
-                    Button("Ses profilini kaydet") { Task { await model.saveLabel(enroll:true) } }.disabled(!model.clean || model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
+                    if model.meeting?.metadata["text_only"] as? Bool != true {
+                        Button("Ses profilini kaydet") { Task { await model.saveLabel(enroll:true) } }.disabled(!model.clean || model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
+                    }
                 }
                 if !model.error.isEmpty { Text(ErrorPresentation.summary(model.error)).foregroundStyle(.red).font(.caption) }
             }.padding(28)

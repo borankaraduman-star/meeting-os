@@ -394,3 +394,10 @@ Actual Fable review47221 completed exit0; conditions checked and batch equality 
 New explicit authorization allowed181MiB Small model download. Pinned/reverified source/hash; defaults and Turbo retained. See docs/SMALL_STT_TRIAL.md and benchmarks/results/small-model-{native,modes}-2026-09-09.json. Same12s audio: Small11.01s/807MB sampled peak vs previousTurbo22.49s/1.29GB; texts differ/no gold. Five-minute batch PASSED:137.44s,68segments,851MB,pressure1. Thirty-minute batch attempted and failed global pressure at5.88s after two valid1800s private assemblies, exact model stage unknown. Live5minute failed ResourceProbeError; not fixed by model change. No30minlive pass, no useful full-live latency.
 
 Tool7307 is terminal; no native jobs. All526originalWAVs/270segments/101ASR caches preserved. No services changed or new capture. Stop retries under same environment; report actual short/batch success and remaining live-probe/shared-pressure blockers. Model already downloaded, do not ask to download it again or claim remaining gap is missing weights.
+
+
+## USER PAUSED LOCAL OPTIMIZATION — manual ChatGPT text workflow
+
+User explicitly paused all native STT optimization/benchmarks. Automation meeting-os-gece-geli-tirme was updated via app tool to PAUSED. Goal remains incomplete/blocked, not marked complete. Do not resume native loops without a new user request. Commits491c608 and4f9e437 retain isolated live phases and Small Q5 evaluation. Models: TurboQ5_0 retained/default; SmallQ5_1 downloaded/hash-verified/experimental. Details: docs/LIVE_PHASE_ISOLATION.md and docs/SMALL_STT_TRIAL.md. Remaining: fatal live ResourceProbeError,30minute shared-pressure failure, long live latency and human identity/accuracy acceptance. Preserved526WAVs/270segments/101ASR checkpoints. No model jobs running at pause.
+
+New scoped work: manual ChatGPT transcript import (paste/UTF8plain text→preview→new meeting), user-triggered ChatGPT open only. No account/API access, automatic Record start or transcript retrieval. Raw imported text kept in metadata, unknown timesNULL, labelsunverified, no embeddings/audio. Existing search/edit usable; no summary/task expansion.

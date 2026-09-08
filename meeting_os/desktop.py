@@ -16,8 +16,9 @@ def export_text(rows, kind):
     if kind=='json':
         return json.dumps([{k:v for k,v in r.items() if k not in ('embedding','embedding_model')} for r in rows],ensure_ascii=False,indent=2)
     if kind=='srt':
+        if any(r['start'] is None or r['end'] is None for r in rows):raise ValueError('SRT için başlangıç ve bitiş zamanları gerekir; metin veya JSON olarak dışa aktarın.')
         return '\n\n'.join(f"{i+1}\n{timestamp(r['start'])} --> {timestamp(r['end'])}\n{r['speaker_name'] or r['speaker']}: {r['text']}" for i,r in enumerate(rows))+'\n'
-    return '\n\n'.join(f"**{timestamp(r['start'], '.')} · {r['speaker_name'] or r['speaker']}**\n\n{r['text']}" for r in rows)+'\n'
+    return '\n\n'.join(f"**{timestamp(r['start'], '.') if r['start'] is not None else 'Zaman belirtilmemiş'} · {r['speaker_name'] or r['speaker']}**\n\n{r['text']}" for r in rows)+'\n'
 
 
 def capture_state(metadata, include_signal=False):
@@ -71,6 +72,9 @@ def dispatch(request, db=None):
         return {'diagnostics_saved':True}
     with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as store:
         action=request['action']
+        if action in ('transcript_preview','transcript_import'):
+            from .transcript_import import preview,save
+            return preview(request.get('text')) if action=='transcript_preview' else save(store,request.get('title'),request.get('text'))
         if action in ('label','edit_text','enroll'):
             row=store.db.execute('SELECT status FROM meetings WHERE id=?',(request['meeting'],)).fetchone()
             if not row or row['status']!='complete': raise ValueError('Önce nihai transkriptin tamamlanmasını bekleyin')
@@ -88,6 +92,7 @@ def dispatch(request, db=None):
             for m in meetings:
                 from .recovery import metadata,classify
                 m['metadata']=metadata(m)
+                m['metadata'].pop('raw_source_text',None)
                 m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in ('processing','provisional','incomplete','failed') else m['status']
                 live=m['recovery_state']=='active' and m['metadata'].get('provisional') is True and not m['metadata'].get('retry_attempt')
                 m['capture']=capture_state(m['metadata'],include_signal=live)

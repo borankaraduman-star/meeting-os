@@ -51,14 +51,14 @@ class Store:
         return cur.lastrowid
     def segments(self, mid):
         result = []
-        for r in self.db.execute('SELECT * FROM segments WHERE meeting=? ORDER BY start,id', (mid,)):
+        for r in self.db.execute("SELECT * FROM segments WHERE meeting=? ORDER BY CASE WHEN source='chatgpt_manual' THEN id ELSE start END,id", (mid,)):
             d = json.loads(r['payload'])
             d.update(id=r['id'], speaker_name=r['speaker_name'])
             result.append(d)
         return result
     def display_segments(self, mid):
         # Keep 256-dimensional voice vectors out of every UI polling response.
-        rows=self.db.execute("SELECT id,start,end,source,speaker,speaker_name,json_extract(payload,'$.text') AS text,json_extract(payload,'$.flags') AS flags FROM segments WHERE meeting=? ORDER BY start,id",(mid,))
+        rows=self.db.execute("SELECT id,start,end,source,speaker,speaker_name,json_extract(payload,'$.text') AS text,json_extract(payload,'$.flags') AS flags FROM segments WHERE meeting=? ORDER BY CASE WHEN source='chatgpt_manual' THEN id ELSE start END,id",(mid,))
         return [{**dict(r),'flags':json.loads(r['flags'] or '[]')} for r in rows]
     def correct(self, mid, speaker, name):
         name = name.strip()

@@ -20,6 +20,7 @@ struct TranscriptRow:View, Equatable {
     static func == (lhs:Self,rhs:Self)->Bool { lhs.row == rhs.row && lhs.canPlay == rhs.canPlay && lhs.canEdit == rhs.canEdit && lhs.model === rhs.model }
     var body:some View {
         HStack(alignment:.top,spacing:14) {
+            if canPlay {
             Button { model.play(row) } label:{
                 VStack(spacing:8) {
                     Image(systemName:"play.circle.fill").font(.title2).foregroundStyle(MeetingStyle.accent)
@@ -30,13 +31,16 @@ struct TranscriptRow:View, Equatable {
             .disabled(!canPlay)
             .accessibilityIdentifier("playSegment-\(row.id)")
             .accessibilityLabel("Bu bölümü dinle, \(row.time)")
+            } else if !row.time.isEmpty {
+                Text(row.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width:48)
+            }
             VStack(alignment:.leading,spacing:7) {
                 VStack(alignment:.leading,spacing:4) {
                     HStack { Text(row.label).font(.headline).lineLimit(1); Spacer(minLength:12); editButton }
-                    Text(row.source=="mic" ? "Mikrofon":"Sistem sesi").font(.caption).foregroundStyle(.secondary)
+                    Text(row.source=="mic" ? "Mikrofon" : (row.source=="system" ? "Sistem sesi" : "Aktarılan metin")).font(.caption).foregroundStyle(.secondary)
                 }
                 Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6)
-                if !row.flags.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) }
+                if !row.notices.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) }
             }
         }.padding(20).meetingCard()
     }
