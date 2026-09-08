@@ -18,6 +18,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     if (directory/'events.jsonl').exists(): raise ValueError('Use a new capture directory; existing recordings are never overwritten')
     pending=queue.Queue(); errors=[]; captured=[0]
+    capture_failed=threading.Event()
     from .recovery import current_job_metadata
     mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True}) if store else None
     def completed(status):
@@ -48,7 +49,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
                     except json.JSONDecodeError: continue
                     if event.get('event')=='chunk':
                         captured[0]+=1; pending.put(event)
-                    if event.get('event')=='error': errors.append(event.get('message','Capture error'))
+                    if event.get('event')=='error':
+                        errors.append(event.get('message','Capture error'))
+                        capture_failed.set()
         except Exception as exc:
             errors.append('Capture log failure: '+str(exc))
             if process.poll() is None: process.send_signal(signal.SIGTERM)
@@ -70,6 +73,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         if pipeline_factory is not None: pipeline=pipeline_factory()
         if hasattr(pipeline,"cancel_requested"):pipeline.cancel_requested=lambda:stopping
         while True:
+            # A failed helper can leave stdout open. Give it the same bounded
+            # shutdown and finalized-chunk drain as an explicit user stop.
+            if capture_failed.is_set() and not stopping:stop(None,None)
             # The reader may never reach EOF if the native helper hangs.
             # Check the deadline before waiting, including when chunks are queued.
             if stop_deadline is not None and time.monotonic() >= stop_deadline:

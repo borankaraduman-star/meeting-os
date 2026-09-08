@@ -1,0 +1,25 @@
+{
+  "run": {
+    "minutes_requested": 60,
+    "scope": "hardware_capture_only",
+    "status": "failed",
+    "error_code": "supervision_or_validation_failed"
+  },
+  "failure_report_utc": "2026-09-08T17:19:16.017519+00:00",
+  "header_validation": {
+    "status": "available",
+    "available_chunks": 300,
+    "missing_chunks": 0,
+    "invalid_chunks": 0,
+    "sources": {
+      "mic": 150,
+      "system": 150
+    },
+    "issues": [],
+    "validation": "header_only"
+  },
+  "partial_files": 2,
+  "observed_later_pressure_level": 2,
+  "termination_cause": "not_recorded_by_runner",
+  "scope": "failed60_minute_attempt_header_only_validation_no_pass"
+}

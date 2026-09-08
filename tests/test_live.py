@@ -22,6 +22,52 @@ class LiveTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'device gone'): record(binary,root/'capture',1,1,store=db)
             self.assertEqual(db.meetings()[0]['status'],'incomplete')
             db.close()
+    def test_capture_error_stops_helper_and_preserves_audio_without_receipt(self):
+        import json,signal,threading,time
+        from unittest.mock import patch
+        # Removing error-triggered shutdown must fail before the fallback EOF.
+        # The fake owns no child process; signals and lifeline calls are mocked.
+        for graceful in (False,True):
+            with self.subTest(graceful=graceful),tempfile.TemporaryDirectory() as t:
+                root=Path(t);done=threading.Event();ready=threading.Event()
+                class Helper:
+                    code=None
+                    closed=False
+                    signals=[]
+                    killed=False
+                    def __init__(self):self.stdout=self
+                    def __iter__(self):
+                        yield json.dumps({'event':'chunk','path':'saved.wav','source':'system','start':0})+'\n'
+                        yield json.dumps({'event':'error','message':'device gone'})+'\n'
+                        ready.set()
+                        done.wait(.8)  # Bound the regression even without the fix.
+                        self.code=self.code if self.code is not None else 0
+                        yield json.dumps({'event':'chunk','path':'tail.wav','source':'mic','start':1})+'\n'
+                    def poll(self):return self.code
+                    def send_signal(self,sig):
+                        self.signals.append(sig)
+                        if graceful:self.code=0;done.set()
+                    def kill(self):self.killed=True;self.code=-9;done.set()
+                    def wait(self,timeout=None):return self.code
+                    def close(self):self.closed=True
+                helper=Helper();db=Store(root/'db');receipt=root/'completion.json'
+                def warmed():
+                    if not ready.wait(1):raise AssertionError('fake reader did not start')
+                old_handler=signal.getsignal(signal.SIGINT)
+                started=time.monotonic()
+                with patch('meeting_os.recovery.current_job_metadata',return_value={}),patch('meeting_os.live.subprocess.Popen',return_value=helper),patch('meeting_os.live.open_lifeline',return_value=(None,None)),patch('meeting_os.live.close_lifeline') as close,patch('meeting_os.live.signal.signal') as handler,patch('meeting_os.live.CAPTURE_STOP_GRACE_SECONDS',.05):
+                    with self.assertRaisesRegex(RuntimeError,'device gone'):
+                        record('/fake',root/'capture',60,12,store=db,pipeline_factory=warmed,result_path=receipt)
+                self.assertLess(time.monotonic()-started,.6)
+                self.assertEqual(helper.signals,[signal.SIGINT])
+                self.assertEqual(helper.killed,not graceful)
+                self.assertTrue(helper.closed);close.assert_called_once_with(None,None)
+                self.assertEqual(handler.call_args.args,(signal.SIGINT,old_handler))
+                journal=(root/'capture/events.jsonl').read_text()
+                self.assertIn('saved.wav',journal);self.assertIn('tail.wav',journal)
+                self.assertIn('device gone',journal)
+                self.assertFalse(receipt.exists())
+                self.assertEqual(db.meetings()[0]['status'],'incomplete');db.close()
     def test_model_warmup_failure_leaves_recoverable_meeting(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t); binary=self.recorder(root,'{"event":"started"}')
