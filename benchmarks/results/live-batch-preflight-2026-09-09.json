@@ -1,0 +1,47 @@
+{
+  "verification": {
+    "checked_at": 1788906987.0297248,
+    "private_excerpt_files_matching_original_samples": 50,
+    "original_segments": 270,
+    "original_asr_checkpoints": 101,
+    "original_status": "incomplete",
+    "live_outer_failure_elapsed_seconds": 17.127144125057384,
+    "live_outer_sampled_peak_bytes": 105580008,
+    "peak_limitation": "Outer sample excludes nested isolated model group; no valid full job peak measurement on this failed trial",
+    "live_last_success": "one12s silent system chunk; zero speech segments",
+    "batch": "blocked by pressure at admission, no native execution",
+    "target_30min": "not started;5min gate failed",
+    "accuracy_and_live_text_latency": "unavailable; no emitted text and no human reference",
+    "work_continuing": false
+  },
+  "runs": [
+    {
+      "mode": "live",
+      "target_seconds": 300,
+      "complete": false,
+      "state": "terminal",
+      "failure": "MemoryPressureError",
+      "simulation": true,
+      "capture_validation": false,
+      "completed_chunks": 1,
+      "segments": 0,
+      "speaker_labels": [],
+      "lag_seconds": [],
+      "wall_seconds": 12.221330332919024,
+      "accuracy": null,
+      "reason": "No human reference",
+      "profiles": "isolated empty test store; no auto-enrollment",
+      "started_at": 1788906925.683348,
+      "processed_source_seconds": {
+        "system": 12.06338091706857
+      }
+    },
+    {
+      "mode": "batch",
+      "target_seconds": 300,
+      "complete": false,
+      "state": "terminal",
+      "failure": "MemoryPressureError"
+    }
+  ]
+}
