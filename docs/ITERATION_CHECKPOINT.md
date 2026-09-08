@@ -1,3 +1,7 @@
+## Latest: canonical retry terminal69/392; measured embedding residency overlap
+
+Session91879,parent33865/worker33878 TERMINAL exit75/OSpressure after382.39s;69ASR rows, two diar rows (schema1+2),270original segments preserved, one private workspace cleaned. Real schema2 cache read was separately verified; regenerated-snapshot full retry hit still pending. Evidence benchmarks/results/real-canonical-retry-2026-09-09.json. New fresh-process probe finds eager Resemblyzer adds170,164,560bytes before ASR; next implement isolated final identity phase per ISOLATED_IDENTITY_PLAN.md, reviewed with actual Claude. This is a plan, not an installed optimization. Goal incomplete.
+
 ## Latest: real schema2 diarization cache read verified; canonical retry active
 
 Session91879,parent33865/worker33878 confirmed running; full diarization completed,56priorASR hits and new work beyond60/392. Independent fresh-process probe prohibited native inference and retrieved all442real turns with hit1/miss0/error0 in1.044s including hashing, same immutable snapshot. Evidence benchmarks/results/real-diarization-cache-hit-2026-09-09.json. This proves real schema2 cache reading; full retry with independently regenerated snapshot still pending. Metadata-only variation was tested on public native fixture. Do not edit runtime/cache identity inputs or restart while session91879 is live. Logs build/recovery-canonical.*. Goal incomplete.

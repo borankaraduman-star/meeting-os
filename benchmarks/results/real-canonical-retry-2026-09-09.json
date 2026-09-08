@@ -1,0 +1,41 @@
+{
+  "session": 91879,
+  "state": "terminal",
+  "exit_code": 75,
+  "progress": {
+    "stage": "transcribing",
+    "current": 69,
+    "total": 392,
+    "source": "mic",
+    "updated_at": 1788902384.769651
+  },
+  "failures": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 33878,
+      "child_pid": 44650,
+      "sampled_peak_footprint_bytes": 1201949024,
+      "samples": 57,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 6.720558291999623
+    },
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 33865,
+      "child_pid": 33878,
+      "sampled_peak_footprint_bytes": 1970244848,
+      "samples": 2941,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 382.39334274991415
+    }
+  ],
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "asr_rows": 69,
+  "diar_rows": 2,
+  "original_segments": 270
+}

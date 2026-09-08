@@ -1,0 +1,7 @@
+{
+  "before_embedding_bytes": 75530792,
+  "after_embedding_bytes": 245695352,
+  "difference_bytes": 170164560,
+  "model_id": "resemblyzer:39373b86598fa3da",
+  "scope": "same process before/after eager Resemblyzer initialization, no ASR inference; not total job peak"
+}
