@@ -1,3 +1,7 @@
+## Latest: recovery stopped safely under OS memory pressure
+
+Parent 40778 and worker 40784 exited; meeting 553993e7544a remains incomplete with original 270 provisional segments. Log ends with MemoryPressureError wording. Diarization completed, ASR reached at least 12/391 before last observed progress; final result was not committed. Targeted dead-owner retry cleanup removed one temporary snapshot; audio and SQLite backup remain. No immediate duplicate/retry. Full decoded source audit now proves all mic chunks valid/nonzero and all system chunks zero. Next required work: reduce final/live working set or make final phases resumable; capture peak/pressure failure telemetry before any further long retry. Window benchmark is prepared but unrun. Goal incomplete.
+
 ## Active recovery / next bounded experiment
 
 Real meeting 553993e7544a recovery started through installed UI. Parent 40778 / worker 40784 were alive; progressed from diarization to 391-region transcription. Revalidate current state before acting. Backup: data directory `before-recovery-553993e7544a.sqlite`. Numeric watch: `build/recovery-watch.json`. No second inference while recovery runs. `CPP_WINDOW_EXPERIMENT.md` documents prepared benchmark and Claude review; native window comparison remains pending.
