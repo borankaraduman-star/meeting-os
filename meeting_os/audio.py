@@ -27,7 +27,12 @@ def vad_model():
     return load_silero_vad()
 
 def speech_regions(audio, max_seconds=28):
-    if len(audio) == 0 or np.max(np.abs(audio)) < 1e-5: return []
+    if len(audio) == 0: return []
+    # Keep mapped final audio from acquiring a recording-sized abs temporary.
+    peak = np.max(np.abs(audio[:65536]))
+    for start in range(65536, len(audio), 65536):
+        peak = np.maximum(peak, np.max(np.abs(audio[start:start+65536])))
+    if peak < 1e-5: return []
     import torch
     from silero_vad import get_speech_timestamps
     stamps = get_speech_timestamps(torch.from_numpy(audio), vad_model(), sampling_rate=RATE,

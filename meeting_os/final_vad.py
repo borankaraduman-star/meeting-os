@@ -1,5 +1,5 @@
 """Run unchanged Silero VAD outside the retry parent; release Torch on exit."""
-import json,sys,tempfile
+import json,sys,tempfile,warnings
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -34,7 +34,18 @@ def main():
     if not 0<frames<=16000*14400:raise ValueError('Invalid VAD length')
     with sf.SoundFile(path) as f:
         if f.samplerate!=16000 or f.channels!=1 or f.subtype!='FLOAT' or f.frames!=frames:raise ValueError('Invalid VAD snapshot')
-        audio=f.read(dtype='float32')
+    from scipy.io import wavfile
+    # Map the existing immutable WAV rather than allocating decoded PCM.
+    # SciPy uses writable copy-on-write storage: Torch can share this view
+    # without allowing writes through to the source. Keep it alive for VAD.
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore',message=r'^Chunk \(non-data\) not understood, skipping it\.$',category=wavfile.WavFileWarning)
+        rate,audio=wavfile.read(path,mmap=True)
+    if (rate!=16000 or not isinstance(audio,np.memmap) or audio.mode!='c'
+            or not audio.flags.writeable or audio.dtype!=np.dtype('float32')
+            or audio.ndim!=1 or audio.shape!=(frames,)):
+        raise ValueError('Invalid VAD mapping')
+    if _signature(path)!=signature:raise ValueError('VAD input changed')
     if len(audio)!=frames or not all(np.isfinite(audio[a:a+65536]).all() for a in range(0,frames,65536)):raise ValueError('Invalid VAD samples')
     from .audio import speech_regions
     regions=validate_regions(speech_regions(audio),frames)

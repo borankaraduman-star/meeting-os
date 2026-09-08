@@ -1,0 +1,26 @@
+{
+  "seconds": 95.58,
+  "exact_sample_spans": true,
+  "regions": 13,
+  "runs": [
+    {
+      "mode": "baseline",
+      "resources": {
+        "peak_footprint_bytes": 319767896,
+        "samples": 16,
+        "elapsed_seconds": 1.9576751249842346
+      },
+      "regions": 13
+    },
+    {
+      "mode": "mapped",
+      "resources": {
+        "peak_footprint_bytes": 309003608,
+        "samples": 11,
+        "elapsed_seconds": 1.3113759589614347
+      },
+      "regions": 13
+    }
+  ],
+  "scope": "95s public constructed human fixture, real unchanged Silero model; single-order short comparison, not full meeting performance or peak upper bound"
+}
