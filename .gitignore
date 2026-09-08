@@ -17,3 +17,5 @@ models
 benchmarks/private/
 benchmarks/results-local/
 benchmarks/results-*/**/stdout.log
+
+installation.log

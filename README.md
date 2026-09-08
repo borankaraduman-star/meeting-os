@@ -8,8 +8,11 @@ yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktu
 
 ## Bu Mac’te aç
 
-**`Meeting OS.command` dosyasını çift tıklayın** veya `build/Meeting OS.app`
-uygulamasını açın. Modeller ve Python ortamı kuruludur; yeniden indirme gerekmez.
+**`Meeting OS.command` dosyasını çift tıklayın.** Uygulama henüz yoksa ilk kurulumu
+başlatır; kuruluysa uygulamayı açar. İlk kurulumda araçlar ve modeller indirilir.
+Homebrew veya Apple geliştirici araçları eksikse kurucunun gösterdiği adımları
+tamamlayın. Gerekirse aynı dosyayı tekrar açın. Hata ayrıntısı `installation.log`
+dosyasına kaydedilir. Kurulu uygulama ayrıca `build/Meeting OS.app` içindedir.
 Gerçek dosyalar `~/Library/Application Support/MeetingOS/` altında bulunur.
 Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar.
 
@@ -131,8 +134,11 @@ isimlerin kesin yazılmasını garanti eden otomatik değiştirme listesi değil
 ## Başka bir Mac / yeniden kurulum
 
 macOS 15+, Apple Silicon, Xcode Command Line Tools, Python 3.12 ve ffmpeg gerekir.
-Kaynak klasörünü iCloud dışındaki yerel bir dizine yerleştirip `scripts/setup.sh`
-çalıştırın. Kurulum paketleri ve ücretsiz modelleri indirir; inference sesinizi
+ZIP’i açıp kaynak klasörünü iCloud dışında yerel bir dizine yerleştirin.
+`Meeting OS.command` dosyasını çift tıklayın; eksik Homebrew/Python/ffmpeg araçlarını
+kurmaya yönlendirir ve ardından `scripts/setup.sh` çalıştırır.
+macOS indirilen dosyayı engellerse Sistem Ayarları → Gizlilik ve Güvenlik içindeki
+uyarıyı inceleyin; bu paket Apple tarafından noterlenmiş bir kurucu değildir. Kurulum paketleri ve ücretsiz modelleri indirir; inference sesinizi
 yüklemez. Test edilmiş paket sürümleri `requirements-macos-tested.txt` içindedir.
 Bu Mac’in bağımsız Python tabanı `MeetingOS/python-3.12`, ortamı
 `MeetingOS/runtime-v0.1` altında; Codex önbelleğine bağımlı değildir.

@@ -1,4 +1,4 @@
-# Meeting OS 1.0.1 teslimi
+# Meeting OS 1.0.2 teslimi
 
 **Aç:** [Meeting OS.command](Meeting%20OS.command)
 
@@ -41,3 +41,6 @@ ekranları iyileştirildi. Seçili toplantının durumu ile uygulama işlemi ayr
 Döngü bazında doğrulama ve sınırlar [gece çalışma kaydında](docs/NIGHT_ITERATION.md).
 
 Son gece teslimi: [8 Eylül sabah raporu](docs/MORNING_DELIVERY.md).
+
+1.0.2: Yeni Mac’te Meeting OS.command ilk kurulumu başlatır. Eski 1.0.1
+başlatıcısı yalnızca önceden kurulmuş uygulamayı açıyordu.

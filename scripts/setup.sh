@@ -13,6 +13,6 @@ fi
 .venv/bin/python -m pip install -r requirements-macos-tested.txt
 .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]'
 .venv/bin/python scripts/fetch-recommended.py
-scripts/build-capture.sh
-scripts/build-desktop.sh
+/bin/sh scripts/build-capture.sh
+/bin/sh scripts/build-desktop.sh
 .venv/bin/python -m meeting_os doctor
