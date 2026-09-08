@@ -64,6 +64,8 @@ def retry_capture(retry,mid,owner,process,cancel_requested=lambda:False):
             if len(events)>MAX_CHUNKS:raise ValueError('Retry chunk limit')
         if not events:raise ValueError('No retry chunks')
         with tempfile.TemporaryDirectory(prefix=f'meeting-os-retry-{attempt}-') as temp:
+            from .retry_workspaces import register_workspace
+            register_workspace(retry,attempt,Path(temp))
             work=Path(temp);manifest={};copies={};used=0;copied_events=[]
             for index,event in enumerate(events):
                 check();name=f'{index:06d}.wav';target=work/name

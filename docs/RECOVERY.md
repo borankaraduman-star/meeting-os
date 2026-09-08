@@ -96,3 +96,19 @@ Tests cover atomic receipt identity/permissions, failed capture with no receipt,
 Claude C5 review identified differing Python/Swift spellings for symlinked capture paths. Reproduced with an actual temporary symlink; receipt matching now canonicalizes both absolute paths and still rejects different capture directories. The suggestion to force selected=mid at completion was rejected intentionally: RecordingNavigation already owns the one-shot recording navigation policy, while completion must not override a user's subsequent selection. Receipt routing identifies the correct backend meeting independently of visible selection. Receipt write failure was also tested: the journal and single provisional meeting remain intact, and no automatic inference is authorized without a valid receipt.
 
 Final C5 verification:152 Python tests and14 Swift tests passed; production build and local preview signature verified. No user meeting data/model was used; running app unchanged.
+
+## C6 registered workspace cleanup
+
+```sh
+.venv/bin/python -m meeting_os cleanup-retries
+```
+
+Each newly created private retry workspace is now registered against its attempt ID, canonical temporary root, generated basename and directory device/inode before audio copying starts. Cleanup examines at most100 registered entries, never scans unrelated temporary directories, and removes only directories under the current OS temporary root whose exact owner process identity is confirmed dead. Live/unknown owners, unregistered or foreign-root directories, changed directory identities, symlinks/hardlinks and unexpected contents are preserved. Only generated six-digit WAV copies, events.jsonl and mic/system-full.wav are accepted; scanning is bounded to10003 entries. No recursion is used.
+
+Cleanup verifies dead ownership before filesystem work, uses directory-relative operations without holding a SQLite write lock, then rechecks the immutable registration/owner under a short transaction before reconciling state. It preserves the original capture and transcript; an abandoned running attempt becomes aborted/incomplete only if it still owns that meeting. Already absent registered directories are reconciled safely. Explicit cleanup outputs counts only. Starting CLI retry first cleans registered leftovers for that same meeting.
+
+Filesystem deletion and SQLite state updates are not one atomic operation. Interruption may leave a partially cleaned private copy directory; later cleanup can continue while original audio/text remains unchanged. This is not a sandbox against a hostile same-user process rewriting the private workspace/database concurrently. A directory created immediately before SIGKILL but before registration, older unregistered workspaces, changed temp roots or folders containing unexpected user-added files are conservatively retained. No real user workspace was removed during this checkpoint; tests use only synthetic temporary directories/databases and an abruptly exiting owned child.
+
+Claude C6 review found write-lock contention while deleting files. A two-connection test with busy_timeout=0 reproduced database-is-locked in an unrelated active writer. Filesystem operations now run outside the write transaction; final registration/owner checks remain transactional. The test now passes, and a second race test confirms a newly claimed attempt remains running while an old workspace is removed. Abort transitions use the shared RetryStore._abort_locked helper rather than duplicated SQL. If final ownership cannot be confirmed after filesystem removal, state_deferred reports that database reconciliation was retained for a later pass. The same-user rename/unlink race remains outside the declared threat model; no unconditional recursive deletion was introduced.
+
+Final C6 verification:162 Python tests passed and diff whitespace check passed. No model, actual user workspace cleanup, native UI change or public release in this checkpoint.

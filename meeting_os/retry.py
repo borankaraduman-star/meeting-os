@@ -1,4 +1,4 @@
-"""Internal transactional retry storage. Not yet connected to inference or UI."""
+"""Transactional staging and ownership for guarded same-meeting retries."""
 import hashlib,json,uuid
 from contextlib import contextmanager
 from .recovery import classify,metadata,process_identity,valid_identity
@@ -11,6 +11,7 @@ class RetryStore:
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS retry_attempts(id TEXT PRIMARY KEY,meeting TEXT REFERENCES meetings(id),owner TEXT,baseline TEXT,state TEXT);
         CREATE UNIQUE INDEX IF NOT EXISTS retry_one_running ON retry_attempts(meeting) WHERE state='running';
+        CREATE TABLE IF NOT EXISTS retry_workspaces(attempt TEXT PRIMARY KEY REFERENCES retry_attempts(id),root TEXT,name TEXT,device INTEGER,inode INTEGER);
         CREATE TABLE IF NOT EXISTS retry_segments(attempt TEXT REFERENCES retry_attempts(id),sequence INTEGER,payload TEXT,PRIMARY KEY(attempt,sequence));
         ''')
     @contextmanager
@@ -94,13 +95,16 @@ class RetryStore:
             self.db.execute("UPDATE meetings SET status='complete',metadata=? WHERE id=?",(json.dumps(meta),mid))
             self.db.execute("UPDATE retry_attempts SET state='complete' WHERE id=?",(attempt,))
             self.db.execute('DELETE FROM retry_segments WHERE attempt=?',(attempt,));return True
+    def _abort_locked(self,attempt):
+        """Caller holds transaction; shared by explicit abort and cleanup."""
+        row=self.db.execute('SELECT * FROM retry_attempts WHERE id=?',(attempt,)).fetchone()
+        if row is None or row['state']!='running':return False
+        meeting=self.meeting(row['meeting']);meta=metadata(meeting)
+        if meta.get('retry_attempt')==attempt and meeting['status']=='processing':
+            meta.pop('retry_attempt',None)
+            self.db.execute("UPDATE meetings SET status='incomplete',metadata=? WHERE id=?",(json.dumps(meta),row['meeting']))
+        self.db.execute("UPDATE retry_attempts SET state='aborted' WHERE id=?",(attempt,))
+        self.db.execute('DELETE FROM retry_segments WHERE attempt=?',(attempt,));return True
+
     def abort(self,attempt):
-        with self.transaction():
-            row=self.db.execute('SELECT * FROM retry_attempts WHERE id=?',(attempt,)).fetchone()
-            if row is None or row['state']!='running':return False
-            meeting=self.meeting(row['meeting']);meta=metadata(meeting)
-            if meta.get('retry_attempt')==attempt and meeting['status']=='processing':
-                meta.pop('retry_attempt',None)
-                self.db.execute("UPDATE meetings SET status='incomplete',metadata=? WHERE id=?",(json.dumps(meta),row['meeting']))
-            self.db.execute("UPDATE retry_attempts SET state='aborted' WHERE id=?",(attempt,))
-            self.db.execute('DELETE FROM retry_segments WHERE attempt=?',(attempt,));return True
+        with self.transaction():return self._abort_locked(attempt)
