@@ -67,6 +67,10 @@ def main():
     if list(_signature(path))!=data['signature']:raise ValueError('Identity snapshot changed')
     sig,digest=_hash_file(weights)
     if list(sig)!=data['weight_signature'] or digest!=data['digest']:raise ValueError('Identity weights changed')
+    import torch
+    # The prior in-process path runs after Silero, which sets this to one.
+    # Preserve that CPU budget when identity moves to its own fresh process.
+    torch.set_num_threads(1)
     from .speakers import Embedder
     embedder=Embedder('resemblyzer',weights)
     if embedder.model_id!='resemblyzer:'+digest[:16]:raise ValueError('Embedding model identity mismatch')

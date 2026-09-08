@@ -1,0 +1,32 @@
+{
+  "session": 63599,
+  "state": "terminal",
+  "exit": 75,
+  "failure": [
+    {
+      "kind": "MemoryPressureError",
+      "supervisor_pid": 50151,
+      "child_pid": 50162,
+      "sampled_peak_footprint_bytes": 98354208,
+      "samples": 55,
+      "budget_bytes": 3758096384,
+      "elapsed_seconds": 6.596912165987305
+    }
+  ],
+  "stage": {
+    "stage": "assembling",
+    "current": 0,
+    "total": 0,
+    "source": "",
+    "updated_at": 1788903219.508311
+  },
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "scope": "OSpressure during assembly before new model phase could be validated"
+}

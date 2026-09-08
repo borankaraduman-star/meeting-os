@@ -1,0 +1,9 @@
+{
+  "vectors": 2,
+  "max_absolute_differences": [
+    0.0,
+    0.0
+  ],
+  "worker_torch_threads": 1,
+  "scope": "native isolated identity vectors vs stored full-pipeline baseline on10s public speech; no ASR rerun"
+}

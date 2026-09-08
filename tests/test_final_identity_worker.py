@@ -31,3 +31,16 @@ class Tests(unittest.TestCase):
     Path(cmd[-1]).write_text(json.dumps({'model_id':e.model_id,'rows':[{'index':0,'vector':None}]}))
     weights.write_bytes(b'changed')
    with patch('meeting_os.final_identity.run_guarded',side_effect=worker),self.assertRaises(ValueError):e.embed_file(audio,[(0,16000)])
+ def test_worker_preserves_post_vad_torch_thread_budget(self):
+  import hashlib,sys
+  from unittest.mock import Mock
+  from meeting_os.final_identity import main
+  from meeting_os.asr_checkpoints import _signature
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d);weights=p/'weights';weights.write_bytes(b'fixture');audio=p/'a.wav';sf.write(audio,np.zeros(16000),16000,subtype='FLOAT')
+   digest=hashlib.sha256(b'fixture').hexdigest();request=p/'request';out=p/'result'
+   request.write_text(json.dumps({'weights':str(weights),'digest':digest,'weight_signature':_signature(weights),'path':str(audio),'signature':_signature(audio),'frames':16000,'spans':[[0,16000]]}))
+   torch=Mock();encoder=Mock();encoder.model_id='resemblyzer:'+digest[:16];encoder.embed.return_value=[1.]+[0.]*255
+   def create(*a):torch.set_num_threads.assert_called_once_with(1);return encoder
+   with patch.dict(sys.modules,{'torch':torch}),patch('sys.argv',['worker',str(request),str(out)]),patch('meeting_os.speakers.Embedder',side_effect=create),patch('meeting_os.asr_checkpoints.check_pressure'):main()
+   self.assertEqual(len(json.loads(out.read_text())['rows']),1)
