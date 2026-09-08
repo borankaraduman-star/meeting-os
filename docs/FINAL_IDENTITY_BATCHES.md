@@ -1,0 +1,9 @@
+# Bounded final speaker identity batches
+
+A source review reproduced a deterministic capacity mismatch in the new isolated identity path: 7,000 valid one-second spans within the supported four-hour timeline produced 39,058,923 bytes of normalized-vector JSON, exceeding the 32 MiB worker output cap. Validation admitted up to 10,000 spans. Such a job could finish ASR and embeddings yet never finish the retry. Original transcript atomicity protected data, but repeated attempts could not resolve this failure.
+
+The repair partitions the admitted source spans into at most 512 per worker invocation. Each invocation retains the existing output size bound, model identity, exact sample spans, input integrity and vector validation. Results are concatenated in original order, including null embeddings. A failed later batch raises instead of returning a partial identity result. The outer retry transaction still owns final transcript replacement.
+
+This trades extra model initialization after every 512 spans for bounded serialization overhead. It does not claim reduced live latency, reduced total stored embedding size, or full four-hour native-model acceptance. The live pipeline is unchanged. A 7,000-span model-free regression must demonstrate 14 bounded calls and complete ordered output; native public-speech validation forces a batch boundary without running thousands of model calls.
+
+Validation: 35 related tests pass, including the 7,000-span reproduction and later-batch failure/missing-output/input-mutation checks. Native public10s speech: two vectors remain exactly equal to the stored full-pipeline baseline, both in one batch and forced separate batches. Single-order elapsed times2.61s versus3.14s; sampled outer-tree footprint384,682,000bytes. This validates a native batch boundary, not7,000 native embeddings or real-meeting completion. Evidence: benchmarks/results/identity-batches-native-2026-09-09.json.

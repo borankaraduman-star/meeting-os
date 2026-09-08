@@ -1,0 +1,23 @@
+{
+  "runs": [
+    {
+      "batch_limit": 512,
+      "vectors": 2,
+      "max_absolute_differences": [
+        0.0,
+        0.0
+      ],
+      "elapsed_seconds": 2.609580541960895
+    },
+    {
+      "batch_limit": 1,
+      "vectors": 2,
+      "max_absolute_differences": [
+        0.0,
+        0.0
+      ],
+      "elapsed_seconds": 3.142869749921374
+    }
+  ],
+  "scope": "10s public speech, two actual embeddings; forced batch boundary validates native ordering/parity; single-order times are not a general latency benchmark"
+}

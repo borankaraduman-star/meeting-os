@@ -6,6 +6,7 @@ from .asr_checkpoints import _hash_file,_signature
 from .supervisor import run_guarded
 
 MAX_SPANS=10000
+MAX_BATCH_SPANS=512
 MAX_OUTPUT=32*1024**2
 
 
@@ -49,15 +50,22 @@ class FinalEmbedder:
         if info.samplerate!=16000 or info.channels!=1 or info.subtype!='FLOAT' or not 0<info.frames<=16000*14400:raise ValueError('Invalid identity snapshot')
         validate_spans(spans,info.frames)
         if not spans:return []
-        with tempfile.TemporaryDirectory(prefix='meeting-os-identity-') as tmp:
-            root=Path(tmp);request=root/'request.json';output=root/'result.json'
-            request.write_text(json.dumps({'path':str(path),'signature':signature,'frames':info.frames,'spans':spans,'weights':str(self.weights),'weight_signature':self.signature,'digest':self.digest}))
-            run_guarded([sys.executable,'-m','meeting_os.final_identity',str(request),str(output)],timeout=600)
-            with output.open('rb') as f:raw=f.read(MAX_OUTPUT+1)
-            if len(raw)>MAX_OUTPUT:raise ValueError('Embedding output too large')
-            vectors=validate_vectors(json.loads(raw),len(spans),self.model_id)
+        vectors=[]
+        # Reload the model per bounded batch to limit worker/result memory.
+        # This trades additional startup work for memory, with no latency claim.
+        for start in range(0,len(spans),MAX_BATCH_SPANS):
+            batch=spans[start:start+MAX_BATCH_SPANS]
             if _signature(path)!=signature or _signature(self.weights)!=self.signature:raise ValueError('Identity input changed')
-            return vectors
+            with tempfile.TemporaryDirectory(prefix='meeting-os-identity-') as tmp:
+                root=Path(tmp);request=root/'request.json';output=root/'result.json'
+                request.write_text(json.dumps({'path':str(path),'signature':signature,'frames':info.frames,'spans':batch,'weights':str(self.weights),'weight_signature':self.signature,'digest':self.digest}))
+                run_guarded([sys.executable,'-m','meeting_os.final_identity',str(request),str(output)],timeout=600)
+                with output.open('rb') as f:raw=f.read(MAX_OUTPUT+1)
+                if len(raw)>MAX_OUTPUT:raise ValueError('Embedding output too large')
+                batch_vectors=validate_vectors(json.loads(raw),len(batch),self.model_id)
+                if _signature(path)!=signature or _signature(self.weights)!=self.signature:raise ValueError('Identity input changed')
+                vectors.extend(batch_vectors)
+        return vectors
 
 
 def main():

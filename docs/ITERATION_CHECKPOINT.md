@@ -1,3 +1,7 @@
+## Latest: fixed deterministic long identity-batch overflow
+
+The admitted7,000-vector case exceeded32MiB JSON. Final identity now processes<=512 spans per worker, preserves ordering/nulls and full-operation input signatures, returns no partial success.35 related tests pass; native2-vector publicspeech exactly matches stored baseline across forced batch boundary. One-batch2.61s vs two-batch3.14s, not a general latency result. See FINAL_IDENTITY_BATCHES.md and identity-batches-native-2026-09-09.json. Actual Claude broad Fable95385 timed out600s without report, terminal. Narrow Fable5.1/max precision session70684/PID53802 now returns real streaming thinking events, no final review yet. Revalidate handle; no subagent-review claim for Claude. Local delegated source review found overflow; fixed and tested. Idle pressure observation15samples/28s normal, but no long retry started during edits. Full real recovery/live acceptance still open.
+
 ## Latest: Opus review timed out; Fable review still verified live
 
 Opus session80775 TERMINAL after600s timeout, stdout/stderr both empty; no completed review or confirmed subagent result. Fable session95385/PID49368 confirmed live at7m20s, no report yet; poll same handle, do not duplicate. Latest real retry78649 terminal during assembly; no active native recovery. Implementation/tests/evidence committed through2ae1a14. Goal remains incomplete.
