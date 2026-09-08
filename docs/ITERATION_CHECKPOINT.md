@@ -1,3 +1,7 @@
+## Latest: owned-audio real retry reached ASR10/392 then stopped safely
+
+Session32354,parent98285/worker98296 is TERMINAL exit75. Full mic diarization completed; OS pressure stopped ASR after291.56s, sampled tree peak1,685,965,896 bytes. Ten completed exact ASR outputs are now persisted;270original provisional segments preserved. This verifies real checkpoint writes, not real resume/full recovery. Targeted dead-owner cleanup removed one registered private workspace, no raw audio. UI AX window query returned900×652 in.544s during processing. Evidence `benchmarks/results/real-owned-audio-retry-2026-09-08.json`. Next: avoid recomputing completed full diarization via retry-only validated checkpoint before another expensive attempt. Live performance and held-out precision remain unproven.
+
 ## Latest: closed-set entity precision added to benchmark
 
 Optional predeclared entity_universe measures wrong name/term additions as well as misses; absent annotations yield null, legacy recall unchanged. References validated before model work.13tests pass and actual Claude review completed. See `ENTITY_PRECISION.md`. This is measurement infrastructure, not improved recognition. Long owned-audio retry session32354 was running at last poll; revalidate its handle and build/recovery-owned logs before action.

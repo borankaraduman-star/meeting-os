@@ -1,0 +1,35 @@
+{
+  "terminal_exit": 75,
+  "failure": {
+    "kind": "MemoryPressureError",
+    "supervisor_pid": 98285,
+    "child_pid": 98296,
+    "sampled_peak_footprint_bytes": 1685965896,
+    "samples": 2327,
+    "budget_bytes": 3758096384,
+    "elapsed_seconds": 291.5556978750974
+  },
+  "progress": {
+    "stage": "transcribing",
+    "current": 10,
+    "total": 392,
+    "source": "mic",
+    "updated_at": 1788900790.046169
+  },
+  "original_segments": 270,
+  "completed_asr_cache_rows": 10,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "ui_probe": {
+    "query_seconds": 0.5439430000260472,
+    "exit": 0,
+    "window_size": "900, 652",
+    "error": "",
+    "scope": "one read-only accessibility window query during long diarization; not interaction soak"
+  },
+  "scope": "Actual long recording with owned-audio optimization; full diarization completed, ASR incomplete. Cached outputs persisted, real resume not yet exercised."
+}
