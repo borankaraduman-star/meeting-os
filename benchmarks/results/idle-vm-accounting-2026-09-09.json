@@ -1,0 +1,9 @@
+{
+  "observed_at": 1788903997.485173,
+  "page_bytes": 16384,
+  "pressure": 1,
+  "compressor_occupied_bytes": 6065913856,
+  "wired_bytes": 2851209216,
+  "file_backed_bytes": 2598436864,
+  "scope": "Read-only idle VM accounting; not process ownership, free-memory estimate, peak measurement, or causal attribution of retry failures."
+}

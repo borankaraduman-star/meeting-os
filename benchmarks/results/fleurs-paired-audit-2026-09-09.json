@@ -1,0 +1,329 @@
+{
+  "source_sha256": {
+    "benchmarks/results-cpp-tr-current/report.json": "f07d1144ebb0730c06d6ebc3ebd57089c49345551a83d6e9ae561f1f01971091",
+    "benchmarks/results-cpp-tr-deferred/report.json": "ba50fe522179098f46fafc73233f92e0fc712b79201a29ec1ef0dc4ea8080b70",
+    "benchmarks/results-cpp-tr-no-vocabulary/report.json": "a84170efa08d12fdc2561c05cf8471e6f3b8e2e90e8f7f57f4e74cac3091e4fd",
+    "benchmarks/results-cpp-tr-no-vocabulary-deferred/report.json": "f819cff752e6332bb9df49a3071f9aefe413be7d1858e9e6aa255275465481ab",
+    "benchmarks/fleurs-tr/00.json": "863b842d8ce850a7296290166207d1c7505e25675fc2e9085bd161b8bb6fe500",
+    "benchmarks/fleurs-tr/01.json": "6d3e20850924eb215feff3691a10111eb6c7c6c135d04683a05e005a02a95a12",
+    "benchmarks/fleurs-tr/02.json": "ec08764e5200140c5eaa7547d66151b89effdcafe21fc5e14f060b1b8ea27760",
+    "benchmarks/fleurs-tr/03.json": "84df4f70d635f3ed600725748a31eca35a0fd7a2e697501e6e3b4435d3687c75",
+    "benchmarks/fleurs-tr/04.json": "a856fe7ab315fe43be6e04aef8101fb116dc96ba5ef05904ee1fc231d5fcfef5",
+    "benchmarks/fleurs-tr/05.json": "982f9f4bb611e534c7eee64cd8d5651a5273aa040f4b86142ebc34b52e58970f",
+    "benchmarks/fleurs-tr/06.json": "75c0d15a0713d75d5cdd4817036a8ca803178676538793c8838434f3103817e1",
+    "benchmarks/fleurs-tr/07.json": "0d1d8c8e5f236b8354df321cc36a45b9bd7dbb64bd45ce4aa79be1576ead5ea3",
+    "benchmarks/fleurs-tr/08.json": "99fcdfcf7b98240d840ba1c1e9e25951f72ddddade786a5c1df15bca87966796",
+    "benchmarks/fleurs-tr/09.json": "4df47ba017e0379a80b65aa1385745f34f50a235455902468d0aa1cc0b7add56",
+    "benchmarks/fleurs-tr/10.json": "108ff8d35fd3f9e60f4c2729103a5fc3f15d622a25fd3ab564c09cbc73072768",
+    "benchmarks/fleurs-tr/11.json": "89d78dbf942f112f59083e14bb772bf92af58e0e65424229839d2aeb6569be48"
+  },
+  "selection": "first successful stored result per case; no new decoding",
+  "canonical_reference_words": 244,
+  "canonical_errors": {
+    "on": 14,
+    "off": 17
+  },
+  "paired_case_deltas": [
+    {
+      "case": "fleurs-tr-2004-0",
+      "reference_words": 21,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 1,
+      "on": {
+        "word_errors": 4,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 1,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 3,
+        "apostrophe_stripped_reference_words": 20
+      },
+      "off": {
+        "word_errors": 4,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 1,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 3,
+        "apostrophe_stripped_reference_words": 20
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1660-1",
+      "reference_words": 14,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 0,
+      "on": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 14
+      },
+      "off": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 14
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1692-2",
+      "reference_words": 12,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 1,
+      "on": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 11
+      },
+      "off": {
+        "word_errors": 2,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 2,
+        "apostrophe_stripped_reference_words": 11
+      },
+      "off_minus_on_errors": 1
+    },
+    {
+      "case": "fleurs-tr-1711-3",
+      "reference_words": 24,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 0,
+      "on": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 24
+      },
+      "off": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 24
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1689-4",
+      "reference_words": 26,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 0,
+      "on": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 26
+      },
+      "off": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 26
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1747-5",
+      "reference_words": 7,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 1,
+      "on": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 6
+      },
+      "off": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 6
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1684-6",
+      "reference_words": 16,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 1,
+      "reference_apostrophes": 2,
+      "on": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 1,
+        "hypothesis_apostrophes": 2,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 14
+      },
+      "off": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 1,
+        "hypothesis_apostrophes": 2,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 14
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1884-7",
+      "reference_words": 17,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 0,
+      "on": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 17
+      },
+      "off": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 17
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1908-8",
+      "reference_words": 11,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 0,
+      "on": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 11
+      },
+      "off": {
+        "word_errors": 0,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 11
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-1729-9",
+      "reference_words": 38,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 3,
+      "on": {
+        "word_errors": 3,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 3,
+        "apostrophe_stripped_errors": 3,
+        "apostrophe_stripped_reference_words": 35
+      },
+      "off": {
+        "word_errors": 5,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 2,
+        "apostrophe_stripped_errors": 3,
+        "apostrophe_stripped_reference_words": 35
+      },
+      "off_minus_on_errors": 2
+    },
+    {
+      "case": "fleurs-tr-1716-10",
+      "reference_words": 43,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 2,
+      "on": {
+        "word_errors": 2,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 41
+      },
+      "off": {
+        "word_errors": 2,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 1,
+        "apostrophe_stripped_errors": 0,
+        "apostrophe_stripped_reference_words": 41
+      },
+      "off_minus_on_errors": 0
+    },
+    {
+      "case": "fleurs-tr-2002-11",
+      "reference_words": 15,
+      "reference_combining_dot_count": 0,
+      "reference_digit_tokens": 0,
+      "reference_apostrophes": 0,
+      "on": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 15
+      },
+      "off": {
+        "word_errors": 1,
+        "hypothesis_combining_dot_count": 0,
+        "hypothesis_digit_tokens": 0,
+        "hypothesis_apostrophes": 0,
+        "apostrophe_stripped_errors": 1,
+        "apostrophe_stripped_reference_words": 15
+      },
+      "off_minus_on_errors": 0
+    }
+  ],
+  "bootstrap": {
+    "unit": "utterance",
+    "draws": 20000,
+    "seed": 20260909,
+    "estimate_off_minus_on_wer": 0.012295081967213115,
+    "percentile95": [
+      0.0,
+      0.028754568230399655
+    ],
+    "limitation": "Descriptive resampling of first12 inspected read-speech cases; not a generalization interval for meetings or independent confirmation."
+  },
+  "normalization": "Canonical unchanged; apostrophe removal is sensitivity diagnostic only. No number normalization or foreign-letter code-switch labels.",
+  "scope": "No model promotion, held-out meeting precision, determinism or resource availability acceptance."
+}
