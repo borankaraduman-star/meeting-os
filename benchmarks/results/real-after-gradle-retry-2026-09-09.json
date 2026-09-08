@@ -1,0 +1,79 @@
+{
+  "pid": 65055,
+  "state": "terminal",
+  "started_at": 1788905149.485188,
+  "experiment": "uncached snapshot transfers and private assembly after stopped orphan Gradle exited",
+  "base_commit": "44c5cf7",
+  "exit": 1,
+  "ended_at": 1788905163.8637812,
+  "session": 48191,
+  "cleanup": {
+    "removed": 1,
+    "already_missing": 0,
+    "preserved": 0,
+    "state_deferred": 0
+  },
+  "original_segments": 270,
+  "asr_cache_rows": 69,
+  "numeric_events": [
+    {
+      "uncached_transfer_applied": "source_fds"
+    },
+    {
+      "uncached_transfer_applied": "destination_fds"
+    },
+    {
+      "uncached_assembly_applied": {
+        "source_fds": 1,
+        "destination_fds": 0
+      }
+    },
+    {
+      "uncached_assembly_applied": {
+        "source_fds": 263,
+        "destination_fds": 1
+      }
+    },
+    {
+      "supervisor_failure": {
+        "kind": "MemoryPressureError",
+        "supervisor_pid": 65060,
+        "child_pid": 65505,
+        "sampled_peak_footprint_bytes": 650266328,
+        "samples": 11,
+        "budget_bytes": 3758096384,
+        "elapsed_seconds": 1.2269295830046758
+      }
+    },
+    {
+      "supervisor_failure": {
+        "kind": "MemoryPressureError",
+        "supervisor_pid": 65055,
+        "child_pid": 65060,
+        "sampled_peak_footprint_bytes": 669436088,
+        "samples": 119,
+        "budget_bytes": 3758096384,
+        "elapsed_seconds": 14.304693958023563
+      }
+    }
+  ],
+  "stage": {
+    "stage": "vad",
+    "current": 0,
+    "total": 0,
+    "source": "mic",
+    "updated_at": 1788905162.5205839
+  },
+  "gradle_cleanup": {
+    "pid": 73863,
+    "stop_requested_in_daemon_log": "2026-09-02T15:53:19+03:00",
+    "registered_daemons": 0,
+    "daemon_or_execution_worker_threads": 0,
+    "signal": "SIGTERM",
+    "confirmed_exited": true,
+    "prior_footprint_bytes": 1169754056,
+    "note": "Logical physical-footprint release is not guaranteed equivalent physical RAM headroom."
+  },
+  "docker": "VM identified from Docker.raw/LinuxKit open files; four active containers left running",
+  "scope": "Headroom cleanup insufficient: resource stop still at VAD. No full recovery or new ASR results."
+}

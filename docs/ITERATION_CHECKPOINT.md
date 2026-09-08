@@ -1,3 +1,11 @@
+## Latest: user resumed; identified Docker and stopped already-shutdown Gradle; VAD optimization underway
+
+Current memory investigation identified VM3757 asDocker (active PostgreSQL/Redis/HomeAssistant containers left running), Java73863 asGradle8.14.3. Daemon log explicitly requested stop/removed registry onSep2, --status lists no registered daemon, no Daemon/Execution workers in JVM dump. Targeted SIGTERM exited the leftover stopped Gradle process; prior footprint1,169,754,056bytes (not guaranteed equal physical RAM freed). User explicitly requested computer recovery and continuation. MeetingOS UI remains~51MiB.
+
+Real retry48191/PID65055 TERMINAL exit1 after14.30s atVAD, sampled669,436,088bytes; cleanup1, original270segments/69ASRrows preserved. Evidence real-after-gradle-retry-2026-09-09.json. No default changed or active native job. User resume starts fresh blocking audit; do not immediately re-mark blocked.
+
+Concrete next VAD path: use existing FLOAT WAV copy-on-write memmap and bounded silence peak instead of whole waveform copy plus whole np.abs temporary, preserving unchanged Silero timestamp logic. Local delegated implementation/tests underway; no success or installation claim until tests/native public parity and real trial. Prepared old audio.py snapshot in build/legacy_vad_audio.py for matched native public baseline.
+
 ## Latest: full validation blocked by recurring system pressure; experiments not promoted
 
 Session55850/PID63001 TERMINAL exit1, MemoryPressureError after16.12s at micVAD. Uncached transfer+assembly markers prove adapters applied; both sources assembled but VAD/full ASR did not complete.270segments/69ASRrows preserved, one dead-owner workspace removed. Evidence real-uncached-assembly-retry-2026-09-09.json.34 combined tests and actual tiny-WAV F_NOCACHE parity passed; this does not prove long acceptance. No native job or Claude review remains active.
