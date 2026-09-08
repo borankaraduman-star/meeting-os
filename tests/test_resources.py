@@ -13,9 +13,10 @@ class ResourceTests(unittest.TestCase):
             p=Path(t);(p/'config.json').write_text(json.dumps({'n_text_layer':4}))
             with patch('meeting_os.resources.physical_memory',return_value=16*1024**3):check_asr_model(p)
     def test_import_and_finalize_default_to_turbo(self):
-        from meeting_os.cli import parser
+        from meeting_os.cli import parser,resolve_inference
         for command in ('import','finalize'):
-            self.assertEqual(Path(parser().parse_args([command,'fixture']).model).name,'mlx-turbo')
+            a=parser().parse_args([command,'fixture']);resolve_inference(a)
+            self.assertIn(Path(a.model).name,('mlx-turbo','ggml-large-v3-turbo-q5_0.bin'))
     def test_pressure_blocks_before_model_load(self):
         from meeting_os.resources import check_pressure
         with patch('meeting_os.resources.sys.platform','darwin'),patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):

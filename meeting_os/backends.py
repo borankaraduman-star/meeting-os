@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import soundfile as sf
 from .audio import RATE
+from .supervisor import run_guarded
 
 class ASR:
     def __init__(self, engine='mlx', model=None, language='tr', vocabulary=(), cpp_bin='whisper-cli'):
@@ -38,9 +39,8 @@ class ASR:
             wav = Path(tmp)/'input.wav'; prefix = Path(tmp)/'result'
             sf.write(wav, audio, RATE, subtype='PCM_16')
             command = [self.cpp_bin, '-m', self.model, '-f', str(wav), '-l', self.language,
-                       '-ojf', '-of', str(prefix), '-np', '--prompt', self.prompt]
-            run = subprocess.run(command, capture_output=True, text=True, timeout=600)
-            if run.returncode: raise RuntimeError('whisper.cpp failed: '+run.stderr[-2000:])
+                       '-ojf', '-of', str(prefix), '-np', '-ng', '-t', '2', '--prompt', self.prompt]
+            run_guarded(command, timeout=600)
             data = json.loads(prefix.with_suffix('.json').read_text())
             return [{'start':s['offsets']['from']/1000, 'end':s['offsets']['to']/1000,
                      'text':s['text'], 'words':[], 'confidence_unavailable':True}

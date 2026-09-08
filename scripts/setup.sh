@@ -13,6 +13,9 @@ fi
 .venv/bin/python -m pip install -r requirements-macos-tested.txt
 .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]'
 .venv/bin/python scripts/fetch-recommended.py
+if .venv/bin/python -c 'from meeting_os.resources import low_memory_mac; raise SystemExit(0 if low_memory_mac() else 1)'; then
+  /bin/sh scripts/build-whisper-cpp.sh
+fi
 /bin/sh scripts/build-capture.sh
 /bin/sh scripts/build-desktop.sh
 .venv/bin/python -m meeting_os doctor

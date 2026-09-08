@@ -176,3 +176,15 @@ Standart kurulum artık yalnızca turbo STT, konuşmacı ve yerel özet modeller
 Kayıt yardımcısı durdurma sinyalinden sonra 15 saniye içinde kapanmazsa uygulama kendi yardımcısını sonlandırır ve kaydı eksik olarak işaretler. Tamamlanmış ses parçaları ve günlük korunur. Hâlen çalışan native model çağrısının iptali ayrı bir sınırlamadır; bu sürüm onun için kesin bir zaman garantisi vermez.
 
 Güncel kalite döngüsü ve kalan kabul testleri: [ITERATION_CHECKPOINT](docs/ITERATION_CHECKPOINT.md).
+
+## 1.0.5 — 16 GB Mac için transkripsiyon
+
+`--engine auto` varsayılandır. 16 GB ve altı Mac'lerde quantize turbo whisper.cpp, GPU kapalı ve iki CPU iş parçacığıyla çalışır. Kurulum uygun modeli ve sabit sürümlü whisper.cpp derlemesini hazırlar. Özel model yolu verirken `--engine mlx`, `cpp` veya `whisper` belirtin.
+
+Ağır komutlar ayrı süreçlerde bellek baskısı ve süreç grubu belleği izlenerek çalışır. Örneklemeli koruma her işletim sistemi arızasını önleme garantisi değildir. Canlı metin ayrı işçilerde üretilir; ana süreç ölürse ses yakalama ve model süreçleri arkada bırakılmaz. Tamamlanmış ses parçaları korunur.
+
+Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durumu gösterir. Kapağı açın veya harici mikrofon kullanın.
+
+16 GB Mac'te özet/görev analizi otomatik başlamaz; Analiz sekmesinden isteğe bağlı çalıştırılır ve bellek korumasına tabidir. Bu bilgisayarın mevcut yükünde büyük özet modeli bellek baskısına takıldı; küçük model kalite testini geçmediği için varsayılan yapılmadı.
+
+[Bu Mac'te ölçülen sonuçlar](docs/RELIABILITY_1.0.5.md).

@@ -6,7 +6,11 @@ User authorized continued local testing and improvement with Claude Code. Codex 
 
 The 16 GiB M4 desktop crashed during full Whisper testing (see CRASH_RECOVERY_1.0.3.md). Never repeat that workload. MLX memory limits are advisory. Use OS pressure and owned-process physical footprint, preserve captured audio, keep model tests sequential and bounded. Unit tests with fakes are preferred for fault injection. Do not run memory-pressure stress utilities or terminate unrelated apps.
 
-## Current checkpoint
+## Latest shipped checkpoint: 1.0.5
+
+Read [RELIABILITY_1.0.5](RELIABILITY_1.0.5.md) first. CPU default integrated import15.45s passed;40s live capture passed; second capture finalize19.52s passed and persistent synthetic identity matched0.971–0.986. Independent process-group supervisor and parent-death guardians implemented for inference and recording;87 Python and9 Swift tests passed. Closed lid is the actual reason the default built-in microphone is unavailable; native UI now warns. Automatic analysis deferred on16GiB. Small1.7B model failed semantic and staged quote-validation tests; NOT selected.4B prefill/KV memory experiment also failed and was reverted. Prioritize a lower-overhead quality-preserving analysis runtime/model, diagnostics, recovery UX, and then natural meeting benchmarks. Do not repeat completed baseline work or failed identical model tests.
+
+## Earlier checkpoint
 
 - Recommended installation downloads turbo, diarization and local analysis models; optional full Whisper is no longer downloaded automatically.
 - Xet CAS is disabled by default before Hugging Face import, and HTTP download timeout defaults to 120 seconds. Explicit environment overrides are respected. This addresses the observed CAS transport path, not every possible network failure.

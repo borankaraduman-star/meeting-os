@@ -77,7 +77,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         error=resourceStopMessage
         if recording { stop() } else { process.terminate() }
     }
+    @Published var microphoneHint=""
     func refresh() async {
+        microphoneHint=MicrophoneHint.current()
         if let process=job, let bytes=ResourceGuard.footprint(pid:process.processIdentifier), bytes>ResourceGuard.budget(physical:ProcessInfo.processInfo.physicalMemory) { stopForResources() }
         if job != nil, let started=jobStarted {
             let elapsed=Int(Date().timeIntervalSince(started))
@@ -145,7 +147,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let result=dataDir.appendingPathComponent("final-\(UUID().uuidString).json")
         launch(["finalize",dir.path,"--title",name,"--output",result.path]) { [weak self] ok in
             guard let self=self else { return }
-            if ok, let mid=self.resultMeeting(result) { self.selected=mid; self.analyzeMeeting(mid) } else { self.activity="Son işlem başarısız · Ses korunuyor" }
+            if ok, let mid=self.resultMeeting(result) { self.selected=mid; self.analyzeAutomatically(mid) } else { self.activity="Son işlem başarısız · Ses korunuyor" }
         }
     }
     func recover() { guard let m=meeting, let dir=m.metadata["capture_dir"] as? String else { return }; finalize(URL(fileURLWithPath:dir),name:m.title) }
@@ -156,7 +158,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let result=dataDir.appendingPathComponent("import-\(UUID().uuidString).json")
             launch(["import",url.path,"--title",url.deletingPathExtension().lastPathComponent,"--output",result.path]) { [weak self] ok in
                 guard let self=self else { return }
-                if ok, let mid=self.resultMeeting(result) { self.selected=mid;self.analyzeMeeting(mid) } else { self.activity="Dosya işlenemedi" }
+                if ok, let mid=self.resultMeeting(result) { self.selected=mid;self.analyzeAutomatically(mid) } else { self.activity="Dosya işlenemedi" }
             }
         }
     }

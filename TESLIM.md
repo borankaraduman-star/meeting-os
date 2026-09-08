@@ -1,4 +1,4 @@
-# Meeting OS 1.0.4 teslimi
+# Meeting OS 1.0.5 teslimi
 
 **Aç:** [Meeting OS.command](Meeting%20OS.command)
 

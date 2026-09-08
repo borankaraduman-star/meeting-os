@@ -28,6 +28,11 @@ extension Model {
         actions=(result["tasks"] as? [[String:Any]] ?? []).map(ActionItem.init)
         drafts=(result["drafts"] as? [[String:Any]] ?? []).map(DraftItem.init)
     }
+    func analyzeAutomatically(_ mid:String) {
+        if ProcessInfo.processInfo.physicalMemory <= 16*1024*1024*1024 {
+            activity="Transkript hazır · Özet ve görevleri Analiz sekmesinden isteğe bağlı hazırlayabilirsiniz."
+        } else { analyzeMeeting(mid) }
+    }
     func analyzeMeeting(_ mid:String?=nil) {
         guard let mid=mid ?? selected else { return }
         activity="Özet, kararlar ve görevler bu Mac’te hazırlanıyor…"

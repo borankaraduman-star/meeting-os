@@ -8,6 +8,7 @@ import threading
 import time
 from pathlib import Path
 from .progress import emit
+from .supervisor import open_lifeline,close_lifeline
 
 CAPTURE_STOP_GRACE_SECONDS = 15.0
 
@@ -22,6 +23,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     except Exception:
         if store: store.status(mid,'failed')
         raise
+    guardian,lifeline=open_lifeline(process)
     started=time.monotonic()
     def reader():
         try:
@@ -52,6 +54,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     try:
         # Capture and its durable journal start before expensive model warm-up.
         if pipeline_factory is not None: pipeline=pipeline_factory()
+        if hasattr(pipeline,"cancel_requested"):pipeline.cancel_requested=lambda:stopping
         while True:
             # The reader may never reach EOF if the native helper hangs.
             # Check the deadline before waiting, including when chunks are queued.
@@ -77,6 +80,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
                     print(f'{row.start:8.2f} {row.speaker_name or row.speaker}: {row.text}',flush=True)
                 print(json.dumps({'backlog_chunks':pending.qsize()}),flush=True)
             except Exception as exc:
+                if stopping:continue
                 errors.append(str(exc))
                 print(json.dumps({'error':str(exc),'chunk':event['path'],'recover':'finalize capture directory'}),flush=True)
         try: code=process.wait(timeout=15)
@@ -98,4 +102,5 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             try: process.wait(timeout=15)
             except subprocess.TimeoutExpired: process.kill(); process.wait()
         thread.join(timeout=5); process.stdout.close()
+        close_lifeline(guardian,lifeline)
     return mid

@@ -23,6 +23,7 @@ if ! xcrun --find swift >/dev/null 2>&1; then
 fi
 if ! command -v python3.12 >/dev/null; then brew install python@3.12; fi
 if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
+if ! command -v cmake >/dev/null; then brew install cmake; fi
 export MEETING_OS_PYTHON="$(command -v python3.12)"
 echo 'Python paketleri ve modeller kuruluyor…'
 /bin/sh scripts/setup.sh 2>&1 | tee installation.log

@@ -28,3 +28,6 @@ def configure_mlx():
     # monitors physical footprint and OS pressure and terminates its own job.
     mx.set_cache_limit(64*1024**2)
     mx.set_memory_limit(min(4*GIB,max(GIB,physical_memory()//4)))
+
+def low_memory_mac():
+    return sys.platform=='darwin' and physical_memory()<=16*GIB
