@@ -6,4 +6,4 @@ The adapter scopes SoundFile replacement to synchronous assembly only and restor
 
 Inspection caught a real macOS integration mismatch: tempfile writes /var paths while resolve() yields /private/var. Parent normalization now accepts that spelling difference without bypassing descriptor/inode protections. The regression originally failed and now passes.
 
-Validation:37 combined assembly/progress/retry/audio tests pass, including11 adapter tests. Actual Darwin F_NOCACHE on tiny synthetic16k/48k stereo sources gives identical PCM with gaps/overlaps/>1 peaks and unchanged raw hashes. This is fidelity/adapter verification, not large-file memory or live performance acceptance. Full real retry experiment remains pending at this checkpoint.
+Validation:34 combined assembly/progress/retry/audio tests pass, including8 adapter tests. Actual Darwin F_NOCACHE on tiny synthetic16k/48k stereo sources gives identical PCM with gaps/overlaps/>1 peaks and unchanged raw hashes. This is fidelity/adapter verification, not large-file memory or live performance acceptance. Full real retry experiment remains pending at this checkpoint.
