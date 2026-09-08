@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-swift build --package-path desktop -c release
-app="$PWD/build/Meeting OS.app"
+.venv/bin/python scripts/signing.py --resolve >/dev/null
+swift build --package-path desktop -c release --jobs 1
+stage=$(mktemp -d "$PWD/build/desktop-stage.XXXXXX")
+app="$stage/Meeting OS.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp desktop/.build/release/MeetingOS "$app/Contents/MacOS/MeetingOS"
 .venv/bin/python - "$app/Contents/Resources/runtime.json" <<'PY'
@@ -26,5 +28,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 xattr -cr "$app"
-codesign --force --deep --sign - "$app"
-printf '%s\n' "$app"
+.venv/bin/python scripts/signing.py --sign "$app"
+.venv/bin/python scripts/signing.py --publish "$app" --target "$PWD/build/Meeting OS.app"
+rmdir "$stage"
+printf '%s\n' "$PWD/build/Meeting OS.app"

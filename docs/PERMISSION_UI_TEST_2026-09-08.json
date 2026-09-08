@@ -1,0 +1,38 @@
+[
+  {
+    "meeting": "07908aeccfa2",
+    "scenario": "QA · İzin düzeltmesi ve ses testi",
+    "started": true,
+    "stopped": true,
+    "errors": 0,
+    "sources": {
+      "mic": 24.501333333333335,
+      "system": 24.54
+    },
+    "status": "complete"
+  },
+  {
+    "meeting": "45dc2411d5d2",
+    "scenario": "QA · Yeniden açılış izin testi",
+    "started": true,
+    "stopped": true,
+    "errors": 0,
+    "sources": {
+      "mic": 21.898666666666667,
+      "system": 21.92
+    },
+    "status": "complete"
+  },
+  {
+    "meeting": "0df329f5caa9",
+    "scenario": "QA · Güncelleme sonrası izin testi",
+    "started": true,
+    "stopped": true,
+    "errors": 0,
+    "sources": {
+      "mic": 12.853333333333333,
+      "system": 12.9
+    },
+    "status": "complete"
+  }
+]

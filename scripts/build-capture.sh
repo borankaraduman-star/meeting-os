@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-swift build --package-path capture -c release
-app="$PWD/build/MeetingCapture.app"
+.venv/bin/python scripts/signing.py --resolve >/dev/null
+swift build --package-path capture -c release --jobs 1
+stage=$(mktemp -d "$PWD/build/capture-stage.XXXXXX")
+app="$stage/MeetingCapture.app"
 mkdir -p "$app/Contents/MacOS"
 cp capture/.build/release/MeetingCapture "$app/Contents/MacOS/MeetingCapture"
 cat > "$app/Contents/Info.plist" <<'PLIST'
@@ -20,5 +22,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 xattr -cr "$app"
-codesign --force --deep --sign - "$app"
-printf '%s\n' "$app/Contents/MacOS/MeetingCapture"
+.venv/bin/python scripts/signing.py --sign "$app"
+.venv/bin/python scripts/signing.py --publish "$app" --target "$PWD/build/MeetingCapture.app"
+rmdir "$stage"
+printf '%s\n' "$PWD/build/MeetingCapture.app/Contents/MacOS/MeetingCapture"
