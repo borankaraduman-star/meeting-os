@@ -1,0 +1,10 @@
+{
+  "first_seconds_including_hashing": 4.711262249969877,
+  "reuse_seconds_including_hashing": 0.20843329094350338,
+  "turns": 13,
+  "exact_native_baseline_match": true,
+  "cache_hits": 1,
+  "cache_misses": 0,
+  "duration": 95.58,
+  "scope": "public four-voice95s fixture, fresh cache wrapper, same process; not full meeting recovery"
+}

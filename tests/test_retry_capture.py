@@ -163,3 +163,30 @@ print(json.dumps({'event':'chunk','source':'system','path':str(path),'start':0,'
             with patch('meeting_os.cli.make_pipeline',return_value=Pipe(resumed)):run_retry(args,db)
             self.assertEqual(resumed.calls,[float(np.float32(.1))])
             self.assertEqual(db.segments(mid)[0]['text'],'new');db.close()
+
+    def test_cli_retry_reuses_completed_diarization_after_downstream_failure(self):
+        from unittest.mock import patch
+        from meeting_os.cli import run_retry,parser
+        from tests.test_diarization_checkpoints import Backend
+        import soundfile as sf
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);db,mid,capture,retry=self.setup_capture(root)
+            artifact=root/'model';artifact.write_bytes(b'fixture')
+            b=Backend(root);calls=[]
+            def compute(path,source,frames):
+                calls.append(1);return [(0.,frames/16000,source+':S0')]
+            b.turns_file=compute
+            class Pipe:
+                def __init__(self,fail):self.diarizer=b;self.fail=fail
+                def process(self,path,source,**kwargs):
+                    turns=self.diarizer.turns_file(path,source,sf.info(path).frames)
+                    if self.fail:raise RuntimeError('downstream ASR failed')
+                    return [Segment(0,.01,'new',source)],turns,.01
+            args=parser().parse_args(['retry',mid])
+            with patch('meeting_os.diarization_checkpoints.artifact_paths',return_value=[artifact]),patch('meeting_os.asr_checkpoints.check_pressure'):
+                with patch('meeting_os.cli.make_pipeline',return_value=Pipe(True)):
+                    with self.assertRaises(RuntimeError):run_retry(args,db)
+                self.assertEqual(db.segments(mid)[0]['text'],'old')
+                with patch('meeting_os.cli.make_pipeline',return_value=Pipe(False)):run_retry(args,db)
+            self.assertEqual(len(calls),1)
+            self.assertEqual(db.segments(mid)[0]['text'],'new');db.close()

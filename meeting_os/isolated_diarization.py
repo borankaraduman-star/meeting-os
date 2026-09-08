@@ -28,7 +28,10 @@ def _run_child(wav,out,source,model,threshold,frames):
         '--threshold',str(threshold)],timeout=600)
     with out.open('rb') as f:raw=f.read(4*1024**2+1)
     if len(raw)>4*1024**2:raise ValueError('Diarization result too large')
-    data=json.loads(raw)
+    return validate_turns(json.loads(raw),source,frames)
+
+
+def validate_turns(data,source,frames):
     if not isinstance(data,list) or len(data)>10000:raise ValueError('Invalid diarization result')
     turns=[];previous=-1
     for row in data:

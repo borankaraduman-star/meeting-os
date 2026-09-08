@@ -1,3 +1,7 @@
+## Latest: retry-only completed diarization cache implemented
+
+33tests passed including failed-ASR retry integration; native95s13turns exactly match baseline, fresh-wrapper reuse4.71s→.208s including hashing. Full audio/model/runtime/options/code identity, bounded checksummed SQLite, overlap retained and original final-commit protection unchanged. Actual Claude review done. See DIARIZATION_CHECKPOINT_PLAN.md. Real cache population/resume and long recovery remain pending; previous owned-audio session32354 is terminal, ten ASR checkpoints persist.
+
 ## Latest: owned-audio real retry reached ASR10/392 then stopped safely
 
 Session32354,parent98285/worker98296 is TERMINAL exit75. Full mic diarization completed; OS pressure stopped ASR after291.56s, sampled tree peak1,685,965,896 bytes. Ten completed exact ASR outputs are now persisted;270original provisional segments preserved. This verifies real checkpoint writes, not real resume/full recovery. Targeted dead-owner cleanup removed one registered private workspace, no raw audio. UI AX window query returned900×652 in.544s during processing. Evidence `benchmarks/results/real-owned-audio-retry-2026-09-08.json`. Next: avoid recomputing completed full diarization via retry-only validated checkpoint before another expensive attempt. Live performance and held-out precision remain unproven.

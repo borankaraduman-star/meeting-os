@@ -91,6 +91,9 @@ def run_retry(args,store):
         if getattr(getattr(pipe,'asr',None),'engine',None)=='cpp':
             from .asr_checkpoints import CheckpointASR
             pipe.asr=CheckpointASR(pipe.asr,store,args.meeting)
+        if getattr(getattr(pipe,'diarizer',None),'isolate_sherpa',False):
+            from .diarization_checkpoints import CheckpointDiarizer
+            pipe.diarizer=CheckpointDiarizer(pipe.diarizer,store,args.meeting)
         for source,path in sorted(paths.items()):
             with contextlib.redirect_stdout(sys.stderr):rows,_,_=pipe.process(path,source,bounded_final=True)
             yield from rows

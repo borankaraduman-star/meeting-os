@@ -1,4 +1,4 @@
-# Retry-only completed diarization checkpoints — proposed, not implemented
+# Retry-only completed diarization checkpoints — implemented, long-record acceptance pending
 
 Real owned-audio retry completed full diarization then failed at ASR10/392 due to OS pressure. Persisting completed diarization avoids repeating its native memory peak on an otherwise identical retry. This does not reduce first-run native memory, guarantee successful recovery or change recognition quality.
 
@@ -7,3 +7,13 @@ Wrap only retry pipeline diarizer.turns_file. Cache key includes exact private s
 Actual Claude Code reviewed the design, emphasizing complete keying, atomic writes and overlap preservation. Its FLOAT16 concern misread the supplied description: snapshots are float32 WAV at16kHz, not float16. Hash the same snapshot the worker reads. Review at build/benchmarks/claude-diarization-checkpoint-plan.md.
 
 Acceptance: first red tests for failed computation not stored, interrupted downstream ASR with successful diarization reused by fresh wrapper, exact output/overlap preservation, audio/model/config/runtime changes forcing miss, invalid/oversized/corrupt payloads rejected and deletion cascade. Then short native equality/reuse, then actual long retry with interruption/resume evidence. No resource guard relaxation or parallel heavy work. Ten real ASR checkpoints currently exist; full recovery, held-out human accuracy and live acceptance remain open.
+
+## Implemented and verified
+
+CheckpointDiarizer wraps isolated Sherpa turns_file in run_retry only. All model tree files, Sherpa package Python/native dylib/so files and relevant pipeline code are content-hashed. Snapshot bytes, source and frame count form the audio key; platform, environment and threshold form artifact identity. Snapshot/artifact signatures and resolved artifact list are checked before returning a hit or saving native results. Protected private retry inputs remain the trust boundary; this is not protection against a malicious same-user writer defeating filesystem metadata checks.
+
+SQLite commits key/payload/checksum together, bounds single entry to4MiB and global payload to32MiB/128entries, evicts by LRU, and cascades meeting deletion. Bounds cover declared payload, not total database/WAL size. Empty completed turns can be cached; failed computation cannot. Invalid cache data is deleted and recomputed. SQL errors fall back to native with diagnostic error counts. Cached full turns retain overlap; embeddings/identity are still recomputed. No live path cache.
+
+33 relevant tests passed, including actual run_retry integration: downstream failure preserves the original transcript, subsequent retry uses completed turns once and commits the final replacement. Native public95.58s four-voice fixture: exact13turn baseline match; first calculation including hashing4.711s, fresh-wrapper reuse including hashing0.208s. Evidence benchmarks/results/diarization-checkpoint-native-2026-09-08.json. Same Python process with fresh wrappers; full real interrupted-run acceptance still pending.
+
+Actual Claude code review found no blockers (several tentative claims in its response were self-retracted). Retained pre/post checks rather than adopting its suggestion to remove them. No claim of live latency, first-run memory reduction or improved recognition accuracy.
