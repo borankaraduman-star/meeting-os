@@ -234,6 +234,9 @@ def main(supervised=False):
                 output(store.profiles())
         finally: store.close()
     except (Exception,KeyboardInterrupt) as exc:
-        from .supervisor import ChildFailure
+        from .supervisor import ChildFailure, JobMemoryLimitError
+        from .resources import MemoryPressureError, ResourceProbeError
+        if isinstance(exc,(MemoryPressureError,ResourceProbeError,JobMemoryLimitError)):
+            print(f'Meeting OS: {exc}',file=sys.stderr); raise SystemExit(75)
         if isinstance(exc,ChildFailure):raise SystemExit(exc.code if exc.code>0 else 1)
         print(f'Meeting OS: {exc}',file=sys.stderr); raise SystemExit(1)

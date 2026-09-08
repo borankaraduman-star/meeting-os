@@ -1,3 +1,7 @@
+## Latest: benchmark resource-stop implemented
+
+CLI resource failures use exit 75; benchmark stops dispatching and explicitly defers all remaining cases/configs, preserving prior successes and the actual failed attempt. Deferred cases carry null exit/no metrics and create no database or worker. No automatic retry or guard relaxation. Targeted benchmark, resource, supervisor, low-memory and retry tests passed. Four vocabulary-off cases still require measurement; no new native inference during this change. See `TURKISH_PRECISION_CHECKPOINT.md`. Real meeting recovery, conservative-window latency and live source validation remain open.
+
 ## Latest: vocabulary ablation paused under OS pressure
 
 8/12 vocabulary-off human cases completed; same paired cases have 8 edits with vocabulary and 9 without. Four pressure failures retained, no promotion/retry under elevated pressure. See `TURKISH_PRECISION_CHECKPOINT.md`. Claude reviewed same-speaker contiguous-window candidate: guard entire span, preserve real time, and validate speaker embeddings/identity as well as text. Next: make benchmark resource-stop/deferred handling explicit, finish ablation when safe, then test conservative windows without cross-speaker/identity regression. Goal remains incomplete.

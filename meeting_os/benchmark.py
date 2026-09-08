@@ -45,8 +45,14 @@ def benchmark(manifest_path,output_dir):
     output_dir=Path(output_dir).resolve()
     output_dir.mkdir(parents=True,exist_ok=True)
     results=[]
+    resource_stopped=False
     for ci,config in enumerate(manifest['configs']):
         for ni,case in enumerate(manifest['cases']):
+            if resource_stopped:
+                results.append({'config':config['name'],'case':case['id'],'session':case['session'],
+                    'kind':manifest['kind'],'tags':case.get('tags',[]),'status':'deferred',
+                    'exit_code':None,'reason':'prior_resource_failure'})
+                continue
             ident=f'{ci:02}-{ni:02}'
             run_dir=output_dir/ident
             run_dir.mkdir(exist_ok=False) # protect prior results
@@ -67,7 +73,7 @@ def benchmark(manifest_path,output_dir):
                     code=proc.returncode
                 except subprocess.TimeoutExpired: code=124
             entry={'config':config['name'],'case':case['id'],'session':case['session'],'kind':manifest['kind'],
-                   'tags':case.get('tags',[]),'exit_code':code,'wall_seconds':time.monotonic()-begin,'command':cmd}
+                   'tags':case.get('tags',[]),'exit_code':code,'status':'ok' if code==0 else 'failed','wall_seconds':time.monotonic()-begin,'command':cmd}
             if code==0:
                 result=json.loads(result_path.read_text())
                 hyp=' '.join(s['text'] for s in result['segments'])
@@ -80,12 +86,17 @@ def benchmark(manifest_path,output_dir):
                 known={s['name'] for s in manifest.get('enrollment',[]) if s['model']==result['embedding_model']}
                 entry['identity']=identity_metrics(reference.get('identity_turns',[]),result['segments'],known) if 'identity_turns' in reference else None
                 entry['silence_hallucination_words']=len(hyp.split()) if not reference['text'].strip() else None
-            else: entry['error_log']=str(run_dir/'stderr.log')
+            else:
+                entry['error_log']=str(run_dir/'stderr.log')
+                if code==75:
+                    entry['reason']='resource_failure'
+                    resource_stopped=True
             results.append(entry)
             (output_dir/'report.json').write_text(json.dumps({'kind':manifest['kind'],'results':results},ensure_ascii=False,indent=2,allow_nan=False))
+    (output_dir/'report.json').write_text(json.dumps({'kind':manifest['kind'],'results':results},ensure_ascii=False,indent=2,allow_nan=False))
     lines=[f'# Meeting OS benchmark — {manifest["kind"]}', '', 'Synthetic runs only validate plumbing; they do not establish meeting accuracy.' if manifest['kind']=='synthetic' else 'Real human audio evaluation (see manifest tags: read speech is not a meeting). Rates are fractions.', '', '| Config | Case | WER | Entity recall | RTF incl. startup | Peak RSS GB | Status |','|---|---|---:|---:|---:|---:|---|']
     def number(value): return '—' if value is None else f'{value:.3f}'
     for r in results:
-        lines.append(f'| {r["config"]} | {r["case"]} | {number(r.get("wer"))} | {number(r.get("entity_recall"))} | {number(r.get("rtf"))} | {number(r["peak_rss_bytes"]/1e9) if r.get("peak_rss_bytes") is not None else "—"} | {"ok" if r["exit_code"]==0 else "failed"} |')
+        lines.append(f'| {r["config"]} | {r["case"]} | {number(r.get("wer"))} | {number(r.get("entity_recall"))} | {number(r.get("rtf"))} | {number(r["peak_rss_bytes"]/1e9) if r.get("peak_rss_bytes") is not None else "—"} | {r["status"]} |')
     (output_dir/'REPORT.md').write_text('\n'.join(lines)+'\n')
-    return {'report':str(output_dir/'REPORT.md'),'runs':len(results),'failed':sum(r['exit_code']!=0 for r in results)}
+    return {'report':str(output_dir/'REPORT.md'),'runs':sum(r['status']!='deferred' for r in results),'failed':sum(r['status']=='failed' for r in results),'deferred':sum(r['status']=='deferred' for r in results)}

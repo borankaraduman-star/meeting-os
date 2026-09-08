@@ -55,3 +55,11 @@ Review correction: Claude speculated that the vocabulary was likely built from t
 The same model/configuration with a deliberately empty vocabulary completed 8/12 cases. OS memory pressure then rose to level 2: one active job was stopped (sampled peak 1,211,108,016 bytes below 3.5 GiB child budget), and three later cases failed admission. No guard was relaxed or heavy retry started. Matched completed subset: 137 reference words, vocabulary on 8 edits versus off 9 edits. See `benchmarks/results-cpp-tr-no-vocabulary/paired-summary.json`. This partial one-edit difference does not justify a default change or establish name/code-switching precision. Four deferred cases remain open.
 
 The harness currently continues after a resource failure, producing further admission failures. Before larger repeat runs, add an explicit deferred/resource-stop outcome so this does not become an automated retry loop. Preserve completed evidence and count availability separately.
+
+## Resource-stop implementation
+
+CLI resource failures (`MemoryPressureError`, `ResourceProbeError`, `JobMemoryLimitError`) now return exit 75; a supervised child forwards that code through `ChildFailure`. On exit 75 the benchmark preserves the failed attempt and existing successful artifacts, creates no further jobs, and marks remaining cases across every configuration `status=deferred`, `exit_code=null`, `reason=prior_resource_failure`. Deferred cases have no accuracy metrics or run directory. Normal failures remain failed attempts and do not trigger this resource stop. No automatic retry is added.
+
+The return summary distinguishes attempted `runs`, `failed`, and `deferred`. The benchmark CLI still emits its report summary normally; callers must inspect these counts rather than interpreting report-generation exit 0 as all cases passing. Existing saved reports are unchanged. Regression coverage exercises a completed result followed by a resource stop across configurations, resource CLI exit classification, and ordinary failure continuation. Resource limits and model defaults are unchanged.
+
+Claude review of this resource-stop patch was attempted through the subscription CLI with code-only context, but timed out after 120 seconds. No completed review or approval is claimed. Local diff review and tests passed; independent Claude review remains pending.
