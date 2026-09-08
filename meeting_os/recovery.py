@@ -57,10 +57,20 @@ def metadata(row):
     except (TypeError,ValueError):return {}
     return value if isinstance(value,dict) else {}
 
-def list_recovery(store,inspect=process_identity):
-    return [{'meeting':row['id'],'status':row['status'],
-             'recovery_state':classify(metadata(row).get('worker_identity'),inspect)}
-            for row in store.meetings() if row['status']=='processing']
+def list_recovery(store,inspect=process_identity,include_audio=False):
+    result=[]
+    for row in store.meetings():
+        if row['status']!='processing' and not (include_audio and row['status'] in ('incomplete','provisional','failed')):continue
+        meta=metadata(row)
+        state=classify(meta.get('worker_identity'),inspect) if row['status']=='processing' else row['status']
+        item={'meeting':row['id'],'status':row['status'],'recovery_state':state}
+        if include_audio:
+            from .recovery_audio import inspect_capture
+            if state in ('active','unknown'):item['audio']={'status':'not_checked_owner_uncertain'}
+            elif isinstance(meta.get('capture_dir'),str):item['audio']=inspect_capture(meta['capture_dir'])
+            else:item['audio']={'status':'not_supported_import'}
+        result.append(item)
+    return result
 
 def mark_interrupted(store,mid,inspect=process_identity):
     # Lock before reading identity: no concurrent metadata/status change may

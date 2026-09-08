@@ -87,7 +87,7 @@ def parser():
     f=sub.add_parser('finalize'); f.add_argument('directory',type=Path); f.add_argument('--title',default='Final meeting'); f.add_argument('--output',type=Path); inference_options(f)
     r=sub.add_parser('record'); r.add_argument('directory',type=Path); r.add_argument('--seconds',type=float,default=3600); r.add_argument('--chunk-seconds',type=float,default=12); r.add_argument('--live',action='store_true'); r.add_argument('--title',default='Live meeting'); r.add_argument('--capture-bin',default=str(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture')); inference_options(r)
     sub.add_parser('meetings')
-    recovery=sub.add_parser('recovery'); recovery.add_argument('--mark-interrupted',metavar='MEETING')
+    recovery=sub.add_parser('recovery'); recovery.add_argument('--mark-interrupted',metavar='MEETING'); recovery.add_argument('--audio',action='store_true',help='Inspect finalized capture headers without loading audio or models')
     s=sub.add_parser('show'); s.add_argument('meeting'); s.add_argument('--json',action='store_true')
     c=sub.add_parser('label'); c.add_argument('meeting'); c.add_argument('speaker'); c.add_argument('name')
     c=sub.add_parser('label-segment'); c.add_argument('meeting'); c.add_argument('segment',type=int); c.add_argument('name')
@@ -179,7 +179,7 @@ def main(supervised=False):
             elif args.command=='recovery':
                 from .recovery import list_recovery,mark_interrupted
                 if args.mark_interrupted:output({'marked_interrupted':mark_interrupted(store,args.mark_interrupted)})
-                else:output(list_recovery(store))
+                else:output(list_recovery(store,include_audio=args.audio))
             elif args.command=='show':
                 rows=store.segments(args.meeting)
                 if args.json: output(rows)
