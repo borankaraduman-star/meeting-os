@@ -101,3 +101,15 @@ class SupervisorTests(unittest.TestCase):
         code="from meeting_os.resources import check_pressure,physical_memory; import time;\nfor _ in range(20): check_pressure(); physical_memory(); time.sleep(.02)"
         result=run_guarded([sys.executable,'-c',code],timeout=10,isolated=True)
         self.assertGreater(result['samples'],0)
+
+    def test_failure_telemetry_is_numeric_and_does_not_expose_command(self):
+        import contextlib,io,json
+        from meeting_os.supervisor import run_guarded
+        stderr=io.StringIO()
+        with contextlib.redirect_stderr(stderr),self.assertRaises(RuntimeError):
+            run_guarded([sys.executable,'-c','import time; secret="PRIVATE_COMMAND"; time.sleep(10)'],timeout=.15)
+        rows=[json.loads(line) for line in stderr.getvalue().splitlines() if line.startswith('{')]
+        event=rows[-1]['supervisor_failure']
+        self.assertEqual(event['kind'],'JobTimeoutError')
+        self.assertGreaterEqual(event['elapsed_seconds'],.15)
+        self.assertNotIn('PRIVATE_COMMAND',stderr.getvalue())

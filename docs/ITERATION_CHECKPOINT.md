@@ -1,3 +1,7 @@
+## Latest: native short check passed; live window candidate ~4x faster
+
+Native old/bounded-final equality passed (9.4s fixture, full dictionaries identical, ~1.47 GiB sampled tree peak). Long recovery remains stopped, original 270 segments preserved. Window benchmark completed: ~22s serial vs ~5.5s window, synthetic WER .1818 vs 0; timed_words=0 makes timing gate unverified. Found CPP adapter discards real token timestamps; native JSON probe confirms valid subword offsets, zero-duration tokens and specials. Next: conservative CPP word reconstruction + approximate timing flags + speaker-boundary tests before live window promotion. Failure telemetry added for next long retry. Goal incomplete.
+
 ## Latest: bounded final-audio residency implemented
 
 See `BOUNDED_FINAL_AUDIO.md`. Retry now releases mmap-backed analysis audio before ASR and reads exact VAD regions on demand. Synthetic no-model footprint at ASR entry drops ~433 MiB; six new correctness/lifetime tests, pipeline and retry suites pass. Native short-pipeline validation and real recovery remain pending. No active retry; do not treat old PID notes below as current. Goal incomplete.

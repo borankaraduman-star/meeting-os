@@ -1,0 +1,29 @@
+{
+  "kind": "synthetic real local models; no private audio",
+  "runs": [
+    {
+      "bounded": false,
+      "elapsed_seconds": 6.351754083996639,
+      "segments": 3,
+      "turns": 1,
+      "audio_seconds": 9.405625,
+      "invalid_segment_times": 0
+    },
+    {
+      "bounded": true,
+      "elapsed_seconds": 5.303053125040606,
+      "segments": 3,
+      "turns": 1,
+      "audio_seconds": 9.405625,
+      "invalid_segment_times": 0
+    }
+  ],
+  "exact_segment_match": true,
+  "text_match": true,
+  "profiles_created": 0,
+  "supervisor": {
+    "peak_footprint_bytes": 1578601520,
+    "samples": 94,
+    "elapsed_seconds": 13.56598600000143
+  }
+}

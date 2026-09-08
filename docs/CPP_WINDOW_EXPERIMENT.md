@@ -15,3 +15,9 @@ When idle, from repo:
 ```
 
 Run only through the guarded CLI. No concurrent model, GPU, changed thread count, or default promotion. Source scripts are synthetic, not human-annotated real meeting references.
+
+## Native matched result
+
+Real CPU CPP on four fixtures: serial 21.216/23.008s versus window 5.396/5.509s (~4.1x faster, ~75% lower elapsed). Script WER 0.1818 serial versus 0 window on this tiny synthetic sample. Report: `benchmarks/results/cpp-window-matched-2026-09-08.json`. Not a real-meeting WER result and not a production promotion.
+
+Critical qualification: timed_words=0 in every run, so zero timing violations/gap words is **no evidence of timing accuracy**. Investigation found backends.py explicitly returns words=[] for CPP, discarding full JSON tokens. The pinned CLI sets token_timestamps for -ojf; an actual synthetic native probe (`build/benchmarks/cpp-token-probe.json`) confirms subword text/offsets including zero-duration subwords and special tokens. Next prerequisite: conservatively group complete lexical tokens into words, preserve original text, validate bounds and fall back when incomplete; mark heuristic timing approximate. Validate speaker transitions before enabling contiguous live windows.

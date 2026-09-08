@@ -1,5 +1,6 @@
 """Bounded native inference child execution; never signal unrelated processes."""
 import ctypes
+import json
 import os
 import subprocess
 import sys
@@ -114,13 +115,22 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
                 log.seek(0,2);size=log.tell();log.seek(max(0,size-2000))
                 detail=log.read().decode('utf-8',errors='replace')
                 raise RuntimeError(f'Yerel model başarısız (exit={process.returncode}): {detail}')
-        except BaseException:
+        except BaseException as exc:
             for sig in old_handlers:signal.signal(sig,signal.SIG_IGN)
             if isolated:
                 try:os.killpg(process.pid,signal.SIGKILL)
                 except ProcessLookupError:pass
             elif process.poll() is None:process.kill()
             process.wait()
+            # Numeric evidence only, after reaping. Never log audio, argv or paths.
+            # Peak is sampled, not a guaranteed upper bound at the failure instant.
+            try:
+                print(json.dumps({'supervisor_failure':{'kind':type(exc).__name__,
+                    'supervisor_pid':os.getpid(),'child_pid':process.pid,
+                    'sampled_peak_footprint_bytes':peak if samples else None,
+                    'samples':samples,'budget_bytes':budget,
+                    'elapsed_seconds':time.monotonic()-start}}),file=sys.stderr,flush=True)
+            except Exception:pass  # Diagnostics must never mask cleanup/failure.
             if on_failure:on_failure(process.pid)
             raise
         finally:
