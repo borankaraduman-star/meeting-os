@@ -45,8 +45,9 @@ struct SidebarView:View {
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
                 VStack(alignment:.leading,spacing:6) {
+                    Text("YAZIYA ÇEVİRME").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
                     Picker("Yazıya çevirme",selection:$model.transcriptionMode) { Text("OpenRouter").tag("openrouter");Text("Yerel model").tag("local") }
-                        .pickerStyle(.segmented).disabled(model.recording || model.busy).accessibilityIdentifier("transcriptionModePicker")
+                        .pickerStyle(.segmented).labelsHidden().disabled(model.recording || model.busy).accessibilityIdentifier("transcriptionModePicker")
                     if model.transcriptionMode=="openrouter" {
                         if model.cloudModels.isEmpty { Text("Model listesi yükleniyor…").font(.caption).foregroundStyle(.secondary) }
                         else {

@@ -61,7 +61,7 @@ struct TranscriptEmptyView:View {
         if !model.rows.isEmpty { return "Başka bir kelime deneyin veya tüm konuşmayı gösterin." }
         switch model.meeting?.displayStatus {
         case "not_started":return "Bu denemede ses parçası alınmadı. macOS izinlerini kontrol edip Yeni kayıt düğmesiyle tekrar başlayın."
-        case "pending_finalization":return "Canlı kayıt sona erdi. Kaydedilen sesi yazıya dönüştürmek için Transkripti tamamla düğmesini kullanın."
+        case "pending_finalization":return "Canlı kayıt sona erdi. Kaydedilen sesi yazıya dönüştürmek için “OpenRouter ile yazıya çevir” (bu Mac’te model yüklemez) veya “Yerel modelle tamamla” düğmesini kullanın."
         case "capture_unknown":return "Bu kaydın çalışan bir işleme ait olup olmadığı doğrulanamadı."
         case "capturing","processing","provisional":return "Bu toplantı henüz nihai değil. Kullanılabilir bölümler geldikçe burada görünür."
         case "failed","incomplete":return "İşlem durumunu ve varsa hata bilgisini kontrol edin. Kayıt arşivi varsa üstteki kurtarma seçeneğini kullanabilirsiniz."
