@@ -33,10 +33,22 @@ struct SidebarView:View {
                     Image(systemName:"waveform").font(.system(size:23,weight:.semibold)).foregroundStyle(MeetingStyle.accent).frame(width:45,height:45).background(MeetingStyle.accent.opacity(0.13),in:RoundedRectangle(cornerRadius:14))
                     VStack(alignment:.leading,spacing:3) { Text("Meeting OS").font(.system(size:23,weight:.bold,design:.rounded));Text("Toplantı hafızası").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.bottom,4).accessibilityElement(children:.combine)
-                TextField("Toplantıya bir ad ver",text:$model.title)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("meetingTitleField")
-                    .accessibilityLabel("Toplantı adı")
+                // One name field, only when it can do something: seed the next recording, or name a meeting
+                // that is still called "9 Eyl 2026 14:05". Otherwise the header pencil is the way to rename.
+                switch SidebarTitle.mode(recording:model.recording,busy:model.busy,selectedTitle:model.meeting?.title) {
+                case .seed:
+                    TextField("Toplantıya bir ad ver",text:$model.title)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("meetingTitleField")
+                        .accessibilityLabel("Toplantı adı")
+                case .rename:
+                    TextField("Bu toplantıya bir ad ver",text:$model.renameText)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { guard !model.renameText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }; Task { await model.renameMeeting() } }
+                        .accessibilityIdentifier("meetingTitleField")
+                        .accessibilityLabel("Toplantı adı")
+                case .hidden: EmptyView()
+                }
                 Button(action:{ model.recording ? model.stop() : model.start() }) {
                     Label(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind),systemImage:model.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity)
                 }
@@ -46,15 +58,13 @@ struct SidebarView:View {
                 .help(model.recording ? "Kaydı bitir (⌃⌥R her yerden)" : "Yeni kayıt (⌃⌥R her yerden)")
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
-                Button { model.showOpenRouter=true } label: { Label("Ses dosyası aç…",systemImage:"waveform.badge.plus").frame(maxWidth:.infinity) }.controlSize(.small).disabled(model.busy).help("Bir ses dosyasını OpenRouter ile yazıya çevirip toplantı olarak ekler")
                 if model.zoomMeetingOpen && !model.recording { Label("Zoom toplantısı açık · ⌃⌥R ile kaydı başlat",systemImage:"video.fill").font(.caption).foregroundStyle(MeetingStyle.accent) }
                 if model.update?.available != true {
                     HStack(spacing:6) {
-                        Image(systemName:"checkmark.circle").foregroundStyle(.secondary).font(.caption)
-                        Text(model.update.map { $0.error.isEmpty ? "Sürüm güncel" : $0.error } ?? "Sürüm kontrol edilmedi").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text(UpdateInfo.sidebarLine(version:UpdateInfo.appVersion,info:model.update)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                         Spacer()
-                        Button("Kontrol et") { Task { await model.checkForUpdates(force:true) } }.controlSize(.mini).disabled(model.busy || model.recording).help("GitHub’daki v0.1 dalıyla karşılaştırır; yeni sürüm varsa burada “Güncelle ve yeniden başlat” çıkar").accessibilityIdentifier("checkUpdateButton")
-                    }.padding(.horizontal,4)
+                        Button("Kontrol et") { Task { await model.checkForUpdates(force:true) } }.controlSize(.mini).disabled(model.busy || model.recording).help("Yeni sürüm var mı diye bakar; varsa burada “Güncelle ve yeniden başlat” çıkar").accessibilityIdentifier("checkUpdateButton")
+                    }.padding(.horizontal,4).accessibilityIdentifier("versionRow")
                 }
                 if let u=model.update, u.available {
                     VStack(alignment:.leading,spacing:6) {
@@ -74,23 +84,7 @@ struct SidebarView:View {
                         Text(model.markerCount==0 ? "Konuşmayı bölmeden işaretle; kayıt bitince Kontrol sekmesinde sırayla görürsün. ⌘⇧M karar, ⌘⌥M görev, ⌘⌃M sonra bak." : "\(model.markerCount) an işaretlendi · Kontrol sekmesinde görünecek").font(.caption2).foregroundStyle(.secondary)
                     }
                 }
-                DisclosureGroup(isExpanded:$model.showTranscriptionOptions) {
-                    Picker("Yazıya çevirme",selection:$model.transcriptionMode) { Text("OpenRouter").tag("openrouter");Text("Yerel model").tag("local") }
-                        .pickerStyle(.segmented).labelsHidden().disabled(model.recording || model.busy).accessibilityIdentifier("transcriptionModePicker")
-                    if model.transcriptionMode=="openrouter" {
-                        if model.cloudModels.isEmpty { Text("Model listesi yükleniyor…").font(.caption).foregroundStyle(.secondary) }
-                        else {
-                            Picker("Model",selection:$model.cloudModel) { ForEach(model.cloudModels) { Text($0.name).tag($0.id) } }
-                                .labelsHidden().disabled(model.recording || model.busy).accessibilityIdentifier("cloudModelPicker")
-                        }
-                        Text("Kayıt bitince ses OpenRouter’a gider; bu Mac’te model yüklenmez, canlı metin olmaz. Her yerden ⌃⌥R başlat/bitir, ⌃⌥M an işaretle.").font(.caption2).foregroundStyle(.secondary)
-                    } else {
-                        Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
-                    }
-                } label: {
-                    Text(model.transcriptionMode=="openrouter" ? "OpenRouter · \(model.cloudModels.first { $0.id==model.cloudModel }?.name ?? "model")" : "Yerel model").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }.task { await model.loadCloudModels() }
-            }.padding(18)
+            }.padding(18).task { await model.loadCloudModels() }   // the picker now lives in Ayarlar → Sistem; the list still warms up here, as before
             HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text(model.filter.isEmpty ? "\(model.meetings.count)" : "\(model.visibleMeetings.count)/\(model.meetings.count)").monospacedDigit().font(.caption) }
                 .foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,6)
                 .accessibilityHidden(true)
@@ -130,15 +124,24 @@ struct SidebarView:View {
                 if model.canCancelJob {
                     Button("İşlemi iptal et",action:model.cancelJob).disabled(model.jobCanceled).accessibilityIdentifier("cancelJobButton")
                 }
-                Button { Task { await model.exportDiagnostics() } } label: { Label("Tanılama raporu kaydet",systemImage:"doc.badge.gearshape") }
-                    .buttonStyle(.plain).font(.caption).frame(minHeight:28)
-                    .accessibilityIdentifier("diagnosticsButton")
-                    .accessibilityLabel("Tanılama raporu kaydet")
                 Divider()
-                Button { Task { await model.settings() } } label:{ Label("Ayarlar",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.keyboardShortcut(",",modifiers:.command).help("Ayarlar (⌘,)")
-                    .buttonStyle(.plain).font(.callout).frame(minHeight:28)
-                    .accessibilityIdentifier("settingsButton")
-                    .accessibilityLabel("Ayarlar: sözlük ve ses profilleri")
+                // Two things people need a few times a year sit behind one ⋯ instead of taking a row each.
+                HStack(spacing:8) {
+                    Button { Task { await model.settings() } } label:{ Label("Ayarlar",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.keyboardShortcut(",",modifiers:.command).help("Ayarlar (⌘,)")
+                        .buttonStyle(.plain).font(.callout).frame(minHeight:28)
+                        .accessibilityIdentifier("settingsButton")
+                        .accessibilityLabel("Ayarlar: sözlük ve ses profilleri")
+                    Menu {
+                        Button("Ses dosyası aç…") { model.showOpenRouter=true }.disabled(model.busy)
+                            .accessibilityIdentifier("openAudioFileButton")
+                        Button("Tanılama raporu kaydet") { Task { await model.exportDiagnostics() } }
+                            .accessibilityIdentifier("diagnosticsButton")
+                    } label: { Image(systemName:"ellipsis.circle") }
+                        .menuStyle(.borderlessButton).fixedSize().frame(minHeight:28)
+                        .help("Ses dosyası aç, tanılama raporu kaydet")
+                        .accessibilityIdentifier("sidebarMoreMenu")
+                        .accessibilityLabel("Daha fazla")
+                }
             }.padding(18)
         }
         .background(.regularMaterial)
@@ -232,7 +235,7 @@ struct DetailHeader:View {
                 Button("Altyazı (SRT)") { Task { await model.export("srt") } }
                 Button("JSON") { Task { await model.export("json") } }
                 Divider()
-                Menu("Belge hazırla (OpenRouter)") {
+                Menu("Belge hazırla") {
                     Button("Ürün gereksinimi (PRD)…") { Task { await model.exportDocument(kind:"prd") } }
                     Button("Hata raporu…") { Task { await model.exportDocument(kind:"bug") } }
                     Button("Müşteri talebi…") { Task { await model.exportDocument(kind:"customer") } }
@@ -261,7 +264,7 @@ struct RecoveryBanner:View {
                 .font(.caption)
             Spacer()
             if CloudTranscription.canFinalize(meeting:meeting,busy:model.busy) {
-                Button("OpenRouter ile yazıya çevir") { model.finalizeWithOpenRouter(meeting.id,model:model.cloudModel) }
+                Button("Bulutta yazıya çevir") { model.finalizeWithOpenRouter(meeting.id,model:model.cloudModel) }
                     .buttonStyle(.borderedProminent).accessibilityIdentifier("cloudFinalizeButton")
             }
             if canRetry {
