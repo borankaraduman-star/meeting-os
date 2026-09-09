@@ -249,4 +249,13 @@ final class CapturePreviewWarningTests: XCTestCase {
         XCTAssertFalse(value.contains("Canlı metin eksik"))
         XCTAssertFalse(value.contains("tamamlandı"))
     }
+
+    func testDotStates() {
+        XCTAssertEqual(CaptureSignalPresentation.dotState(["signals":["mic":["state":"signal","age_seconds":2]]],key:"mic"),"ok")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(["signals":["mic":["state":"signal","age_seconds":90]]],key:"mic"),"stale")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(["signals":["system":["state":"digital_silence","age_seconds":1]]],key:"system"),"silent")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(["signals":["system":["state":"unavailable"]]],key:"system"),"unknown")
+        XCTAssertEqual(CaptureSignalPresentation.dotState([:],key:"mic"),"unknown")
+        XCTAssertEqual(SignalDot.hint("silent"),"Sessiz · ses gelmiyor")
+    }
 }

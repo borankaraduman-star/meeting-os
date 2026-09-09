@@ -210,6 +210,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
                 activity=CaptureSignalPresentation.label(active.capture)
+                captureDots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
             }
             if !restoredOnLaunch {
                 restoredOnLaunch=true
@@ -418,6 +419,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// Live capture health for the floating panel (mic / system audio), refreshed with every poll while recording.
+    @Published var captureDots:[String:String]=[:]
     /// A job that started before the next Zoom meeting opened is pushed to Darwin background (CPU, I/O and
     /// network throttled) and told to upload one piece at a time; both are undone when the meeting ends.
     var jobBackgrounded=false

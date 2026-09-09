@@ -32,6 +32,13 @@ public enum CaptureSignalPresentation {
         return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)" + warning
     }
 
+    /// Compact state for the floating panel dots: "ok", "silent", "stale" or "unknown".
+    public static func dotState(_ capture: [String: Any], key: String) -> String {
+        guard let entry = (capture["signals"] as? [String: Any])?[key] as? [String: Any], let state = entry["state"] as? String else { return "unknown" }
+        if isStale(entry) { return "stale" }
+        switch state { case "signal": return "ok"; case "digital_silence": return "silent"; default: return "unknown" }
+    }
+
     private static func describeSignal(_ signals: [String: Any]?, key: String) -> String {
         guard let entry = signals?[key] as? [String: Any],
               let state = entry["state"] as? String else {
