@@ -4,7 +4,10 @@ struct TranscriptView:View {
     @ObservedObject var model:Model
     var body:some View {
         ScrollView {
-            LazyVStack(alignment:.leading,spacing:20) {
+            // Plain VStack: LazyVStack's height estimation oscillated with long wrapped paragraphs and
+            // pinned the main thread at 100% CPU after scrolling or renaming a speaker. Meetings have
+            // at most a few hundred rows, so eager layout is cheap and deterministic.
+            VStack(alignment:.leading,spacing:20) {
                 ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:!model.recording && model.meeting?.metadata["text_only"] as? Bool != true,canEdit:model.meeting?.status == "complete").equatable() }
                 if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
             }.padding(24)

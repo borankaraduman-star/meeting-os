@@ -451,3 +451,7 @@ Kullanıcı iki yeni kayıt aldı (3:39 tek konuşmacı, 3:41 üç kümeli podca
 ## 2026-09-09 — Model karşılaştırması: varsayılan MAI-Transcribe 2
 
 Aynı 60 s Türkçe sistem sesi parçası: Deepgram Nova-3 (tr) aksan işaretsiz/bozuk metin, ayrım açık-kapalı fark yok; dil verilmezse “Marketing”. GPT Transcribe düzgün Türkçe, ayrım yok, $0.0045. MAI-Transcribe 2 düzgün Türkçe (dolgu sesleri dahil), $0.0017, 2.4 s; 70–141 s parçasında iki konuşmacıyı “Hı hı” onaylarına kadar ayırdı. Varsayılan `microsoft/mai-transcribe-2` yapıldı (backend, Swift, kullanıcı UserDefaults). 3:41 sistem sesi MAI ile yeni toplantı (5a4da28cbb0f, 142 s, $0.0039, 3 küme) olarak yeniden çevrildi; ses profili adımı 76 s’lik tek dönüşte 60 s işçi sınırına takıldı → dönüşler 30 s pencerelere bölünüp ortalanıyor; sonuç: yalnız Konuşmacı 3 → Gözlük (0.962), diğerleri 0.83–0.85 isimsiz. Testler: cloud_finalize 14, openrouter/desktop geçti; 48 Swift geçti.
+
+## 2026-09-09 — Adlandırma sonrası donma: LazyVStack kaldırıldı
+
+Kullanıcı bir konuşmacıyı adlandırınca uygulama yine 100% CPU ile dondu; `sample` aynı imzayı verdi (FlexFrame/StackLayout salınımı), `fixedSize` tek başına yetmedi. Transkript listesi LazyVStack yerine düz VStack yapıldı (satır sayısı yüzlerle sınırlı). Doğrulama: yeni sürümde CGEvent ile 160 kaydırma olayı ve backend üzerinden adlandırma sonrası CPU %0.1–0.2; kullanıcı ardından arayüzden üç konuşmacıyı (Sol Üst, Sağ üst, Gözlük) profil kaydederek adlandırdı, donma olmadı. Donmuş süreçler işçi yokken sonlandırıldı. 48 Swift testi geçti.
