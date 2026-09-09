@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 from meeting_os.store import Store
-from meeting_os.cloud_finalize import finalize_capture, import_file_cloud_only, pieces, speaker_label, is_silent
+from meeting_os.cloud_finalize import finalize_capture, import_file_cloud_only, pieces, speaker_label, is_silent, merge_segments, flag_echo
 from meeting_os.openrouter import OpenRouterError
 
 def capture_dir(root,seconds=4):
@@ -138,3 +138,31 @@ class IdentityTests(unittest.TestCase):
                 rg.side_effect=fake_run
                 FinalEmbedder(model=str(wav),light=True).embed_file(wav,[(0,16000*4)])
                 self.assertTrue(rg.call_args.kwargs['light'])
+
+class MergeEchoTests(unittest.TestCase):
+    def test_merge_joins_same_speaker_phrases_within_gap(self):
+        segs=[{'start':0,'end':1.2,'text':'Selamlar,','speaker':'0'},{'start':1.3,'end':3.2,'text':'saygılar.','speaker':'0'},{'start':4.0,'end':4.9,'text':'','speaker':'0'},
+              {'start':5.0,'end':6.0,'text':'Merhaba.','speaker':'1'},{'start':8.0,'end':9.0,'text':'Evet.','speaker':'1'}]
+        self.assertEqual(merge_segments(segs),[{'start':0,'end':3.2,'text':'Selamlar, saygılar.','speaker':'0'},{'start':5.0,'end':6.0,'text':'Merhaba.','speaker':'1'},{'start':8.0,'end':9.0,'text':'Evet.','speaker':'1'}])
+        long=[{'start':i*10,'end':i*10+9.5,'text':'x y','speaker':'0'} for i in range(5)]
+        self.assertEqual([round(m['end']-m['start'],1) for m in merge_segments(long)],[29.5,19.5])
+    def test_mic_bleed_is_flagged_but_real_mic_speech_is_not(self):
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('E',{})
+            store.add_segment(mid,Segment(0,10,'Bakalım kimler var, neler konuşalım. Berna Hanım merhaba.','system','Konuşmacı 1'))
+            echo=store.add_segment(mid,Segment(0,10,'Bakalım kimler var neler konuşalım Berna Hanım merhaba','mic','Boran'))
+            real=store.add_segment(mid,Segment(12,20,'Ben bu konuda farklı düşünüyorum, rapor yarın hazır olur.','mic','Boran'))
+            self.assertEqual(flag_echo(store,mid),1)
+            rows={r['id']:r for r in store.segments(mid)}
+            self.assertIn('possible_echo',rows[echo]['flags']);self.assertNotIn('possible_echo',rows[real]['flags'])
+            self.assertEqual(flag_echo(store,mid),0);store.close()
+    def test_hash_file_light_mode_tolerates_warning(self):
+        from unittest.mock import patch
+        from meeting_os.asr_checkpoints import _hash_file
+        from meeting_os.resources import MemoryPressureError
+        with tempfile.TemporaryDirectory() as tmp:
+            f=Path(tmp)/'w.pt';f.write_bytes(b'x'*10)
+            with patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):
+                with self.assertRaises(MemoryPressureError):_hash_file(f)
+                self.assertEqual(len(_hash_file(f,allow_warning=True)[1]),64)

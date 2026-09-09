@@ -64,6 +64,41 @@ def digest_files(paths):
     return h.hexdigest()
 
 
+MERGE_GAP=1.0
+MERGE_MAX=30.0
+
+def merge_segments(segments, gap=MERGE_GAP, longest=MERGE_MAX):
+    """Join consecutive same-speaker provider phrases so segments read naturally and reach the 3 s voiceprint minimum."""
+    out=[]
+    for seg in segments:
+        if not seg['text']: continue
+        last=out[-1] if out else None
+        if last and last['speaker']==seg['speaker'] and seg['start']-last['end']<=gap and seg['end']-last['start']<=longest:
+            last['end']=max(last['end'],seg['end']);last['text']=(last['text']+' '+seg['text']).strip()
+        else: out.append(dict(seg))
+    return out
+
+
+def _tokens(text):
+    import re
+    return [t for t in re.split(r'[^\wçğıöşüÇĞİÖŞÜ]+',text.lower()) if len(t)>1]
+
+
+def flag_echo(store, mid, threshold=0.6):
+    """A microphone segment whose words largely repeat the system audio of the same interval is speaker bleed, not Boran."""
+    rows=store.segments(mid);system=[r for r in rows if r['source']=='system'];flagged=0
+    for r in rows:
+        if r['source']!='mic' or 'possible_echo' in r['flags']: continue
+        mine=_tokens(r['text'])
+        if len(mine)<4: continue
+        overlap=set(_tokens(' '.join(s['text'] for s in system if s['start']<r['end'] and s['end']>r['start'])))
+        ratio=sum(1 for t in mine if t in overlap)/len(mine)
+        if ratio>=threshold:
+            r['flags'].append('possible_echo');r.setdefault('metrics',{})['echo_overlap']=round(ratio,3);flagged+=1
+            with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
+    return flagged
+
+
 def speaker_label(source, provider_speaker, piece_index, multi_piece):
     if source=='mic' or provider_speaker is None: return SOURCE_LABELS.get(source,source)
     try: number=int(provider_speaker)+1
@@ -105,10 +140,9 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
             usage=result['usage']
             flags=['cloud_transcript','confidence_unavailable','speaker_unverified']
             multi=counts[source]>1
-            provider_segments=result.get('segments') or []
+            provider_segments=merge_segments(result.get('segments') or [])
             if provider_segments:
                 for seg in provider_segments:
-                    if not seg['text']: continue
                     label=speaker_label(source,seg['speaker'],index,multi)
                     segments.append(Segment(a+seg['start'],min(a+seg['end'],b),seg['text'],source,label,
                         metrics={'provider':'openrouter','model':model,'piece':index,'cluster':f'{index}:{seg["speaker"]}'},flags=flags+(['cloud_diarization'] if source!='mic' else [])))
@@ -218,6 +252,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
         try:
             transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg)
+            metadata['echo_segments']=flag_echo(store,mid)
             try:
                 identity=identify_clusters(store,mid,sources,embedder)
                 metadata['identity']=identity;metadata.pop('identity_error',None)

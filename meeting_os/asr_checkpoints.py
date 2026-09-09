@@ -14,12 +14,12 @@ def _signature(path):
     s=path.stat();return (s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
 
 
-def _hash_file(path):
+def _hash_file(path, allow_warning=False):
     before=_signature(path);h=hashlib.sha256();blocks=0
-    check_pressure()
+    check_pressure(allow_warning=allow_warning)
     with path.open('rb') as f:
         while block:=f.read(1024**2):
-            if blocks%64==0:check_pressure()
+            if blocks%64==0:check_pressure(allow_warning=allow_warning)
             blocks+=1;h.update(block)
     if before!=_signature(path):raise ValueError('ASR artifact changed during hashing')
     return before,h.hexdigest()

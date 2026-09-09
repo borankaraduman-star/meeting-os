@@ -42,7 +42,7 @@ class FinalEmbedder:
             spec=importlib.util.find_spec('resemblyzer')
             if spec is None or not spec.submodule_search_locations:raise ValueError('Resemblyzer package unavailable')
             self.weights=(Path(next(iter(spec.submodule_search_locations)))/'pretrained.pt').resolve(strict=True)
-        self.signature,self.digest=_hash_file(self.weights)
+        self.signature,self.digest=_hash_file(self.weights,allow_warning=light)
         self.model_id='resemblyzer:'+self.digest[:16]
     def embed(self,audio):raise ValueError('Final identity requires deferred file batch')
     def embed_file(self,path,spans):
@@ -59,7 +59,7 @@ class FinalEmbedder:
             if _signature(path)!=signature or _signature(self.weights)!=self.signature:raise ValueError('Identity input changed')
             with tempfile.TemporaryDirectory(prefix='meeting-os-identity-') as tmp:
                 root=Path(tmp);request=root/'request.json';output=root/'result.json'
-                request.write_text(json.dumps({'path':str(path),'signature':signature,'frames':info.frames,'spans':batch,'weights':str(self.weights),'weight_signature':self.signature,'digest':self.digest}))
+                request.write_text(json.dumps({'path':str(path),'signature':signature,'frames':info.frames,'spans':batch,'weights':str(self.weights),'weight_signature':self.signature,'digest':self.digest,'light':self.light}))
                 run_guarded([sys.executable,'-m','meeting_os.final_identity',str(request),str(output)],timeout=600,light=self.light)
                 with output.open('rb') as f:raw=f.read(MAX_OUTPUT+1)
                 if len(raw)>MAX_OUTPUT:raise ValueError('Embedding output too large')
@@ -74,7 +74,7 @@ def main():
     if len(raw)>2*1024**2:raise ValueError('Embedding request too large')
     data=json.loads(raw);path=Path(data['path']);weights=Path(data['weights'])
     if list(_signature(path))!=data['signature']:raise ValueError('Identity snapshot changed')
-    sig,digest=_hash_file(weights)
+    sig,digest=_hash_file(weights,allow_warning=data.get('light') is True)
     if list(sig)!=data['weight_signature'] or digest!=data['digest']:raise ValueError('Identity weights changed')
     import torch
     # The prior in-process path runs after Silero, which sets this to one.
