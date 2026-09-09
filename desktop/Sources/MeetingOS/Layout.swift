@@ -106,6 +106,15 @@ struct DetailView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:0) {
             DetailHeader(model:model)
+            if let meeting=model.meeting, model.restoredMeeting==meeting.id, RelaunchRestore.restorableStates.contains(meeting.status) {
+                HStack(spacing:10) {
+                    Image(systemName:"arrow.counterclockwise.circle.fill").foregroundStyle(MeetingStyle.accent)
+                    Text(RelaunchRestore.headline(meeting)).font(.callout.weight(.semibold)).lineLimit(1)
+                    Spacer()
+                    Button { model.restoredMeeting=nil } label: { Image(systemName:"xmark.circle.fill").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain).accessibilityLabel("Kurtarma bildirimini kapat")
+                }.padding(.horizontal,24).padding(.bottom,8).accessibilityIdentifier("relaunchRestoreBanner")
+            }
             if let meeting=model.meeting, meeting.metadata["capture_dir"] is String, !["complete","canceled"].contains(meeting.status), !model.busy {
                 RecoveryBanner(model:model,meeting:meeting)
             }
@@ -306,6 +315,7 @@ struct SettingsSheet:View {
                         Button("Profili sil",role:.destructive) { Task { await model.deleteProfile(p.name) } }.accessibilityIdentifier("deleteProfile-\(p.name)")
                     }
                 }.frame(height:140) }
+                if let storage=model.storage { StorageSection(model:model,storage:storage) }
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
                     Spacer()
@@ -313,6 +323,35 @@ struct SettingsSheet:View {
                     Button("Kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton")
                 }
             }.padding(28)
-        }.frame(width:600,height:560)
+        }.frame(width:600,height:640)
+    }
+}
+
+/// Read-only disk usage; deletion goes through the sidebar's existing confirmation. No automatic cleanup.
+struct StorageSection:View {
+    @ObservedObject var model:Model
+    let storage:StorageReport
+    var body:some View {
+        VStack(alignment:.leading,spacing:8) {
+            Text("Depolama").font(.headline)
+            Text("Toplam \(StorageReport.format(bytes:storage.total)) · Kayıtlar \(StorageReport.format(bytes:storage.recordings)) · İçe aktarımlar \(StorageReport.format(bytes:storage.imports)) · Veritabanı \(StorageReport.format(bytes:storage.database))")
+                .font(.caption).foregroundStyle(.secondary)
+            if storage.meetings.isEmpty {
+                Text("Ses dosyası olan toplantı yok.").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("En büyük toplantılar").font(.caption.weight(.semibold))
+                ForEach(storage.largest(5)) { entry in
+                    HStack {
+                        Text(entry.title.isEmpty ? "Adsız toplantı" : entry.title).lineLimit(1)
+                        Spacer()
+                        Text(StorageReport.format(bytes:entry.bytes)).monospacedDigit().foregroundStyle(.secondary)
+                        Button("Sil…",role:.destructive) { model.requestDelete(meetingID:entry.meeting) }
+                            .disabled(model.busy || entry.active)
+                            .accessibilityIdentifier("storageDelete-\(entry.meeting)")
+                    }.font(.callout)
+                }
+                Text("Silme, arşivdeki onay penceresinden yapılır; otomatik temizlik yoktur.").font(.caption2).foregroundStyle(.secondary)
+            }
+        }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
     }
 }

@@ -51,6 +51,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
+    /// Meeting auto-selected on this launch because its processing was interrupted; drives the one-line restore banner.
+    @Published var restoredMeeting:String?; var restoredOnLaunch=false
+    @Published var storage:StorageReport?
     @Published var transcriptionMode=UserDefaults.standard.string(forKey:CloudTranscription.modeKey) ?? "openrouter" { didSet { UserDefaults.standard.set(transcriptionMode,forKey:CloudTranscription.modeKey) } }
     @Published var cloudModel=UserDefaults.standard.string(forKey:CloudTranscription.modelKey) ?? CloudTranscription.defaultModel { didSet { UserDefaults.standard.set(cloudModel,forKey:CloudTranscription.modelKey) } }
     @Published var cloudModels:[OpenRouterModelOption]=[]
@@ -121,6 +124,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
                 activity=CaptureSignalPresentation.label(active.capture)
+            }
+            if !restoredOnLaunch {
+                restoredOnLaunch=true
+                if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
             if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
@@ -267,7 +274,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard panel.runModal() == .OK, let url=panel.url else { return }
         do { _=try await request(["action":format=="analysis.md" ? "export_analysis":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
     }
-    func settings() async { do { vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""; showSettings=true } catch { self.error=error.localizedDescription } }
+    func settings() async {
+        do {
+            vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""
+            storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse)   // read-only walk; a failure hides the section only
+            showSettings=true
+        } catch { self.error=error.localizedDescription }
+    }
+    /// From the storage list: close the sheet first so the sidebar's confirmation dialog can present.
+    func requestDelete(meetingID:String) {
+        guard let meeting=meetings.first(where:{ $0.id==meetingID }) else { return }
+        showSettings=false
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.35) { [weak self] in self?.deleteCandidate=meeting }
+    }
     func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
     func play(_ row:Row) {
         guard let m=meeting else { return }
