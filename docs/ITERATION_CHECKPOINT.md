@@ -527,3 +527,7 @@ Ayarlar’da gerçek OpenRouter transkript harcaması (bu ay/toplam; ekranda $0.
 ## 2026-09-09 14:50 — 1.2.10: Görevlerim filtre sayaçları ve otomatik geçiş
 
 Segmentlerde açık görev sayıları (“Boran’ın görevleri (0) · Bu toplantı (8) · Tüm görevler (10)”); Boran’a atanmış görev yokken sekme kendiliğinden “Bu toplantı”ya açılır (ekranda doğrulandı). 13:35–14:50 arasında yayınlanan sürümler: 1.2.3, 1.2.4, 1.2.5, 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.2.10.
+
+## 2026-09-09 14:55 — 1.2.11: Kurulum durumu kartı
+
+`SetupStatus` (Swift: AVCaptureDevice/CGPreflightScreenCaptureAccess/EventKit/UNUserNotificationCenter) + `setup_status` köprü eylemi (Keychain’de anahtar varlığı `security find-generic-password` ile -w olmadan, sözlük, `updater.check`). Ekranda doğrulandı: bu Mac’te bildirim izni dışında her şey yeşil. Amaç: ikinci Mac’te “izin istiyor / çalışmıyor” durumlarını tek bakışta görmek.

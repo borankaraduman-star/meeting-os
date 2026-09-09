@@ -240,6 +240,10 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 
 Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
 
+### Kurulum durumu (ikinci Mac için)
+
+Ayarlar sayfasının başındaki **Kurulum durumu** kartı mikrofon, ekran kaydı, takvim, hatırlatıcı ve bildirim izinlerini, OpenRouter anahtarının Keychain’de olup olmadığını (değer okunmaz, yalnız varlık), sözlük terim sayısını/paylaşımını ve sürümün güncel olup olmadığını tek listede gösterir. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; gri: isteğe bağlı.
+
 ### Görevleri Apple Hatırlatıcılar’a gönderme
 
 Görevlerim’de her görevin yanında **Hatırlatıcılar’a ekle**: görev varsayılan Hatırlatıcılar listesine başlığıyla eklenir; notunda kaynak toplantı, sahip ve transkriptteki zaman ifadesi bulunur (tarih tahmin edilmez). İlk kullanımda macOS Hatırlatıcılar izni istenir.
