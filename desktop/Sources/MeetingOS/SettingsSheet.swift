@@ -23,6 +23,7 @@ struct SettingsSheet:View {
                 } else {
                     Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
                 }
+                OpenRouterKeyRow()
                 Divider()
                 }
                 if group=="sistem" {
@@ -159,6 +160,31 @@ struct SettingsSheet:View {
         guard panel.runModal() == .OK, let url=panel.url else { return }
         model.reportSettings.teamDir=url.path
         Task { await model.saveReportSettings() }
+    }
+}
+
+/// The only place the key was reachable used to be the OpenRouter import sheet, which nobody opens when they
+/// merely want to paste a key. Same Keychain item, same save path — one compact row in Ayarlar → Sistem.
+struct OpenRouterKeyRow:View {
+    @State private var key=""
+    @State private var stored=OpenRouterCredential.read() != nil
+    @State private var message=""
+    var body:some View {
+        VStack(alignment:.leading,spacing:4) {
+            HStack(spacing:8) {
+                Text("OpenRouter anahtarı").font(.callout)
+                SecureField(stored ? "Yeni anahtar girin" : "OpenRouter API anahtarı",text:$key)
+                    .textFieldStyle(.roundedBorder).frame(width:240).accessibilityIdentifier("openRouterKeyField")
+                    .onSubmit { save() }
+                Button("Kaydet") { save() }.disabled(key.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty).accessibilityIdentifier("saveOpenRouterKeyButton")
+                if stored { Label("Keychain’de kayıtlı",systemImage:"checkmark.circle").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("openRouterKeyStored") }
+            }
+            Text(message.isEmpty ? "Anahtar yalnızca macOS Anahtar Zinciri’nde durur; kayıtlıysa yeniden girmeniz gerekmez." : message).font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+    private func save() {
+        do { try OpenRouterCredential.save(key); key=""; stored=true; message="Anahtar Anahtar Zinciri’ne kaydedildi." }
+        catch { message=error.localizedDescription }
     }
 }
 

@@ -16,7 +16,7 @@ struct ReviewItem:Identifiable, Equatable {
         case "ambiguous": return "Çakışan konuşma"
         case "short_match": return "Kısa sesle tanındı"
         case "task_owner": return "Görev sahibi belirsiz"
-        case "marker": return "İşaretlediğin an"
+        case "marker": return "İşaretlediğiniz an"
         case "glossary": return "Sözlük düzeltmesi"
         default: return "Kontrol edin"
         }

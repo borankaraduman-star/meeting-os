@@ -3,6 +3,8 @@ import UserNotifications
 
 struct VoiceSample:Identifiable, Equatable {
     let id:Int; let seconds:Double; let kind:String; let meetingTitle:String; let model:String
+    /// The card above says "N otomatik, M elle"; a row must use the same two words, not the storage `kind`.
+    var origin:String { kind=="otomatik" ? "otomatik" : "elle" }
     init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; kind=d["kind"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "bilinmeyen toplantı"; model=d["model"] as? String ?? "" }
 }
 
@@ -45,11 +47,13 @@ struct ProfileHealth:Equatable {
         weakestFit=d["weakest_fit"] as? Double; weakestSample=d["weakest_sample"] as? Int; weak=d["weak"] as? Bool ?? false
         lastMeetingTitle=d["last_meeting_title"] as? String ?? ""
     }
+    /// The number itself only belongs in a tooltip: the everyday line says whether something is wrong, not how wrong.
+    var fitHelp:String { weakestFit.map { "En zayıf örnek benzerliği "+String(format:"%.2f",$0).replacingOccurrences(of:".",with:",") } ?? "" }
     /// One line under the name; everything a person needs before deciding to add or drop a sample.
     var line:String {
         var parts=["\(samples) örnek (\(autoSamples) otomatik, \(max(0,samples-autoSamples)) elle)"]
         parts.append(seconds>=60 ? "\(Int(seconds/60)) dk ses" : "\(Int(seconds)) sn ses")
-        if let fit=weakestFit { parts.append("en zayıf örnek "+String(format:"%.2f",fit).replacingOccurrences(of:".",with:",")+(weak ? " · zayıf" : "")) }
+        if weak { parts.append("bir örnek diğerlerine benzemiyor") }
         if rejections>0 { parts.append("\(rejections) ret") }
         parts.append(lastMeetingTitle.isEmpty ? "hiç duyulmadı" : "son: "+lastMeetingTitle)
         return parts.joined(separator:" · ")
@@ -120,7 +124,7 @@ struct ProfileMaintenanceRow:View {
                 }
                 ForEach(samples) { s in
                     HStack {
-                        Text("\(s.kind) · \(s.meetingTitle) · \(String(format:"%.0f",s.seconds)) sn").font(.caption)
+                        Text("\(s.origin) · \(s.meetingTitle) · \(String(format:"%.0f",s.seconds)) sn").font(.caption).help(s.origin=="otomatik" ? "Bu örneği uygulama kendiliğinden kaydetti" : "Bu örneği siz adlandırırken kaydettiniz")
                         Spacer()
                         Button("Örneği sil",role:.destructive) { Task { await model.deleteSample(s.id); samples=await model.loadSamples(profile.name); await model.loadMaintenance() } }.controlSize(.small)
                     }
@@ -139,7 +143,7 @@ struct ProfileMaintenanceRow:View {
                         Text(profile.name)
                         if health?.weak==true { Image(systemName:"exclamationmark.triangle.fill").font(.caption2).foregroundStyle(.orange).help("Bu profilde diğerlerine uymayan bir örnek var") }
                     }
-                    Text(health?.line ?? "\(profile.samples) örnek").font(.caption2).foregroundStyle(.secondary)
+                    Text(health?.line ?? "\(profile.samples) örnek").font(.caption2).foregroundStyle(.secondary).help(health?.fitHelp ?? "")
                 }
                 Spacer()
                 Button("Profili sil",role:.destructive) { Task { await model.deleteProfile(profile.name); await model.loadMaintenance() } }.controlSize(.small).accessibilityIdentifier("deleteProfile-\(profile.name)")
@@ -164,7 +168,7 @@ enum ZoomNotifier {
         if let last=lastNotified, Date().timeIntervalSince(last) < 20*60 { return }   // one reminder per meeting, not one per poll
         lastNotified=Date()
         let content=UNMutableNotificationContent()
-        content.title="Zoom toplantısı açık"; content.body="Meeting OS kaydı başlatmak için tıkla ya da ⌃⌥R."; content.categoryIdentifier=category
+        content.title="Zoom toplantısı açık"; content.body="Meeting OS kaydı başlatmak için tıklayın ya da ⌃⌥R."; content.categoryIdentifier=category
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier:"zoom-"+UUID().uuidString,content:content,trigger:nil))
     }
     static func reset() { lastNotified=nil }

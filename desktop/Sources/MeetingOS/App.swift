@@ -66,7 +66,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
     @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
-    @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
+    @Published var activity="Hazır · ⌃⌥R ile kayıt başlat"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
     /// Meeting auto-selected on this launch because its processing was interrupted; drives the one-line restore banner.

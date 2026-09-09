@@ -10,6 +10,6 @@ enum RelaunchRestore {
             .max { $0.created < $1.created }   // ISO-8601 UTC timestamps sort lexically
     }
     static func headline(_ meeting:Meeting)->String {
-        "Sesin korundu · işlem şurada kaldı: \(statusLabel(meeting.displayStatus))"
+        "Sesiniz korundu · işlem şurada kaldı: \(statusLabel(meeting.displayStatus))"
     }
 }

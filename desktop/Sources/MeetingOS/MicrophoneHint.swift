@@ -7,6 +7,6 @@ struct MicrophoneHint {
         guard service != 0 else { return "" }
         defer { IOObjectRelease(service) }
         let closed=IORegistryEntryCreateCFProperty(service,"AppleClamshellState" as CFString,kCFAllocatorDefault,0)?.takeRetainedValue() as? Bool
-        return closed == true ? "Kapak kapalı: dahili mikrofon devre dışı. Sesiniz için kapağı açın veya harici mikrofon kullanın. Sistem sesi kaydedilebilir." : ""
+        return closed == true ? "Kapak kapalı · dahili mikrofon kapalı, sistem sesi kaydediliyor." : ""
     }
 }

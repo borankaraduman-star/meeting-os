@@ -53,8 +53,8 @@ struct OpenRouterImportView:View {
     }
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
-            Text("OpenRouter · Ses transkripsiyonu").font(.title2.bold())
-            Text("Türkçe ses → transkript. Bu yolda bu Mac’te model yüklenmez; konuşmacı ayrımı seçilen sağlayıcıdan gelir (ayrım sunmayan modellerde konuşmacılar ayrılmaz). Özet, karar ve görevleri işlem bitince Özet sekmesinden bu Mac’te hazırlayabilirsiniz.").foregroundStyle(.secondary)
+            Text("OpenRouter · Ses dosyasını yazıya çevir").font(.title2.bold())
+            Text("Türkçe ses → transkript. Bu yolda bu Mac’te model yüklenmez; konuşmacı ayrımı seçilen modelden gelir (ayrım sunmayan modellerde konuşmacılar ayrılmaz). Özet, karar ve görevleri işlem bitince Özet sekmesinden bu Mac’te hazırlayabilirsiniz.").foregroundStyle(.secondary)
             if models.isEmpty { Text("Model listesi yükleniyor…").font(.caption) }
             else {
                 Picker("Transkripsiyon modeli",selection:$selectedModel) {

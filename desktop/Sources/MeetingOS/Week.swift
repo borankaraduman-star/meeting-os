@@ -51,7 +51,7 @@ struct WaitingView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             HStack { Text("Başkalarının verdiği sözler, kişiye göre. Sahibi belirsiz görevler burada değil, Kontrol’de.").font(.callout).foregroundStyle(.secondary); Spacer(); Button("Yenile") { Task { await m.loadWaiting() } }.controlSize(.small) }
-            if m.waiting.isEmpty { ContentUnavailableView("Kimseden bir şey beklemiyorsun",systemImage:"person.2",description:Text("Sahibi başkası olan açık görev yok.")) }
+            if m.waiting.isEmpty { ContentUnavailableView("Kimseden bir şey beklemiyorsunuz",systemImage:"person.2",description:Text("Sahibi başkası olan açık görev yok.")) }
             ForEach(m.waiting) { p in
                 VStack(alignment:.leading,spacing:8) {
                     HStack { Text(p.id).font(.headline); Text("\(p.items.count) söz").font(.caption).foregroundStyle(.secondary); Spacer()

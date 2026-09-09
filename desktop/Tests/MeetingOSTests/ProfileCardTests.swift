@@ -8,8 +8,9 @@ final class ProfileCardTests:XCTestCase {
     func testPersonCardLineNamesEverySourceOfDoubt() {
         let weak=ProfileHealth(["name":"Gözlük","model":"m","samples":4,"auto_samples":3,"seconds":180.0,"rejections":2,
                                 "weakest_fit":0.41,"weakest_sample":7,"weak":true,"last_meeting_title":"Pazartesi toplantısı"])
-        XCTAssertEqual(weak.line,"4 örnek (3 otomatik, 1 elle) · 3 dk ses · en zayıf örnek 0,41 · zayıf · 2 ret · son: Pazartesi toplantısı")
+        XCTAssertEqual(weak.line,"4 örnek (3 otomatik, 1 elle) · 3 dk ses · bir örnek diğerlerine benzemiyor · 2 ret · son: Pazartesi toplantısı")
         XCTAssertEqual(weak.weakestSample,7)
+        XCTAssertEqual(weak.fitHelp,"En zayıf örnek benzerliği 0,41")   // the number lives in the tooltip, not the line
         let thin=ProfileHealth(["name":"Ali","model":"m","samples":1,"auto_samples":0,"seconds":12.0])
         XCTAssertEqual(thin.line,"1 örnek (0 otomatik, 1 elle) · 12 sn ses · hiç duyulmadı")
         XCTAssertFalse(thin.weak)

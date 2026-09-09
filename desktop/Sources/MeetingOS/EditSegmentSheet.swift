@@ -24,7 +24,7 @@ struct EditSegmentSheet:View {
                     .onSubmit { Task { await primary() } }
                 if !choices.isEmpty { FlowChips(items:Array(choices.prefix(12))) { model.editName=$0 } }
             }
-            Text(cluster ? "Bu toplantıdaki bütün “\(row.speaker)” bölümleri bu adı alır; ses profili kaydedilir ve sonraki toplantılarda kendiliğinden tanınır." : (textOnly ? "Bu toplantı yalnızca metin içerir; isim yalnız bu bölüme yazılır." : "İsim bu bölüme yazılır. Sesi öğrenmesi için “Gelişmiş” altında temiz ses onayı ver.")).font(.caption).foregroundStyle(.secondary)
+            Text(cluster ? "Bu toplantıdaki bütün “\(row.speaker)” bölümleri bu adı alır; ses profili kaydedilir ve sonraki toplantılarda kendiliğinden tanınır." : (textOnly ? "Bu toplantı yalnızca metin içerir; isim yalnız bu bölüme yazılır." : "İsim bu bölüme yazılır. Sesi öğrenmesi için “Gelişmiş” altında temiz ses onayı verin.")).font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Vazgeç") { model.editRow=nil }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelEditButton")
                 Spacer()
@@ -39,7 +39,7 @@ struct EditSegmentSheet:View {
                         Button("Metni kaydet") { Task { await model.saveText() } }.disabled(model.editText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.editText==row.text).controlSize(.small)
                     }
                     if !textOnly {
-                        Toggle("Dinledim: en az 3 saniye, tek kişi, temiz ses",isOn:$model.clean).font(.callout)
+                        Toggle("Dinledim: en az 6 saniye, tek kişi, temiz ses",isOn:$model.clean).font(.callout)
                         HStack {
                             Button("Yalnız bu bölümü adlandır") { Task { await model.saveLabel(enroll:false) } }.disabled(name.isEmpty).controlSize(.small)
                             Button("Bu bölümden ses profili kaydet") { Task { await model.saveLabel(enroll:true) } }.disabled(!model.clean || name.isEmpty).controlSize(.small).help("Yalnız temiz, tek kişilik bir bölümden profil kaydedin; belirsiz sesler profili bozar")

@@ -23,7 +23,7 @@ struct NamesCard:View {
                     if suggested.count>1 { Button("Hepsini onayla (\(suggested.count))") { Task { await model.confirmAll(suggested) } }.buttonStyle(.borderedProminent).controlSize(.small).disabled(model.busy).accessibilityIdentifier("namesConfirmAll") }
                     Button("Kontrol") { model.tab="review" }.controlSize(.small).help("Şüpheli bölümlerin tam listesi")
                 }
-                Text("Bir kez adlandır; ses profili kaydedilir ve sonraki toplantılarda kendiliğinden tanınır.").font(.caption).foregroundStyle(.secondary)
+                Text("Bir kez adlandırın; ses profili kaydedilir ve sonraki toplantılarda kendiliğinden tanınır.").font(.caption).foregroundStyle(.secondary)
                 ForEach(items) { item in
                     HStack(spacing:8) {
                         Button { if let seg=item.segment { model.reveal(segment:seg) } } label: { Label(item.speaker.isEmpty ? item.speakerKey : item.speaker,systemImage:"text.quote").lineLimit(1) }.buttonStyle(.plain).foregroundStyle(.secondary).frame(width:150,alignment:.leading).help(item.text)
