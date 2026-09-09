@@ -575,3 +575,7 @@ Snapshot parmak izleri (`segments_hash`, `intel_hash`): satırlar ve `intelligen
 ## 2026-09-09 20:15 — 1.2.22 hazırlığı: vade önerisi, karşılama ekranı
 
 `due_dates.py` (Türkçe göreli tarih ayrıştırıcı; 18 ifade + belirsizler → None, birim testli), `intelligence` yanıtında `due_suggestions`, `task_set_due`; Görevlerim’de “Öneri: 15 Eyl · Onayla” çipi (gerçek görevde ekranda doğrulandı), onaylı tarih Hatırlatıcılar’a 09:00 alarmıyla. Boş kütüphanede karşılama ekranı (3 adım; derlendi, boş kütüphane bu Mac’te yok), menü çubuğunda “Son toplantıyı aç”, “Ayarlar” etiketi, ikincil “Ses dosyası aç…”. Tam Python paketi bu Mac’te bellek baskısı (seviye 2) yüzünden supervisor/pressure testlerinde düşüyor; tek tek koşulan diğer modüller temiz (soak testi hatası da `memory_pressure`).
+
+## 2026-09-09 20:40 — 1.2.22: soru radarı, karne, vade önerisi, karşılama
+
+Ajan dalı (questions.py, scorecard.py; talk share Swift ile birebir) birleştirildi; Hafıza sekmesi beş bölüm: Ara / Kararlar / Sorular / Beklediklerim / Karne (Sorular: 5 grup kanıtlı, Karne: 0,9 sa · 9 toplantı · %48/36/12/4 ekranda doğrulandı). Vade önerisi çipi gerçek görevde doğrulandı. Kayıt sırasında parça sinyal analizi her 3. yoklamada.
