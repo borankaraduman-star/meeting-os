@@ -77,7 +77,7 @@ class DesktopTests(unittest.TestCase):
    s.add_segment(a,Segment(0,70,'x','system','Konuşmacı 1',speaker_name='Ayşe'));s.add_segment(a,Segment(70,90,'y','system','Konuşmacı 2'));s.add_segment(a,Segment(0,60,'echo','mic','mic:S0'))
    s.status(a,'complete');s.status(b,'complete');s.close()
    st={m['id']:m['stats'] for m in dispatch({'action':'snapshot'},db)['meetings']}
-   self.assertEqual(st[a],{'segments':2,'seconds':90.0,'speakers':2});self.assertEqual(st[b],{'segments':0,'seconds':0.0,'speakers':0})
+   self.assertEqual(st[a],{'segments':2,'seconds':90.0,'speakers':2,'names':['Ayşe']});self.assertEqual(st[b],{'segments':0,'seconds':0.0,'speakers':0})
  def test_delete_meeting_refuses_active_job(self):
   from meeting_os.recovery import current_job_metadata
   with tempfile.TemporaryDirectory() as tmp:

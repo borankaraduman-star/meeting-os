@@ -6,9 +6,9 @@ import AVFoundation
 
 struct Meeting: Identifiable {
     let id: String; let title: String; let status: String; let displayStatus:String; let recoveryState:String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
-    let segments:Int; let seconds:Double; let speakers:Int
+    let segments:Int; let seconds:Double; let speakers:Int; let names:[String]
     init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; displayStatus=d["display_status"] as? String ?? status; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:]
-        let st=d["stats"] as? [String:Any] ?? [:]; segments=st["segments"] as? Int ?? 0; seconds=st["seconds"] as? Double ?? 0; speakers=st["speakers"] as? Int ?? 0 }
+        let st=d["stats"] as? [String:Any] ?? [:]; segments=st["segments"] as? Int ?? 0; seconds=st["seconds"] as? Double ?? 0; speakers=st["speakers"] as? Int ?? 0; names=st["names"] as? [String] ?? [] }
 }
 extension Meeting {
     var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
@@ -370,8 +370,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var visibleMeetings:[Meeting] {
         let q=filter.trimmingCharacters(in:.whitespaces)
         if q.isEmpty { return meetings }
-        return meetings.filter { ($0.title+" "+$0.created).range(of:q,options:[.caseInsensitive,.diacriticInsensitive]) != nil }
+        return meetings.filter { ($0.title+" "+$0.created+" "+$0.names.joined(separator:" ")+" "+MeetingDates.label($0.created)).range(of:q,options:[.caseInsensitive,.diacriticInsensitive]) != nil }
     }
+    /// Sidebar sections in display order; empty groups are omitted.
+    var groupedMeetings:[(String,[Meeting])] {
+        let now=Date(); let byGroup=Dictionary(grouping:visibleMeetings) { MeetingDates.group($0.created,now:now) }
+        return MeetingDates.order.compactMap { g in byGroup[g].map { (g,$0) } }
+    }
+    /// Bumped by ⌘F / ⌘⇧F; the field that owns the token takes focus.
+    @Published var searchFocusToken=0; @Published var memoryFocusToken=0
+    func focusTranscriptSearch() { tab="transcript"; searchFocusToken+=1 }
+    func focusMemorySearch() { tab="memory"; memoryFocusToken+=1 }
     @Published var cost:[String:Any]?
     @Published var setupChecks:[SetupCheck]=[]
     func loadSetupStatus() async {
@@ -592,7 +601,14 @@ func statusLabel(_ status:String)->String {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject var model=Model()
     var body:some Scene {
-        Window("Meeting OS",id:"main") { MeetingContent(m:model).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780)
+        Window("Meeting OS",id:"main") { MeetingContent(m:model).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780).commands {
+            CommandMenu("Git") {
+                Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)
+                Button("Hafızada ara") { model.focusMemorySearch() }.keyboardShortcut("f",modifiers:[.command,.shift])
+                Divider()
+                Text("Sekmeler: ⌘1 Transkript · ⌘2 Özet · ⌘3 Görevlerim · ⌘4 Kontrol · ⌘5 Hafıza")
+            }
+        }
         MenuBarExtra { QuickMenu(model:model) } label: {
             if model.recording { Label(model.elapsedText,systemImage:"record.circle.fill") } else { Image(systemName:model.zoomMeetingOpen ? "video.badge.waveform" : "waveform") }
         }.menuBarExtraStyle(.menu)

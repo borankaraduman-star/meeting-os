@@ -199,8 +199,9 @@ def dispatch(request, db=None):
         if action=='handoff':return handoff(store,request['task'],request['path'])
         if action=='snapshot':
             meetings=store.meetings()
-            stats={r[0]:{'segments':r[1],'seconds':float(r[2] or 0),'speakers':r[3]} for r in store.db.execute(
-                "SELECT meeting,count(*),max(end),count(DISTINCT coalesce(nullif(speaker_name,''),speaker)) FROM segments WHERE source='system' OR speaker_name<>'' GROUP BY meeting")}
+            stats={r[0]:{'segments':r[1],'seconds':float(r[2] or 0),'speakers':r[3],'names':sorted({n for n in (r[4] or '').split('\x1f') if n})} for r in store.db.execute(
+                "SELECT meeting,count(*),max(end),count(DISTINCT coalesce(nullif(speaker_name,''),speaker)),group_concat(DISTINCT speaker_name) FROM segments WHERE source='system' OR speaker_name<>'' GROUP BY meeting")}
+            for v in stats.values(): v['names']=sorted({n.strip() for n in ','.join(v['names']).split(',') if n.strip()})
             for m in meetings:
                 from .recovery import metadata,classify
                 m['stats']=stats.get(m['id'],{'segments':0,'seconds':0.0,'speakers':0})

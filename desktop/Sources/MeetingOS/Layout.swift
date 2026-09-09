@@ -85,20 +85,22 @@ struct SidebarView:View {
             HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text(model.filter.isEmpty ? "\(model.meetings.count)" : "\(model.visibleMeetings.count)/\(model.meetings.count)").monospacedDigit().font(.caption) }
                 .foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,6)
                 .accessibilityHidden(true)
-            if model.meetings.count>6 {
+            if !model.meetings.isEmpty {
                 HStack(spacing:6) {
                     Image(systemName:"magnifyingglass").foregroundStyle(.secondary).font(.caption)
-                    TextField("Toplantı ara",text:$model.filter).textFieldStyle(.plain).font(.callout).accessibilityIdentifier("meetingFilter")
+                    TextField("Toplantı, kişi veya tarih ara",text:$model.filter).textFieldStyle(.plain).font(.callout).accessibilityIdentifier("meetingFilter")
                     if !model.filter.isEmpty { Button { model.filter="" } label:{ Image(systemName:"xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain) }
                 }.padding(.horizontal,10).padding(.vertical,6).background(.primary.opacity(0.05),in:RoundedRectangle(cornerRadius:8)).padding(.horizontal,14).padding(.bottom,6)
             }
             List(selection:$model.selected) {
-                ForEach(model.visibleMeetings) { meeting in
-                    MeetingLibraryRow(meeting:meeting)
-                        .tag(meeting.id)
-                        .contextMenu { Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(model.busy || meeting.recoveryState=="active") }
-                        .accessibilityIdentifier("meetingRow-\(meeting.id)")
-                        .accessibilityLabel("\(meeting.title.isEmpty ? "Adsız toplantı" : meeting.title), \(meeting.sidebarDetail)")
+                ForEach(model.groupedMeetings,id:\.0) { group,items in
+                    Section { ForEach(items) { meeting in
+                        MeetingLibraryRow(meeting:meeting)
+                            .tag(meeting.id)
+                            .contextMenu { Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(model.busy || meeting.recoveryState=="active") }
+                            .accessibilityIdentifier("meetingRow-\(meeting.id)")
+                            .accessibilityLabel("\(meeting.title.isEmpty ? "Adsız toplantı" : meeting.title), \(meeting.sidebarDetail)")
+                    } } header: { Text(group).font(.system(size:10,weight:.semibold)).tracking(1.2).foregroundStyle(.secondary) }
                 }
             }
             .listStyle(.sidebar)
@@ -257,11 +259,15 @@ struct RecoveryBanner:View {
 
 struct TranscriptSearchBar:View {
     @ObservedObject var model:Model
+    @FocusState private var focused:Bool
     var body:some View {
         HStack {
             Image(systemName:"magnifyingglass").foregroundStyle(.secondary)
             TextField("Bu konuşmada ara",text:$model.search)
                 .textFieldStyle(.plain)
+                .focused($focused)
+                .onChange(of:model.searchFocusToken) { _,_ in focused=true }
+                .onExitCommand { model.search=""; focused=false }
                 .accessibilityIdentifier("transcriptSearchField")
                 .accessibilityLabel("Konuşmada ara")
             if model.focusedSegment != nil { Button("Tüm konuşmayı göster") { model.focusedSegment=nil } }

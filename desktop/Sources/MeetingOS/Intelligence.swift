@@ -174,8 +174,10 @@ struct ActionsView:View {
 }
 struct MemoryView:View {
     @ObservedObject var m:Model
+    @FocusState private var queryFocused:Bool
     var memoryQueryField:some View {
         TextField("Örn. onboarding PRD",text:$m.memoryQuery).onSubmit { Task { await m.memorySearch() } }
+            .focused($queryFocused).onChange(of:m.memoryFocusToken) { _,_ in queryFocused=true }
             .accessibilityIdentifier("memoryQueryField").accessibilityLabel("Hafızada ara")
     }
     var body:some View { VStack(alignment:.leading,spacing:16) {
