@@ -511,3 +511,7 @@ Simge: CoreGraphics ile üretilen `desktop/Icon/AppIcon.icns` (bundle’a kopyal
 ## 2026-09-09 13:35–14:25 — 2 saatlik iterasyon, ara sürümler 1.2.1 → 1.2.6
 
 Her sürüm dala itildi ve GitHub’da yayınlandı (v1.2.3, v1.2.4, v1.2.5, v1.2.6; diğer Mac “Güncelle ve yeniden başlat” ile alır). Ekranda doğrulananlar: yüzen kayıt paneli (⌃⌥R ile), Kontrol’de “Doğrulananları uygula (N)” ve “Yoksay” (uçtan uca: metin değişti, öneri düştü), Özet’te konuşma payı çubukları (41 dk kayıt: %48/%36/%12/%4), kenar çubuğu araması ve “40 dk · 4 kişi / Konuşma bulunmadı” satırları, takvim bağlamı (gerçek Takvim etkinliğiyle kayıt: başlık “Takvim deneme toplantısı”, metadata.calendar yazıldı), Kontrol’de katılımcı çipleri, ayarlar sayfasının ekrana göre uzaması. Kodlandı, birim testli ama canlı Zoom ile denenmedi: Zoom açılınca kendiliğinden kayıt (10 sn onay / 60 sn kapanış toleransı; `ZoomAutoRecord`). Silinen toplantının iCloud raporu da silinir; deneme kayıtlarının raporları temizlendi. Diğer Mac’ten hâlâ rapor yok (yalnız Boran-MacBook-Air klasörü).
+
+## 2026-09-09 14:35 — 1.2.7
+
+Ayarlar’da gerçek OpenRouter transkript harcaması (bu ay/toplam; ekranda $0.10 · 9 toplantı · 62 dk doğrulandı), Zoom elle dokunmadan kayıt yalnız gerçek toplantı penceresini sayar (“Zoom Workplace” ana penceresi hariç, tek pencere taraması), yüzen panel kayıt başlığını gösterir (ekranda doğrulandı). Zoom bu Mac’te kurulu olmadığı için kendiliğinden kayıt canlı denenmedi.

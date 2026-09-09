@@ -240,6 +240,10 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 
 Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
 
+### Bulut maliyeti
+
+Ayarlar sayfasındaki **Bulut maliyeti** kartı OpenRouter’ın her parça için bildirdiği gerçek transkript ücretini toplar: bu ay ve toplam (toplantı sayısı, yüklenen dakika). Özet/görev analizi ve yankı olarak atlanan parçalar dahil değildir. CLI karşılığı yok; `cost_report` köprü eylemi.
+
 ### Zoom’da elle dokunmadan kayıt (isteğe bağlı)
 
 Ayarlar → Kayıt sırasında → **Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat** açıkken Zoom toplantı penceresi 10 saniye boyunca açık kalınca kayıt başlar (bildirim gelir), pencere kapanıp 60 saniye geri gelmezse kendiliğinden başlayan kayıt bitirilir. Elle başlatılan kayıtlar hiçbir zaman kendiliğinden bitirilmez; iş sürerken yeni kayıt başlatılmaz. Varsayılan kapalı.
