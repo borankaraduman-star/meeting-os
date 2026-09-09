@@ -49,6 +49,22 @@ MEETING_OS_PYTHON="$(command -v python3.12)"; export MEETING_OS_PYTHON
 # scripts/signing.py otomatik ad-hoc imzaya düşmez: kimlik yoksa ya da birden fazlaysa derleme durur.
 if [ ! -f build/signing-identity.json ] && [ -z "${MEETING_OS_SIGNING_IDENTITY:-}" ]; then
   identities="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | grep -c ') [0-9A-F]\{40\} ' || true)"
+  if [ "$identities" = 0 ]; then
+    # No certificate at all (a fresh Mac): make one self-signed code-signing identity in the login keychain.
+    # The trust step opens one macOS password dialog; that is the only interactive part of the whole install.
+    echo "Kod imzalama sertifikası yok; 'Meeting OS Local' adıyla kendinden imzalı bir tane oluşturuluyor (macOS bir kez parola soracak)…"
+    certdir="$(mktemp -d -t meeting-os-cert)"
+    (
+      cd "$certdir" &&
+      openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Meeting OS Local/O=Meeting OS" -keyout key.pem -out cert.pem \
+        -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=critical,codeSigning" -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1 &&
+      { openssl pkcs12 -export -inkey key.pem -in cert.pem -out id.p12 -passout pass:meetingos -legacy >/dev/null 2>&1 || openssl pkcs12 -export -inkey key.pem -in cert.pem -out id.p12 -passout pass:meetingos >/dev/null 2>&1; } &&
+      security import id.p12 -k "$HOME/Library/Keychains/login.keychain-db" -P meetingos -T /usr/bin/codesign -T /usr/bin/security >/dev/null &&
+      security add-trusted-cert -r trustRoot -p codeSign -k "$HOME/Library/Keychains/login.keychain-db" cert.pem
+    ) || echo "Sertifika kendiliğinden oluşturulamadı; aşağıdaki elle adımı uygulayın." >&2
+    rm -rf "$certdir"
+    identities="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | grep -c ') [0-9A-F]\{40\} ' || true)"
+  fi
   if [ "$identities" != 1 ]; then
     echo "Kod imzalama sertifikası bulunamadı ya da birden fazla var (bulunan: $identities)." >&2
     cat >&2 <<'CERT'

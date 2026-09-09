@@ -30,7 +30,7 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 
 İki şey elle gerekebilir:
 
-1. **Kod imzalama sertifikası.** Uygulama macOS izinlerini koruyabilmek için sabit bir imzayla derlenir. Betik sertifika bulamazsa ne yapacağınızı yazar: Anahtar Zinciri Erişimi → Sertifika Yardımcısı → Sertifika Oluştur… (Ad: Meeting OS · Kimlik türü: Kendinden imzalı kök · Sertifika türü: Kod İmzalama), sonra betiği tekrar çalıştırın.
+1. **Kod imzalama sertifikası.** Uygulama macOS izinlerini koruyabilmek için sabit bir imzayla derlenir. Mac’te hiç sertifika yoksa betik kendisi “Meeting OS Local” adıyla bir tane oluşturur; bu sırada macOS bir kez parolanızı sorar (güven ayarı için). Kendiliğinden oluşturamazsa ne yapacağınızı yazar: Anahtar Zinciri Erişimi → Sertifika Yardımcısı → Sertifika Oluştur… (Ad: Meeting OS · Kimlik türü: Kendinden imzalı kök · Sertifika türü: Kod İmzalama), sonra betiği tekrar çalıştırın.
 2. **OpenRouter anahtarı.** <https://openrouter.ai/keys> adresinden kendi anahtarınızı oluşturun. Betiğe verirseniz Anahtar Zinciri’ne kaydedilir; ilk bulut işleminde macOS “Meeting OS anahtar zincirine erişmek istiyor” diye bir kez sorabilir — **Her Zaman İzin Ver** deyin. Anahtarı betiğe vermezseniz uygulama ilk kullanımda sorar.
 
 ## İlk gün
