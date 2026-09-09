@@ -141,6 +141,7 @@ def parser():
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
     rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
+    dc=sub.add_parser('document',help='Meeting → PRD / bug report / customer request / Claude Code prompt'); dc.add_argument('--meeting',required=True); dc.add_argument('--kind',choices=['prd','bug','customer','claude'],default='prd'); dc.add_argument('--output',type=Path); dc.add_argument('--openrouter-model',default='openai/gpt-4.1-mini')
     sub.add_parser('mcp')
     return p
 
@@ -148,7 +149,7 @@ def main(supervised=False):
     args=parser().parse_args()
     os.umask(0o077)
     try:
-        cloud_llm=getattr(args,'openrouter_model',None) or args.command in ('glossary','reports','update')
+        cloud_llm=getattr(args,'openrouter_model',None) or args.command in ('glossary','reports','update','document')
         if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask','openrouter-import') and not cloud_llm:
             from .supervisor import run_guarded
             def interrupted(pid):
@@ -282,6 +283,14 @@ def main(supervised=False):
                             try: G.apply_suggestion(store,args.meeting,sg['segment_id'],sg['original'],sg['replacement']);applied+=1
                             except ValueError: pass
                     output({'suggestions':suggestions,'applied':applied})
+            elif args.command=='document':
+                from .documents import build_document
+                from .openrouter import OpenRouterClient,validate_analysis_model
+                from .glossary import load as load_glossary, analysis_context
+                llm=OpenRouterClient().analysis(validate_analysis_model(args.openrouter_model),consent=True)
+                doc=build_document(store,args.meeting,args.kind,llm,glossary=analysis_context(load_glossary(DATA_DIR,ROOT)))
+                if args.output: args.output.write_text(doc['text'],encoding='utf-8');output({'path':str(args.output),'sections':doc['sections'],'sources':doc['sources']})
+                else: print(doc['text'])
             elif args.command=='agenda':
                 from .agenda import build_agenda,render_agenda
                 text=render_agenda(build_agenda(store,args.limit))

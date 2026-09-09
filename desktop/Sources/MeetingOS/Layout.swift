@@ -199,6 +199,13 @@ struct DetailHeader:View {
                 Button("Transkript (Markdown)") { Task { await model.export("md") } }
                 Button("Altyazı (SRT)") { Task { await model.export("srt") } }
                 Button("JSON") { Task { await model.export("json") } }
+                Divider()
+                Menu("Belge hazırla (bulut)") {
+                    Button("Ürün gereksinimi (PRD)…") { Task { await model.exportDocument(kind:"prd") } }
+                    Button("Hata raporu…") { Task { await model.exportDocument(kind:"bug") } }
+                    Button("Müşteri talebi…") { Task { await model.exportDocument(kind:"customer") } }
+                    Button("Claude Code istemi…") { Task { await model.exportDocument(kind:"claude") } }
+                }.disabled(model.meeting?.status != "complete" || model.busy)
             }
             .disabled(model.selected==nil)
             .accessibilityIdentifier("exportMenu")

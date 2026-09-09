@@ -230,6 +230,15 @@ def dispatch(request, db=None):
                 from .openrouter import OpenRouterClient,validate_analysis_model
                 llm=OpenRouterClient().analysis(validate_analysis_model(request['openrouter_model']),consent=True)
             return {'suggestions':G.suggest_for_meeting(store,request['meeting'],entries,llm)}
+        if action=='document':
+            from .documents import build_document
+            from .openrouter import OpenRouterClient,validate_analysis_model
+            from .glossary import load as load_glossary, analysis_context
+            if not request.get('openrouter_model'): raise ValueError('Belge hazırlama bulut modu gerektirir (Yazıya çevirme: OpenRouter)')
+            llm=OpenRouterClient().analysis(validate_analysis_model(request['openrouter_model']),consent=True)
+            doc=build_document(store,request['meeting'],request.get('kind','prd'),llm,segment_ids=request.get('segments'),glossary=analysis_context(load_glossary(DATA_DIR,ROOT)))
+            if request.get('path'): Path(request['path']).write_text(doc['text'],encoding='utf-8')
+            return {**doc,'path':request.get('path')}
         if action=='continuity':
             from .continuity import related_tasks,decision_history
             return {'related_tasks':related_tasks(store,request['meeting']),'decision_history':decision_history(store,request['meeting'])}

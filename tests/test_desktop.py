@@ -182,6 +182,26 @@ class DesktopTests(unittest.TestCase):
    tasks={t['id']:t for t in Memory(Store(db)).actions()}
    self.assertEqual(tasks[old]['state'],'dismissed');self.assertEqual(tasks[old]['payload']['superseded_by'],new);self.assertEqual(tasks[new]['payload']['continues'],old)
    with self.assertRaises(ValueError):dispatch({'action':'supersede_task','old':new,'new':new},db)
+ def test_document_builder_validates_headings_and_numbers(self):
+  from meeting_os.documents import build_document, KINDS
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Ödeme hatası',{})
+   a=s.add_segment(mid,Segment(0,10,'Ödeme adımında 3 kullanıcı hata aldı, dönüşüm düştü.','system','Ayşe'))
+   b=s.add_segment(mid,Segment(10,20,'Yarın düzeltmeyi deploy edelim.','system','Mehmet'));s.status(mid,'complete')
+   calls=[]
+   class LLM:
+    model_id='m'
+    def count(self,t):return 1
+    def complete(self,system,user,max_tokens=0,schema=None):
+     calls.append(system)
+     heads=KINDS['bug'][1]
+     if len(calls)==1: return json.dumps({'sections':[{'heading':h,'content':'12 kullanıcı etkilendi' if i==0 else 'x','sources':[a]} for i,h in enumerate(heads)]})  # invented number → rejected once
+     return json.dumps({'sections':[{'heading':h,'content':'3 kullanıcı hata aldı.' if i==0 else 'Bilinmiyor; sorulacak.','sources':[a if i<2 else b]} for i,h in enumerate(heads)]})
+   doc=build_document(s,mid,'bug',LLM())
+   self.assertEqual(len(calls),2);self.assertIn('Kaynakta olmayan sayılar',calls[1]);self.assertEqual(doc['sections'],5);self.assertEqual(doc['sources'],2)
+   self.assertTrue(doc['text'].startswith('# Hata raporu: Ödeme hatası'));self.assertIn('## Yeniden üretme adımları',doc['text']);self.assertIn('Kaynak bölümler',doc['text'])
+   with self.assertRaises(ValueError):build_document(s,mid,'poem',LLM())
+   s.close()
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

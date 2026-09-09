@@ -332,6 +332,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
     @Published var continuity=Continuity()
+    /// Meeting → PRD / bug report / customer request / Claude Code prompt, saved where the user chooses. Cloud mode only.
+    func exportDocument(kind:String) async {
+        guard let mid=selected, transcriptionMode=="openrouter" else { self.error="Belge hazırlama OpenRouter modunda çalışır (Yazıya çevirme: OpenRouter)"; return }
+        let names=["prd":"prd","bug":"hata-raporu","customer":"musteri-talebi","claude":"claude-code-istemi"]
+        let panel=NSSavePanel();panel.nameFieldStringValue="\(names[kind] ?? kind)-\(mid.prefix(6)).md";panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        busy=true; activity="Belge hazırlanıyor (\(analysisModel))…"
+        defer { busy=false }
+        do { let r=try await request(["action":"document","meeting":mid,"kind":kind,"path":url.path,"openrouter_model":analysisModel]); activity="Belge kaydedildi · \(r["title"] as? String ?? "") · \(r["sources"] as? Int ?? 0) kaynak bölüm" }
+        catch { self.error=error.localizedDescription }
+    }
     func loadContinuity() async { guard let mid=selected else { continuity=Continuity(); return }; continuity=(try? await request(["action":"continuity","meeting":mid])).map(Continuity.parse) ?? Continuity() }
     func supersede(old:String,new:String) async {
         do { _=try await request(["action":"supersede_task","old":old,"new":new]); activity="Önceki görev kapatıldı; bu görev devamı sayılıyor"; if let mid=selected { try await refreshIntelligence(mid) }; await loadContinuity() } catch { self.error=error.localizedDescription }
