@@ -305,7 +305,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// Cloud-only transcription of a stopped recording. Pass a model only for a recording that has not started in the cloud yet.
     func finalizeWithOpenRouter(_ mid:String,model:String?) {
-        guard job==nil else { if !finalizeQueue.contains(mid) { finalizeQueue.append(mid); activity="Sıradaki toplantı yazıya çevrilecek · önceki iş bitince" }; return }
+        guard job==nil else { idleRetry=false; if !finalizeQueue.contains(mid) { finalizeQueue.append(mid); activity="Sıradaki toplantı yazıya çevrilecek · önceki iş bitince" }; return }   // a queued meeting is the user's, not the idle queue's
         let result=dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
         let stored=meetings.first(where:{ $0.id==mid })?.metadata["cloud_mode"] != nil
         activity="Yazıya çevriliyor…"
