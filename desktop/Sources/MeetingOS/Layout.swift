@@ -187,7 +187,14 @@ struct DetailHeader:View {
     var body:some View {
         HStack(alignment:.top) {
             VStack(alignment:.leading) {
-                Text(model.meeting?.title ?? "Bir sonraki iyi fikri kaçırmayın.").font(.system(size:27,weight:.bold,design:.rounded)).lineLimit(2)
+                if model.renaming, model.meeting != nil {
+                    HStack { TextField("Toplantı adı",text:$model.renameText).textFieldStyle(.roundedBorder).font(.title3).onSubmit { Task { await model.renameMeeting() } }.accessibilityIdentifier("renameField"); Button("Kaydet") { Task { await model.renameMeeting() } }; Button("Vazgeç") { model.renaming=false } }
+                } else {
+                    HStack(alignment:.firstTextBaseline,spacing:8) {
+                        Text(model.meeting?.title ?? "Bir sonraki iyi fikri kaçırmayın.").font(.system(size:27,weight:.bold,design:.rounded)).lineLimit(2)
+                        if let m=model.meeting { Button { model.renameText=m.title; model.renaming=true } label: { Image(systemName:"pencil") }.buttonStyle(.plain).foregroundStyle(.secondary).help("Toplantıyı yeniden adlandır").accessibilityIdentifier("renameButton") }
+                    }
+                }
                 HStack(spacing:6) {
                     Circle().fill(MeetingStyle.statusColor(model.meeting?.displayStatus ?? "")).frame(width:6,height:6)
                     Text(model.meeting.map { statusLabel($0.displayStatus) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary)

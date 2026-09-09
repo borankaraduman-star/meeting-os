@@ -37,7 +37,7 @@ extension Model {
     func analyzeMeeting(_ mid:String?=nil) {
         guard let mid=mid ?? selected else { return }
         activity=transcriptionMode=="openrouter" ? "Özet, kararlar ve görevler OpenRouter’da hazırlanıyor (\(analysisModel))…" : "Özet, kararlar ve görevler bu Mac’te hazırlanıyor…"
-        launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in self?.activity=ok ? "Özet ve görevler hazır · Kaynakları gözden geçirin" : "Analiz tamamlanamadı · Transkript korunuyor" }
+        launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in self?.activity=ok ? "Özet ve görevler hazır · Kaynakları gözden geçirin" : "Analiz tamamlanamadı · Transkript korunuyor"; if ok, !NSApp.isActive { self?.notifyDone("Özet ve görevler hazır","Kararlar, sorular ve görevler kaynaklarıyla birlikte çıkarıldı.") } }
     }
     func resultMeeting(_ url:URL) -> String? {
         guard let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return nil }

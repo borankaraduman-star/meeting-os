@@ -220,6 +220,13 @@ class DesktopTests(unittest.TestCase):
    self.assertFalse(dold.exists());self.assertTrue(dkept.exists());self.assertTrue(dfresh.exists());self.assertTrue(dinc.exists());self.assertEqual(real['bytes'],1000)
    s=Store(db);meta=json.loads(s.db.execute('SELECT metadata FROM meetings WHERE id=?',(old,)).fetchone()[0]);self.assertIn('audio_removed',meta);self.assertNotIn('paths',meta)
    self.assertEqual(s.db.execute('SELECT status FROM meetings WHERE id=?',(old,)).fetchone()[0],'complete');s.close()
+ def test_rename_meeting(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('9 Eyl 2026 14:05',{});s.close()
+   self.assertEqual(dispatch({'action':'rename_meeting','meeting':mid,'title':'  Sprint planlama  '},db),{'title':'Sprint planlama'})
+   self.assertEqual(dispatch({'action':'snapshot'},db)['meetings'][0]['title'],'Sprint planlama')
+   with self.assertRaises(ValueError):dispatch({'action':'rename_meeting','meeting':mid,'title':'   '},db)
+   with self.assertRaises(ValueError):dispatch({'action':'rename_meeting','meeting':'yok','title':'x'},db)
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

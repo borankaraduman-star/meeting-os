@@ -313,6 +313,12 @@ def dispatch(request, db=None):
             return {'meetings':count,'bytes':freed}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
+        if action=='rename_meeting':
+            title=(request.get('title') or '').strip()
+            if not title or len(title)>200: raise ValueError('Başlık 1–200 karakter olmalı')
+            with store.db:
+                if not store.db.execute('UPDATE meetings SET title=? WHERE id=?',(title,request['meeting'])).rowcount: raise ValueError('Toplantı bulunamadı')
+            return {'title':title}
         if action=='keep_meeting':
             from .recovery import metadata as read_metadata
             row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(request['meeting'],)).fetchone()

@@ -258,7 +258,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 self.selected=mid;self.tab="transcript"
                 let count=(try? Data(contentsOf:result)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] }?["segments"] as? Int ?? 0
                 if count==0 { self.activity="Kayıtta konuşma bulunmadı · analiz başlatılmadı" }
-                else { self.activity="Transkript OpenRouter’dan alındı · Konuşmacı adlarını kontrol edin"; if !self.requestedQuit { self.analyzeAutomatically(mid) } }
+                else { self.activity="Transkript OpenRouter’dan alındı · Konuşmacı adlarını kontrol edin"; if !NSApp.isActive { self.notifyDone("Transkript hazır","Konuşmacı adlarını Kontrol sekmesinden onaylayın.") }; if !self.requestedQuit { self.analyzeAutomatically(mid) } }
             }
             else { self.activity=self.jobCanceled ? "İşlem durduruldu · Ses ve tamamlanan parçalar korunuyor" : "OpenRouter işlemi tamamlanamadı · Tamamlanan parçalar korunuyor, ‘OpenRouter ile yazıya çevir’ ile sürdürün" }
         }
@@ -341,6 +341,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
     @Published var continuity=Continuity()
+    @Published var renaming=false; @Published var renameText=""
+    func renameMeeting() async {
+        guard let mid=selected else { return }
+        do { _=try await request(["action":"rename_meeting","meeting":mid,"title":renameText]); renaming=false; await refresh() } catch { self.error=error.localizedDescription }
+    }
+    /// Finished work reaches the user even when Zoom or another app is in front.
+    func notifyDone(_ title:String,_ body:String) {
+        let content=UNMutableNotificationContent(); content.title=title; content.body=body
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier:"done-"+UUID().uuidString,content:content,trigger:nil))
+    }
     struct CleanupPreview:Equatable { let days:Int; let count:Int; let bytes:Int; let titles:[String] }
     @Published var cleanupPreview:CleanupPreview?
     @Published var cleanupDays=30
