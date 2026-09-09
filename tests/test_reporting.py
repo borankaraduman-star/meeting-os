@@ -297,3 +297,44 @@ class BriefTests(unittest.TestCase):
             self.assertEqual((r['people'],r['owed'],r['questions']),(2,1,1))
             self.assertIn('## Ayşe Yılmaz · son görüşme: Sprint',r['text']); self.assertIn('- Raporu gönder · cuma',r['text']); self.assertIn('Bütçe onayı kimde?',r['text'])
             self.assertIn('## Yeni Kişi · kayıtlı toplantı yok',r['text']); self.assertIn('- Bütçeyi sor',r['text'])
+
+
+def _similarity_reference(a,b):
+ """The similarity from before the screening, kept verbatim so the fast one can be checked against it."""
+ import difflib,re
+ from meeting_os.continuity import STOP
+ from meeting_os.memory import normalize
+ tok=lambda t:{w for w in re.split(r'\W+',normalize(t or '')) if len(w)>2 and w not in STOP}
+ ta,tb=tok(a),tok(b)
+ jaccard=len(ta&tb)/len(ta|tb) if ta and tb else 0.0
+ ratio=difflib.SequenceMatcher(None,normalize(a or ''),normalize(b or '')).ratio()
+ return round(max(jaccard,ratio),3)
+
+def _synthetic_titles(n=80):
+ import random
+ words='rapor hazırlamak bütçe onay müşteri görüşme tasarım revizyon ekip toplantı sunum teslim tarih güncelleme liste fatura ödeme sözleşme imza test yayın sürüm hata düzeltme'.split()
+ r=random.Random(11)
+ return [' '.join(r.choices(words,k=r.randint(2,9))) for _ in range(n)]+['','Rapor hazır','rapor hazır','Rapor hazır!']
+
+class SimilarityScreeningTests(unittest.TestCase):
+ """The early exits may only skip work: every threshold decision and every kept score has to survive them."""
+ def test_score_matches_the_reference_at_and_above_the_floor(self):
+  from meeting_os.continuity import similarity
+  texts=_synthetic_titles()
+  for a in texts:
+   for b in texts:
+    old=_similarity_reference(a,b)
+    self.assertEqual(similarity(a,b),old,(a,b))                    # no floor: exact everywhere
+    for floor in (0.45,0.5,0.6):
+     new=similarity(a,b,floor)
+     self.assertEqual(old>=floor,new>=floor,(a,b,floor,old,new))   # same decision
+     self.assertLessEqual(new,old,(a,b,floor))                     # never an overestimate
+     if new>=floor: self.assertEqual(new,old,(a,b,floor))          # exact wherever it is kept
+
+ def test_similarity_index_is_the_full_ordered_matrix(self):
+  from meeting_os.continuity import similarity_index
+  texts=_synthetic_titles(50)
+  for floor in (0.45,0.6):
+   self.assertEqual(similarity_index(texts,floor),
+                    {(i,j):_similarity_reference(a,b) for i,a in enumerate(texts) for j,b in enumerate(texts)
+                     if i!=j and _similarity_reference(a,b)>=floor})

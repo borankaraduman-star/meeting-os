@@ -1,8 +1,9 @@
 """Karar günlüğü: her toplantının en güncel analizindeki kararlar, yenisi üstte, önceki hâlleriyle birlikte.
 Read-only — deterministic similarity only, no model call; masking happens in the rendered text only."""
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
-from .continuity import similarity
+from .continuity import prepare, score
 from .memory import Memory, normalize
 
 PREVIOUS_THRESHOLD = 0.45
@@ -21,9 +22,11 @@ def decision_log(store, query=None, limit=DEFAULT_LIMIT, threshold=PREVIOUS_THRE
             entries.append({'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'text': d.get('text') or '',
                             'evidence': {'segment_id': first.get('segment_id'), 'start': first.get('start'), 'quote': first.get('quote')} if first else None,
                             'previous': []})
-    for e in entries:
-        hits = [{'meeting': o['meeting'], 'title': o['title'], 'created': o['created'], 'text': o['text'], 'similarity': similarity(e['text'], o['text'])}
-                for o in entries if o['meeting'] != e['meeting'] and (o['created'] or '') < (e['created'] or '')]
+    prepared = [prepare(e['text']) for e in entries]
+    sm = SequenceMatcher(None)
+    for e, pe in zip(entries, prepared):
+        hits = [{'meeting': o['meeting'], 'title': o['title'], 'created': o['created'], 'text': o['text'], 'similarity': score(pe, po, threshold, sm)}
+                for o, po in zip(entries, prepared) if o['meeting'] != e['meeting'] and (o['created'] or '') < (e['created'] or '')]
         e['previous'] = sorted([h for h in hits if h['similarity'] >= threshold], key=lambda h: h['created'] or '', reverse=True)[:5]
     needle = normalize(query or '')
     matched = [e for e in entries if not needle or needle in normalize(e['text']) or needle in normalize(e['title'] or '')]

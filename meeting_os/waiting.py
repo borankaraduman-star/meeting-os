@@ -1,7 +1,7 @@
 """Beklediklerim: açık görevlerin başkalarına düşen kısmı, kişi kişi, yaşı ve kaynağıyla.
 Deterministic only — no model call; nothing is sent anywhere and nothing stored is changed."""
 from datetime import datetime, timezone
-from .continuity import similarity
+from .continuity import similarity_index
 from .memory import Memory, normalize
 
 OPEN = ('open', 'in_progress')
@@ -41,11 +41,13 @@ def build_waiting(store, owner='Boran', threshold=REPEAT_THRESHOLD):
     dates = {m['id']: (m['created'] or '')[:10] for m in store.meetings()}
     everything = [t for t in memory.actions() if t.get('state') in OPEN]
     mine = normalize(owner or '')
+    links = {}
+    for i, j in similarity_index([t['title'] for t in everything], threshold): links.setdefault(i, []).append(j)
     people = {}
-    for t in everything:
+    for n, t in enumerate(everything):
         who = (t.get('owner') or '').strip()
         if not who or (mine and normalize(who) == mine): continue
-        meetings = {o['meeting'] for o in everything if o['meeting'] != t['meeting'] and similarity(t['title'], o['title']) >= threshold}
+        meetings = {everything[j]['meeting'] for j in links.get(n, ()) if everything[j]['meeting'] != t['meeting']}
         meetings.add(t['meeting'])
         item = {'task': t['id'], 'title': t['title'], 'owner': who, 'meeting': t['meeting'], 'meeting_title': t.get('meeting_title'),
                 'meeting_date': dates.get(t['meeting']), 'created': t.get('created'), 'due_text': t.get('due_text'), 'state': t.get('state'),

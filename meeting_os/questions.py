@@ -2,8 +2,9 @@
 Read-only — deterministic similarity only, no model call. A question is never closed on its own; a later decision
 that looks like an answer is offered as a hint ("muhtemelen cevaplandı"), nothing is marked answered."""
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
-from .continuity import similarity
+from .continuity import prepare, score
 from .memory import Memory, normalize
 
 REPEAT_THRESHOLD = 0.5
@@ -30,19 +31,22 @@ def question_radar(store, query=None, limit=DEFAULT_LIMIT, threshold=REPEAT_THRE
     memory = Memory(store)
     questions = _items(store, memory, 'questions')   # newest meeting first
     decisions = _items(store, memory, 'decisions')
-    clusters = []
-    for q in questions:
+    pq = [prepare(q['text']) for q in questions]
+    pd = [prepare(d['text']) for d in decisions]
+    sm = SequenceMatcher(None)
+    clusters = []   # question indexes, so the prepared text of each one is reused
+    for n in range(len(questions)):
         for c in clusters:
-            if max(similarity(q['text'], o['text']) for o in c) >= threshold: c.append(q); break
-        else: clusters.append([q])
+            if max(score(pq[n], pq[k], threshold, sm) for k in c) >= threshold: c.append(n); break
+        else: clusters.append([n])
     groups = []
     for c in clusters:
-        newest = c[0]; meetings = []; seen = set()
-        for i in c:
+        newest = questions[c[0]]; meetings = []; seen = set()
+        for i in (questions[k] for k in c):
             if i['meeting'] in seen: continue
             seen.add(i['meeting']); meetings.append({'meeting': i['meeting'], 'title': i['title'], 'created': i['created']})
-        hits = [{'text': d['text'], 'meeting': d['meeting'], 'title': d['title'], 'created': d['created'], 'similarity': similarity(newest['text'], d['text'])}
-                for d in decisions if (d['created'] or '') > (newest['created'] or '')]
+        hits = [{'text': d['text'], 'meeting': d['meeting'], 'title': d['title'], 'created': d['created'], 'similarity': score(pq[c[0]], p, answer_threshold, sm)}
+                for d, p in zip(decisions, pd) if (d['created'] or '') > (newest['created'] or '')]
         hits = sorted([h for h in hits if h['similarity'] >= answer_threshold], key=lambda h: (h['similarity'], h['created'] or ''), reverse=True)
         groups.append({'text': newest['text'], 'meetings': meetings, 'count': len(meetings), 'created': newest['created'],
                        'evidence': newest['evidence'], 'answered_by': hits[0] if hits else None})
