@@ -567,3 +567,7 @@ Kart kabuğu kalktı, zaman sol olukta, aynı konuşmacının ardışık paragra
 ## 2026-09-09 19:25 — 1.2.20: Görünüm ayarı
 
 Boran “tema renk değiştirme nerede” sordu; yoktu. Ayarlar → Görünüm: Sistem/Açık/Koyu (`preferredColorScheme`, yüzen panel dahil) ve 6 vurgu rengi (`Accents`; `MeetingStyle.accent` artık Model’den beslenen static var, 18 çağrı yeri değişmedi; pencere `.id(accentKey)` ile yeniden çizilir). Koyu + mavi ekranda doğrulandı.
+
+## 2026-09-09 19:50 — 1.2.21: sadeleştirme + yoklama optimizasyonu
+
+Snapshot parmak izleri (`segments_hash`, `intel_hash`): satırlar ve `intelligence` çağrısı yalnız değişince alınır (2 sn’lik yoklama artık iki Python süreci yerine bir hafif çağrı; 335 satırlık JSON her seferinde taşınmıyor). Ayarlar beş bölüme ayrıldı (Genel / Sözlük ve sesler / Depolama / Güncelleme ve raporlar / Kurulum durumu; yükseklik bölüme göre), kenar çubuğunda yazıya çevirme seçenekleri tek satıra katlandı, başlıktaki teknik satır kalktı, transkript üstündeki iki bilgi satırı bire indi.
