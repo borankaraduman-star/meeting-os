@@ -80,6 +80,19 @@ def is_silent(path, start, end, threshold=1e-4):
     return True
 
 
+def upload_workers():
+    """One piece at a time while a Zoom meeting is on screen (the app sets the flag); three otherwise."""
+    return 1 if os.environ.get('MEETING_OS_LOW_PRIORITY') else UPLOAD_WORKERS
+
+
+def job_usage(started):
+    """CPU seconds, peak memory and wall time of this job, for the shared diagnostics report."""
+    import resource, time
+    me=resource.getrusage(resource.RUSAGE_SELF); kids=resource.getrusage(resource.RUSAGE_CHILDREN)
+    return {'cpu_seconds':round(me.ru_utime+me.ru_stime+kids.ru_utime+kids.ru_stime,1),'peak_rss_mb':round(max(me.ru_maxrss,kids.ru_maxrss)/1e6,1),
+            'wall_seconds':round(time.monotonic()-started,1),'low_priority':bool(os.environ.get('MEETING_OS_LOW_PRIORITY')),'upload_workers':upload_workers()}
+
+
 def encode_piece(path, start, end, ffmpeg=None):
     command=[ffmpeg or shutil.which('ffmpeg') or '/opt/homebrew/bin/ffmpeg','-nostdin','-v','error','-ss',f'{start:.3f}','-t',f'{end-start:.3f}','-i',str(path),
              '-vn','-ac','1','-ar','16000','-c:a','libopus','-b:a','32k','-f','ogg','pipe:1']
@@ -198,9 +211,10 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     pending=[i for i in range(len(plan)) if i not in done]
     finished=len(plan)-len(pending)
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
-        for start in range(0,len(pending),UPLOAD_WORKERS):
-            batch=pending[start:start+UPLOAD_WORKERS]
+    workers=upload_workers()
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for start in range(0,len(pending),workers):
+            batch=pending[start:start+workers]
             emit('transcribing',finished,len(plan),'OpenRouter')
             futures={}
             for position in batch:
@@ -455,6 +469,7 @@ def compact_capture(store, mid):
 def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
     """Capture-directory recordings and cloud-only file imports share this resumable path."""
     _consent(consent)
+    import time; job_started=time.monotonic()
     row=store.db.execute('SELECT * FROM meetings WHERE id=?',(mid,)).fetchone()
     if not row: raise ValueError('Toplantı bulunamadı')
     from .recovery import classify, current_job_metadata, metadata as read_metadata
@@ -496,6 +511,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             metadata['echo_segments']=flag_echo(store,mid)
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))
+            metadata['job_usage']=job_usage(job_started)
             try:
                 identity=identify_clusters(store,mid,sources,embedder)
                 metadata['identity']=identity;metadata.pop('identity_error',None)

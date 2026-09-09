@@ -240,6 +240,10 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 
 Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
 
+### Toplantı sırasında yük (1.2.14+)
+
+Uygulama toplantıyı hiçbir zaman yavaşlatmamalı. Bunun için: kayıt işi normal öncelikte kalır, diğer bütün işler (yükleme, kişi tanıma, analiz, belge) düşük öncelikte (`utility`) çalışır; ekranda Zoom toplantı penceresi varsa en düşük öncelikte (`background`), Python tarafı `nice 10` ve tek yükleyici ile. Zoom açıkken güncelleme başlatılmaz (düğme “Güncelleme toplantı bitince” olur; otomatik güncelleme de bekler); güncelleme betiği derlemeyi ve pip’i `nice 19` ile koşar. Uygulama boştayken durum yoklaması 2 sn yerine 6 sn’de bir. Her tamamlanan işin CPU saniyesi, tepe belleği ve süresi toplantı metadata’sına (`job_usage`) ve iCloud raporuna yazılır; “yavaşladı” şüphesinde önce oraya bakın. Yükleme ağı hafiftir: parçalar Opus 32 kbps (saatte ≈14 MB).
+
 ### Kurulum durumu (ikinci Mac için)
 
 Ayarlar sayfasının başındaki **Kurulum durumu** kartı mikrofon, ekran kaydı, takvim, hatırlatıcı ve bildirim izinlerini, OpenRouter anahtarının Keychain’de olup olmadığını (değer okunmaz, yalnız varlık), sözlük terim sayısını/paylaşımını ve sürümün güncel olup olmadığını tek listede gösterir. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; gri: isteğe bağlı.

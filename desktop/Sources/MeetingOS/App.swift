@@ -89,7 +89,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let pressure=DispatchSource.makeMemoryPressureSource(eventMask:[.warning,.critical],queue:.main)
         pressure.setEventHandler { [weak self] in Task { @MainActor in self?.stopForResources() } }
         pressure.resume();pressureSource=pressure
-        timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true) { [weak self] _ in Task { @MainActor in await self?.refresh() } }
+        timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true) { [weak self] _ in Task { @MainActor in
+            guard let self=self else { return }
+            self.pollTick+=1
+            if RefreshCadence.shouldRefresh(tick:self.pollTick,recording:self.recording,busy:self.busy,active:NSApp.isActive) { await self.refresh() }
+        } }
         Task { await refresh() }
     }
     var meeting:Meeting? { meetings.first { $0.id==selected } }
@@ -221,7 +225,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             resourceStopMessage="";jobCanceled=false;jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args)
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor"
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }; p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen)) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
@@ -387,6 +391,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
     }
     var pendingCalendar:CalendarEvent?
+    var pollTick=0
     /// Send one task to Apple Reminders; asks for reminders access on first use.
     func addReminder(_ item:ActionItem) {
         let go={ [weak self] in
@@ -475,11 +480,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
         if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r) }
-        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording { startUpdate() }
+        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, !zoomMeetingOpen { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
     func startUpdate() {
         guard job==nil, !recording, !updating else { return }
+        if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
         Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
     }

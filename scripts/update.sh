@@ -20,13 +20,13 @@ if ! git merge --ff-only origin/v0.1; then status failed "$FROM" "Dal ileri sar�
 TO="$(git rev-parse --short HEAD)"
 status running "$TO" "Bağımlılıklar kontrol ediliyor"
 if [ "$FROM" != "$TO" ] && ! git diff --quiet "$FROM" "$TO" -- requirements-macos-tested.txt pyproject.toml; then
-  .venv/bin/python -m pip install -r requirements-macos-tested.txt && .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]' || { status failed "$TO" "Python bağımlılıkları kurulamadı"; exit 1; }
+  nice -n 19 .venv/bin/python -m pip install -r requirements-macos-tested.txt && nice -n 19 .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]' || { status failed "$TO" "Python bağımlılıkları kurulamadı"; exit 1; }
 fi
 if [ "$FROM" != "$TO" ] && ! git diff --quiet "$FROM" "$TO" -- capture; then
-  /bin/sh scripts/build-capture.sh || { status failed "$TO" "Kayıt yardımcısı derlenemedi"; exit 1; }
+  nice -n 19 /bin/sh scripts/build-capture.sh || { status failed "$TO" "Kayıt yardımcısı derlenemedi"; exit 1; }
 fi
 status running "$TO" "Uygulama derleniyor ve imzalanıyor"
-if /bin/sh scripts/build-desktop.sh; then
+if nice -n 19 /bin/sh scripts/build-desktop.sh; then
   status done "$TO" "Güncellendi: $FROM → $TO"
 else
   status failed "$TO" "Derleme başarısız; önceki sürüm build/app-backups içinde"

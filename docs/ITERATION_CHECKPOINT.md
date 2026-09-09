@@ -539,3 +539,7 @@ Hiç sorulmamış izinlerde macOS sorusu açılır; reddedilmiş izinlerde ilgil
 ## 2026-09-09 15:00 — 1.2.13: Kurulum kartında teşhis raporu klasörü
 
 `setup_status` artık rapor paylaşımının açık olup olmadığını, klasörün yazılabilirliğini (ilk var olan üst klasörde W_OK) ve yazılmış rapor sayısını döner; kart “Teşhis raporları · Açık · N rapor iCloud Drive’da” gösterir. Kullanım Mac’inde rapor gelmiyorsa nedeni burada görünür.
+
+## 2026-09-09 15:15 — 1.2.14: toplantı sırasında yük koruması
+
+Boran diğer Mac’te “internet yavaşladı / dondu” bildirdi; uygulamayla ilişkisi doğrulanamadı (o Mac’ten rapor yok). Ölçülenler: köprü yoklaması 30–40 ms / 2 sn (≈%2 CPU), yükleme Opus 32 kbps (saatte ≈14 MB), boşta uygulama %0–2.5 CPU / 120–156 MB. Ağır adaylar: güncelleme derlemesi (`swift build`, tek çekirdek dakikalarca), kayıt sonrası Resemblyzer/PyTorch, art arda toplantıda önceki toplantının finalize’ı. Önlemler: `JobPriority` (kayıt userInitiated, diğer işler utility, Zoom açıkken background + `MEETING_OS_LOW_PRIORITY` → `os.nice(10)` + tek yükleyici), Zoom açıkken güncelleme yasak (UI + otomatik), `update.sh` `nice 19`, boşta yoklama 6 sn (`RefreshCadence`), `job_usage` (CPU s, tepe RSS, süre) metadata + rapor. Canlı doğrulama: `nice` 10 oldu; QoS/Zoom yolu bu Mac’te Zoom olmadığı için denenmedi.

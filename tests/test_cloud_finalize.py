@@ -521,3 +521,18 @@ class CompactTests(unittest.TestCase):
             meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['chunks_removed'],2)
             self.assertEqual(compact_capture(store,mid),0)   # idempotent
             store.close()
+
+
+class JobPriorityTests(unittest.TestCase):
+    def test_low_priority_flag_means_one_uploader_and_is_reported(self):
+        import os
+        from unittest.mock import patch
+        from meeting_os import cloud_finalize as CF
+        with patch.dict(os.environ,{},clear=False):
+            os.environ.pop('MEETING_OS_LOW_PRIORITY',None)
+            self.assertEqual(CF.upload_workers(),CF.UPLOAD_WORKERS)
+            u=CF.job_usage(__import__('time').monotonic()-2.0)
+            self.assertFalse(u['low_priority']);self.assertGreaterEqual(u['wall_seconds'],2.0);self.assertGreater(u['peak_rss_mb'],0);self.assertGreaterEqual(u['cpu_seconds'],0)
+        with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
+            self.assertEqual(CF.upload_workers(),1)
+            self.assertEqual((CF.job_usage(0)['low_priority'],CF.job_usage(0)['upload_workers']),(True,1))

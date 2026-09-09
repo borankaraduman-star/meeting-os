@@ -51,7 +51,7 @@ struct SidebarView:View {
                 if let u=model.update, u.available {
                     VStack(alignment:.leading,spacing:6) {
                         Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)
-                        Button(model.updating ? "Güncelleniyor…" : "Güncelle ve yeniden başlat") { model.startUpdate() }.controlSize(.small).disabled(model.busy || model.recording || model.updating).accessibilityIdentifier("updateButton")
+                        Button(model.updating ? "Güncelleniyor…" : (model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")) { model.startUpdate() }.controlSize(.small).disabled(model.zoomMeetingOpen || model.busy || model.recording || model.updating).accessibilityIdentifier("updateButton")
                     }.padding(10).meetingCard()
                 }
                 if model.recording {
@@ -397,7 +397,7 @@ struct SettingsSheet:View {
                 Text("Yeni sürüm varsa kenar çubuğunda ve menü çubuğu simgesinde “Güncelle ve yeniden başlat” görünür; güncelken düğme yoktur. Kontrol açılışta, uygulama öne gelince ve 15 dakikada bir yapılır.").font(.caption2).foregroundStyle(.secondary)
                 HStack {
                     Button("Şimdi kontrol et") { Task { await model.checkForUpdates(force:true) } }
-                    if model.update?.available==true { Button("Güncelle ve yeniden başlat") { model.startUpdate() }.disabled(model.busy || model.recording) }
+                    if model.update?.available==true { Button(model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat") { model.startUpdate() }.disabled(model.busy || model.recording || model.zoomMeetingOpen) }
                 }
                 Toggle("Yeni sürüm bulununca açılışta kendiliğinden güncelle (kayıt yokken)",isOn:$model.reportSettings.autoUpdate).onChange(of:model.reportSettings.autoUpdate) { _ in Task { await model.saveReportSettings() } }
                 Toggle("Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz",isOn:$model.reportSettings.shareReports).onChange(of:model.reportSettings.shareReports) { _ in Task { await model.saveReportSettings() } }

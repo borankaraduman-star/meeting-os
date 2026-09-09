@@ -148,6 +148,8 @@ def parser():
     return p
 
 def main(supervised=False):
+    if os.environ.get('MEETING_OS_LOW_PRIORITY'):   # a Zoom meeting is on screen: never compete with it
+        with contextlib.suppress(OSError): os.nice(10)
     args=parser().parse_args()
     os.umask(0o077)
     try:
