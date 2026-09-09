@@ -10,12 +10,21 @@ import urllib.request
 
 STT_MODEL = 'openai/gpt-transcribe'
 STT_MODELS = (
-    {'id':'openai/gpt-transcribe','name':'GPT Transcribe','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18'},
-    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında'},
-    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında'},
-    {'id':'openai/whisper-large-v3','name':'Whisper Large V3','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında'},
-    {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında'},
+    {'id':'deepgram/nova-3','name':'Deepgram Nova-3 (konuşmacı ayrımı)','pricing':'$0.0043/dakika (Deepgram liste fiyatı); konuşmacı ayrımı dahil','diarization':{'deepgram':{'diarize':True}}},
+    {'id':'microsoft/mai-transcribe-2','name':'Microsoft MAI-Transcribe 2 (konuşmacı ayrımı)','pricing':'Azure üzerinden; fiyat birimi OpenRouter model sayfasında','diarization':{'azure':{'diarization':{'enabled':True}}}},
+    {'id':'openai/gpt-transcribe','name':'GPT Transcribe','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18','diarization':None},
+    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/whisper-large-v3','name':'Whisper Large V3','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
 )
+DIARIZATION_DEFAULT_MODEL = 'deepgram/nova-3'
+
+def diarization_options(model):
+    """Provider-specific diarization switch verified on 2026-09-09, or None when the model has none."""
+    for m in STT_MODELS:
+        if m['id']==model: return m['diarization']
+    return None
 
 def validate_stt_model(model):
     if model not in {m['id'] for m in STT_MODELS}:
@@ -73,21 +82,39 @@ def http_error_message(code):
     return f'OpenRouter HTTP {code}. {detail} Otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor.'
 
 
+def parse_segments(raw):
+    """Provider segments -> bounded list of {start,end,text,speaker}; never invents timing or speakers."""
+    if raw is None: return []
+    if not isinstance(raw,list) or len(raw)>20000: raise OpenRouterError('OpenRouter konuşmacı bölümleri geçersiz.')
+    out=[]
+    for item in raw:
+        if not isinstance(item,dict): raise OpenRouterError('OpenRouter konuşmacı bölümleri geçersiz.')
+        start,end,text=item.get('start'),item.get('end'),item.get('text')
+        if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) for v in (start,end)) or start<0 or end<start:
+            raise OpenRouterError('OpenRouter bölüm zamanları geçersiz.')
+        if not isinstance(text,str): raise OpenRouterError('OpenRouter bölüm metni geçersiz.')
+        speaker=item.get('speaker')
+        if speaker is not None and (isinstance(speaker,bool) or not isinstance(speaker,(int,str))): speaker=None
+        out.append({'start':float(start),'end':float(end),'text':text.strip(),'speaker':None if speaker is None else str(speaker)})
+    return out
+
+
 class OpenRouterClient:
     MAX_AUDIO_BYTES = 8 * 1024 * 1024
     MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-    def __init__(self, api_key=None, *, transport=None):
+    def __init__(self, api_key=None, *, transport=None, max_audio_bytes=None):
+        if max_audio_bytes: self.MAX_AUDIO_BYTES=int(max_audio_bytes)
         self._key = api_key or read_api_key()
         if not isinstance(self._key,str) or any(c.isspace() for c in self._key):
             raise OpenRouterError('Geçersiz OpenRouter anahtarı.')
         self._transport = transport or urllib.request.build_opener(NoRedirect()).open
 
-    def _post(self, endpoint, payload):
+    def _post(self, endpoint, payload, timeout=90):
         req = urllib.request.Request('https://openrouter.ai/api/v1/' + endpoint,
             data=json.dumps(payload,ensure_ascii=False,allow_nan=False).encode(),
             headers={'Authorization':'Bearer '+self._key,'Content-Type':'application/json'},method='POST')
         try:
-            with self._transport(req, timeout=90) as response: raw=response.read(self.MAX_RESPONSE_BYTES+1)
+            with self._transport(req, timeout=timeout) as response: raw=response.read(self.MAX_RESPONSE_BYTES+1)
         except urllib.error.HTTPError as exc:
             raise OpenRouterError(http_error_message(exc.code)) from None
         except (OSError, TimeoutError):
@@ -98,17 +125,21 @@ class OpenRouterClient:
         if not isinstance(result,dict) or 'error' in result: raise OpenRouterError('OpenRouter geçersiz/hatalı yanıt döndürdü.')
         return result
 
-    def transcribe(self, audio, format, *, model=STT_MODEL, consent=False, language='tr'):
+    def transcribe(self, audio, format, *, model=STT_MODEL, consent=False, language='tr', diarize=False, timeout=90):
         _consent(consent);validate_stt_model(model)
         if not isinstance(audio,bytes) or not 0<len(audio)<=self.MAX_AUDIO_BYTES:
-            raise OpenRouterError('Ses parçası boş veya 8 MiB sınırını aşıyor.')
+            raise OpenRouterError(f'Ses parçası boş veya {self.MAX_AUDIO_BYTES//(1024*1024)} MiB sınırını aşıyor.')
         if format not in ('wav','mp3','flac','m4a','ogg','webm','aac'):
             raise OpenRouterError('Desteklenmeyen ses biçimi.')
         if language is not None and not re.fullmatch('[a-z]{2}',language):
             raise OpenRouterError('Dil iki harfli ISO kodu olmalı.')
         payload={'model':model,'input_audio':{'data':base64.b64encode(audio).decode(),'format':format},'response_format':'json'}
         if language:payload['language']=language
-        result=self._post('audio/transcriptions',payload)
+        options=diarization_options(model) if diarize else None
+        if diarize and options is None:raise OpenRouterError('Seçilen model konuşmacı ayrımı sunmuyor; model otomatik değiştirilmedi.')
+        if options:
+            payload['response_format']='verbose_json';payload['timestamp_granularities']=['segment'];payload['provider']={'options':options}
+        result=self._post('audio/transcriptions',payload,timeout=timeout)
         if not isinstance(result.get('text'),str):raise OpenRouterError('OpenRouter transkript metni döndürmedi.')
         usage=result.get('usage') or {}
         if not isinstance(usage,dict):raise OpenRouterError('OpenRouter kullanım verisi geçersiz.')
@@ -119,7 +150,9 @@ class OpenRouterClient:
                 if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or value<0:
                     raise OpenRouterError('OpenRouter kullanım verisi geçersiz.')
                 safe_usage[key]=value
-        return {'text':result['text'],'usage':safe_usage}
+        out={'text':result['text'],'usage':safe_usage}
+        if options: out['segments']=parse_segments(result.get('segments'))
+        return out
 
     def analysis(self, model, *, consent=False):
         _consent(consent)

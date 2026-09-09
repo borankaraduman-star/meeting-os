@@ -8,6 +8,6 @@ enum RecoveryPresentation {
         recording ? "Kaydı bitir" : (jobKind == "record" ? "Kayıt durduruluyor…" : "Yeni kayıt")
     }
     static func canCancel(jobKind:String?,running:Bool,requested:Bool)->Bool {
-        running && ["retry","openrouter-import"].contains(jobKind ?? "") && !requested
+        running && ["retry","openrouter-import","openrouter-finalize"].contains(jobKind ?? "") && !requested
     }
 }

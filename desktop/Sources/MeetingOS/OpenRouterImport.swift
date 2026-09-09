@@ -22,13 +22,14 @@ struct OpenRouterModelOption:Identifiable,Decodable {
     let id:String
     let name:String
     let pricing:String
+    let diarization:Bool
 }
 
 struct OpenRouterImportView:View {
     @ObservedObject var model:Model
     @Environment(\.dismiss) private var dismiss
     @State private var models:[OpenRouterModelOption]=[]
-    @State private var selectedModel="openai/gpt-transcribe"
+    @State private var selectedModel=CloudTranscription.defaultModel
     @State private var key=""
     @State private var path:URL?
     @State private var title=""
@@ -42,7 +43,7 @@ struct OpenRouterImportView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
             Text("OpenRouter · Ses transkripsiyonu").font(.title2.bold())
-            Text("Türkçe ses → transkript. Konuşmacı ayrımı ve ses profilleri Mac’te işlenir. Özet, karar ve görevleri işlem bitince Özet sekmesinden bu Mac’te hazırlayabilirsiniz.").foregroundStyle(.secondary)
+            Text("Türkçe ses → transkript. Bu yolda bu Mac’te model yüklenmez; konuşmacı ayrımı seçilen sağlayıcıdan gelir (ayrım sunmayan modellerde konuşmacılar ayrılmaz). Özet, karar ve görevleri işlem bitince Özet sekmesinden bu Mac’te hazırlayabilirsiniz.").foregroundStyle(.secondary)
             if models.isEmpty { Text("Model listesi yükleniyor…").font(.caption) }
             else {
                 Picker("Transkripsiyon modeli",selection:$selectedModel) {
@@ -92,6 +93,7 @@ struct OpenRouterImportView:View {
                 let response=try await model.request(["action":"openrouter_models"])
                 let data=try JSONSerialization.data(withJSONObject:response["models"] ?? [])
                 models=try JSONDecoder().decode([OpenRouterModelOption].self,from:data)
+                if let stored=model.meeting?.metadata["model"] as? String, resumable != nil, models.contains(where:{$0.id==stored}) { selectedModel=stored }
                 guard models.contains(where:{$0.id==selectedModel}) else { throw OpenRouterCredential.failure("Varsayılan model listede yok.") }
             } catch { message=error.localizedDescription;models=[] }
         }
@@ -99,9 +101,11 @@ struct OpenRouterImportView:View {
     private func start(resume:String?) {
         guard consent,!model.busy,models.contains(where:{$0.id==selectedModel}) else { return }
         let result=model.dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
-        var args=["openrouter-import","--allow-upload","--model",selectedModel,"--title",title.isEmpty ? "OpenRouter toplantısı":title,"--output",result.path]
-        if let resume { args += ["--resume",resume] } else if let path { args.append(path.path) } else { return }
-        model.activity="Konuşmacılar yerelde ayrılıyor; seçilen transkripsiyon modeli hazırlanıyor…"
+        let args:[String]
+        if let resume, let meeting=model.meetings.first(where:{ $0.id==resume }) { args=CloudTranscription.resumeArguments(meeting:meeting,model:selectedModel,output:result.path) }
+        else if let path { args=CloudTranscription.importArguments(path:path.path,title:title.isEmpty ? "OpenRouter toplantısı":title,model:selectedModel,output:result.path) }
+        else { return }
+        model.activity="Ses OpenRouter’a gönderiliyor · Bu Mac’te model yüklenmiyor"
         model.launch(args) { [weak model] ok in
             guard let model else { return }
             if ok,let mid=model.resultMeeting(result) {

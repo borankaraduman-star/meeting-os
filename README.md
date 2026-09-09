@@ -35,7 +35,7 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    çakışan veya kısa bağlamlı örnekler reddedilir. Aynı adlı farklı kişilere
    ayırt edici adlar verin. Belirsiz eşleşmeler isimsiz kalır.
 
-Kayıtlı ses dosyaları **OpenRouter ile ses aç** üzerinden yazıya çevrilir; yerel
+Kenar çubuğundaki **Yazıya çevirme** seçimi varsayılan olarak OpenRouter’dır: kayıt bitince ses seçili modele gönderilir, bu Mac’te model yüklenmez, konuşmacı ayrımı sağlayıcıdan gelir (varsayılan Deepgram Nova-3). Bu modda kayıt sırasında canlı metin yoktur. Bitmemiş kayıtlar başlıktaki **OpenRouter ile yazıya çevir** ile gönderilir. Kayıtlı ses dosyaları **OpenRouter ile ses aç** üzerinden yazıya çevrilir; yerel
 `import` ve `transcript_import` yolları CLI’de durur, kenar çubuğunda düğmeleri yoktur.
 Bir toplantıyı silmek için listede sağ tıklayıp **Toplantıyı sil…** seçin veya
 başlıktaki çöp kutusunu kullanın; onaydan sonra transkript, düzeltmeler, özet,

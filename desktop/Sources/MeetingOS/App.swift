@@ -47,6 +47,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
+    @Published var transcriptionMode=UserDefaults.standard.string(forKey:CloudTranscription.modeKey) ?? "openrouter" { didSet { UserDefaults.standard.set(transcriptionMode,forKey:CloudTranscription.modeKey) } }
+    @Published var cloudModel=UserDefaults.standard.string(forKey:CloudTranscription.modelKey) ?? CloudTranscription.defaultModel { didSet { UserDefaults.standard.set(cloudModel,forKey:CloudTranscription.modelKey) } }
+    @Published var cloudModels:[OpenRouterModelOption]=[]
     @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
     @Published var tab="transcript" { didSet { if tab != "transcript" { pendingEvidence=nil } } }; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
     @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
@@ -141,7 +144,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         recordingDir=dir; recording=true; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"
         let name=title.isEmpty ? Date().formatted(date:.abbreviated,time:.shortened) : title
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
-        launch(["record",dir.path,"--live","--seconds","14400","--title",name,"--output",receipt.path]) { [weak self] ok in
+        launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
@@ -155,6 +158,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
     func finishRecordedMeeting(_ mid:String) {
+        if transcriptionMode=="openrouter" { finalizeWithOpenRouter(mid,model:cloudModel); return }
         activity="Aynı toplantının son transkripti hazırlanıyor…"
         launch(["retry",mid]) { [weak self] ok in
             guard let self=self else { return }
@@ -164,6 +168,28 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             }
             else { self.activity=self.jobCanceled ? "İşlem durduruldu · Kaynak kayıt korunuyor" : "Son işlem başarısız · Önceki metin ve ses korunuyor" }
         }
+    }
+    /// Cloud-only transcription of a stopped recording. Pass a model only for a recording that has not started in the cloud yet.
+    func finalizeWithOpenRouter(_ mid:String,model:String?) {
+        guard job==nil else { return }
+        let result=dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
+        let stored=meetings.first(where:{ $0.id==mid })?.metadata["cloud_mode"] != nil
+        activity="Ses OpenRouter’a gönderiliyor · Bu Mac’te model yüklenmiyor"
+        launch(CloudTranscription.finalizeArguments(meeting:mid,model:stored ? nil : model,output:result.path)) { [weak self] ok in
+            guard let self else { return }
+            try? FileManager.default.removeItem(at:result)
+            if ok { self.selected=mid;self.tab="transcript";self.activity="Transkript OpenRouter’dan alındı · Konuşmacı adlarını kontrol edin";if !self.requestedQuit { self.analyzeAutomatically(mid) } }
+            else { self.activity=self.jobCanceled ? "İşlem durduruldu · Ses ve tamamlanan parçalar korunuyor" : "OpenRouter işlemi tamamlanamadı · Tamamlanan parçalar korunuyor, ‘OpenRouter ile yazıya çevir’ ile sürdürün" }
+        }
+    }
+    func loadCloudModels() async {
+        guard cloudModels.isEmpty else { return }
+        do {
+            let response=try await request(["action":"openrouter_models"])
+            let data=try JSONSerialization.data(withJSONObject:response["models"] ?? [])
+            cloudModels=try JSONDecoder().decode([OpenRouterModelOption].self,from:data)
+            if !cloudModels.contains(where:{ $0.id==cloudModel }) { cloudModel=(response["diarization_default"] as? String) ?? CloudTranscription.defaultModel }
+        } catch { self.error=error.localizedDescription }
     }
     var canCancelJob:Bool { RecoveryPresentation.canCancel(jobKind:jobKind,running:job?.isRunning == true,requested:jobCanceled) }
     func cancelJob() {

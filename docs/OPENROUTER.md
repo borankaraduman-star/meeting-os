@@ -1,6 +1,18 @@
 # OpenRouter transkripsiyon modelleri
 
-Bu seçenek isteğe bağlı, ücretli ve bulut tabanlıdır. Yerel kayıt/STT varsayılanları değişmedi. Native optimizasyon otomasyonu hâlâ duraklatılmıştır.
+Bu seçenek ücretli ve bulut tabanlıdır. 9 Eylül 2026 kullanıcı kararıyla **varsayılan yazıya çevirme yolu OpenRouter’dır ve bu yolda bu Mac’te hiçbir model yüklenmez**: canlı STT, Sherpa konuşmacı ayrımı, Resemblyzer kimlik ve bellek baskısı kapısı devreye girmez. Yerel model kenar çubuğundaki “Yazıya çevirme” seçiminden hâlâ seçilebilir. Native optimizasyon otomasyonu duraklatılmıştır.
+
+## Kayıt sonrası bulut yolu (varsayılan)
+
+1. Kenar çubuğunda **Yazıya çevirme: OpenRouter** ve model seçili olsun. Varsayılan model konuşmacı ayrımı sunan `deepgram/nova-3`; `microsoft/mai-transcribe-2` de ayrım sunar. Diğer beş modelde konuşmacılar ayrılmaz, yalnız kaynak etiketi kalır.
+2. **Yeni kayıt** bu modda canlı önizleme olmadan alınır (`record` komutu `--live` almaz). Kayıt sırasında ekranda metin yoktur.
+3. Kayıt bitince uygulama `openrouter-finalize MEETING --model M --allow-upload` başlatır. Mic ve sistem parçaları dosya kopyalamayla iki tam WAV’a birleştirilir, her kaynak ffmpeg ile en fazla 20 dakikalık Opus parçalarına sıkıştırılır (ayrım sunmayan modellerde 30 saniyelik pencereler), dijital sessiz parçalar yüklenmez. Sistem sesi için sağlayıcı ayrımı istenir (`verbose_json`, `timestamp_granularities: ["segment"]`, `provider.options.deepgram.diarize` / `azure.diarization.enabled`).
+4. Etiketler: mikrofon = **Boran**; sistem sesi = **Konuşmacı 1, 2, …** (sağlayıcı numarası). Sağlayıcı numaraları parça içinde tutarlıdır; 20 dakikayı aşan kayıtlarda parçalar arası eşleşme yoktur ve etiket `Konuşmacı <parça>-<n>` olur. Ayrım olmayan modelde sistem sesi **Karşı taraf** olarak tek etikettir. Kalıcı ses profili eşleştirmesi bu yolda çalışmaz.
+5. Her parça transkriptiyle birlikte tek işlemde checkpoint’lenir. Kesintide başlıktaki **OpenRouter ile yazıya çevir** aynı modelle sürdürür; farklı model reddedilir. Bitmemiş eski yerel kayıtlar da aynı düğmeyle buluta gönderilebilir; geçici canlı metin silinir ve bulut metniyle değişir.
+6. **OpenRouter ile ses aç** artık aynı bulut-only yolu kullanır (`openrouter-import --no-local`). Eski Sherpa’lı `openrouter-import` yolu yalnız CLI’de ve `--no-local` verilmeden çalışır.
+
+Deepgram Nova-3 için OpenRouter uç noktası 9 Eylül 2026’da doğrulandı (sağlayıcı Deepgram, $0.0043 birim fiyat; dakika başına olduğu Deepgram liste fiyatıyla örtüşür ama OpenRouter faturasıyla ölçülmedi). MAI-Transcribe 2 uç noktası Azure; fiyat birimi doğrulanmadı. Türkçe kalitesi ve konuşmacı ayrımı doğruluğu bu cihazda henüz gerçek istekle ölçülmedi.
+
 
 ## Kullanım
 
@@ -36,6 +48,6 @@ HTTP hataları koda göre ayrışır: 401 anahtar reddedildi, 402 bakiye yetersi
 
 ## Test durumu
 
-58 Python testi (56 önceki + Anahtar Zinciri zaman aşımı/red ayrımı + HTTP mesajları): beş modelin istekle eşleşmesi, model değişiminde checkpoint reddi, eski checkpoint geçişi, istemci kontratı, onaysız gönderim engeli, hatalarda gizli veri sızdırmama, yeniden yönlendirme engeli, parça checkpoint/devam, değişen kaynak reddi, 40 dakikalık parça planı, dosya import fixture’ı, mevcut masaüstü/metin aktarımı ve kaynaklı analiz testleri. 44 Swift testi geçti. Gerçek API çağrısı, özel ses yükleme veya canlı Türkçe doğruluk benchmark’ı yapılmadı. Keychain’e gerçek anahtar yazılmadı.
+65 Python testi (bulut-only finalize/içe aktarma, diarization istek gövdesi ve bölüm ayrıştırma, checkpoint/sürdürme, model kilidi dahil) ve 47 Swift testi. Önceki 58 Python testi (56 önceki + Anahtar Zinciri zaman aşımı/red ayrımı + HTTP mesajları): beş modelin istekle eşleşmesi, model değişiminde checkpoint reddi, eski checkpoint geçişi, istemci kontratı, onaysız gönderim engeli, hatalarda gizli veri sızdırmama, yeniden yönlendirme engeli, parça checkpoint/devam, değişen kaynak reddi, 40 dakikalık parça planı, dosya import fixture’ı, mevcut masaüstü/metin aktarımı ve kaynaklı analiz testleri. 44 Swift testi geçti. Gerçek API çağrısı, özel ses yükleme veya canlı Türkçe doğruluk benchmark’ı yapılmadı. Keychain’e gerçek anahtar yazılmadı.
 
 Model fiyatları aynı birimle dönmüyor: GPT-4o modellerinde token bazlı, Whisper modellerinde sağlayıcıya bağlı bilgiler var. Menü GPT Transcribe fiyatını yalnız o seçildiğinde gösterir; diğer seçeneklerde doğrulanmamış dakika tahmini yerine ilgili resmî model/fiyat bağlantısını açar.

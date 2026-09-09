@@ -96,6 +96,28 @@ class OpenRouterTests(unittest.TestCase):
             self.assertEqual(read_api_key(),'sk-or-secret')
             self.assertEqual(run.call_args.kwargs['timeout'],KEYCHAIN_TIMEOUT)
 
+    def test_diarization_request_and_segment_parsing(self):
+        from meeting_os.openrouter import parse_segments, diarization_options
+        self.assertEqual(diarization_options('deepgram/nova-3'),{'deepgram':{'diarize':True}});self.assertIsNone(diarization_options('openai/gpt-transcribe'))
+        captured={}
+        def transport(req,timeout):
+            captured['body']=json.loads(req.data);captured['timeout']=timeout
+            class R:
+                def __enter__(self):return self
+                def __exit__(self,*a):pass
+                def read(self,n):return json.dumps({'text':'a b','usage':{'seconds':2},'segments':[{'start':0,'end':1,'text':'a','speaker':0},{'start':1,'end':2,'text':'b','speaker':1}]}).encode()
+            return R()
+        client=OpenRouterClient(api_key='k',transport=transport)
+        out=client.transcribe(b'OggS','ogg',model='deepgram/nova-3',consent=True,diarize=True,timeout=600)
+        body=captured['body'];self.assertEqual(body['response_format'],'verbose_json');self.assertEqual(body['timestamp_granularities'],['segment'])
+        self.assertEqual(body['provider'],{'options':{'deepgram':{'diarize':True}}});self.assertEqual(body['language'],'tr');self.assertEqual(captured['timeout'],600)
+        self.assertEqual(out['segments'],[{'start':0.0,'end':1.0,'text':'a','speaker':'0'},{'start':1.0,'end':2.0,'text':'b','speaker':'1'}])
+        with self.assertRaises(OpenRouterError):client.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True,diarize=True)
+        plain=client.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True);self.assertNotIn('segments',plain);self.assertNotIn('provider',captured['body'])
+        for bad in ([{'start':-1,'end':1,'text':'x'}],[{'start':2,'end':1,'text':'x'}],[{'start':0,'end':1,'text':5}],'nope'):
+            with self.assertRaises(OpenRouterError):parse_segments(bad)
+        self.assertEqual(parse_segments(None),[]);self.assertEqual(parse_segments([{'start':0,'end':1,'text':' x ','speaker':True}])[0]['speaker'],None)
+
     def test_http_status_messages_are_specific_and_leak_nothing(self):
         from meeting_os.openrouter import http_error_message
         self.assertIn('reddedildi',http_error_message(401));self.assertIn('bakiye',http_error_message(402))
@@ -122,7 +144,8 @@ class OpenRouterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             listing=dispatch({'action':'openrouter_models'},Path(tmp)/'db.sqlite')
         self.assertEqual(listing['default'],'openai/gpt-transcribe')
-        self.assertEqual(len(listing['models']),5)
+        self.assertEqual(len(listing['models']),7);self.assertEqual(listing['diarization_default'],'deepgram/nova-3')
+        self.assertEqual([m['id'] for m in listing['models'] if m['diarization']],['deepgram/nova-3','microsoft/mai-transcribe-2'])
         for option in listing['models']:
             client=self.client({'text':'Test'})
             client.transcribe(b'RIFF','wav',model=option['id'],consent=True)

@@ -44,6 +44,20 @@ struct SidebarView:View {
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
+                VStack(alignment:.leading,spacing:6) {
+                    Picker("Yazıya çevirme",selection:$model.transcriptionMode) { Text("OpenRouter").tag("openrouter");Text("Yerel model").tag("local") }
+                        .pickerStyle(.segmented).disabled(model.recording || model.busy).accessibilityIdentifier("transcriptionModePicker")
+                    if model.transcriptionMode=="openrouter" {
+                        if model.cloudModels.isEmpty { Text("Model listesi yükleniyor…").font(.caption).foregroundStyle(.secondary) }
+                        else {
+                            Picker("Model",selection:$model.cloudModel) { ForEach(model.cloudModels) { Text($0.name).tag($0.id) } }
+                                .labelsHidden().disabled(model.recording || model.busy).accessibilityIdentifier("cloudModelPicker")
+                        }
+                        Text("Kayıt bitince ses OpenRouter’a gönderilir; bu Mac’te model yüklenmez. Kayıt sırasında canlı metin olmaz.").font(.caption2).foregroundStyle(.secondary)
+                    } else {
+                        Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }.task { await model.loadCloudModels() }
             }.padding(18)
             HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(model.meetings.count)").monospacedDigit().font(.caption) }
                 .foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,6)
@@ -101,7 +115,7 @@ struct DetailView:View {
                 HStack {
                     Text("\(meeting.metadata["model"] as? String ?? "") · OpenRouter | Konuşmacı ayrımı bu Mac’te").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    if meeting.status != "complete" { Button("İşlemi sürdür") { model.showOpenRouter=true }.disabled(model.busy || meeting.recoveryState=="active") }
+                    if meeting.status != "complete" { Button("İşlemi sürdür") { if meeting.metadata["cloud_mode"] != nil { model.finalizeWithOpenRouter(meeting.id,model:nil) } else { model.showOpenRouter=true } }.disabled(model.busy || meeting.recoveryState=="active") }
                 }.padding(.horizontal,24).padding(.bottom,8)
             }
             MeetingNavigation(model:model).padding(.horizontal,24).padding(.bottom,16)
@@ -169,8 +183,12 @@ struct RecoveryBanner:View {
             Text(canRetry ? "Kurtarma aynı toplantıyı günceller; işlem bitene kadar önceki metin korunur." : (meeting.displayStatus == "not_started" ? "Ses alınamadı. macOS izinlerini kontrol edip yeni kayıt başlatın." : "İşlem sürüyor veya durumu doğrulanamıyor. Kayıt değiştirilmedi."))
                 .font(.caption)
             Spacer()
+            if CloudTranscription.canFinalize(meeting:meeting,busy:model.busy) {
+                Button("OpenRouter ile yazıya çevir") { model.finalizeWithOpenRouter(meeting.id,model:model.cloudModel) }
+                    .buttonStyle(.borderedProminent).accessibilityIdentifier("cloudFinalizeButton")
+            }
             if canRetry {
-                Button(meeting.displayStatus == "pending_finalization" ? "Transkripti tamamla" : "Toplantıyı kurtar",action:model.recover)
+                Button(meeting.displayStatus == "pending_finalization" ? "Yerel modelle tamamla" : "Yerel modelle kurtar",action:model.recover)
                     .accessibilityIdentifier("recoverButton")
             }
         }.padding(.horizontal,24).padding(.bottom,12)
