@@ -14,6 +14,19 @@ struct TranscriptBlock:Identifiable, Equatable {
     var end:Double { rows.last?.end ?? lead.end }
 }
 
+enum Fillers {
+    /// MAI-Transcribe keeps disfluencies (“eee”, “ııı”, “Bi-”) verbatim. Reading mode hides them; the stored
+    /// transcript, search and evidence quotes keep the original words.
+    static let pattern=try! NSRegularExpression(pattern:"(?<![\\p{L}\\p{N}])(?:[eEaAıIiİuUoOöÖüÜ]{2,}|[hH][ıiI]+(?:\\s?[hH][ıiI]+)?|[\\p{L}]{1,3}-)(?=[\\s.,;!?…]|$)[.,]?\\s*",options:[])
+    static func clean(_ text:String)->String {
+        let range=NSRange(text.startIndex..., in:text)
+        var out=pattern.stringByReplacingMatches(in:text,options:[],range:range,withTemplate:"")
+        out=out.replacingOccurrences(of:"  ",with:" ").trimmingCharacters(in:.whitespaces)
+        if let first=out.first, first.isLowercase, text.first?.isUppercase==true { out=first.uppercased()+out.dropFirst() }
+        return out.isEmpty ? text : out
+    }
+}
+
 enum TranscriptBlocks {
     static let asideSeconds=1.5
     static func isBackchannel(_ row:Row)->Bool {

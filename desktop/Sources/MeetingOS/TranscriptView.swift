@@ -36,6 +36,7 @@ struct TranscriptView:View {
                             Button(model.showAsides ? "Gizle" : "Göster") { model.showAsides.toggle() }.font(.caption).accessibilityIdentifier("toggleAsides")
                         }
                     }
+                    Toggle("Dolgu seslerini gizle (eee, ııı, yarım kelimeler) · yalnız okuma görünümü",isOn:$model.hideFillers).toggleStyle(.checkbox).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("toggleFillers")
                     ForEach(blocks) { block in TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides) }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
@@ -116,7 +117,7 @@ struct TranscriptBlockView:View {
                     if block.rows.count>1 { Text("\(block.rows.count) bölüm").font(.caption2).foregroundStyle(.secondary) }
                     Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).accessibilityIdentifier("editBlock-\(block.id)")
                 }
-                Text(block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
+                Text(model.hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
                 let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")
                 if !notices.isEmpty { Label(notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
                 if showAsides && !block.asides.isEmpty {

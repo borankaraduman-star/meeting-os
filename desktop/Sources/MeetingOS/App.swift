@@ -112,6 +112,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     @Published var readingMode=true
     @Published var showAsides=false
+    @Published var hideFillers=UserDefaults.standard.object(forKey:"hideFillers") as? Bool ?? true { didSet { UserDefaults.standard.set(hideFillers,forKey:"hideFillers") } }
     var filteredRows:[Row] {
         if let id=focusedSegment { return rows.filter { $0.id==id } }
         let visible=CloudTranscription.visibleRows(rows,showEcho:showEchoRows)

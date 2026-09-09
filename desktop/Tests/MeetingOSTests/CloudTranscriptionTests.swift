@@ -36,6 +36,16 @@ final class ReviewItemTests:XCTestCase {
         XCTAssertEqual(t.title,"Görev sahibi belirsiz");XCTAssertEqual(t.id,"task_owner:t9");XCTAssertNil(t.segment);XCTAssertEqual(t.time,"")
     }
 }
+final class FillerTests:XCTestCase {
+    func testFillersAndStuttersAreHiddenButWordsSurvive() {
+        XCTAssertEqual(Fillers.clean("Şimdi çok şey, eee az önce hoşuma giden de oydu."),"Şimdi çok şey, az önce hoşuma giden de oydu.")
+        XCTAssertEqual(Fillers.clean("Bi- mesela ben ve Burak'ta benzer bir motivasyon olabilir."),"Mesela ben ve Burak'ta benzer bir motivasyon olabilir.")
+        XCTAssertEqual(Fillers.clean("Eee uğraşmasak bile zaten hani kişi sayısından ııı dolayı."),"Uğraşmasak bile zaten hani kişi sayısından dolayı.")
+        XCTAssertEqual(Fillers.clean("Hı hı."),"Hı hı.")             // never blank a segment
+        XCTAssertEqual(Fillers.clean("Ee-commerce ve e-posta iyi."),"Ee-commerce ve e-posta iyi.")   // hyphenated words stay
+        XCTAssertEqual(Fillers.clean("Evet."),"Evet.")
+    }
+}
 final class CloudTranscriptionTests:XCTestCase {
     func testOpenRouterModeRecordsWithoutLivePreview() {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))
