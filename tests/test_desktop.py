@@ -44,6 +44,15 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM cloud_chunks').fetchone()[0],0)
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],1);s.close()
    with self.assertRaises(ValueError):dispatch({'action':'delete_meeting','meeting':mid},db)
+ def test_cost_report_sums_real_charges_by_month(self):
+  from datetime import datetime,timezone
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';s=Store(db);a=s.create_meeting('Bu ay',{});b=s.create_meeting('Eski',{})
+   s.db.executescript("CREATE TABLE cloud_chunks(meeting TEXT,position INTEGER,usage TEXT,PRIMARY KEY(meeting,position));INSERT INTO cloud_chunks VALUES('"+a+"',0,'{\"cost\":0.01,\"seconds\":300}');INSERT INTO cloud_chunks VALUES('"+a+"',1,'{\"skipped\":\"echo\"}');INSERT INTO cloud_chunks VALUES('"+b+"',0,'{\"cost\":0.02,\"seconds\":600}');UPDATE meetings SET created='2025-01-05T10:00:00+00:00' WHERE id='"+b+"';")
+   s.close()
+   r=dispatch({'action':'cost_report'},db)
+   self.assertEqual(r['month']['label'],datetime.now(timezone.utc).strftime('%Y-%m'));self.assertEqual((r['month']['usd'],r['month']['meetings'],r['month']['minutes']),(0.01,1,5.0))
+   self.assertEqual((r['all']['usd'],r['all']['meetings'],r['all']['minutes']),(0.03,2,15.0));self.assertEqual(r['recent'][0]['title'],'Bu ay')
  def test_meeting_context_stores_calendar_hints(self):
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('9 Eyl 2026 14:05',{'engine':'openrouter'});s.close()

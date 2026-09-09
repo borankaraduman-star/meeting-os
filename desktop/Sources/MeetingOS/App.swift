@@ -368,6 +368,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         if q.isEmpty { return meetings }
         return meetings.filter { ($0.title+" "+$0.created).range(of:q,options:[.caseInsensitive,.diacriticInsensitive]) != nil }
     }
+    @Published var cost:[String:Any]?
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
     /// Read the calendar when a recording starts: the live event names the meeting and its attendees become naming shortcuts.
@@ -508,6 +509,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""
             await loadGlossarySummary()
             storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse)   // read-only walk; a failure hides the section only
+            cost=try? await request(["action":"cost_report"])
             showSettings=true
         } catch { self.error=error.localizedDescription }
     }

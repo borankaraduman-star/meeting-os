@@ -319,6 +319,14 @@ def dispatch(request, db=None):
             return {'meetings':count,'bytes':freed}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
+        if action=='cost_report':
+            # Real OpenRouter transcription charges per piece (analysis calls are not metered by the provider response).
+            from datetime import datetime,timezone
+            rows=store.db.execute("SELECT m.id,m.title,m.created,sum(json_extract(c.usage,'$.cost')),sum(json_extract(c.usage,'$.seconds')),count(json_extract(c.usage,'$.cost')) FROM meetings m JOIN cloud_chunks c ON c.meeting=m.id GROUP BY m.id ORDER BY m.created DESC").fetchall()
+            month=datetime.now(timezone.utc).strftime('%Y-%m')
+            def bucket(rs): return {'usd':round(sum(float(r[3] or 0) for r in rs),4),'meetings':len(rs),'minutes':round(sum(float(r[4] or 0) for r in rs)/60,1)}
+            this=[r for r in rows if (r[2] or '').startswith(month)]
+            return {'month':{'label':month,**bucket(this)},'all':bucket(rows),'recent':[{'meeting':r[0],'title':r[1],'usd':round(float(r[3] or 0),4),'minutes':round(float(r[4] or 0)/60,1)} for r in rows[:5]]}
         if action=='meeting_context':
             # Calendar event that was live when the recording started: title + attendee names (read-only hints).
             cal=request.get('calendar') or {}
