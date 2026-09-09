@@ -454,6 +454,14 @@ def dispatch(request, db=None):
             # Guardrail: while a Zoom meeting has pushed the app into low priority, the idle queue offers nothing.
             if os.environ.get('MEETING_OS_LOW_PRIORITY'): return {'candidates':[],'blocked':[],'low_priority':True}
             return retry_candidates(store)
+        if action=='maintenance':
+            from . import correction_memory as CM
+            data=DATA_DIR if db is None else Path(db).parent
+            rules=CM.learned_rules(store)
+            blocked=[]
+            try: blocked=dispatch({'action':'retry_candidates'},db).get('blocked',[]) if db is None else []
+            except Exception: blocked=[]
+            return {'profiles':store.profile_health(),'rules':rules,'storage':storage_report(store,data,db or DATA_DIR/'meeting-os.sqlite'),'blocked':blocked}
         if action=='storage_report':
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
         if action=='storage_compact':

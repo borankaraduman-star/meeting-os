@@ -211,6 +211,31 @@ class Store:
             kind = 'otomatik' if prov.startswith('auto:') else ('küme' if ':speaker:' in prov else ('bölüm' if len(parts) == 2 and parts[1].isdigit() else 'elle'))
             out.append({'id': r['id'], 'model': r['model'], 'seconds': round(float(r['duration'] or 0), 1), 'kind': kind, 'meeting': mid, 'meeting_title': titles.get(mid), 'provenance': prov})
         return out
+    WEAK_FIT = 0.60   # a sample this far from its person's centroid is probably another voice or a bad recording
+    def profile_health(self):
+        """Per person: how many samples, how much speech, and the weakest sample's fit to the centroid — the
+        weekly-maintenance view; nothing is pruned automatically."""
+        groups = {}
+        for r in self.db.execute('SELECT id,name,model,vector,duration,provenance FROM samples ORDER BY id'):
+            try: x = unit(json.loads(r['vector']))
+            except (ValueError, TypeError): continue
+            groups.setdefault((r['name'], r['model']), []).append((r['id'], x, float(r['duration'] or 0), r['provenance'] or ''))
+        rejected = {}
+        for r in self.db.execute('SELECT name,count(*) FROM rejections GROUP BY name'): rejected[r[0]] = r[1]
+        out = []
+        for (name, model), xs in groups.items():
+            fits = []
+            if len(xs) >= 2:
+                try:
+                    centroid = unit([sum(col)/len(xs) for col in zip(*[x for _, x, _, _ in xs])])
+                    fits = [(sid, cosine(x, centroid), prov) for sid, x, _, prov in xs]
+                except ValueError: fits = []
+            weakest = min(fits, key=lambda f: f[1]) if fits else None
+            out.append({'name': name, 'model': model, 'samples': len(xs), 'seconds': round(sum(d for _, _, d, _ in xs), 1),
+                        'auto_samples': sum(1 for _, _, _, p in xs if p.startswith('auto:')), 'rejections': rejected.get(name, 0),
+                        'weakest_fit': round(weakest[1], 3) if weakest else None, 'weakest_sample': weakest[0] if weakest else None,
+                        'weak': bool(weakest and weakest[1] < self.WEAK_FIT)})
+        return sorted(out, key=lambda p: (not p['weak'], -p['samples'], p['name']))
     def delete_sample(self, sample_id):
         with self.db:
             cur = self.db.execute('DELETE FROM samples WHERE id=?', (int(sample_id),))
