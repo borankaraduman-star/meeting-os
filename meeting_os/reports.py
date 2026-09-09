@@ -297,7 +297,35 @@ def build_heartbeat(store, data_dir, *, app=None):
         'memory_pressure': _memory_pressure(), 'thermal': _thermal(), 'load_average': load,
         'recording': read_recording_heartbeat(host_dir(load_settings(data_dir))),   # a meeting being taped right now
         'errors': _errors(data/'last-job.log', limit=5),
+        'cloud_blocked': store.db.execute("SELECT count(*) FROM meetings WHERE status!='complete' AND json_extract(metadata,'$.cloud_error.kind') IN ('auth','credit')").fetchone()[0],
+        'probe': daily_probe(data),
     }
+
+
+PROBE_CACHE = 'probe-last.json'
+PROBE_EVERY_SECONDS = 24*3600
+
+
+def daily_probe(data_dir, *, now=None, force=False):
+    """The self-test, at most once a day, riding the hourly heartbeat: the other Mac learns overnight that this
+    one cannot record tomorrow, instead of the user learning it in the meeting. Cached; never runs while a
+    recording heartbeat is live."""
+    data = Path(data_dir); cache = data / PROBE_CACHE
+    now = now or datetime.now(timezone.utc)
+    try:
+        last = json.loads(cache.read_text(encoding='utf-8'))
+        if not force and (now - datetime.fromisoformat(last['at'])).total_seconds() < PROBE_EVERY_SECONDS: return last
+    except (OSError, ValueError, KeyError, TypeError): last = None
+    if not force and read_recording_heartbeat(host_dir(load_settings(data_dir))): return last
+    try:
+        from .probe import run, summary_line
+        from .cli import ROOT
+        result = run(ROOT, data)
+        last = {'ok': result['ok'], 'failed': result['failed'], 'warnings': result['warnings'], 'summary': summary_line(result), 'at': result['at']}
+        cache.write_text(json.dumps(last, ensure_ascii=False), encoding='utf-8')
+    except Exception as exc:  # observability must never break the app
+        last = {'ok': False, 'failed': ['probe'], 'warnings': [], 'summary': f'Öz-test çalıştırılamadı: {type(exc).__name__}', 'at': now.isoformat()}
+    return last
 
 
 def write_heartbeat(store, data_dir, *, app=None):
@@ -348,7 +376,8 @@ def summarize(report_dir, limit=30):
         host = beat.get('host') or path.parent.name
         hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})
         hosts[host]['heartbeat'] = {'last_seen': beat.get('written'), 'free_disk': (beat.get('sizes') or {}).get('free_disk'), 'thermal': beat.get('thermal'),
-                                    'memory_pressure': beat.get('memory_pressure'), 'meetings': beat.get('meetings'), 'app_version': beat.get('app_version')}
+                                    'memory_pressure': beat.get('memory_pressure'), 'meetings': beat.get('meetings'), 'app_version': beat.get('app_version'),
+                                    'probe': beat.get('probe'), 'cloud_blocked': beat.get('cloud_blocked'), 'errors': len(beat.get('errors') or [])}
     for path in sorted(root.glob('*/'+RECORDING_HEARTBEAT_FILE)):   # a Mac that is in a meeting right now says so
         beat = read_recording_heartbeat(path)
         if not beat: continue
@@ -356,4 +385,36 @@ def summarize(report_dir, limit=30):
         hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})
         hosts[host]['recording'] = {'line': beat.get('line') or recording_line(beat), 'meeting': beat.get('meeting'), 'elapsed_seconds': beat.get('elapsed_seconds'),
                                     'last_chunk_age_seconds': beat.get('last_chunk_age_seconds'), 'restarts': beat.get('restarts'), 'relaunches': beat.get('relaunches')}
-    return {'hosts': hosts, 'reports': out}
+    return {'hosts': hosts, 'reports': out, 'alerts': alerts(hosts)}
+
+
+STALE_HEARTBEAT_SECONDS = 3*24*3600
+LOW_DISK_BYTES = 3*1024**3
+
+
+def alerts(hosts, *, now=None):
+    """What the person maintaining the fleet should look at today, one Turkish line each. Derived only from the
+    shared folder, so it works on the dev Mac without touching the other machines."""
+    now = now or datetime.now(timezone.utc); out = []
+    for host, h in sorted(hosts.items()):
+        beat = h.get('heartbeat') or {}
+        seen = beat.get('last_seen')
+        if seen:
+            try:
+                age = (now - datetime.fromisoformat(seen)).total_seconds()
+                if age > STALE_HEARTBEAT_SECONDS: out.append({'host': host, 'level': 'warning', 'key': 'stale', 'line': f'{host}: {int(age//86400)} gündür nabız yok · uygulama açık mı, güncelleme takıldı mı?'})
+            except ValueError: pass
+        elif h.get('reports'): out.append({'host': host, 'level': 'note', 'key': 'no_heartbeat', 'line': f'{host}: rapor var ama nabız dosyası yok · 1.2.15 öncesi sürüm olabilir'})
+        free = beat.get('free_disk')
+        if isinstance(free, (int, float)) and free < LOW_DISK_BYTES: out.append({'host': host, 'level': 'error', 'key': 'disk', 'line': f'{host}: disk {free/1024**3:.1f} GB boş · kayıt 400 MB altında durur; eski sesleri temizleyin'})
+        probe = beat.get('probe') or {}
+        if probe and not probe.get('ok'): out.append({'host': host, 'level': 'error', 'key': 'probe', 'line': f'{host}: {probe.get("summary") or "öz-test başarısız"}'})
+        elif probe.get('warnings'): out.append({'host': host, 'level': 'warning', 'key': 'probe', 'line': f'{host}: {probe.get("summary")}'})
+        blocked = beat.get('cloud_blocked')
+        if isinstance(blocked, int) and blocked > 0: out.append({'host': host, 'level': 'error', 'key': 'cloud', 'line': f'{host}: {blocked} toplantı bulutta bekliyor (anahtar/kredi) · kişi Ayarlar → OpenRouter’a bakmalı'})
+        if beat.get('memory_pressure') not in (None, 0, 1, 'normal'): out.append({'host': host, 'level': 'warning', 'key': 'memory', 'line': f'{host}: bellek baskısı {beat.get("memory_pressure")} · yerel işler durur, bulut işleri sürer'})
+        rec = h.get('recording') or {}
+        age = rec.get('last_chunk_age_seconds')
+        if isinstance(age, (int, float)) and age > 60: out.append({'host': host, 'level': 'error', 'key': 'recording', 'line': f'{host}: kayıt sürüyor ama son parça {int(age)} sn önce · yardımcı takılmış olabilir'})
+        if h.get('errors'): out.append({'host': host, 'level': 'note', 'key': 'errors', 'line': f'{host}: son raporlarda {h["errors"]} hata satırı'})
+    return out

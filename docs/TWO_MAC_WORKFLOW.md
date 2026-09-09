@@ -8,7 +8,7 @@
 - Toplantıdan bağımsız nabız: `.venv/bin/python -m meeting_os reports heartbeat` (ya da köprüde `{"action":"heartbeat"}`) aynı klasöre `<mac-adı>/heartbeat.json` yazar ve her seferinde üzerine yazar. İçerik: yazılma zamanı, sürüm/commit, toplantı sayısı ve durum dağılımı, son tamamlanan toplantı, recordings/imports/sqlite boyutları, boş disk, bellek baskısı, `pmset -g therm` CPU_Speed_Limit, yük ortalaması ve son 5 hata satırı. Rapor paylaşımı kapalıysa yazılmaz.
 
 ## Geliştirme Mac’inde (bu Mac)
-1. Oturum başında `.venv/bin/python -m meeting_os reports summarize` — bütün Mac’lerin raporları, hata sayıları, isimsiz konuşmacı oranı, maliyet. Her Mac için `heartbeat` satırı da burada: son görülme, boş disk, termal.
+1. Oturum başında `.venv/bin/python -m meeting_os reports summarize` — önce **uyarı listesi** (stderr: 3 gündür nabız yok, disk 3 GB altı, gece öz-testi başarısız, bulutta anahtar/kredi yüzünden bekleyen toplantı, kayıt sürerken parça gelmiyor, bellek baskısı), sonra bütün Mac’lerin raporları, hata sayıları, isimsiz konuşmacı oranı, maliyet. Her Mac için `heartbeat` satırı: son görülme, boş disk, termal, günlük `probe` özeti (`Öz-test temiz` ya da eksik madde). Nabız saatte bir yazılır; öz-test günde bir kez, kayıt yokken, nabızla birlikte koşar (`probe-last.json` önbelleği).
 2. Sorunlu raporu aç (`iCloud Drive/MeetingOS-Reports/<mac>/…json`), nedeni bul, düzelt, test et, commit + `git push origin v0.1`.
 3. Kullanım Mac’i bir sonraki açılışta günceller (veya kartta tek tık).
 

@@ -270,7 +270,10 @@ def main(supervised=False):
             elif args.command=='retry': output(run_retry(args,store))
             elif args.command=='reports':
                 from . import reports
-                if args.action=='summarize': output(reports.summarize(reports.report_root(reports.load_settings(DATA_DIR))))
+                if args.action=='summarize':
+                    summary=reports.summarize(reports.report_root(reports.load_settings(DATA_DIR)))
+                    for a in summary.get('alerts') or []: print(('✘ ' if a['level']=='error' else '! ' if a['level']=='warning' else '· ')+a['line'],file=sys.stderr)
+                    output(summary)
                 elif args.action=='heartbeat':
                     from . import __version__
                     output({'path':reports.write_heartbeat(store,DATA_DIR,app={'version':__version__,'commit':None})})
