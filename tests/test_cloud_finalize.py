@@ -199,3 +199,21 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(embedding_windows(139,141.4,R*141),[])                 # < 3 s after clamping → skipped
         self.assertEqual(embedding_windows(100,141.4,R*141),[(100*R,130*R),(130*R,141*R)])  # clamped to file length
         self.assertTrue(all(b-a<=60*R for a,b in embedding_windows(0,600,R*700)))
+
+class EchoAnalysisTests(unittest.TestCase):
+    def test_echo_rows_are_excluded_from_analysis_input(self):
+        from unittest.mock import patch
+        from meeting_os import assistant
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('E',{})
+            store.add_segment(mid,Segment(0,10,'Karar: yarın rapor çıkacak.','system','Konuşmacı 1'))
+            store.add_segment(mid,Segment(0,10,'Karar yarın rapor çıkacak','mic','Boran',flags=['possible_echo']))
+            store.status(mid,'complete')
+            seen={}
+            def fake_analyze(rows,*a,**k): seen['rows']=rows; raise RuntimeError('stop here')
+            with patch.object(assistant,'analyze_rows',fake_analyze,create=True):
+                src=Path(assistant.__file__).read_text()
+            self.assertIn("'possible_echo' not in r['flags']",src)
+            rows=[r for r in store.display_segments(mid) if 'possible_echo' not in r['flags']]
+            self.assertEqual([r['source'] for r in rows],['system']);store.close()

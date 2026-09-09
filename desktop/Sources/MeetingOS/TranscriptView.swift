@@ -40,7 +40,7 @@ struct TranscriptRow:View, Equatable {
             VStack(alignment:.leading,spacing:7) {
                 VStack(alignment:.leading,spacing:4) {
                     HStack { Text(row.label).font(.headline).lineLimit(1); Spacer(minLength:12); editButton }
-                    Text(row.source=="mic" ? "Mikrofon" : (row.source=="system" ? "Sistem sesi" : "Aktarılan metin")).font(.caption).foregroundStyle(.secondary)
+                    Text(row.flags.contains("possible_echo") ? "Mikrofon · sistem sesinin yankısı, özet ve görevlerde yok sayılır" : (row.source=="mic" ? "Mikrofon" : (row.source=="system" ? "Sistem sesi" : "Aktarılan metin"))).font(.caption).foregroundStyle(.secondary)
                 }
                 // fixedSize(vertical) pins wrapped-text heights so LazyVStack estimates converge; without it long
                 // paragraphs made the layout engine oscillate and the app spun at 100% CPU.

@@ -15,6 +15,7 @@ struct Row: Identifiable, Equatable {
     var label:String {
         if !name.isEmpty { return name }
         if flags.contains("provisional") { return "Geçici konuşmacı" }
+        if flags.contains("possible_echo") { return "Hoparlör yankısı" }  // microphone picked up the speakers; not Boran talking
         if flags.contains("cloud_transcript"), !speaker.isEmpty, speaker != "unknown" { return speaker }  // cloud path stores human-readable cluster labels
         if let tail=speaker.split(separator:":").last, tail.hasPrefix("S"), let n=Int(tail.dropFirst()) { return "Konuşmacı \(n+1)" }
         return "İsimsiz konuşmacı"

@@ -12,7 +12,7 @@ def analyze(store,mid,llm=None,force=False):
     if not meeting or meeting['status']!='complete':raise ValueError('Analiz için tamamlanmış bir toplantı seçin')
     mem=Memory(store);previous=mem.latest(mid)
     if previous and not previous['stale'] and not force:return previous
-    rows=store.display_segments(mid)
+    rows=[r for r in store.display_segments(mid) if 'possible_echo' not in r['flags']]  # microphone bleed repeats the system audio
     if not rows:raise ValueError('Toplantıda metin yok')
     from .llm import LocalLLM
     llm=llm or LocalLLM()

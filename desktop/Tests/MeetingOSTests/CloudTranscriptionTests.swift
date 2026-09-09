@@ -22,6 +22,8 @@ final class CloudTranscriptionTests:XCTestCase {
         XCTAssertEqual(named.label,"Ayşe")
         let mic=Row(["id":3,"start":0.0,"end":3.0,"text":"x","speaker":"Boran","source":"mic","flags":["cloud_transcript"]])
         XCTAssertEqual(mic.label,"Boran")
+        let echo=Row(["id":5,"start":0.0,"end":3.0,"text":"x","speaker":"Boran","source":"mic","flags":["cloud_transcript","possible_echo"]])
+        XCTAssertEqual(echo.label,"Hoparlör yankısı")
         let local=Row(["id":4,"start":0.0,"end":3.0,"text":"x","speaker":"S1","source":"system","flags":[]])
         XCTAssertEqual(local.label,"Konuşmacı 2")
     }
