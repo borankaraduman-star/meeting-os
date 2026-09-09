@@ -106,6 +106,25 @@ class Store:
             self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)', (name,r['embedding_model'],json.dumps(vector),duration,f'{mid}:{sid}'))
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(name,mid,sid))
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created) VALUES(?,?,?,?)',(mid,f'segment:{sid}',name,datetime.now(timezone.utc).isoformat()))
+    def enroll_speaker(self, mid, speaker, name):
+        """Name every segment of a diarized speaker cluster and save one voice sample from the cluster's embedded segments."""
+        name=name.strip()
+        if not name: raise ValueError('Name cannot be empty')
+        rows=[r for r in self.segments(mid) if r['speaker']==speaker]
+        if not rows: raise ValueError('Speaker not found in meeting')
+        voiced=[r for r in rows if r.get('embedding') and r['end']-r['start']>=3 and 'speaker_ambiguous' not in r['flags']]
+        model=voiced[0]['embedding_model'] if voiced else None
+        vectors=[unit(r['embedding']) for r in voiced if r['embedding_model']==model]
+        duration=sum(r['end']-r['start'] for r in voiced)
+        provenance=f'{mid}:speaker:{speaker}'
+        with self.db:
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created) VALUES(?,?,?,?)',(mid,speaker,name,datetime.now(timezone.utc).isoformat()))
+            if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone():
+                centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
+                self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance))
+                return {'labeled':len(rows),'profile_saved':True,'seconds':duration}
+        return {'labeled':len(rows),'profile_saved':False,'seconds':duration}
     def delete_meeting(self, mid):
         """Remove one meeting and every row derived from it. Voice profiles are kept. Returns metadata for file cleanup."""
         row=self.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()

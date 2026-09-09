@@ -35,7 +35,8 @@ def validate_vectors(data,count,model_id):
 class FinalEmbedder:
     isolated_final=True
     engine='resemblyzer'
-    def __init__(self,model=None):
+    def __init__(self,model=None,light=False):
+        self.light=light  # voice embedder is small; under light mode OS warning pressure does not block it
         if model:self.weights=Path(model).resolve(strict=True)
         else:
             spec=importlib.util.find_spec('resemblyzer')
@@ -59,7 +60,7 @@ class FinalEmbedder:
             with tempfile.TemporaryDirectory(prefix='meeting-os-identity-') as tmp:
                 root=Path(tmp);request=root/'request.json';output=root/'result.json'
                 request.write_text(json.dumps({'path':str(path),'signature':signature,'frames':info.frames,'spans':batch,'weights':str(self.weights),'weight_signature':self.signature,'digest':self.digest}))
-                run_guarded([sys.executable,'-m','meeting_os.final_identity',str(request),str(output)],timeout=600)
+                run_guarded([sys.executable,'-m','meeting_os.final_identity',str(request),str(output)],timeout=600,light=self.light)
                 with output.open('rb') as f:raw=f.read(MAX_OUTPUT+1)
                 if len(raw)>MAX_OUTPUT:raise ValueError('Embedding output too large')
                 batch_vectors=validate_vectors(json.loads(raw),len(batch),self.model_id)

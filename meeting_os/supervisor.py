@@ -65,13 +65,13 @@ def close_lifeline(guardian,write_fd):
         except subprocess.TimeoutExpired:guardian.kill();guardian.wait()
 
 
-def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_failure=None, handle_signals=True, cancel_requested=None, output_stream=None, failure_details=True):
+def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_failure=None, handle_signals=True, cancel_requested=None, output_stream=None, failure_details=True, light=False):
     """Run a direct native child (which must not daemonize/spawn workers).
 
     The caller remains outside the native call. Temporary logs avoid pipe
     deadlocks and unbounded RAM capture. Limit includes this Python caller.
     """
-    check_pressure()
+    check_pressure(allow_warning=light)
     budget=min(int(3.5*GIB),max(GIB,physical_memory()//4))
     with tempfile.TemporaryFile() as log:
         process=subprocess.Popen(command,stdout=output_stream if output_stream is not None else (None if passthrough else log),stderr=None if passthrough else log,start_new_session=isolated)
@@ -87,7 +87,7 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
                 if cancel_requested and cancel_requested():raise JobCancelledError("Canlı metin işlemi durduruldu; ses korunuyor")
                 if time.monotonic()-start > timeout:
                     raise JobTimeoutError('Yerel model süre sınırını aştı; ses korunuyor')
-                check_pressure()
+                check_pressure(allow_warning=light)
                 try:
                     if isolated:
                         # Keep this diagnostic helper out of an outer model group.

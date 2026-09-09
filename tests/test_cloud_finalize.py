@@ -77,3 +77,64 @@ class CloudFinalizeTests(unittest.TestCase):
             result=finalize_capture(store,mid,tmp,consent=True,client=client)
             self.assertEqual(result['segments'],2);self.assertEqual(len(client.calls),2)
             self.assertEqual([r['speaker'] for r in store.segments(mid)],['Konuşmacı 1','Konuşmacı 2']);store.close()
+
+class FakeEmbedder:
+    model_id='resemblyzer:test'
+    def __init__(self):self.spans=[]
+    def embed_file(self,path,spans):
+        self.spans+=spans
+        # speaker 0 segment (0-1.5s) is short -> not requested; both requested spans get distinct vectors by start time
+        return [[1.0,0.0] if a<16000*2 else [0.0,1.0] for a,b in spans]
+
+class LongFakeClient(FakeClient):
+    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+        self.calls.append({'diarize':diarize})
+        return {'text':'x','usage':{'seconds':8},'segments':[{'start':0.0,'end':3.5,'text':'Ayşe konuşuyor.','speaker':'0'},{'start':4.0,'end':7.5,'text':'Mehmet cevap veriyor.','speaker':'1'}]}
+
+class IdentityTests(unittest.TestCase):
+    def test_cluster_identity_names_known_voice_and_speaker_naming_saves_profile(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);db=Path(tmp)/'db.sqlite';store=Store(db)
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',4.0,'earlier')
+            mid=store.create_meeting('Kayıt',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            emb=FakeEmbedder();finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=emb)
+            rows=store.segments(mid)
+            self.assertEqual([(r['speaker'],r['speaker_name']) for r in rows],[('Konuşmacı 1','Ayşe'),('Konuşmacı 2',None)])
+            self.assertTrue(all(r['embedding'] for r in rows));self.assertEqual(rows[0]['metrics']['identity']['name'],'Ayşe')
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['identity'],{'embedded':2,'named':1})
+            store.close()
+            result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Mehmet','enroll':True},db)
+            self.assertEqual(result,{'labeled':1,'profile_saved':True,'seconds':3.5})
+            snap=dispatch({'action':'snapshot','meeting':mid},db)
+            self.assertEqual([s['speaker_name'] for s in snap['segments']],['Ayşe','Mehmet']);self.assertEqual({p['name'] for p in snap['profiles']},{'Ayşe','Mehmet'})
+            dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Mehmet','enroll':True},db)  # idempotent
+            self.assertEqual(len(dispatch({'action':'snapshot'},db)['profiles']),2)
+            with self.assertRaises(ValueError):dispatch({'action':'label_speaker','meeting':mid,'speaker':'Yok','name':'X','enroll':True},db)
+    def test_identity_failure_keeps_transcript_complete(self):
+        class Broken:
+            model_id='resemblyzer:test'
+            def embed_file(self,path,spans):raise RuntimeError('worker died')
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=Broken())
+            row=store.db.execute('SELECT status,metadata FROM meetings WHERE id=?',(mid,)).fetchone()
+            self.assertEqual(row[0],'complete');self.assertIn('identity_error',json.loads(row[1]));self.assertEqual(len(store.segments(mid)),2);store.close()
+    def test_light_guard_admits_warning_but_not_critical(self):
+        from unittest.mock import patch
+        from meeting_os.resources import check_pressure, MemoryPressureError
+        from meeting_os.final_identity import FinalEmbedder
+        with patch('subprocess.check_output',return_value=b'2'):
+            with self.assertRaises(MemoryPressureError):check_pressure()
+            check_pressure(allow_warning=True)
+        with patch('subprocess.check_output',return_value=b'4'):
+            with self.assertRaises(MemoryPressureError):check_pressure(allow_warning=True)
+        with patch('meeting_os.final_identity.run_guarded') as rg, patch('meeting_os.final_identity._signature',return_value='s'), patch('meeting_os.final_identity._hash_file',return_value=('s','d'*16)), patch('meeting_os.final_identity.sf.info') as info, patch('meeting_os.final_identity.validate_vectors',return_value=[[0.0,1.0]]):
+            info.return_value.samplerate=16000;info.return_value.channels=1;info.return_value.subtype='FLOAT';info.return_value.frames=16000*5
+            import tempfile as tf
+            with tf.TemporaryDirectory() as t:
+                wav=Path(t)/'a.wav';sf.write(wav,np.zeros(16000*5,dtype='float32'),16000,subtype='FLOAT')
+                def fake_run(cmd,timeout,light=False):Path(cmd[-1]).write_text('[[0.0,1.0]]')
+                rg.side_effect=fake_run
+                FinalEmbedder(model=str(wav),light=True).embed_file(wav,[(0,16000*4)])
+                self.assertTrue(rg.call_args.kwargs['light'])

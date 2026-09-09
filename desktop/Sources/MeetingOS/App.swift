@@ -220,6 +220,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             editRow=nil; await refresh()
         } catch { self.error=error.localizedDescription }
     }
+    /// Names a provider-diarized speaker cluster for the whole meeting; with enroll, the cluster centroid becomes a voice profile.
+    func saveSpeaker(enroll:Bool) async {
+        guard let row=editRow, let mid=selected, !row.speaker.isEmpty else { return }
+        do {
+            let result=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":editName,"enroll":enroll])
+            editRow=nil
+            if enroll { activity=(result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi" }
+            await refresh()
+        } catch { self.error=error.localizedDescription }
+    }
     func saveText() async {
         guard let row=editRow, let mid=selected else { return }
         do { _=try await request(["action":"edit_text","meeting":mid,"segment":row.id,"text":editText]); editRow=nil; await refresh() } catch { self.error=error.localizedDescription }

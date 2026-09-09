@@ -138,7 +138,12 @@ struct DetailView:View {
                 }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
             Divider()
-            HStack { Label("Yerel işleme",systemImage:"lock.shield"); Text("•"); Text("\(model.rows.count) bölüm"); Spacer(); Text("İsim düzeltmek ses profilini otomatik eğitmez.") }
+            HStack {
+                if model.meeting?.metadata["engine"] as? String=="openrouter" { Label("Transkript OpenRouter · Ses profili eşleştirme bu Mac’te",systemImage:"cloud") } else { Label("Yerel işleme",systemImage:"lock.shield") }
+                Text("•"); Text("\(model.rows.count) bölüm"); Spacer()
+                if let e=model.meeting?.metadata["identity_error"] as? String { Text(e).foregroundStyle(.orange) }
+                else { Text(model.meeting?.metadata["engine"] as? String=="openrouter" ? "Bir konuşmacıyı bir kez adlandırın; profil kaydedilir ve sonraki toplantılarda otomatik tanınır." : "İsim düzeltmek ses profilini otomatik eğitmez.") }
+            }
                 .font(.caption).foregroundStyle(.secondary).padding(12)
         }
         .background(MeetingStyle.canvas)
@@ -257,10 +262,18 @@ struct EditSegmentSheet:View {
                 } else {
                     Text("Bu toplantı yalnızca metin içerir. İsim düzeltmesi ses profili oluşturmaz.").font(.caption).foregroundStyle(.secondary)
                 }
+                if let row=model.editRow, row.flags.contains("cloud_diarization") {
+                    Divider()
+                    Text("Bu bölüm sağlayıcı ayrımıyla “\(row.speaker)” kümesine ait. Kümeyi adlandırırsanız bu toplantıdaki tüm bölümleri isim alır ve kümeden bir ses profili kaydedilir; sonraki toplantılarda aynı ses otomatik tanınır.").font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Bu konuşmacıyı adlandır ve profili kaydet") { Task { await model.saveSpeaker(enroll:true) } }.buttonStyle(.borderedProminent).disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty).accessibilityIdentifier("nameSpeakerButton")
+                        Button("Yalnızca bu toplantıda adlandır") { Task { await model.saveSpeaker(enroll:false) } }.disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
+                    }
+                }
                 HStack {
                     Button("Vazgeç") { model.editRow=nil }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelEditButton")
                     Spacer()
-                    Button("Yalnızca ismi kaydet") { Task { await model.saveLabel(enroll:false) } }.disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
+                    Button("Yalnızca bu bölümün ismini kaydet") { Task { await model.saveLabel(enroll:false) } }.disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
                     if model.meeting?.metadata["text_only"] as? Bool != true {
                         Button("Ses profilini kaydet") { Task { await model.saveLabel(enroll:true) } }.disabled(!model.clean || model.editName.trimmingCharacters(in:.whitespaces).isEmpty)
                     }

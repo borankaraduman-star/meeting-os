@@ -111,7 +111,7 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
                     if not seg['text']: continue
                     label=speaker_label(source,seg['speaker'],index,multi)
                     segments.append(Segment(a+seg['start'],min(a+seg['end'],b),seg['text'],source,label,
-                        metrics={'provider':'openrouter','model':model,'piece':index},flags=flags+(['cloud_diarization'] if source!='mic' else [])))
+                        metrics={'provider':'openrouter','model':model,'piece':index,'cluster':f'{index}:{seg["speaker"]}'},flags=flags+(['cloud_diarization'] if source!='mic' else [])))
             elif result['text'].strip():
                 segments.append(Segment(a,b,result['text'].strip(),source,SOURCE_LABELS.get(source,source),
                     metrics={'provider':'openrouter','model':model,'piece':index,'usage':usage},flags=flags+['coarse_timing']))
@@ -125,7 +125,7 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     return plan
 
 
-def import_file_cloud_only(store, path, title, data_dir, *, consent=False, model=None, client=None, ffmpeg=None):
+def import_file_cloud_only(store, path, title, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
     """Recorded file → OpenRouter transcript with provider diarization. No local model is loaded."""
     _consent(consent)
     if not isinstance(title,str) or not title.strip() or len(title)>200: raise ValueError('Toplantı başlığı gerekli (en fazla 200 karakter)')
@@ -141,10 +141,46 @@ def import_file_cloud_only(store, path, title, data_dir, *, consent=False, model
     if result.returncode or not target.is_file(): raise ValueError('Ses dosyası dönüştürülemedi')
     metadata={'engine':'openrouter','model':model,'cloud_mode':'file','paths':{'system':str(target)},'cloud_upload_authorized':True,'original_name':source.name}
     mid=store.create_meeting(title.strip(),metadata)
-    return finalize_capture(store,mid,data_dir,consent=True,model=model,client=client,ffmpeg=ffmpeg)
+    return finalize_capture(store,mid,data_dir,consent=True,model=model,client=client,ffmpeg=ffmpeg,embedder=embedder)
 
 
-def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None):
+def identify_clusters(store, mid, sources, embedder=None):
+    """Local, light voiceprint step: one vector per diarized segment, cluster centroid matched against saved profiles.
+    Never blocks the transcript: caller records failures in metadata."""
+    rows=[r for r in store.segments(mid) if 'cloud_diarization' in r['flags'] and r['end']-r['start']>=3 and r.get('embedding') is None and r['source'] in sources]
+    if not rows: return {'embedded':0,'named':0}
+    if embedder is None:
+        from .final_identity import FinalEmbedder
+        embedder=FinalEmbedder(light=True)
+    emit('identifying')
+    by_source={}
+    for r in rows: by_source.setdefault(r['source'],[]).append(r)
+    embedded=0
+    for source,group in by_source.items():
+        with contextlib.redirect_stdout(__import__('sys').stderr):
+            vectors=embedder.embed_file(sources[source],[(round(r['start']*16000),round(r['end']*16000)) for r in group])
+        for r,vector in zip(group,vectors):
+            if vector is None: continue
+            r['embedding']=vector;r['embedding_model']=embedder.model_id;embedded+=1
+            with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
+    named=0
+    clusters={}
+    for r in store.segments(mid):
+        key=(r['source'],(r.get('metrics') or {}).get('cluster'))
+        if key[1] is not None: clusters.setdefault(key,[]).append(r)
+    for (source,cluster),members in clusters.items():
+        vectors=[r['embedding'] for r in members if r.get('embedding') and r.get('embedding_model')==embedder.model_id]
+        if not vectors: continue
+        centroid=[sum(col)/len(vectors) for col in zip(*vectors)]
+        identity=store.identify(centroid,embedder.model_id,.80,.08)
+        for r in members:
+            r.setdefault('metrics',{})['identity']=identity
+            with store.db: store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(identity['name'],json.dumps(r,ensure_ascii=False),r['id'],mid))
+        if identity['name']: named+=len(members)
+    return {'embedded':embedded,'named':named}
+
+
+def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
     """Capture-directory recordings and cloud-only file imports share this resumable path."""
     _consent(consent)
     row=store.db.execute('SELECT * FROM meetings WHERE id=?',(mid,)).fetchone()
@@ -182,6 +218,13 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
         try:
             transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg)
+            try:
+                identity=identify_clusters(store,mid,sources,embedder)
+                metadata['identity']=identity;metadata.pop('identity_error',None)
+            except Exception as exc:  # voice matching is optional; the cloud transcript stands on its own
+                from .resources import MemoryPressureError, ResourceProbeError
+                metadata['identity_error']='Bellek baskısı; ses profili eşleştirmesi atlandı' if isinstance(exc,(MemoryPressureError,ResourceProbeError)) else 'Ses profili eşleştirmesi yapılamadı'
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(metadata),mid))
             store.status(mid,'complete');emit('complete')
             return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources)}
         except BaseException:

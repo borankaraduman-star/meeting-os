@@ -19,12 +19,14 @@ def physical_memory():
     try:return int(subprocess.check_output(['/usr/sbin/sysctl','-n','hw.memsize'],timeout=2,start_new_session=True))
     except (OSError,ValueError,subprocess.SubprocessError):return 0
 
-def check_pressure():
+def check_pressure(allow_warning=False):
+    """allow_warning=True admits level 2 (warning) for light workers such as the voice embedder; critical still blocks."""
     if sys.platform!='darwin':return
     try:level=int(subprocess.check_output(['/usr/sbin/sysctl','-n','kern.memorystatus_vm_pressure_level'],timeout=2,start_new_session=True))
     except (OSError,ValueError,subprocess.SubprocessError) as exc:
         raise ResourceProbeError(f"Bellek durumu okunamadı ({type(exc).__name__}); güvenlik için yerel model başlatılmadı.") from exc
-    if level!=1:raise MemoryPressureError('Mac bellek baskısı altında. Ağır uygulamaları kapatıp yeniden deneyin; ses dosyaları korunuyor.')
+    if level==1 or (allow_warning and level==2):return
+    raise MemoryPressureError('Mac bellek baskısı altında. Ağır uygulamaları kapatıp yeniden deneyin; ses dosyaları korunuyor.')
 
 def check_asr_model(path):
     cfg=Path(path)/'config.json'

@@ -112,7 +112,7 @@ def dispatch(request, db=None):
         if action in ('transcript_preview','transcript_import'):
             from .transcript_import import preview,save
             return preview(request.get('text')) if action=='transcript_preview' else save(store,request.get('title'),request.get('text'))
-        if action in ('label','edit_text','enroll'):
+        if action in ('label','edit_text','enroll','label_speaker'):
             row=store.db.execute('SELECT status FROM meetings WHERE id=?',(request['meeting'],)).fetchone()
             if not row or row['status']!='complete': raise ValueError('Önce nihai transkriptin tamamlanmasını bekleyin')
         from .memory import Memory
@@ -138,6 +138,9 @@ def dispatch(request, db=None):
                     m['capture']['preview']=summarize(m['metadata']['capture_dir'],DATA_DIR/'last-job.log' if db is None else None)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
             return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(request.get('meeting',''))}
+        if action=='label_speaker':
+            if request.get('enroll'): return store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
+            store.correct(request['meeting'],request['speaker'],request['name']); return {'labeled':True,'profile_saved':False}
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}
         if action=='edit_text':
