@@ -563,3 +563,7 @@ Boran: “ses dosyaları çok yer kaplıyor”. Ölçüm: 9 toplantı 416 MB; 41
 ## 2026-09-09 19:10 — 1.2.19: okuma görünümü belge gibi
 
 Kart kabuğu kalktı, zaman sol olukta, aynı konuşmacının ardışık paragrafları başlıksız devam ediyor, konuşmacı değişiminde ince ayraç, metin sütunu 760 pt. Ekranda doğrulandı: aynı pencerede görünen paragraf sayısı belirgin arttı. Kurul turu 1.2.15–1.2.19: sağlamlık 7/7 madde (2’si canlı denenmedi), PM 4/6, arayüz 6/6.
+
+## 2026-09-09 19:25 — 1.2.20: Görünüm ayarı
+
+Boran “tema renk değiştirme nerede” sordu; yoktu. Ayarlar → Görünüm: Sistem/Açık/Koyu (`preferredColorScheme`, yüzen panel dahil) ve 6 vurgu rengi (`Accents`; `MeetingStyle.accent` artık Model’den beslenen static var, 18 çağrı yeri değişmedi; pencere `.id(accentKey)` ile yeniden çizilir). Koyu + mavi ekranda doğrulandı.
