@@ -64,6 +64,47 @@ class DesktopTests(unittest.TestCase):
    kinds=[i['kind'] for i in q['items']]
    self.assertEqual(kinds,['suggested_name','ambiguous','unnamed_speaker','short_match']);self.assertEqual(q['count'],4)
    self.assertEqual(q['items'][0]['suggested'],'Ayşe');self.assertIn('Mehmet',q['items'][2]['reason']);self.assertIn('15 sn',q['items'][2]['reason'])
+ def test_check_duplicate_matches_registered_digest_or_name_and_size(self):
+  from meeting_os.import_registry import digest_path,find_duplicate
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db)
+   audio=data/'toplanti.m4a';audio.write_bytes(b'audio-bytes-1');other=data/'baska.m4a';other.write_bytes(b'audio-bytes-2')
+   mid=s.create_meeting('İlk içe aktarım',{'engine':'openrouter','model':'microsoft/mai-transcribe-2','cloud_mode':'file','original_name':'toplanti.m4a'})
+   s.status(mid,'complete');legacy=s.create_meeting('Eski',{'original_name':'baska.m4a'});s.close()
+   self.assertIsNone(dispatch({'action':'check_duplicate','path':str(audio)},db)['duplicate'])  # name alone is not enough
+   with self.assertRaises(ValueError):dispatch({'action':'register_import_digest','meeting':mid,'digest':'nope'},db)
+   with self.assertRaises(ValueError):dispatch({'action':'register_import_digest','meeting':'missing','digest':digest_path(audio)},db)
+   self.assertTrue(dispatch({'action':'register_import_digest','meeting':mid,'digest':digest_path(audio),'size':audio.stat().st_size},db)['registered'])
+   result=dispatch({'action':'check_duplicate','path':str(audio)},db)
+   self.assertEqual(result['duplicate'],{'meeting':mid,'title':'İlk içe aktarım','model':'microsoft/mai-transcribe-2','status':'complete'})
+   self.assertEqual(result['digest'],digest_path(audio));self.assertEqual(result['size'],len(b'audio-bytes-1'))
+   self.assertIsNone(dispatch({'action':'check_duplicate','path':str(other)},db)['duplicate'])
+   audio.write_bytes(b'audio-bytes-X')  # same name and size, different content: content wins
+   self.assertIsNone(dispatch({'action':'check_duplicate','path':str(audio)},db)['duplicate'])
+   s=Store(db)
+   meta=json.loads(s.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+   self.assertEqual(meta['original_name'],'toplanti.m4a');self.assertEqual(meta['engine'],'openrouter')  # merged, not replaced
+   with s.db:s.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps({'original_name':'baska.m4a','original_size':len(b'audio-bytes-2')}),legacy))
+   self.assertEqual(find_duplicate(s,'0'*64,'baska.m4a',len(b'audio-bytes-2'))['meeting'],legacy)  # size without digest falls back to name+size
+   self.assertIsNone(find_duplicate(s,'0'*64,'baska.m4a',999));s.close()
+   with self.assertRaises(ValueError):dispatch({'action':'check_duplicate','path':str(data/'yok.m4a')},db)
+ def test_storage_report_walks_data_dir_without_deleting(self):
+  from meeting_os.recovery import current_job_metadata
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db)
+   rec=data/'recordings'/'r1';rec.mkdir(parents=True);(rec/'mic.wav').write_bytes(b'x'*300);(rec/'system.wav').write_bytes(b'y'*200)
+   rec2=data/'recordings'/'r2';rec2.mkdir();(rec2/'mic.wav').write_bytes(b'x'*100)
+   imp=data/'imports'/'i1';imp.mkdir(parents=True);(imp/'audio.wav').write_bytes(b'z'*50)
+   (data/'imports'/'orphan').mkdir();(data/'imports'/'orphan'/'a.wav').write_bytes(b'q'*25)
+   big=s.create_meeting('Kayıt',{'capture_dir':str(rec)});small=s.create_meeting('İçe aktarım',{'paths':{'system':str(imp/'audio.wav')}})
+   text=s.create_meeting('Metin',{'text_only':True});live=s.create_meeting('Canlı',{**current_job_metadata(),'capture_dir':str(rec2)});s.close()
+   report=dispatch({'action':'storage_report'},db)
+   self.assertEqual(report['totals']['recordings'],600);self.assertEqual(report['totals']['imports'],75)
+   self.assertGreater(report['totals']['database'],0);self.assertEqual(report['total'],675+report['totals']['database'])
+   self.assertEqual([m['meeting'] for m in report['meetings']],[big,live,small]);self.assertNotIn(text,[m['meeting'] for m in report['meetings']])
+   self.assertEqual(report['meetings'][0]['bytes'],500);self.assertEqual(report['meetings'][2]['bytes'],50)
+   self.assertFalse(report['meetings'][0]['active']);self.assertTrue(report['meetings'][1]['active'])
+   self.assertTrue((rec/'mic.wav').exists());self.assertTrue((data/'imports'/'orphan'/'a.wav').exists())
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):
