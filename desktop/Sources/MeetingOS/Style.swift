@@ -41,7 +41,7 @@ struct MeetingNavigation:View {
     /// Work waiting behind a tab: open tasks of this meeting, items in the review queue.
     func badge(_ key:String)->Int? { key=="actions" ? model.openTaskCount : (key=="review" ? model.review.count : nil) }
     let tabs=[("transcript","Transkript","waveform"),("analysis","Özet","text.alignleft"),("actions","Görevlerim","checklist"),("review","Kontrol","checklist.checked"),("memory","Hafıza","sparkle.magnifyingglass")]
-    var body:some View { HStack(spacing:5) { ForEach(Array(tabs.enumerated()),id:\.element.0) { index,tab in let (key,title,icon)=tab; Button { model.tab=key } label:{ HStack(spacing:7) { Image(systemName:icon);Text(title).fontWeight(model.tab==key ? .semibold:.medium); if let n=badge(key), n>0 { Text("\(n)").font(.caption2.weight(.semibold)).monospacedDigit().padding(.horizontal,6).padding(.vertical,1).background(MeetingStyle.accent.opacity(0.14),in:Capsule()).foregroundStyle(MeetingStyle.accent).accessibilityIdentifier("badge-\(key)") } }.font(.callout).frame(maxWidth:.infinity).padding(.vertical,10).contentShape(Rectangle()) }.buttonStyle(.plain).foregroundStyle(model.tab==key ? Color.primary:Color.secondary).background(model.tab==key ? MeetingStyle.surface:Color.clear,in:RoundedRectangle(cornerRadius:10)).overlay(alignment:.bottom) { if model.tab==key { Capsule().fill(MeetingStyle.accent).frame(width:24,height:2).offset(y:3) } }.accessibilityIdentifier("tab-\(key)").accessibilityLabel(title).accessibilityAddTraits(model.tab==key ? .isSelected:[]).keyboardShortcut(KeyEquivalent(Character(String(index+1))),modifiers:.command).help("\(title) (⌘\(index+1))") } }.padding(5).background(.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:14)).accessibilityElement(children:.contain).accessibilityLabel("Toplantı görünümleri") }
+    var body:some View { HStack(spacing:5) { ForEach(Array(tabs.enumerated()),id:\.element.0) { index,tab in let (key,title,icon)=tab; Button { model.tab=key } label:{ HStack(spacing:7) { Image(systemName:icon);Text(title).fontWeight(model.tab==key ? .semibold:.medium); if let n=badge(key), n>0 { Text("\(n)").font(.caption2.weight(.semibold)).monospacedDigit().padding(.horizontal,6).padding(.vertical,1).background(MeetingStyle.accent.opacity(0.14),in:Capsule()).foregroundStyle(MeetingStyle.accent).accessibilityIdentifier("badge-\(key)") } }.font(.callout).frame(maxWidth:.infinity).padding(.vertical,10).contentShape(Rectangle()) }.buttonStyle(.plain).foregroundStyle(model.tab==key ? Color.primary:Color.secondary).background(model.tab==key ? MeetingStyle.surface:Color.clear,in:RoundedRectangle(cornerRadius:10)).overlay(alignment:.bottom) { if model.tab==key { Capsule().fill(MeetingStyle.accent).frame(width:24,height:2).offset(y:3) } }.accessibilityIdentifier("tab-\(key)").accessibilityLabel(title).accessibilityAddTraits(model.tab==key ? .isSelected:[]).help("\(title) (⌘\(index+1))") } }.padding(5).background(.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:14)).accessibilityElement(children:.contain).accessibilityLabel("Toplantı görünümleri") }
 }
 struct MeetingLibraryRow:View {
     let meeting:Meeting
@@ -52,7 +52,7 @@ struct TaskStatusBadge:View {
     let state:String
     var label:String { switch state { case "done":return "Tamamlandı";case "dismissed":return "Kaldırıldı";case "in_progress":return "Devam ediyor";default:return "Açık" } }
     var icon:String { switch state { case "done":return "checkmark.circle.fill";case "dismissed":return "minus.circle";case "in_progress":return "clock";default:return "circle" } }
-    var color:Color { switch state { case "done":return MeetingStyle.accent;case "in_progress":return .blue;default:return .secondary } }
+    var color:Color { switch state { case "done":return MeetingStyle.accent;case "in_progress":return MeetingStyle.accent.opacity(0.7);default:return .secondary } }
     var body:some View { Label(label,systemImage:icon).font(.caption.weight(.medium)).foregroundStyle(color).padding(.horizontal,9).padding(.vertical,5).background(color.opacity(0.09),in:Capsule()).fixedSize() }
 }
 
@@ -81,7 +81,7 @@ struct TranscriptEmptyView:View {
         case "failed","incomplete":return "İşlem durumunu ve varsa hata bilgisini kontrol edin. Kayıt arşivi varsa üstteki kurtarma seçeneğini kullanabilirsiniz."
         case "canceled":return "Bu toplantı için şu anda gösterilecek bir konuşma bölümü yok. Yeni bir kayıt başlatabilir veya ses dosyası açabilirsiniz."
         case "complete":return "Bu toplantının metni şu anda boş görünüyor. Yenileyerek tekrar kontrol edebilirsiniz."
-        default:return "Bir toplantı seçin, ⌘R ile kayıt başlatın veya OpenRouter ile bir ses dosyası açın."
+        default:return "Bir toplantı seçin, ⌃⌥R ile kayıt başlatın veya bir ses dosyası açın."
         }
     }
     var body:some View {

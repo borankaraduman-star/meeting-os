@@ -43,7 +43,7 @@ struct SidebarView:View {
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(model.recording ? .red:MeetingStyle.accent)
                 .disabled(model.busy && !model.recording)
                 .keyboardShortcut("r",modifiers:.command)   // ⌘R starts or ends the recording without touching the mouse
-                .help(model.recording ? "Kaydı bitir (⌘R)" : "Yeni kayıt (⌘R)")
+                .help(model.recording ? "Kaydı bitir (⌃⌥R her yerden)" : "Yeni kayıt (⌃⌥R her yerden)")
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("Ses dosyası aç…",systemImage:"waveform.badge.plus").frame(maxWidth:.infinity) }.controlSize(.small).disabled(model.busy).help("Bir ses dosyasını OpenRouter ile yazıya çevirip toplantı olarak ekler")
@@ -188,13 +188,9 @@ struct DetailView:View {
                 } }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
             Divider()
-            HStack {
-                if model.meeting?.metadata["engine"] as? String=="openrouter" { Label("Transkript OpenRouter · Ses profili eşleştirme bu Mac’te",systemImage:"cloud") } else { Label("Yerel işleme",systemImage:"lock.shield") }
-                Text("•"); Text("\(model.rows.count) bölüm"); Spacer()
-                if let e=model.meeting?.metadata["identity_error"] as? String { Text(e).foregroundStyle(.orange) }
-                else { Text(model.meeting?.metadata["engine"] as? String=="openrouter" ? "Bir konuşmacıyı bir kez adlandırın; profil kaydedilir ve sonraki toplantılarda otomatik tanınır." : "İsim düzeltmek ses profilini otomatik eğitmez.") }
+            if let e=model.meeting?.metadata["identity_error"] as? String, !e.isEmpty {
+                HStack { Label(e,systemImage:"exclamationmark.triangle").foregroundStyle(.orange); Spacer() }.font(.caption).padding(.horizontal,12).padding(.vertical,6)
             }
-                .font(.caption).foregroundStyle(.secondary).padding(12)
         }
         .background(MeetingStyle.canvas)
     }
@@ -227,7 +223,7 @@ struct DetailHeader:View {
                 Button("Altyazı (SRT)") { Task { await model.export("srt") } }
                 Button("JSON") { Task { await model.export("json") } }
                 Divider()
-                Menu("Belge hazırla (bulut)") {
+                Menu("Belge hazırla (OpenRouter)") {
                     Button("Ürün gereksinimi (PRD)…") { Task { await model.exportDocument(kind:"prd") } }
                     Button("Hata raporu…") { Task { await model.exportDocument(kind:"bug") } }
                     Button("Müşteri talebi…") { Task { await model.exportDocument(kind:"customer") } }
@@ -377,7 +373,7 @@ struct SettingsSheet:View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
                 HStack { Text("Ayarlar").font(.title2.bold()); Spacer(); Text("⌘,").font(.caption.monospaced()).foregroundStyle(.secondary) }
-                Picker("Bölüm",selection:$section) { Text("Genel").tag("genel"); Text("Sözlük ve sesler").tag("sozluk"); Text("Depolama").tag("depolama"); Text("Güncelleme ve raporlar").tag("guncelleme"); Text("Kurulum durumu").tag("durum") }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("settingsSection")
+                Picker("Ayar grubu",selection:$section) { Text("Genel").tag("genel"); Text("Sözlük ve sesler").tag("sozluk"); Text("Depolama").tag("depolama"); Text("Güncelleme ve raporlar").tag("guncelleme"); Text("Kurulum durumu").tag("durum") }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("settingsSection")
                 if section=="durum" {
                 if !model.setupChecks.isEmpty {
                     VStack(alignment:.leading,spacing:6) {
@@ -465,8 +461,8 @@ struct SettingsSheet:View {
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
                     Spacer()
-                    Button("Vazgeç") { model.showSettings=false }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelSettingsButton")
-                    Button("Kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton")
+                    if section=="sozluk" { Button("Sözlüğü kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton") }
+                    Button("Kapat") { model.showSettings=false }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelSettingsButton")
                 }
             }.padding(28)
         }.scrollIndicators(.visible).frame(width:640,height:min(["genel":470,"sozluk":820,"depolama":700,"guncelleme":620,"durum":660][section] ?? 700,(NSScreen.main?.visibleFrame.height ?? 900)-80))

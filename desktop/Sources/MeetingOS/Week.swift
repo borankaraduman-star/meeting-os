@@ -26,15 +26,12 @@ struct DebtItem: Identifiable {
 
 struct DecisionLogView:View {
     @ObservedObject var m:Model
-    @State private var query=""
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             HStack {
-                TextField("Kararlarda ara",text:$query).textFieldStyle(.roundedBorder).onSubmit { Task { await m.loadDecisions(query:query) } }.accessibilityIdentifier("decisionQuery")
-                Button("Ara") { Task { await m.loadDecisions(query:query) } }
-                Spacer()
                 Text("\(m.decisions.count) karar").font(.caption).foregroundStyle(.secondary)
-                Button("Markdown…") { Task { await m.exportDecisions(query:query) } }.disabled(m.decisions.isEmpty)
+                Spacer()
+                Button("Markdown…") { Task { await m.exportDecisions(query:m.memoryQuery) } }.disabled(m.decisions.isEmpty).accessibilityIdentifier("exportDecisions")
             }
             if m.decisions.isEmpty { ContentUnavailableView("Karar bulunamadı",systemImage:"checkmark.seal",description:Text("Özet çıkarılmış toplantıların kararları burada tek listede görünür.")) }
             ForEach(m.decisions) { d in
@@ -117,14 +114,9 @@ struct ScoreMeeting: Identifiable {
 
 struct QuestionRadarView:View {
     @ObservedObject var m:Model
-    @State private var query=""
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            HStack {
-                TextField("Sorularda ara",text:$query).textFieldStyle(.roundedBorder).onSubmit { Task { await m.loadQuestions(query:query) } }
-                Button("Ara") { Task { await m.loadQuestions(query:query) } }
-                Spacer(); Text("\(m.questions.count) soru grubu").font(.caption).foregroundStyle(.secondary)
-            }
+            HStack { Spacer(); Text("\(m.questions.count) soru grubu").font(.caption).foregroundStyle(.secondary) }
             Text("Toplantılarda açık kalan sorular; birden çok toplantıda tekrar edenler üstte. “Muhtemelen cevaplandı” yalnız ipucudur, kontrol edin.").font(.callout).foregroundStyle(.secondary)
             if m.questions.isEmpty { ContentUnavailableView("Cevapsız soru yok",systemImage:"questionmark.circle",description:Text("Özet çıkarılmış toplantıların açık soruları burada toplanır.")) }
             ForEach(m.questions) { q in
@@ -138,7 +130,7 @@ struct QuestionRadarView:View {
                     Text(q.text).font(.system(size:15,weight:.medium)).lineSpacing(4).textSelection(.enabled)
                     if let a=q.answeredBy { Label("Muhtemelen cevaplandı · \(q.answeredMeeting ?? ""): \(a)",systemImage:"checkmark.circle").font(.caption).foregroundStyle(MeetingStyle.accent).lineLimit(2) }
                     if let e=q.evidence { EvidenceView(m:m,evidence:[e]) }
-                }.padding(16).frame(maxWidth:.infinity,alignment:.leading).meetingCard()
+                }.padding(16).frame(maxWidth:.infinity,alignment:.leading).meetingCard().accessibilityIdentifier("questionCard-\(q.id)")
             }
         }.task { if m.questions.isEmpty { await m.loadQuestions(query:"") } }
     }
@@ -148,7 +140,7 @@ struct ScorecardView:View {
     @ObservedObject var m:Model
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            HStack { Text("Son 7 gün").font(.headline); Spacer(); Button("Yenile") { Task { await m.loadPeriodScorecard() } }.controlSize(.small) }
+            HStack { Text("Son 7 gün").font(.headline); Spacer(); Button("Yenile") { Task { await m.loadPeriodScorecard() } }.controlSize(.small).accessibilityIdentifier("refreshScorecard") }
             if let p=m.scorePeriod {
                 LazyVGrid(columns:[GridItem(.adaptive(minimum:150),spacing:12)],spacing:12) {
                     SmallMetric(value:String(format:"%.1f sa",p["hours"] as? Double ?? 0),label:"\(p["meetings"] as? Int ?? 0) toplantı",icon:"clock")
@@ -174,7 +166,7 @@ struct ScorecardView:View {
                         Spacer()
                         Text(s.speakers.prefix(4).map { "\($0.label) %\($0.percent)" }.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
-                }.padding(12).frame(maxWidth:.infinity,alignment:.leading).meetingCard()
+                }.padding(12).frame(maxWidth:.infinity,alignment:.leading).meetingCard().accessibilityIdentifier("scoreMeeting-\(s.id)")
             }
         }.task { if m.scoreMeetings.isEmpty { await m.loadPeriodScorecard() } }
     }

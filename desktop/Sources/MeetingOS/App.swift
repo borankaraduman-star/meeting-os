@@ -144,7 +144,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func loadScorecard() async {
         guard let r=try? await request(["action":"quality_report"]), let i=r["identity"] as? [String:Any] else { scorecard=""; return }
         let ok=i["auto_correct"] as? Int ?? 0, wrong=i["auto_wrong"] as? Int ?? 0, conf=i["suggestion_confirmed"] as? Int ?? 0, rej=i["suggestion_rejected"] as? Int ?? 0, missed=i["missed_known"] as? Int ?? 0, edits=r["text_edits"] as? Int ?? 0
-        scorecard="Kimlik karnesi · otomatik \(ok) doğru / \(wrong) yanlış · öneri \(conf) onay / \(rej) red · \(missed) kaçırılan · \(edits) metin düzeltmesi"
+        scorecard="Adlandırma isabeti · otomatik \(ok) doğru / \(wrong) yanlış · öneri \(conf) onay / \(rej) red · \(missed) kaçırılan · \(edits) metin düzeltmesi"
     }
     @Published var analysisModel=UserDefaults.standard.string(forKey:"cloudAnalysisModel") ?? "openai/gpt-4.1-mini" { didSet { UserDefaults.standard.set(analysisModel,forKey:"cloudAnalysisModel") } }
     /// analyze/prepare/ask run through OpenRouter whenever transcription does; the local Qwen path stays for local mode.
@@ -297,9 +297,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
-            if !ok { self.activity="Kayıt tamamlanamadı · Arşivdeki kayıt durumunu kontrol edin" }
+            if !ok { self.activity="Kayıt tamamlanamadı · Toplantılar listesindeki kayıt durumunu kontrol edin" }
             else if let mid=RecordingCompletion.retryMeeting(result,capture:dir.path) {
-                if self.requestedQuit { self.activity="Kayıt saklandı · Son işlemi arşivden başlatabilirsiniz" }
+                if self.requestedQuit { self.activity="Kayıt saklandı · Son işlemi Toplantılar listesinden başlatabilirsiniz" }
                 else { self.finishRecordedMeeting(mid) }
             } else if ok && result["status"] as? String == "canceled" { self.activity="Kayıt iptal edildi · Ses alınmadı" }
             else { self.activity="Kayıt saklandı · Son işlem otomatik başlatılamadı" }
@@ -450,6 +450,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     /// Talk shares depend on rows only; computed once per row change instead of in the Özet body every poll.
     @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
+    /// One search field for the whole Hafıza tab: the active segment decides what it queries.
+    func runMemoryQuery(mode:String) async {
+        switch mode { case "decisions": await loadDecisions(query:memoryQuery); case "questions": await loadQuestions(query:memoryQuery); case "waiting": await loadWaiting(); default: if !memoryQuery.isEmpty { await memorySearch() } }
+    }
     @Published var questions:[QuestionGroup]=[]; @Published var scorePeriod:[String:Any]?; @Published var scoreMeetings:[ScoreMeeting]=[]
     func loadQuestions(query:String) async {
         guard !recording else { return }
@@ -739,7 +743,11 @@ func statusLabel(_ status:String)->String {
                 Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)
                 Button("Hafızada ara") { model.focusMemorySearch() }.keyboardShortcut("f",modifiers:[.command,.shift])
                 Divider()
-                Text("Sekmeler: ⌘1 Transkript · ⌘2 Özet · ⌘3 Görevlerim · ⌘4 Kontrol · ⌘5 Hafıza")
+                Button("Transkript") { model.tab="transcript" }.keyboardShortcut("1",modifiers:.command)
+                Button("Özet") { model.tab="analysis" }.keyboardShortcut("2",modifiers:.command)
+                Button("Görevlerim") { model.tab="actions" }.keyboardShortcut("3",modifiers:.command)
+                Button("Kontrol") { model.tab="review" }.keyboardShortcut("4",modifiers:.command)
+                Button("Hafıza") { model.tab="memory" }.keyboardShortcut("5",modifiers:.command)
             }
         }
         MenuBarExtra { QuickMenu(model:model) } label: {
