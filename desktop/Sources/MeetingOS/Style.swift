@@ -1,8 +1,20 @@
 import SwiftUI
 import AppKit
 
+/// Accent presets the user can pick in Ayarlar → Görünüm. Views re-render because the choice lives on the Model.
+enum Accents {
+    static let all:[(key:String,name:String,color:Color)]=[
+        ("green","Yeşil",Color(red:0.20,green:0.68,blue:0.57)),
+        ("blue","Mavi",Color(red:0.22,green:0.52,blue:0.86)),
+        ("indigo","Lacivert",Color(red:0.38,green:0.42,blue:0.86)),
+        ("orange","Turuncu",Color(red:0.88,green:0.52,blue:0.18)),
+        ("rose","Gül",Color(red:0.84,green:0.33,blue:0.48)),
+        ("graphite","Grafit",Color(red:0.45,green:0.48,blue:0.50))]
+    static func color(_ key:String)->Color { all.first { $0.key==key }?.color ?? all[0].color }
+}
 enum MeetingStyle {
-    static let accent=Color(red:0.20,green:0.68,blue:0.57)
+    /// Set from Model.accentKey; default green. A static read keeps the 18 call sites unchanged.
+    static var accent=Accents.color(UserDefaults.standard.string(forKey:"accentKey") ?? "green")
     static let surface=Color(nsColor:.controlBackgroundColor)
     static let canvas=Color(nsColor:.windowBackgroundColor)
     static let sidebarWidth:CGFloat=264

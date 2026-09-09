@@ -420,6 +420,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// Görünüm: "system" | "light" | "dark", and the accent preset key.
+    @Published var appearance=UserDefaults.standard.string(forKey:"appearance") ?? "system" { didSet { UserDefaults.standard.set(appearance,forKey:"appearance") } }
+    @Published var accentKey=UserDefaults.standard.string(forKey:"accentKey") ?? "green" { didSet { UserDefaults.standard.set(accentKey,forKey:"accentKey"); MeetingStyle.accent=Accents.color(accentKey) } }
+    var colorScheme:ColorScheme? { appearance=="light" ? .light : (appearance=="dark" ? .dark : nil) }
     /// Hourly heartbeat into the shared iCloud folder so a day without a finished meeting still leaves a trace.
     var lastHeartbeat:Date?
     func heartbeatIfDue() {
@@ -687,7 +691,7 @@ func statusLabel(_ status:String)->String {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject var model=Model()
     var body:some Scene {
-        Window("Meeting OS",id:"main") { MeetingContent(m:model).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780).commands {
+        Window("Meeting OS",id:"main") { MeetingContent(m:model).preferredColorScheme(model.colorScheme).tint(MeetingStyle.accent).id(model.accentKey).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780).commands {
             CommandMenu("Git") {
                 Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)
                 Button("Hafızada ara") { model.focusMemorySearch() }.keyboardShortcut("f",modifiers:[.command,.shift])

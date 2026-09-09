@@ -33,7 +33,7 @@ struct RecorderPanelView:View {
             Button("An") { model.markMoment("important") }.help("Önemli an (⌃⌥M)")
             Button("Karar") { model.markMoment("decision") }.help("Karar anı (⌘⇧M)")
             Button("Bitir") { model.stop() }.buttonStyle(.borderedProminent).tint(.red).help("Kaydı bitir (⌃⌥R)")
-        }.controlSize(.small).padding(.horizontal,12).padding(.vertical,8).frame(width:400,height:56)
+        }.controlSize(.small).padding(.horizontal,12).padding(.vertical,8).frame(width:400,height:56).preferredColorScheme(model.colorScheme)
     }
 }
 

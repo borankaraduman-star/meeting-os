@@ -432,6 +432,15 @@ struct SettingsSheet:View {
                         Text("Bir transkript bölümünde Düzelt düğmesine basarak temiz bir konuşma örneğinden profil kaydedebilirsiniz.").font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
                 } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
+                Text("Görünüm").font(.headline)
+                HStack(spacing:10) {
+                    Picker("Tema",selection:$model.appearance) { Text("Sistem").tag("system"); Text("Açık").tag("light"); Text("Koyu").tag("dark") }.pickerStyle(.segmented).frame(width:220).accessibilityIdentifier("appearancePicker")
+                    Text("Vurgu").font(.callout).foregroundStyle(.secondary)
+                    ForEach(Accents.all,id:\.key) { a in
+                        Button { model.accentKey=a.key } label: { Circle().fill(a.color).frame(width:18,height:18).overlay(Circle().stroke(Color.primary.opacity(model.accentKey==a.key ? 0.8 : 0),lineWidth:2)) }.buttonStyle(.plain).help(a.name).accessibilityIdentifier("accent-\(a.key)").accessibilityLabel(a.name)
+                    }
+                }
+                Text("Tema uygulama penceresi ve yüzen paneli etkiler; menü çubuğu simgesi sistemi izler.").font(.caption2).foregroundStyle(.secondary)
                 Text("Kayıt sırasında").font(.headline)
                 Toggle("Zoom toplantısı açılınca bildirim gönder (kayıt yokken, 20 dakikada en fazla bir)",isOn:$model.zoomNotify)
                 Toggle("Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat, pencere kapanınca 1 dk sonra bitir (elle başlatılan kayıtlara dokunmaz)",isOn:$model.zoomAutoRecord)
