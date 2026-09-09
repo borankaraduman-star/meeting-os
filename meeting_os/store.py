@@ -34,10 +34,17 @@ class Store:
         CREATE TABLE IF NOT EXISTS corrections(id INTEGER PRIMARY KEY, meeting TEXT, speaker TEXT, name TEXT, created TEXT);
         CREATE TABLE IF NOT EXISTS text_edits(id INTEGER PRIMARY KEY, meeting TEXT, segment INTEGER, previous TEXT, replacement TEXT, created TEXT);
         CREATE TABLE IF NOT EXISTS rejections(id INTEGER PRIMARY KEY, name TEXT, model TEXT, vector TEXT, provenance TEXT, created TEXT);
+        CREATE TABLE IF NOT EXISTS profile_stats(name TEXT PRIMARY KEY, confirmed INTEGER DEFAULT 0, wrong INTEGER DEFAULT 0);
         CREATE INDEX IF NOT EXISTS segment_meeting ON segments(meeting,start);
         ''')
-        if 'previous_name' not in {r[1] for r in self.db.execute('PRAGMA table_info(corrections)')}:
+        columns={r[1] for r in self.db.execute('PRAGMA table_info(corrections)')}
+        if 'previous_name' not in columns:
             self.db.execute('ALTER TABLE corrections ADD COLUMN previous_name TEXT')
+        if 'feedback' not in columns:
+            # New column, so exactly once per database: the corrections the user already made are the evidence
+            # Q5 needs, and the segments still carry the automatic verdict those corrections overruled.
+            self.db.execute('ALTER TABLE corrections ADD COLUMN feedback TEXT')
+            self._backfill_feedback()
     def close(self): self.db.close()
     def create_meeting(self, title, metadata=None):
         mid = uuid.uuid4().hex[:12]
@@ -71,8 +78,9 @@ class Store:
         if not rows: raise ValueError('Speaker not found in meeting')
         with self.db:
             previous=self._reject_previous(mid, speaker, rows, name)
+            feedback=self._record_feedback(rows, name)
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?', (name, mid, speaker))
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name) VALUES(?,?,?,?,?)', (mid, speaker, name, datetime.now(timezone.utc).isoformat(), previous))
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)', (mid, speaker, name, datetime.now(timezone.utc).isoformat(), previous, feedback))
     REJECT_SIMILARITY = 0.90   # a voice this close to one the user said is "not X" can never be X again
     def _previous_names(self, rows):
         """What the app called this cluster before the user corrected it: a confirmed name, an automatic match or an unconfirmed suggestion."""
@@ -102,6 +110,52 @@ class Store:
             if vector is not None and not self.db.execute('SELECT 1 FROM rejections WHERE name=? AND provenance=?',(prev,f'{mid}:speaker:{speaker}')).fetchone():
                 self.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',(prev,model,json.dumps(vector),f'{mid}:speaker:{speaker}',datetime.now(timezone.utc).isoformat()))
         return wrong[0]
+    # --- Q5: per-person evidence. Only automation is judged here; a name the user typed into an empty cluster says
+    # nothing about the model, so it moves no counter. One overruled automatic name outweighs one confirmed suggestion.
+    PERSON_THRESHOLD_FLOOR=0.84   # 3 profiles of real data still separate different people at 0.85; never go under
+    PERSON_THRESHOLD_CAP=0.93
+    def _feedback(self, identities, name):
+        """(confirmed, wrong) for one naming: the suggestion the user accepted, and the automatic name he overruled."""
+        confirmed=name if any((i or {}).get('suggested')==name for i in identities) else None
+        wrong=sorted({(i or {}).get('name') for i in identities if (i or {}).get('name')}-{name})
+        return confirmed,(wrong[0] if wrong else None)
+    def _bump(self, name, column, delta):
+        """Move one evidence counter (must run inside the caller's transaction). Counters never go negative."""
+        self.db.execute('INSERT OR IGNORE INTO profile_stats(name,confirmed,wrong) VALUES(?,0,0)',(name,))
+        self.db.execute(f'UPDATE profile_stats SET {column}=max(0,{column}+?) WHERE name=?',(delta,name))
+    def _record_feedback(self, rows, name):
+        """Apply this naming's evidence and return the JSON the correction row keeps, so undo can take it back."""
+        confirmed,wrong=self._feedback([(r.get('metrics') or {}).get('identity') for r in rows], name)
+        if not confirmed and not wrong: return None
+        if confirmed: self._bump(confirmed,'confirmed',1)
+        if wrong: self._bump(wrong,'wrong',1)
+        return json.dumps({'confirmed':confirmed,'wrong':wrong})
+    def _backfill_feedback(self):
+        """Migration only: replay the existing cluster corrections into the counters, cheaply (no vectors read)."""
+        with self.db:
+            for row in self.db.execute("SELECT id,meeting,speaker,name FROM corrections WHERE speaker NOT LIKE 'segment:%' ORDER BY id"):
+                identities=[{'name':r[0],'suggested':r[1]} for r in self.db.execute(
+                    "SELECT json_extract(payload,'$.metrics.identity.name'),json_extract(payload,'$.metrics.identity.suggested') FROM segments WHERE meeting=? AND speaker=?",(row['meeting'],row['speaker']))]
+                confirmed,wrong=self._feedback(identities,row['name'])
+                if not confirmed and not wrong: continue
+                self.db.execute('UPDATE corrections SET feedback=? WHERE id=?',(json.dumps({'confirmed':confirmed,'wrong':wrong}),row['id']))
+                if confirmed: self._bump(confirmed,'confirmed',1)
+                if wrong: self._bump(wrong,'wrong',1)
+    def person_threshold(self, name, base, exclude=None):
+        """The bar this one person has to clear. Each confirmed suggestion lowers it 0.01 (floor 0.84), each
+        overruled automatic name raises it 0.02 (cap 0.93); people the user never judged keep the global bar.
+        `exclude` drops one meeting's own evidence, so a replay cannot let a meeting vouch for itself."""
+        row=self.db.execute('SELECT confirmed,wrong FROM profile_stats WHERE name=?',(name,)).fetchone()
+        confirmed,wrong=(row['confirmed'] or 0,row['wrong'] or 0) if row else (0,0)
+        if exclude:
+            for r in self.db.execute('SELECT feedback FROM corrections WHERE meeting=? AND feedback IS NOT NULL',(exclude,)):
+                try: f=json.loads(r['feedback'])
+                except ValueError: continue
+                if f.get('confirmed')==name: confirmed-=1
+                if f.get('wrong')==name: wrong-=1
+        confirmed=max(0,min(confirmed,3));wrong=max(0,min(wrong,3))
+        if not confirmed and not wrong: return base
+        return min(self.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, self.PERSON_THRESHOLD_FLOOR)+0.02*wrong)
     def correct_segment(self, mid, sid, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
@@ -124,12 +178,33 @@ class Store:
         with self.db:
             self.db.execute('UPDATE segments SET payload=? WHERE meeting=? AND id=?',(json.dumps(payload,ensure_ascii=False),mid,sid))
             self.db.execute('INSERT INTO text_edits(meeting,segment,previous,replacement,created) VALUES(?,?,?,?,?)',(mid,sid,previous,text,datetime.now(timezone.utc).isoformat()))
+    UNCLEAN_FLAGS={'speaker_ambiguous','possible_non_speech','repetition','provisional','low_asr_confidence','short_context_diarization'}
+    CLEAN_MIN_SECONDS=6.0   # the picker asks for more than enrollment's bare minimum: a long turn makes a better sample
+    def clean_candidates(self, name, limit=8):
+        """Q8: this person's longest turns that could become a voice sample — long enough, no uncertainty flag, a
+        vector already stored, and not already enrolled. Vectors stay in SQLite; only the row summary comes back."""
+        name=(name or '').strip()
+        if not name: return []
+        used={r[0] for r in self.db.execute('SELECT provenance FROM samples WHERE name=?',(name,))}
+        out=[]
+        for r in self.db.execute("""SELECT s.id,s.meeting,s.start,s.end,s.source,m.title,
+                json_extract(s.payload,'$.text') text,json_extract(s.payload,'$.flags') flags,json_type(s.payload,'$.embedding') vector
+                FROM segments s JOIN meetings m ON m.id=s.meeting
+                WHERE s.speaker_name=? AND m.status='complete' AND s.end-s.start>=? ORDER BY s.end-s.start DESC LIMIT ?""",
+                (name,self.CLEAN_MIN_SECONDS,max(8,limit*8))):
+            if r['vector']!='array' or f"{r['meeting']}:{r['id']}" in used: continue
+            try: flags=set(json.loads(r['flags'] or '[]'))
+            except ValueError: flags=set()
+            if self.UNCLEAN_FLAGS & flags: continue
+            out.append({'id':r['id'],'meeting':r['meeting'],'meeting_title':r['title'],'start':round(r['start'],1),'end':round(r['end'],1),
+                        'seconds':round(r['end']-r['start'],1),'source':r['source'],'text':(r['text'] or '')[:120]})
+            if len(out)>=limit: break
+        return out
     def enroll_segment(self, mid, sid, name):
         rows=[r for r in self.segments(mid) if r['id']==sid]
         if not rows: raise ValueError('Segment not found')
         r=rows[0]
-        forbidden={'speaker_ambiguous','possible_non_speech','repetition','provisional','low_asr_confidence','short_context_diarization'}
-        if not r['embedding'] or forbidden.intersection(r['flags']): raise ValueError('Choose clean final speech, at least 3 seconds, without speaker uncertainty')
+        if not r['embedding'] or self.UNCLEAN_FLAGS.intersection(r['flags']): raise ValueError('Choose clean final speech, at least 3 seconds, without speaker uncertainty')
         duration=r['end']-r['start']; name=name.strip()
         if not name or duration < 3: raise ValueError('Enrollment needs a name and at least 3 seconds')
         vector=unit(r['embedding'])
@@ -154,8 +229,9 @@ class Store:
         provenance=f'{mid}:speaker:{speaker}'
         with self.db:
             previous=self._reject_previous(mid, speaker, rows, name)
+            feedback=self._record_feedback(rows, name)
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name) VALUES(?,?,?,?,?)',(mid,speaker,name,datetime.now(timezone.utc).isoformat(),previous))
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,speaker,name,datetime.now(timezone.utc).isoformat(),previous,feedback))
             if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
                 self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance))
@@ -167,12 +243,17 @@ class Store:
         row=self.db.execute("SELECT * FROM corrections WHERE meeting=? AND speaker NOT LIKE 'segment:%' ORDER BY id DESC LIMIT 1",(mid,)).fetchone()
         if not row: raise ValueError('Geri alınacak adlandırma yok')
         speaker,name,previous=row['speaker'],row['name'],row['previous_name']
+        try: feedback=json.loads(row['feedback'] or 'null') or {}
+        except ValueError: feedback={}
         with self.db:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(previous,mid,speaker))
             self.db.execute('DELETE FROM samples WHERE name=? AND provenance=?',(name,f'{mid}:speaker:{speaker}'))
             if previous: self.db.execute('DELETE FROM rejections WHERE name=? AND provenance=?',(previous,f'{mid}:speaker:{speaker}'))
+            if feedback.get('confirmed'): self._bump(feedback['confirmed'],'confirmed',-1)   # the evidence goes back too
+            if feedback.get('wrong'): self._bump(feedback['wrong'],'wrong',-1)
             self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
-        return {'speaker':speaker,'name':name,'previous':previous}
+        # The cluster is open again (or back to its old name): what the rest of the meeting can be has changed.
+        return {'speaker':speaker,'name':name,'previous':previous,**self.resuggest(mid)}
     def delete_meeting(self, mid):
         """Remove one meeting and every row derived from it. Voice profiles are kept. Returns metadata for file cleanup."""
         row=self.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
@@ -199,7 +280,7 @@ class Store:
     def profiles(self):
         return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples GROUP BY name,model')]
     def delete_profile(self, name):
-        with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,)); self.db.execute('DELETE FROM rejections WHERE name=?', (name,))
+        with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,)); self.db.execute('DELETE FROM rejections WHERE name=?', (name,)); self.db.execute('DELETE FROM profile_stats WHERE name=?', (name,))
     def profile_samples(self, name):
         """Every stored voice sample of a person with where it came from, for the maintenance screen."""
         titles = {r['id']: r['title'] for r in self.db.execute('SELECT id,title FROM meetings')}
@@ -222,6 +303,7 @@ class Store:
             groups.setdefault((r['name'], r['model']), []).append((r['id'], x, float(r['duration'] or 0), r['provenance'] or ''))
         rejected = {}
         for r in self.db.execute('SELECT name,count(*) FROM rejections GROUP BY name'): rejected[r[0]] = r[1]
+        heard = self._last_heard()
         out = []
         for (name, model), xs in groups.items():
             fits = []
@@ -231,11 +313,18 @@ class Store:
                     fits = [(sid, cosine(x, centroid), prov) for sid, x, _, prov in xs]
                 except ValueError: fits = []
             weakest = min(fits, key=lambda f: f[1]) if fits else None
+            last = heard.get(name) or {}
             out.append({'name': name, 'model': model, 'samples': len(xs), 'seconds': round(sum(d for _, _, d, _ in xs), 1),
                         'auto_samples': sum(1 for _, _, _, p in xs if p.startswith('auto:')), 'rejections': rejected.get(name, 0),
                         'weakest_fit': round(weakest[1], 3) if weakest else None, 'weakest_sample': weakest[0] if weakest else None,
-                        'weak': bool(weakest and weakest[1] < self.WEAK_FIT)})
+                        'weak': bool(weakest and weakest[1] < self.WEAK_FIT),
+                        'last_meeting': last.get('meeting'), 'last_meeting_title': last.get('title'), 'last_heard': last.get('created')})
         return sorted(out, key=lambda p: (not p['weak'], -p['samples'], p['name']))
+    def _last_heard(self):
+        """Newest meeting each person was heard in. SQLite hands back the row that produced max(created)."""
+        return {r['speaker_name']: {'meeting': r['id'], 'title': r['title'], 'created': r['created']} for r in self.db.execute(
+            "SELECT s.speaker_name,m.id,m.title,max(m.created) created FROM segments s JOIN meetings m ON m.id=s.meeting "
+            "WHERE s.speaker_name IS NOT NULL AND s.speaker_name<>'' GROUP BY s.speaker_name")}
     def delete_sample(self, sample_id):
         with self.db:
             cur = self.db.execute('DELETE FROM samples WHERE id=?', (int(sample_id),))
@@ -250,6 +339,13 @@ class Store:
             n = self.db.execute('UPDATE samples SET name=? WHERE name=?', (new_name, name)).rowcount
             self.db.execute('UPDATE rejections SET name=? WHERE name=?', (new_name, name))
             self.db.execute('UPDATE segments SET speaker_name=? WHERE speaker_name=?', (new_name, name))
+            for column in ('confirmed', 'wrong'):   # undo reads these names back, so they follow the person too
+                self.db.execute(f"UPDATE corrections SET feedback=json_set(feedback,'$.{column}',?) WHERE json_extract(feedback,'$.{column}')=?", (new_name, name))
+            old = self.db.execute('SELECT confirmed,wrong FROM profile_stats WHERE name=?', (name,)).fetchone()
+            if old:   # the evidence belongs to the person, so it survives a rename and adds up on a merge
+                self.db.execute('INSERT OR IGNORE INTO profile_stats(name,confirmed,wrong) VALUES(?,0,0)', (new_name,))
+                self.db.execute('UPDATE profile_stats SET confirmed=confirmed+?,wrong=wrong+? WHERE name=?', (old['confirmed'] or 0, old['wrong'] or 0, new_name))
+                self.db.execute('DELETE FROM profile_stats WHERE name=?', (name,))
         return {'renamed': n, 'merged': merged}
     def _scores(self, vector, model, exclude=None):
         """Every person's blended score for one voice: mean of centroid similarity and best single-sample similarity.
@@ -274,19 +370,66 @@ class Store:
             best = max(cosine(v, unit(x)) for x in xs)
             scores.append({'name': name, 'centroid': round(cosine(v, centroid), 3), 'best_sample': round(best, 3), 'score': (cosine(v, centroid) + best) / 2, 'samples': len(xs)})
         return sorted(scores, key=lambda s: -s['score'])
-    def explain_identity(self, vector, model, limit=5):
-        """Why a voice matched: similarity to every person's centroid and to their nearest sample."""
-        return [{**s, 'score': round(s['score'], 3)} for s in self._scores(vector, model)[:limit]]
+    def explain_identity(self, vector, model, limit=5, base=None):
+        """Why a voice matched: similarity to every person's centroid and to their nearest sample, plus one plain
+        sentence about the profile itself — a single sample, a sample that does not fit, or a bar the user's own
+        corrections have moved. `base` (the global threshold) turns the personal bar on."""
+        weak = {p['name'] for p in self.profile_health() if p['weak']}
+        stats = {r['name']: (r['confirmed'] or 0, r['wrong'] or 0) for r in self.db.execute('SELECT name,confirmed,wrong FROM profile_stats')}
+        out = []
+        for s in self._scores(vector, model)[:limit]:
+            bar = self.person_threshold(s['name'], base) if base is not None else None
+            notes = []
+            if s['samples'] == 1: notes.append('tek örnek — ikinci bir temiz örnek isabeti artırır')
+            if s['name'] in weak: notes.append('zayıf örnek var')
+            confirmed, wrong = stats.get(s['name'], (0, 0))
+            if bar is not None and abs(bar-base) > 1e-9:
+                why = [f'{min(confirmed,3)} onaylı öneri'] if confirmed else []
+                if wrong: why.append(f'{min(wrong,3)} yanlış eşleşme')
+                notes.append(' ve '.join(why)+' → eşik '+f'{bar:.2f}'.replace('.', ','))
+            out.append({**s, 'score': round(s['score'], 3), 'threshold_used': round(bar, 3) if bar is not None else None, 'person_note': ' · '.join(notes)})
+        return out
     def identify(self, vector, model, threshold=0.80, margin=0.08, exclude=None):
         """Score = mean of centroid similarity and best single-sample similarity: the centroid is stable,
-        the nearest sample tolerates a person recorded under different conditions."""
+        the nearest sample tolerates a person recorded under different conditions. The bar is the top candidate's
+        own (Q5): the global one until the user has confirmed or overruled that person."""
         scores = self._scores(vector, model, exclude)
-        if not scores: return {'name': None, 'candidate': None, 'similarity': None, 'margin': None}
+        if not scores: return {'name': None, 'candidate': None, 'similarity': None, 'margin': None, 'threshold_used': threshold}
         score, name = scores[0]['score'], scores[0]['name']
         gap = score - scores[1]['score'] if len(scores) > 1 else score + 1
-        return {'name': name if score >= threshold and gap >= margin else None, 'candidate': name, 'similarity': score, 'margin': gap}
+        bar = self.person_threshold(name, threshold, exclude)
+        return {'name': name if score >= bar and gap >= margin else None, 'candidate': name, 'similarity': score, 'margin': gap, 'threshold_used': bar}
     def add_sample_if_new(self, name, vector, model, duration, provenance, cap=8):
         """Self-feeding profiles: one more sample per meeting for a confident match, bounded per person."""
         if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone(): return False
         if self.db.execute('SELECT count(*) FROM samples WHERE name=? AND model=?',(name,model)).fetchone()[0] >= cap: return False
         self.enroll(name, vector, model, duration, provenance); return True
+    def resuggest(self, mid):
+        """Q9 in-session adaptation. The moment the user names one cluster, the meeting's other still-unnamed
+        linked speakers are scored again: the person he just named now exists, and the sample his correction
+        rejected is gone. Same thresholds as finalize, so a name is written only where finalize would have written
+        one; a cluster the user has already named is never re-scored and never overwritten. Cheap — the voice
+        vectors are already in SQLite, no embedder runs — and only ever triggered by a user action.
+        Counts are people (linked clusters), not segments."""
+        from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid, assign_identities
+        speakers={}
+        for r in self.segments(mid):
+            if (r.get('metrics') or {}).get('cluster') is not None: speakers.setdefault((r['source'],r['speaker']),[]).append(r)
+        scored=[]
+        for members in speakers.values():
+            if any(r.get('speaker_name') for r in members): continue
+            model=next((r['embedding_model'] for r in members if r.get('embedding')),None)
+            centroid=linked_centroid(members,model) if model else None
+            if centroid is not None: scored.append((members,self.identify(centroid,model,IDENTITY_THRESHOLD,IDENTITY_MARGIN)))
+        assignment=assign_identities(scored)
+        renamed=suggested=0
+        for members,identity in scored:
+            name=assignment.get(id(members))
+            sim=identity.get('similarity') or 0;gap=identity.get('margin') or 0
+            suggestion=identity.get('candidate') if (not name and sim>=SUGGEST_THRESHOLD and gap>=IDENTITY_MARGIN) else None
+            for r in members:
+                r.setdefault('metrics',{})['identity']={**identity,'name':name,'suggested':suggestion}
+                with self.db: self.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(name,json.dumps(r,ensure_ascii=False),r['id'],mid))
+            if name: renamed+=1
+            elif suggestion: suggested+=1
+        return {'renamed':renamed,'suggested':suggested}
