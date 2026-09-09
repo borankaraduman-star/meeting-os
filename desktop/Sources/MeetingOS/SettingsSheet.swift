@@ -55,6 +55,7 @@ struct SettingsSheet:View {
                     if model.update?.available==true { Button(model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat") { model.startUpdate() }.disabled(model.busy || model.recording || model.zoomMeetingOpen) }
                 }
                 Toggle("Yeni sürüm bulununca açılışta kendiliğinden güncelle (kayıt yokken)",isOn:$model.reportSettings.autoUpdate).onChange(of:model.reportSettings.autoUpdate) { _ in Task { await model.saveReportSettings() } }
+                Toggle("Bulut hatasında boşta yeniden dene (kayıt ve Zoom toplantısı yokken, 10 dakikada bir en fazla bir toplantı)",isOn:$model.reportSettings.autoRetry).onChange(of:model.reportSettings.autoRetry) { _ in Task { await model.saveReportSettings() } }.accessibilityIdentifier("autoRetryToggle")
                 Toggle("Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz",isOn:$model.reportSettings.shareReports).onChange(of:model.reportSettings.shareReports) { _ in Task { await model.saveReportSettings() } }
                 Toggle("Raporlara transkript metnini de ekle (varsayılan kapalı)",isOn:$model.reportSettings.shareText).onChange(of:model.reportSettings.shareText) { _ in Task { await model.saveReportSettings() } }
                 HStack {

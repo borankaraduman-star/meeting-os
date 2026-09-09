@@ -95,6 +95,34 @@ extension Model {
         }
     }
 
+    /// A wrong key or an empty balance is the user's to fix, so the hint stands whatever the retry toggle says —
+    /// and says so once a day at most, passively, never while a meeting is on.
+    func updateBlockedHint() {
+        let blocked=meetings.filter { ["auth","credit"].contains($0.cloudKind ?? "") }.map { ["kind":$0.cloudKind ?? ""] }
+        let hint=IdleRetry.blockedHint(blocked) ?? ""
+        if blockedHint != hint { blockedHint=hint }
+        guard !hint.isEmpty, IdleRetry.shouldNotifyBlocked(count:blocked.count,last:lastBlockedNotice) else { return }
+        lastBlockedNotice=Date(); notifyDone("Bulut yazıya çevirme bekliyor",hint)
+    }
+
+    /// One bridge call per ten idle minutes, on the existing poll: which meeting did OpenRouter refuse, and
+    /// may we try it again now? The first candidate goes through the ordinary finalize path at background
+    /// priority; key/credit failures only raise a standing hint, because retrying them would change nothing.
+    func idleRetryIfDue() {
+        guard IdleRetry.shouldAsk(enabled:reportSettings.autoRetry,recording:recording,hasJob:job != nil,queued:!finalizeQueue.isEmpty,
+                                  zoomOpen:zoomMeetingOpen,pressureAt:memoryPressureAt,last:lastIdleRetry) else { return }
+        lastIdleRetry=Date()
+        Task { [weak self] in
+            guard let self, let r=try? await self.request(["action":"retry_candidates"]) else { return }
+            // The answer may be seconds old: everything is checked again before a process is started.
+            guard self.reportSettings.autoRetry, !self.recording, self.job==nil, self.finalizeQueue.isEmpty, !self.zoomMeetingOpen,
+                  let first=(r["candidates"] as? [[String:Any]])?.first, let mid=first["meeting"] as? String else { return }
+            self.idleRetry=true
+            self.activity="Boşta yeniden deneniyor · “\((first["title"] as? String ?? "").prefix(40))”"
+            self.finalizeWithOpenRouter(mid,model:self.cloudModel)
+        }
+    }
+
     func applyLivePriority(zoomOpen:Bool) {
         guard let p=job, jobKind != "record" else { if jobBackgrounded { jobBackgrounded=false; try? FileManager.default.removeItem(at:lowPriorityFlag) }; return }
         guard zoomOpen != jobBackgrounded else { return }

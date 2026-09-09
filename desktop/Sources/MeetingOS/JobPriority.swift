@@ -5,13 +5,15 @@ import Foundation
 /// else while a Zoom meeting window is on screen.
 enum JobPriority {
     static func isRealtime(_ args:[String])->Bool { args.first=="record" }
-    static func qos(args:[String],zoomOpen:Bool)->QualityOfService {
+    /// `idle` marks a job nobody asked for right now (the retry queue): it takes the same treatment as a job
+    /// running under a live Zoom meeting, so the Mac stays entirely the user's the moment they touch it.
+    static func qos(args:[String],zoomOpen:Bool,idle:Bool=false)->QualityOfService {
         if isRealtime(args) { return .userInitiated }
-        return zoomOpen ? .background : .utility
+        return (zoomOpen || idle) ? .background : .utility
     }
     /// Extra environment for the job: the Python side lowers its own nice level and uploads one piece at a time.
-    static func environment(args:[String],zoomOpen:Bool)->[String:String] {
-        (!isRealtime(args) && zoomOpen) ? ["MEETING_OS_LOW_PRIORITY":"1"] : [:]
+    static func environment(args:[String],zoomOpen:Bool,idle:Bool=false)->[String:String] {
+        (!isRealtime(args) && (zoomOpen || idle)) ? ["MEETING_OS_LOW_PRIORITY":"1"] : [:]
     }
 }
 

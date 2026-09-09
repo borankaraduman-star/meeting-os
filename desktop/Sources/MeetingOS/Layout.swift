@@ -123,6 +123,10 @@ struct SidebarView:View {
             Divider()
             VStack(alignment:.leading,spacing:8) {
                 ApplicationActivityView(model:model).accessibilityIdentifier("activitySummary")
+                if !model.blockedHint.isEmpty {
+                    Label(model.blockedHint,systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange).lineLimit(3)
+                        .accessibilityIdentifier("cloudBlockedHint")
+                }
                 if model.canCancelJob {
                     Button("İşlemi iptal et",action:model.cancelJob).disabled(model.jobCanceled).accessibilityIdentifier("cancelJobButton")
                 }
@@ -216,6 +220,7 @@ struct DetailHeader:View {
                 HStack(spacing:6) {
                     Circle().fill(MeetingStyle.statusColor(model.meeting?.displayStatus ?? "")).frame(width:6,height:6)
                     Text(model.meeting.map { statusLabel($0.displayStatus) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary)
+                    if let line=model.meeting?.cloudLine { Text("· "+line).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("cloudErrorLine") }
                     if let strip=model.headerStrip { Text("· "+strip).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("headerStrip") }
                 }.padding(.top,5)
             }

@@ -66,8 +66,10 @@ final class UpdaterTests:XCTestCase {
         XCTAssertEqual(UpdateInfo.parse(["available":false,"dirty":true]).headline,"Yerel değişiklikler var; otomatik güncelleme kapalı")
         XCTAssertEqual(UpdateInfo.parse(["error":"GitHub’a ulaşılamadı"]).headline,"GitHub’a ulaşılamadı")
         var s=ReportSettings.parse(["share_reports":false,"share_text":true,"auto_update":true,"report_dir":"/x"]); s.shareText=false
-        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x","audio_retention_days":30] as NSDictionary)
+        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x","audio_retention_days":30,"auto_retry":true] as NSDictionary)
         XCTAssertEqual(ReportSettings.parse(["audio_retention_days":60]).audioRetentionDays,60)
+        XCTAssertTrue(ReportSettings.parse([:]).autoRetry)   // idle retry is on unless the user turns it off
+        XCTAssertFalse(ReportSettings.parse(["auto_retry":false]).autoRetry)
     }
 }
 final class ZoomWatchTests:XCTestCase {

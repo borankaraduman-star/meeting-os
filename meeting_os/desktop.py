@@ -297,6 +297,7 @@ def dispatch(request, db=None):
                     for key in SNAPSHOT_HEAVY_KEYS: m['metadata'].pop(key,None)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
                 m['cloud_line']=cloud_error_line(m['metadata'])   # survives the heavy-key trim: every row can show its own verdict
+                m['cloud_kind']=(m['metadata'].get('cloud_error') or {}).get('kind') if isinstance(m['metadata'].get('cloud_error'),dict) else None
             # Two cheap fingerprints let the app skip the heavy parts of the poll when nothing changed:
             # segments (full rows) and intelligence (a second bridge call for analysis/tasks/drafts).
             tables={r[0] for r in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}

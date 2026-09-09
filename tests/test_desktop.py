@@ -385,3 +385,103 @@ class DesktopTests(unittest.TestCase):
     dispatch({'action':'diagnostics','path':str(output),'progress':str(missing)})
     collector.assert_called_once_with(root,str(missing))
    self.assertEqual(json.loads(output.read_text())['progress']['stage'],'unknown')
+
+
+class CloudRetryQueueTests(unittest.TestCase):
+    """T7: which meetings an idle Mac may re-send, and which audio may never be deleted."""
+
+    def _rec(self,store,data,name,metadata,status='incomplete'):
+        d=data/'recordings'/name;d.mkdir(parents=True)
+        (d/'system-full.wav').write_bytes(b'x'*1000)
+        mid=store.create_meeting(name,{'capture_dir':str(d),'paths':{'system':str(d/'system-full.wav')},'cloud_mode':'capture','engine':'openrouter',**metadata})
+        with store.db: store.db.execute('UPDATE meetings SET status=? WHERE id=?',(status,mid))
+        return mid,d
+
+    def test_selection_honours_kind_backoff_audio_and_the_attempt_cap(self):
+        from datetime import datetime,timedelta,timezone
+        from meeting_os.cloud_finalize import MAX_CLOUD_RETRIES
+        from meeting_os.desktop import retry_candidates,cloud_error_line
+        now=datetime.now(timezone.utc)
+        def failure(kind,minutes,attempt=1):
+            return {'cloud_error':{'kind':kind,'message':'m','at':now.isoformat()},'cloud_retry_attempt':attempt,
+                    'cloud_retry_after':(now+timedelta(minutes=minutes)).isoformat()}
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);store=Store(data/'meeting-os.sqlite')
+            due,_=self._rec(store,data,'due',failure('unavailable',-1))
+            waiting,_=self._rec(store,data,'bekleyen',failure('unavailable',30))
+            auth,_=self._rec(store,data,'anahtar',failure('auth',-1))
+            credit,_=self._rec(store,data,'kredi',failure('credit',-1))
+            never,_=self._rec(store,data,'hic',{})                       # a job that never reported anything
+            capped,_=self._rec(store,data,'dolu',failure('other',-1,attempt=MAX_CLOUD_RETRIES))
+            done,_=self._rec(store,data,'biten',{},status='complete')
+            local,_=self._rec(store,data,'yerel',{'cloud_mode':None,'engine':'sherpa'})
+            gone,folder=self._rec(store,data,'sessiz',failure('unavailable',-1))
+            for f in folder.iterdir(): f.unlink()                        # audio is gone: nothing left to send
+            result=retry_candidates(store)
+            self.assertEqual({e['meeting'] for e in result['candidates']},{due,never})
+            self.assertEqual({e['meeting'] for e in result['blocked']},{auth,credit})
+            self.assertNotIn(waiting,{e['meeting'] for e in result['candidates']})   # backoff has not passed
+            for excluded in (capped,done,local,gone):
+                self.assertNotIn(excluded,{e['meeting'] for e in result['candidates']})
+            self.assertEqual({e['kind'] for e in result['blocked']},{'auth','credit'})
+            store.close()
+
+    def test_snapshot_shows_one_honest_line_per_meeting(self):
+        from datetime import datetime,timedelta,timezone
+        from meeting_os.desktop import cloud_error_line
+        now=datetime.now(timezone.utc)
+        self.assertIsNone(cloud_error_line({}))
+        self.assertEqual(cloud_error_line({'cloud_error':{'kind':'auth'}}),'Anahtar geçersiz · Ayarlar')
+        self.assertEqual(cloud_error_line({'cloud_error':{'kind':'credit'}}),'Kredi bitti')
+        at=now+timedelta(minutes=45)
+        line=cloud_error_line({'cloud_error':{'kind':'unavailable'},'cloud_retry_after':at.isoformat()})
+        self.assertEqual(line,'Yeniden denenecek · '+at.astimezone().strftime('%H:%M'))
+        self.assertEqual(cloud_error_line({'cloud_error':{'kind':'unavailable'}}),'Yeniden denenecek')
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';store=Store(db)
+            mid,_=self._rec(store,data,'kritik',{'cloud_error':{'kind':'credit','message':'OpenRouter kredisi bitti','at':now.isoformat()}})
+            store.close()
+            row=[m for m in dispatch({'action':'snapshot'},db)['meetings'] if m['id']==mid][0]
+            self.assertEqual(row['cloud_line'],'Kredi bitti')
+
+    def test_audio_of_an_unfinished_or_waiting_meeting_survives_every_retention_setting(self):
+        from datetime import datetime,timedelta,timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';store=Store(db)
+            old=(datetime.now(timezone.utc)-timedelta(days=400)).isoformat()
+            half,dhalf=self._rec(store,data,'yarim',{})                                      # incomplete
+            failed,dfailed=self._rec(store,data,'basarisiz',{},status='failed')
+            waiting,dwaiting=self._rec(store,data,'bekleyen',
+                {'cloud_error':{'kind':'unavailable','message':'m','at':old}},status='complete')   # transcript done, retry pending
+            plain,dplain=self._rec(store,data,'biten',{},status='complete')
+            with store.db: store.db.execute('UPDATE meetings SET created=?',(old,))
+            store.close()
+            result=dispatch({'action':'storage_cleanup','days':1,'dry_run':False},db)
+            self.assertEqual([m['meeting'] for m in result['meetings']],[plain])
+            self.assertFalse(dplain.exists())
+            for folder in (dhalf,dfailed,dwaiting):
+                self.assertTrue((folder/'system-full.wav').is_file(),folder)
+            # The retention housekeeping the app runs hourly reaches the same conclusion.
+            from meeting_os.reports import save_settings
+            save_settings(data,{'audio_retention_days':1})
+            dispatch({'action':'storage_housekeeping'},db)
+            for folder in (dhalf,dfailed,dwaiting):
+                self.assertTrue((folder/'system-full.wav').is_file(),folder)
+
+    def test_auto_retry_setting_defaults_on_and_round_trips(self):
+        from meeting_os.reports import load_settings,save_settings
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(load_settings(Path(tmp))['auto_retry'])
+            self.assertFalse(save_settings(Path(tmp),{'auto_retry':False})['auto_retry'])
+            self.assertFalse(load_settings(Path(tmp))['auto_retry'])
+            self.assertFalse(save_settings(Path(tmp),{'auto_retry':'evet'})['auto_retry'])   # only a real bool is accepted
+
+    def test_low_priority_env_keeps_the_idle_queue_silent(self):
+        import os
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';store=Store(data/'meeting-os.sqlite')
+            self._rec(store,data,'kritik',{});store.close()
+            self.assertEqual(len(dispatch({'action':'retry_candidates'},db)['candidates']),1)
+            with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
+                self.assertEqual(dispatch({'action':'retry_candidates'},db),{'candidates':[],'blocked':[],'low_priority':True})

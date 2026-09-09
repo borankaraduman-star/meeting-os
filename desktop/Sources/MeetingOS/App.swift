@@ -7,16 +7,20 @@ import AVFoundation
 struct Meeting: Identifiable {
     let id: String; let title: String; let status: String; let displayStatus:String; let recoveryState:String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
     let segments:Int; let seconds:Double; let speakers:Int; let names:[String]
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; displayStatus=d["display_status"] as? String ?? status; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:]
+    /// One honest line when OpenRouter refused this meeting: "Anahtar geçersiz · Ayarlar", "Kredi bitti", "Yeniden denenecek · 14:30".
+    let cloudLine:String?
+    /// "auth" | "credit" | "unavailable" | "other" — what kind of refusal, for the standing sidebar hint.
+    let cloudKind:String?
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; displayStatus=d["display_status"] as? String ?? status; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:]; cloudLine=d["cloud_line"] as? String; cloudKind=d["cloud_kind"] as? String
         let st=d["stats"] as? [String:Any] ?? [:]; segments=st["segments"] as? Int ?? 0; seconds=st["seconds"] as? Double ?? 0; speakers=st["speakers"] as? Int ?? 0; names=st["names"] as? [String] ?? [] }
 }
 extension Meeting {
     /// Cheap change detector for the sidebar: publishing an identical list every poll re-rendered the whole window.
-    var fingerprint:String { "\(id)|\(title)|\(status)|\(displayStatus)|\(recoveryState)|\(segments)|\(Int(seconds))|\(speakers)|\(metadata.count)|\((metadata["keep"] as? Bool) ?? false)|\((metadata["markers"] as? [Any])?.count ?? 0)|\((capture["state"] as? String) ?? "")|\(Int((capture["seconds"] as? Double) ?? 0))" }
+    var fingerprint:String { "\(id)|\(title)|\(status)|\(displayStatus)|\(recoveryState)|\(segments)|\(Int(seconds))|\(speakers)|\(metadata.count)|\((metadata["keep"] as? Bool) ?? false)|\((metadata["markers"] as? [Any])?.count ?? 0)|\((capture["state"] as? String) ?? "")|\(Int((capture["seconds"] as? Double) ?? 0))|\(cloudLine ?? "")" }
     var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
     /// Sidebar line under the title: what the finished recording holds, or a plain "no speech" for an empty one.
     var sidebarDetail:String {
-        guard status=="complete" else { return statusLabel(displayStatus) }
+        guard status=="complete" else { return cloudLine ?? statusLabel(displayStatus) }   // the cloud verdict is more use than "Kurtarılabilir"
         if segments==0 { return "Konuşma bulunmadı" }
         let length=seconds>=60 ? "\(Int(seconds/60)) dk" : "\(Int(seconds)) sn"
         return speakers>0 ? "\(length) · \(speakers) kişi" : length
@@ -90,7 +94,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         runtime=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
         AppDelegate.model=self
         let pressure=DispatchSource.makeMemoryPressureSource(eventMask:[.warning,.critical],queue:.main)
-        pressure.setEventHandler { [weak self] in Task { @MainActor in self?.stopForResources() } }
+        pressure.setEventHandler { [weak self] in Task { @MainActor in self?.memoryPressureAt=Date(); self?.stopForResources() } }
         pressure.resume();pressureSource=pressure
         timer=Timer.scheduledTimer(withTimeInterval:2,repeats:true) { [weak self] _ in Task { @MainActor in
             guard let self=self else { return }
@@ -210,6 +214,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             zoomMeetingOpen=zoomNow
             applyLivePriority(zoomOpen:zoomState.strict)
             heartbeatIfDue()
+            updateBlockedHint()
+            idleRetryIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {
             case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
@@ -234,6 +240,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
         let isRecord=JobPriority.isRealtime(args)
         guard isRecord ? recordProcess==nil : job==nil else { return }
+        let idle=idleRetry; idleRetry=false   // consumed by this launch only
         do {
             try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true)
             let log=dataDir.appendingPathComponent("last-job.log")
@@ -242,7 +249,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor" }
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
@@ -426,6 +433,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var appearance=UserDefaults.standard.string(forKey:"appearance") ?? "system" { didSet { UserDefaults.standard.set(appearance,forKey:"appearance") } }
     @Published var accentKey=UserDefaults.standard.string(forKey:"accentKey") ?? "green" { didSet { UserDefaults.standard.set(accentKey,forKey:"accentKey"); MeetingStyle.accent=Accents.color(accentKey) } }
     var colorScheme:ColorScheme? { appearance=="light" ? .light : (appearance=="dark" ? .dark : nil) }
+    /// Idle retry of meetings the cloud refused: last question asked, last passive notice, the standing hint.
+    var lastIdleRetry:Date?; var memoryPressureAt:Date?
+    var lastBlockedNotice:Date? {
+        get { UserDefaults.standard.object(forKey:"cloudBlockedNoticeAt") as? Date }
+        set { UserDefaults.standard.set(newValue,forKey:"cloudBlockedNoticeAt") }
+    }
+    @Published var blockedHint=""
+    /// Set for the one launch that follows an idle retry, so the job starts at background priority.
+    var idleRetry=false
     /// Hourly heartbeat into the shared iCloud folder so a day without a finished meeting still leaves a trace.
     var lastHeartbeat:Date?
     // Cross-meeting PM views (loaded on demand, never while recording)
