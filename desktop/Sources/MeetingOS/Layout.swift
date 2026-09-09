@@ -468,7 +468,7 @@ struct SettingsSheet:View {
                     Button("Kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton")
                 }
             }.padding(28)
-        }.scrollIndicators(.visible).frame(width:640,height:min(940,(NSScreen.main?.visibleFrame.height ?? 900)-80))
+        }.scrollIndicators(.visible).frame(width:640,height:min(["genel":470,"sozluk":820,"depolama":700,"guncelleme":620,"durum":660][section] ?? 700,(NSScreen.main?.visibleFrame.height ?? 900)-80))
     }
 }
 
