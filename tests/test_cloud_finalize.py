@@ -102,7 +102,7 @@ class IdentityTests(unittest.TestCase):
             rows=store.segments(mid)
             self.assertEqual([(r['speaker'],r['speaker_name']) for r in rows],[('Konuşmacı 1','Ayşe'),('Konuşmacı 2',None)])
             self.assertTrue(all(r['embedding'] for r in rows));self.assertEqual(rows[0]['metrics']['identity']['name'],'Ayşe')
-            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['identity'],{'embedded':2,'named':1})
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['identity'],{'embedded':2,'named':1,'suggested':0,'fed':0})
             store.close()
             result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Mehmet','enroll':True},db)
             self.assertEqual(result,{'labeled':1,'profile_saved':True,'seconds':3.5})
@@ -187,7 +187,7 @@ class ReidentifyTests(unittest.TestCase):
             self.assertEqual([r['speaker_name'] for r in store.segments(mid)],[None,None])
             store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',4.0,'later')  # profile saved after the meeting was processed
             paths=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])['paths']
-            self.assertEqual(identify_clusters(store,mid,paths,FakeEmbedder()),{'embedded':0,'named':1})
+            self.assertEqual(identify_clusters(store,mid,paths,FakeEmbedder()),{'embedded':0,'named':1,'suggested':0,'fed':0})
             self.assertEqual([r['speaker_name'] for r in store.segments(mid)],['Ayşe',None]);store.close()
 
 class WindowTests(unittest.TestCase):
@@ -248,3 +248,37 @@ class ShortClusterTests(unittest.TestCase):
             store.close()
             result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Sağ üst','enroll':True},db)
             self.assertTrue(result['profile_saved']);self.assertAlmostEqual(result['seconds'],3.5)
+
+class SuggestionAndFeedingTests(unittest.TestCase):
+    def test_identify_blends_centroid_and_nearest_sample_and_reports_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s=Store(Path(tmp)/'db');s.enroll('Ayşe',[1.0,0.0],'m',5,'a');s.enroll('Ayşe',[0.6,0.8],'m',5,'b');s.enroll('Mehmet',[0.0,1.0],'m',5,'c')
+            r=s.identify([1.0,0.0],'m',0.87,0.05)
+            self.assertEqual(r['candidate'],'Ayşe');self.assertAlmostEqual(r['similarity'],(0.8944+1.0)/2,places=3)
+            self.assertIsNone(s.identify([0.7,0.71],'m',0.99,0.05)['name']);self.assertIsNotNone(s.identify([0.7,0.71],'m',0.99,0.05)['candidate'])
+            self.assertTrue(s.add_sample_if_new('Ayşe',[1,0],'m',12,'auto:x',cap=3));self.assertFalse(s.add_sample_if_new('Ayşe',[1,0],'m',12,'auto:x',cap=3))
+            self.assertFalse(s.add_sample_if_new('Ayşe',[1,0],'m',12,'auto:y',cap=3));s.close()
+    def test_borderline_match_becomes_suggestion_and_strong_match_feeds_profile(self):
+        from meeting_os.cloud_finalize import identify_clusters
+        class Emb:
+            model_id='resemblyzer:test'
+            def embed_file(self,path,spans):return [[0.95,0.3122] if a<16000*2 else [1.0,0.0] for a,b in spans]  # cluster0 ≈0.95 sim, cluster1 exact
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=40);store=Store(Path(tmp)/'db.sqlite')
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',10,'earlier')
+            mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            class C(FakeClient):
+                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+                    return {'text':'x','usage':{},'segments':[{'start':0.0,'end':1.5,'text':'a b c','speaker':'0'},{'start':1.5,'end':3.6,'text':'d e f','speaker':'0'},{'start':4.0,'end':20.0,'text':'uzun','speaker':'1'}]}
+            finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=C(),embedder=Emb())
+            rows=store.segments(mid);by={r['speaker']:r for r in rows}
+            k1=by['Konuşmacı 2'];self.assertEqual(k1['speaker_name'],'Ayşe');self.assertEqual(k1['metrics']['identity']['suggested'],None)
+            self.assertEqual(len(store.db.execute("select * from samples where name='Ayşe'").fetchall()),2)  # fed automatically (16 s, exact match)
+            disp={r['speaker']:r for r in store.display_segments(mid)}
+            self.assertIn('suggested',disp['Konuşmacı 2']);store.close()
+    def test_backchannels_skipped_for_analysis(self):
+        from meeting_os.assistant import is_backchannel
+        self.assertTrue(is_backchannel({'text':'Hı hı.','start':26.4,'end':27.2}))
+        self.assertFalse(is_backchannel({'text':'Evet, ben.','start':0,'end':2.0}))
+        self.assertTrue(is_backchannel({'text':'Tamam yarın.','start':0,'end':1.0}))
+        self.assertFalse(is_backchannel({'text':'Yarın rapor hazır olur.','start':0,'end':1.0}))

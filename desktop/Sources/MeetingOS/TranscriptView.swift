@@ -16,8 +16,32 @@ struct TranscriptView:View {
                         Button(model.showEchoRows ? "Gizle" : "Göster") { model.showEchoRows.toggle() }.font(.caption).accessibilityIdentifier("toggleEchoRows")
                     }
                 }
-                ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:!model.recording && model.meeting?.metadata["text_only"] as? Bool != true,canEdit:model.meeting?.status == "complete").equatable() }
-                if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
+                if let notice=TranscriptBlocks.meetingNotice(model.rows) {
+                    HStack(spacing:8) {
+                        Image(systemName:"info.circle").foregroundStyle(.secondary)
+                        Text(notice).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Görünüm",selection:$model.readingMode) { Text("Okuma").tag(true);Text("Bölümler").tag(false) }.pickerStyle(.segmented).labelsHidden().frame(width:170).accessibilityIdentifier("transcriptViewMode")
+                    }
+                }
+                let canPlay = !model.recording && model.meeting?.metadata["text_only"] as? Bool != true
+                let canEdit = model.meeting?.status == "complete"
+                if model.readingMode && model.search.isEmpty && model.focusedSegment == nil {
+                    let blocks=TranscriptBlocks.build(model.filteredRows)
+                    if TranscriptBlocks.asideCount(blocks)>0 {
+                        HStack(spacing:8) {
+                            Image(systemName:"text.bubble").foregroundStyle(.secondary)
+                            Text(model.showAsides ? "Kısa onaylar paragraf altında gösteriliyor" : "\(TranscriptBlocks.asideCount(blocks)) kısa onay (“hı hı”, “tabii”) paragraflara katlandı").font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Button(model.showAsides ? "Gizle" : "Göster") { model.showAsides.toggle() }.font(.caption).accessibilityIdentifier("toggleAsides")
+                        }
+                    }
+                    ForEach(blocks) { block in TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides) }
+                    if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
+                } else {
+                    ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable() }
+                    if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
+                }
             }.padding(24)
         }
     }
@@ -62,5 +86,47 @@ struct TranscriptRow:View, Equatable {
             .disabled(!canEdit)
             .accessibilityIdentifier("editSegment-\(row.id)")
             .accessibilityLabel("Bölümü düzelt: \(row.label)")
+    }
+}
+
+
+struct TranscriptBlockView:View {
+    let model:Model
+    let block:TranscriptBlock
+    let canPlay:Bool
+    let canEdit:Bool
+    let showAsides:Bool
+    var body:some View {
+        HStack(alignment:.top,spacing:14) {
+            if canPlay {
+                Button { model.play(block.lead) } label:{
+                    VStack(spacing:8) {
+                        Image(systemName:"play.circle.fill").font(.title2).foregroundStyle(MeetingStyle.accent)
+                        Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }.frame(width:48)
+                }.buttonStyle(.plain).help("Bu paragrafı dinle").accessibilityIdentifier("playBlock-\(block.id)")
+            } else { Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width:48) }
+            VStack(alignment:.leading,spacing:7) {
+                HStack {
+                    Text(block.label).font(.headline).lineLimit(1)
+                    if !block.lead.suggested.isEmpty && block.lead.name.isEmpty {
+                        Button("Onayla") { Task { await model.confirmSuggestion(block.lead) } }.controlSize(.small).disabled(!canEdit).help("Ses profiline benziyor; tek tıkla adı onaylayın").accessibilityIdentifier("confirmSuggestion-\(block.id)")
+                    }
+                    Spacer(minLength:12)
+                    if block.rows.count>1 { Text("\(block.rows.count) bölüm").font(.caption2).foregroundStyle(.secondary) }
+                    Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).accessibilityIdentifier("editBlock-\(block.id)")
+                }
+                Text(block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
+                let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")
+                if !notices.isEmpty { Label(notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
+                if showAsides && !block.asides.isEmpty {
+                    HStack(spacing:6) {
+                        ForEach(block.asides) { aside in
+                            Text("\(aside.label): \(aside.text)").font(.caption).padding(.horizontal,8).padding(.vertical,4).background(Color.secondary.opacity(0.12),in:Capsule()).help(aside.time)
+                        }
+                    }.fixedSize(horizontal:false,vertical:true)
+                }
+            }.frame(maxWidth:.infinity,alignment:.leading)
+        }.padding(20).meetingCard()
     }
 }

@@ -58,7 +58,7 @@ class Store:
         return result
     def display_segments(self, mid):
         # Keep 256-dimensional voice vectors out of every UI polling response.
-        rows=self.db.execute("SELECT id,start,end,source,speaker,speaker_name,json_extract(payload,'$.text') AS text,json_extract(payload,'$.flags') AS flags FROM segments WHERE meeting=? ORDER BY CASE WHEN source='chatgpt_manual' THEN id ELSE start END,id",(mid,))
+        rows=self.db.execute("SELECT id,start,end,source,speaker,speaker_name,json_extract(payload,'$.text') AS text,json_extract(payload,'$.flags') AS flags,json_extract(payload,'$.metrics.identity.suggested') AS suggested FROM segments WHERE meeting=? ORDER BY CASE WHEN source='chatgpt_manual' THEN id ELSE start END,id",(mid,))
         return [{**dict(r),'flags':json.loads(r['flags'] or '[]')} for r in rows]
     def correct(self, mid, speaker, name):
         name = name.strip()
@@ -153,6 +153,8 @@ class Store:
     def delete_profile(self, name):
         with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,))
     def identify(self, vector, model, threshold=0.80, margin=0.08):
+        """Score = mean of centroid similarity and best single-sample similarity: the centroid is stable,
+        the nearest sample tolerates a person recorded under different conditions."""
         v = unit(vector)
         groups = {}
         for row in self.db.execute('SELECT name,vector FROM samples WHERE model=?', (model,)):
@@ -162,9 +164,15 @@ class Store:
         for name, xs in groups.items():
             try: centroid = unit([sum(col)/len(xs) for col in zip(*xs)])
             except ValueError: continue  # contradictory samples cannot identify anyone
-            scores.append((cosine(v, centroid), name))
+            best = max(cosine(v, unit(x)) for x in xs)
+            scores.append(((cosine(v, centroid) + best) / 2, name))
         scores.sort(reverse=True)
-        if not scores: return {'name': None, 'similarity': None, 'margin': None}
+        if not scores: return {'name': None, 'candidate': None, 'similarity': None, 'margin': None}
         score, name = scores[0]
         gap = score - scores[1][0] if len(scores) > 1 else score + 1
-        return {'name': name if score >= threshold and gap >= margin else None, 'similarity': score, 'margin': gap}
+        return {'name': name if score >= threshold and gap >= margin else None, 'candidate': name, 'similarity': score, 'margin': gap}
+    def add_sample_if_new(self, name, vector, model, duration, provenance, cap=8):
+        """Self-feeding profiles: one more sample per meeting for a confident match, bounded per person."""
+        if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone(): return False
+        if self.db.execute('SELECT count(*) FROM samples WHERE name=? AND model=?',(name,model)).fetchone()[0] >= cap: return False
+        self.enroll(name, vector, model, duration, provenance); return True

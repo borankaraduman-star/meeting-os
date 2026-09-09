@@ -7,12 +7,20 @@ from .metrics import normalize
 from .schemas import analysis_schema
 
 
+
+def is_backchannel(row):
+    """One or two words spoken in under 1.5 s: “Hı hı”, “Tabii”, “Evet”. Kept in the transcript, skipped for analysis."""
+    words=len((row.get('text') or '').split())
+    start,end=row.get('start'),row.get('end')
+    short=isinstance(start,(int,float)) and isinstance(end,(int,float)) and end-start<1.5
+    return words<=2 and short
+
 def analyze(store,mid,llm=None,force=False):
     meeting=store.db.execute('SELECT status FROM meetings WHERE id=?',(mid,)).fetchone()
     if not meeting or meeting['status']!='complete':raise ValueError('Analiz için tamamlanmış bir toplantı seçin')
     mem=Memory(store);previous=mem.latest(mid)
     if previous and not previous['stale'] and not force:return previous
-    rows=[r for r in store.display_segments(mid) if 'possible_echo' not in r['flags']]  # microphone bleed repeats the system audio
+    rows=[r for r in store.display_segments(mid) if 'possible_echo' not in r['flags'] and not is_backchannel(r)]  # bleed and “hı hı” add nothing
     if not rows:raise ValueError('Toplantıda metin yok')
     from .llm import LocalLLM
     llm=llm or LocalLLM()

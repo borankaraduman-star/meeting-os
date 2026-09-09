@@ -233,13 +233,23 @@ def identify_clusters(store, mid, sources, embedder=None):
         centroid=[sum(col)/len(vectors) for col in zip(*vectors)]
         scored.append((members,store.identify(centroid,embedder.model_id,IDENTITY_THRESHOLD,IDENTITY_MARGIN)))
     assignment=assign_identities(scored)
+    suggested=0;fed=0
     for members,identity in scored:
         name=assignment.get(id(members))
+        sim=identity.get('similarity') or 0;gap=identity.get('margin') or 0
+        suggestion=identity.get('candidate') if (not name and sim>=SUGGEST_THRESHOLD and gap>=IDENTITY_MARGIN) else None
         for r in members:
-            r.setdefault('metrics',{})['identity']={**identity,'name':name}
+            r.setdefault('metrics',{})['identity']={**identity,'name':name,'suggested':suggestion}
             with store.db: store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(name,json.dumps(r,ensure_ascii=False),r['id'],mid))
         if name: named+=len(members)
-    return {'embedded':embedded,'named':named}
+        if suggestion: suggested+=len(members)
+        total=sum(r['end']-r['start'] for r in members)
+        if name and sim>=FEED_THRESHOLD and gap>=FEED_MARGIN and total>=FEED_MIN_SECONDS:
+            vectors=[r['embedding'] for r in members if r.get('embedding')]
+            centroid=[sum(col)/len(vectors) for col in zip(*vectors)]
+            cluster=(members[0].get('metrics') or {}).get('cluster')
+            if store.add_sample_if_new(name,centroid,embedder.model_id,total,f'auto:{mid}:{cluster}',cap=MAX_AUTO_SAMPLES): fed+=1
+    return {'embedded':embedded,'named':named,'suggested':suggested,'fed':fed}
 
 
 CLUSTER_MIN_SECONDS=2.0   # concatenated back-channels; the embedder accepts ≥1 s, the margin rule guards weak vectors
@@ -280,6 +290,11 @@ def embed_short_clusters(store, mid, sources, embedder):
     return count
 
 
+SUGGEST_THRESHOLD=0.83    # below the naming threshold but worth a one-click confirmation ("Sol Üst?")
+FEED_THRESHOLD=0.93       # a match this strong adds one more sample to the profile automatically
+FEED_MARGIN=0.10
+FEED_MIN_SECONDS=10.0
+MAX_AUTO_SAMPLES=8        # per person; manual samples count too
 IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap
 IDENTITY_MARGIN=0.05
 OVERSPLIT_THRESHOLD=0.93  # a second cluster may share a name only when it is nearly as close as the best one

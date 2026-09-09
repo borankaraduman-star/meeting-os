@@ -42,6 +42,14 @@ Varsayılan model `openai/gpt-transcribe`. Menüde GPT-4o Transcribe, GPT-4o Min
 - [OpenRouter STT](https://openrouter.ai/docs/guides/overview/multimodal/stt): `/api/v1/audio/transcriptions`, JSON base64, kullanım verisi; uzun sesleri bölme önerisi. Top-level prompt kullanılmıyor.
 - Genel katalog API’si ve `/api/v1/models/openai/gpt-transcribe/endpoints` doğrudan sorgulandı; model ve aktif OpenAI sağlayıcısı doğrulandı. Bu, kullanıcının anahtar/bakiye erişiminin canlı testi değildir.
 
+## Kişi tanıma ve okunabilir transkript (9 Eylül 2026 akşamı)
+
+- Puan = profil merkezine benzerlik ile en yakın tek örneğe benzerliğin ortalaması. İsim eşiği 0.87, marj 0.05. 0.83–0.87 arası ve marjı yeten kümeler “Sol Üst?” diye önerilir; paragraf başlığındaki **Onayla** tek tıkla adı verir ve örnek ekler.
+- Kendini besleyen profil: 0.93 üstü benzerlik, 0.10 üstü marj ve 10 s üstü küme her toplantıda bir örnek ekler (kişi başına en fazla 8, `auto:<toplantı>:<küme>` kaynaklı).
+- Kısa onay kümeleri (“hı hı”, toplam ≥2 s) parçaları birleştirilerek tek vektörle eşlenir.
+- Okuma görünümü: aynı kişinin ardışık bölümleri tek paragraf; başka kişinin 1.5 s altı, ≤2 kelimelik araya girişleri paragrafın altına katlanır (“N kısa onay katlandı · Göster”). Bölümler görünümü ham kayıtları gösterir. Bulut bayrakları toplantı başına tek bilgi satırında; kart altında yalnız olağandışı bayraklar (yankı, belirsiz konuşmacı).
+- Analiz girdisinden yankı bölümleri ve ≤2 kelimelik/1.5 s altı onaylar çıkarılır.
+
 ## Hata mesajları
 
 HTTP hataları koda göre ayrışır: 401 anahtar reddedildi, 402 bakiye yetersiz, 429 hız sınırı, 5xx hizmet hatası. Her mesaj HTTP kodunu ve “otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor” notunu içerir. Anahtar veya yanıt içeriği mesaja girmez.
