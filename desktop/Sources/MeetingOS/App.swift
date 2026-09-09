@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import UniformTypeIdentifiers
 import AppKit
 import AVFoundation
@@ -170,7 +171,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            zoomMeetingOpen=ZoomWatch.current()
+            let zoomNow=ZoomWatch.current()
+            if zoomNow && !zoomMeetingOpen && !recording && zoomNotify { ZoomNotifier.notifyIfNeeded() }
+            if !zoomNow { ZoomNotifier.reset() }
+            zoomMeetingOpen=zoomNow
             if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 15*60 { Task { await checkForUpdates() } }
@@ -205,7 +209,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin()
-        let name=title.isEmpty ? Date().formatted(date:.abbreviated,time:.shortened) : title
+        let name=title.isEmpty ? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR"))) : title   // "9 Eyl 2026 14:05"
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end()
@@ -240,8 +244,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         activity="Ses OpenRouter’a gönderiliyor · Bu Mac’te model yüklenmiyor"
         launch(CloudTranscription.finalizeArguments(meeting:mid,model:stored ? nil : model,output:result.path)) { [weak self] ok in
             guard let self else { return }
-            try? FileManager.default.removeItem(at:result)
-            if ok { self.selected=mid;self.tab="transcript";self.activity="Transkript OpenRouter’dan alındı · Konuşmacı adlarını kontrol edin";if !self.requestedQuit { self.analyzeAutomatically(mid) } }
+            defer { try? FileManager.default.removeItem(at:result) }
+            if ok {
+                self.selected=mid;self.tab="transcript"
+                let count=(try? Data(contentsOf:result)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] }?["segments"] as? Int ?? 0
+                if count==0 { self.activity="Kayıtta konuşma bulunmadı · analiz başlatılmadı" }
+                else { self.activity="Transkript OpenRouter’dan alındı · Konuşmacı adlarını kontrol edin"; if !self.requestedQuit { self.analyzeAutomatically(mid) } }
+            }
             else { self.activity=self.jobCanceled ? "İşlem durduruldu · Ses ve tamamlanan parçalar korunuyor" : "OpenRouter işlemi tamamlanamadı · Tamamlanan parçalar korunuyor, ‘OpenRouter ile yazıya çevir’ ile sürdürün" }
         }
     }
@@ -320,6 +329,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
+    @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
+    @Published var explanation:IdentityExplanation?
+    func loadSamples(_ name:String) async -> [VoiceSample] { ((try? await request(["action":"profile_samples","name":name]))?["samples"] as? [[String:Any]] ?? []).map(VoiceSample.init) }
+    func deleteSample(_ id:Int) async { do { _=try await request(["action":"delete_sample","sample":id]); await refresh() } catch { self.error=error.localizedDescription } }
+    func renameProfile(_ name:String,to newName:String) async {
+        do { let r=try await request(["action":"rename_profile","name":name,"new_name":newName]); activity=(r["merged"] as? Bool)==true ? "“\(name)” → “\(newName)” birleştirildi" : "“\(name)” → “\(newName)” yeniden adlandırıldı"; await refresh() } catch { self.error=error.localizedDescription }
+    }
+    func explainIdentity(_ row:Row) async {
+        guard let mid=selected else { return }
+        explanation=(try? await request(["action":"explain_identity","meeting":mid,"speaker":row.speaker])).map(IdentityExplanation.parse)
+    }
     func showMainWindow() { NSApp.activate(ignoringOtherApps:true); NSApp.windows.first(where:{ $0.title=="Meeting OS" })?.makeKeyAndOrderFront(nil) }
     /// Global hot key dispatch (⌃⌥R / ⌃⌥M) — same guards as the buttons.
     func hotkey(_ id:UInt32) {
@@ -409,8 +429,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 func statusLabel(_ status:String)->String {
     ["not_started":"Kayıt başlayamadı", "pending_finalization":"Son işlem bekliyor", "capture_unknown":"Kayıt durumu belirsiz", "capturing":"Kaydediliyor", "complete":"Hazır", "processing":"İşleniyor", "provisional":"Canlı kayıt", "incomplete":"Kurtarılabilir", "failed":"İşlem başarısız", "canceled":"İptal edildi"][status] ?? status
 }
-@MainActor final class AppDelegate:NSObject,NSApplicationDelegate {
+@MainActor final class AppDelegate:NSObject,NSApplicationDelegate,UNUserNotificationCenterDelegate {
     static weak var model:Model?
+    func applicationDidFinishLaunching(_ notification:Notification) {
+        UNUserNotificationCenter.current().delegate=self
+        if UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { ZoomNotifier.register() }
+    }
+    nonisolated func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping ()->Void) {
+        let action=response.actionIdentifier
+        Task { @MainActor in
+            if action==ZoomNotifier.startAction || action==UNNotificationDefaultActionIdentifier, let m=Self.model, !m.recording, !m.busy { m.start(); m.showMainWindow() }
+            completionHandler()
+        }
+    }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
         guard let m=Self.model, m.job != nil else { return .terminateNow }
         m.requestedQuit=true

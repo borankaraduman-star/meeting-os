@@ -150,6 +150,19 @@ class DesktopTests(unittest.TestCase):
   answers[('status','--porcelain')]=' M x.py\n'
   with patch.object(updater,'_git',fake):
    self.assertFalse(updater.check('/tmp')['available'])
+ def test_profile_maintenance_actions(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Toplantı A',{})
+   s.enroll('Ayşe',[1.0,0.0],'m',4.0,f'{mid}:speaker:Konuşmacı 1');s.enroll('Ayşe',[0.9,0.1],'m',12.0,f'auto:{mid}:0:0');s.enroll('Ayse',[0.95,0.05],'m',5.0,'manual')
+   sid=s.add_segment(mid,Segment(0,5,'x','system','Konuşmacı 2',speaker_name='Ayse',embedding=[0.8,0.2],embedding_model='m'));s.status(mid,'complete');s.close()
+   samples=dispatch({'action':'profile_samples','name':'Ayşe'},db)['samples']
+   self.assertEqual([(x['kind'],x['meeting_title']) for x in samples],[('küme','Toplantı A'),('otomatik','Toplantı A')])
+   why=dispatch({'action':'explain_identity','meeting':mid,'speaker':'Konuşmacı 2'},db)
+   self.assertEqual(why['candidates'][0]['name'],'Ayşe');self.assertEqual(why['threshold'],0.87);self.assertGreater(why['candidates'][0]['score'],0.9)
+   r=dispatch({'action':'rename_profile','name':'Ayse','new_name':'Ayşe'},db);self.assertEqual(r,{'renamed':1,'merged':True})
+   snap=dispatch({'action':'snapshot','meeting':mid},db);self.assertEqual(snap['segments'][0]['speaker_name'],'Ayşe');self.assertEqual([p['samples'] for p in snap['profiles']],[3])
+   dispatch({'action':'delete_sample','sample':samples[1]['id']},db);self.assertEqual([p['samples'] for p in dispatch({'action':'snapshot'},db)['profiles']],[2])
+   with self.assertRaises(ValueError):dispatch({'action':'delete_sample','sample':999},db)
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

@@ -46,7 +46,7 @@ struct SidebarView:View {
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
-                Text(model.zoomMeetingOpen && !model.recording ? "Zoom toplantısı açık · ⌃⌥R her yerden kaydı başlatır, menü çubuğu simgesi de var" : "Her yerden: ⌃⌥R kayıt başlat/bitir, ⌃⌥M an işaretle · menü çubuğundaki dalga simgesi").font(.caption2).foregroundStyle(model.zoomMeetingOpen && !model.recording ? MeetingStyle.accent : .secondary)
+                if model.zoomMeetingOpen && !model.recording { Label("Zoom toplantısı açık · ⌃⌥R ile kaydı başlat",systemImage:"video.fill").font(.caption).foregroundStyle(MeetingStyle.accent) }
                 if let u=model.update, u.available {
                     VStack(alignment:.leading,spacing:6) {
                         Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)
@@ -75,7 +75,7 @@ struct SidebarView:View {
                             Picker("Model",selection:$model.cloudModel) { ForEach(model.cloudModels) { Text($0.name).tag($0.id) } }
                                 .labelsHidden().disabled(model.recording || model.busy).accessibilityIdentifier("cloudModelPicker")
                         }
-                        Text("Kayıt bitince ses OpenRouter’a gönderilir; bu Mac’te model yüklenmez. Kayıt sırasında canlı metin olmaz.").font(.caption2).foregroundStyle(.secondary)
+                        Text("Kayıt bitince ses OpenRouter’a gider; bu Mac’te model yüklenmez, canlı metin olmaz. Her yerden ⌃⌥R başlat/bitir, ⌃⌥M an işaretle.").font(.caption2).foregroundStyle(.secondary)
                     } else {
                         Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
                     }
@@ -295,6 +295,16 @@ struct EditSegmentSheet:View {
                 }
                 if let row=model.editRow, row.flags.contains("cloud_diarization") {
                     Divider()
+                    HStack { Button("Neden bu isim?") { Task { await model.explainIdentity(row) } }.controlSize(.small); Text("Ses profillerine benzerlik puanları").font(.caption2).foregroundStyle(.secondary) }
+                    if let ex=model.explanation {
+                        VStack(alignment:.leading,spacing:3) {
+                            if !ex.reason.isEmpty { Text(ex.reason).font(.caption) }
+                            ForEach(Array(ex.candidates.enumerated()),id:\.element.id) { i,c in
+                                Text("\(c.name): \(String(format:"%.2f",c.score)) (merkez \(String(format:"%.2f",c.centroid)), en yakın örnek \(String(format:"%.2f",c.bestSample)), \(c.samples) örnek) \(ex.verdict(for:c,rank:i))").font(.caption.monospacedDigit())
+                            }
+                            Text("İsim eşiği \(String(format:"%.2f",ex.threshold)), öneri eşiği \(String(format:"%.2f",ex.suggest)), ikinci adaya en az \(String(format:"%.2f",ex.margin)) fark · bu kümede \(String(format:"%.0f",ex.seconds)) sn ses").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
                     Text("Bu bölüm sağlayıcı ayrımıyla “\(row.speaker)” kümesine ait. Kümeyi adlandırırsanız bu toplantıdaki tüm bölümleri isim alır ve kümeden bir ses profili kaydedilir; sonraki toplantılarda aynı ses otomatik tanınır.").font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button("Bu konuşmacıyı adlandır ve profili kaydet") { Task { await model.saveSpeaker(enroll:true) } }.buttonStyle(.borderedProminent).disabled(model.editName.trimmingCharacters(in:.whitespaces).isEmpty).accessibilityIdentifier("nameSpeakerButton")
@@ -352,13 +362,8 @@ struct SettingsSheet:View {
                         Label("Henüz ses profili yok",systemImage:"person.wave.2")
                         Text("Bir transkript bölümünde Düzelt düğmesine basarak temiz bir konuşma örneğinden profil kaydedebilirsiniz.").font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
-                } else { List(model.profiles) { p in
-                    HStack {
-                        VStack(alignment:.leading) { Text(p.name);Text("\(p.samples) örnek · \(p.model)").font(.caption).foregroundStyle(.secondary) }
-                        Spacer()
-                        Button("Profili sil",role:.destructive) { Task { await model.deleteProfile(p.name) } }.accessibilityIdentifier("deleteProfile-\(p.name)")
-                    }
-                }.frame(height:140) }
+                } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
+                Toggle("Zoom toplantısı açılınca bildirim gönder (kayıt yokken, 20 dakikada en fazla bir)",isOn:$model.zoomNotify)
                 if let storage=model.storage { StorageSection(model:model,storage:storage) }
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }

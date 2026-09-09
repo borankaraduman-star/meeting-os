@@ -79,6 +79,16 @@ final class ZoomWatchTests:XCTestCase {
         XCTAssertEqual(GlobalHotkeys.keyName(GlobalHotkeys.record),"⌃⌥R")
     }
 }
+final class IdentityExplanationTests:XCTestCase {
+    func testVerdictsFollowThresholds() {
+        let ex=IdentityExplanation.parse(["candidates":[["name":"Ayşe","score":0.90,"centroid":0.9,"best_sample":0.9,"samples":2],["name":"Ali","score":0.80,"centroid":0.8,"best_sample":0.8,"samples":1]],"threshold":0.87,"margin":0.05,"suggest":0.83,"seconds":12.0])
+        XCTAssertEqual(ex.verdict(for:ex.candidates[0],rank:0),"isim verildi");XCTAssertEqual(ex.verdict(for:ex.candidates[1],rank:1),"")
+        let close=IdentityExplanation.parse(["candidates":[["name":"Ayşe","score":0.90],["name":"Ali","score":0.88]],"threshold":0.87,"margin":0.05,"suggest":0.83])
+        XCTAssertEqual(close.verdict(for:close.candidates[0],rank:0),"ikinci adaya çok yakın, isim verilmedi")
+        let weak=IdentityExplanation.parse(["candidates":[["name":"Ayşe","score":0.85]],"threshold":0.87,"margin":0.05,"suggest":0.83])
+        XCTAssertEqual(weak.verdict(for:weak.candidates[0],rank:0),"öneri (soru işaretli)")
+    }
+}
 final class CloudTranscriptionTests:XCTestCase {
     func testOpenRouterModeRecordsWithoutLivePreview() {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))

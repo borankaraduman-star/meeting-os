@@ -7,6 +7,7 @@ stage=$(mktemp -d "$PWD/build/desktop-stage.XXXXXX")
 app="$stage/Meeting OS.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp desktop/.build/release/MeetingOS "$app/Contents/MacOS/MeetingOS"
+cp desktop/Icon/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 .venv/bin/python - "$app/Contents/Resources/runtime.json" <<'PY'
 import json,sys
 from pathlib import Path
@@ -19,6 +20,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIdentifier</key><string>local.boran.meeting-os</string>
 <key>CFBundleName</key><string>Meeting OS</string>
 <key>CFBundleExecutable</key><string>MeetingOS</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>1.1.0</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>

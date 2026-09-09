@@ -67,7 +67,7 @@ struct TranscriptEmptyView:View {
         case "failed","incomplete":return "İşlem durumunu ve varsa hata bilgisini kontrol edin. Kayıt arşivi varsa üstteki kurtarma seçeneğini kullanabilirsiniz."
         case "canceled":return "Bu toplantı için şu anda gösterilecek bir konuşma bölümü yok. Yeni bir kayıt başlatabilir veya ses dosyası açabilirsiniz."
         case "complete":return "Bu toplantının metni şu anda boş görünüyor. Yenileyerek tekrar kontrol edebilirsiniz."
-        default:return "Bir toplantı seçin, kayıt başlatın veya ses dosyası açın."
+        default:return "Bir toplantı seçin, ⌘R ile kayıt başlatın veya OpenRouter ile bir ses dosyası açın."
         }
     }
     var body:some View {

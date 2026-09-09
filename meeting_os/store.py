@@ -153,6 +153,44 @@ class Store:
         return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples GROUP BY name,model')]
     def delete_profile(self, name):
         with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,))
+    def profile_samples(self, name):
+        """Every stored voice sample of a person with where it came from, for the maintenance screen."""
+        titles = {r['id']: r['title'] for r in self.db.execute('SELECT id,title FROM meetings')}
+        out = []
+        for r in self.db.execute('SELECT id,model,duration,provenance FROM samples WHERE name=? ORDER BY id', (name,)):
+            prov = r['provenance'] or ''
+            parts = prov.split(':')
+            mid = parts[1] if parts[0] == 'auto' and len(parts) > 1 else (parts[0] if parts and parts[0] in titles else None)
+            kind = 'otomatik' if prov.startswith('auto:') else ('küme' if ':speaker:' in prov else ('bölüm' if len(parts) == 2 and parts[1].isdigit() else 'elle'))
+            out.append({'id': r['id'], 'model': r['model'], 'seconds': round(float(r['duration'] or 0), 1), 'kind': kind, 'meeting': mid, 'meeting_title': titles.get(mid), 'provenance': prov})
+        return out
+    def delete_sample(self, sample_id):
+        with self.db:
+            cur = self.db.execute('DELETE FROM samples WHERE id=?', (int(sample_id),))
+            if not cur.rowcount: raise ValueError('Örnek bulunamadı')
+    def rename_profile(self, name, new_name):
+        """Rename a person; renaming onto an existing person merges the samples. Segment names follow."""
+        new_name = (new_name or '').strip()
+        if not new_name: raise ValueError('Yeni isim boş olamaz')
+        if new_name == name: return {'renamed': 0, 'merged': False}
+        merged = bool(self.db.execute('SELECT 1 FROM samples WHERE name=?', (new_name,)).fetchone())
+        with self.db:
+            n = self.db.execute('UPDATE samples SET name=? WHERE name=?', (new_name, name)).rowcount
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE speaker_name=?', (new_name, name))
+        return {'renamed': n, 'merged': merged}
+    def explain_identity(self, vector, model, limit=5):
+        """Why a voice matched: similarity to every person's centroid and to their nearest sample."""
+        v = unit(vector); groups = {}
+        for row in self.db.execute('SELECT name,vector FROM samples WHERE model=?', (model,)):
+            x = json.loads(row['vector'])
+            if len(x) == len(v): groups.setdefault(row['name'], []).append(x)
+        scores = []
+        for name, xs in groups.items():
+            try: centroid = unit([sum(col)/len(xs) for col in zip(*xs)])
+            except ValueError: continue
+            best = max(cosine(v, unit(x)) for x in xs)
+            scores.append({'name': name, 'centroid': round(cosine(v, centroid), 3), 'best_sample': round(best, 3), 'score': round((cosine(v, centroid) + best) / 2, 3), 'samples': len(xs)})
+        return sorted(scores, key=lambda s: -s['score'])[:limit]
     def identify(self, vector, model, threshold=0.80, margin=0.08):
         """Score = mean of centroid similarity and best single-sample similarity: the centroid is stable,
         the nearest sample tolerates a person recorded under different conditions."""
