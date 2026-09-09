@@ -396,3 +396,9 @@ class LinkClustersTests(unittest.TestCase):
             labels={r['metrics']['cluster']:r['speaker'] for r in store.segments(mid)}
             self.assertEqual(labels,{'0:0':'Konuşmacı 1','0:1':'Konuşmacı 2','1:0':'Konuşmacı 2','1:1':'Konuşmacı 3'})
             self.assertEqual(link_clusters(store,mid,'m'),0);store.close()   # idempotent
+
+class UncertaintyFlagTests(unittest.TestCase):
+    def test_cloud_information_flags_do_not_mark_items_for_review(self):
+        from meeting_os.intelligence import uncertain
+        self.assertFalse(uncertain({'flags':['cloud_transcript','cloud_diarization','confidence_unavailable','speaker_unverified','coarse_timing']}))
+        self.assertTrue(uncertain({'flags':['cloud_transcript','speaker_ambiguous']}));self.assertFalse(uncertain({}))

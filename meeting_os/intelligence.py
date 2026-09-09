@@ -56,6 +56,13 @@ def locate_quote(quote,text,min_ratio=0.8):
     return best[1] if best[0]>=min_ratio else None
 
 
+UNCERTAIN_FLAGS={'speaker_ambiguous','low_asr_confidence','possible_non_speech','repetition','provisional','possible_echo','short_context_diarization'}
+
+def uncertain(row):
+    """Only flags that cast doubt on the words or the speaker count; informational cloud flags do not."""
+    return bool(UNCERTAIN_FLAGS.intersection(row.get('flags') or []))
+
+
 def validate_record(record,rows):
     by_id={r['id']:r for r in rows};result={key:[] for key in CATEGORIES}
     for key in CATEGORIES:
@@ -73,7 +80,7 @@ def validate_record(record,rows):
                 quote=locate_quote(quote,by_id[sid]['text'])
                 if quote is None:raise ValueError('Analiz gerçek kaynak alıntısıyla eşleşmiyor')
                 row=by_id[sid];selected.append(row);evidence.append({'segment_id':sid,'quote':quote,'start':row['start'],'source':row['source'],'speaker':row.get('speaker_name') or row['speaker']})
-            clean={field:text.strip(),'evidence':evidence,'needs_review':any(r.get('flags') for r in selected)}
+            clean={field:text.strip(),'evidence':evidence,'needs_review':any(uncertain(r) for r in selected)}
             if key=='actions':
                 owner=item.get('owner');due=item.get('due_text');quotes=' '.join(e['quote'] for e in evidence)
                 owner=owner.strip() if isinstance(owner,str) and owner.strip() else None
@@ -103,7 +110,7 @@ def chunks(rows,llm,budget=2800):
         text=row['text']
         pieces=[text[i:i+2400] for i in range(0,len(text),2400)] or ['']
         for piece in pieces:
-            item={'segment_id':row['id'],'speaker':row.get('speaker_name'),'text':piece,'uncertain':bool(row.get('flags'))}
+            item={'segment_id':row['id'],'speaker':row.get('speaker_name'),'text':piece,'uncertain':uncertain(row)}
             n=llm.count(json.dumps(item,ensure_ascii=False))
             if current and used+n>budget:yield current;current=[];used=0
             current.append(item);used+=n
