@@ -99,6 +99,8 @@ struct TranscriptEmptyView:View {
 
 struct ApplicationActivityView:View {
     @ObservedObject var model:Model
+    @ObservedObject var recorder:RecorderState
+    init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
     var body:some View {
         VStack(alignment:.leading,spacing:7) {
             HStack(spacing:7) {
@@ -108,7 +110,7 @@ struct ApplicationActivityView:View {
                 else { Image(systemName:"info.circle").foregroundStyle(.secondary) }
                 Text(model.recording ? "Kayıt oturumu":model.busy ? "İşlem sürüyor":model.error.isEmpty ? "Son durum":"Sorun var").font(.caption.weight(.semibold))
             }
-            if model.busy && !model.jobProgress.isEmpty { Text(model.jobProgress).font(.caption.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
+            if model.busy && !recorder.jobProgress.isEmpty { Text(recorder.jobProgress).font(.caption.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
             if !model.microphoneHint.isEmpty { Label(model.microphoneHint,systemImage:"mic.slash").font(.caption).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
             Text(model.activity).font(.caption).foregroundStyle(.secondary).lineLimit(4).fixedSize(horizontal:false,vertical:true)
                 .help("Sistem kanalı bu Mac’in ses çıkışını kaydeder. Başka bir cihazdan çalınan ses mikrofondan alınır. Sinyal ölçümü, konuşma algılandığı anlamına gelmez. Eksik canlı metin, kayıt sonunda tam ses üzerinden yeniden işlenmelidir.")

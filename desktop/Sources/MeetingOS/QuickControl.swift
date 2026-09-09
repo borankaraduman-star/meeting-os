@@ -62,7 +62,7 @@ struct QuickMenu:View {
     @ObservedObject var recorder:RecorderState
     init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
     var body:some View {
-        Text(model.recording ? "Kayıt sürüyor · \(recorder.elapsedText)" : (model.busy ? "İşlem sürüyor · \(model.jobProgress.isEmpty ? "lütfen bekleyin" : model.jobProgress)" : "Hazır"))
+        Text(model.recording ? "Kayıt sürüyor · \(recorder.elapsedText)" : (model.busy ? "İşlem sürüyor · \(recorder.jobProgress.isEmpty ? "lütfen bekleyin" : recorder.jobProgress)" : "Hazır"))
         if model.zoomMeetingOpen && !model.recording { Text("Zoom toplantısı açık").foregroundStyle(.secondary) }
         if !model.recording, model.useCalendar, let cal=CalendarContext.currentCached() { Text("Takvim: \(cal.title)").foregroundStyle(.secondary) }
         Divider()
