@@ -86,6 +86,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var showEchoRows=false
     @Published var review:[ReviewItem]=[]
     @Published var scorecard=""
+    @Published var markerCount=0
+    /// ⌘M while recording: append one line to markers.jsonl in the capture folder; nothing else changes.
+    func markMoment(_ kind:String) {
+        guard recording, let dir=recordingDir, let started=jobStarted else { return }
+        let seconds=Date().timeIntervalSince(started)
+        let url=dir.appendingPathComponent("markers.jsonl")
+        let line=Markers.line(seconds:seconds,kind:kind)+"\n"
+        if let handle=try? FileHandle(forWritingTo:url) { handle.seekToEndOfFile();handle.write(Data(line.utf8));try? handle.close() }
+        else { try? line.write(to:url,atomically:true,encoding:.utf8) }
+        markerCount+=1
+        activity="İşaretlendi · \(Marker.labels[kind] ?? "Önemli an") · \(String(format:"%02d:%02d",Int(seconds)/60,Int(seconds)%60))"
+    }
     /// Draft agenda for the next meeting from recent open tasks, questions and decisions; saved where the user chooses.
     func exportAgenda() async {
         let panel=NSSavePanel();panel.nameFieldStringValue="sonraki-toplanti-gundemi.md";panel.allowedContentTypes=[UTType.plainText]
@@ -188,7 +200,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard job==nil else { return }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin()
+        recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin()
         let name=title.isEmpty ? Date().formatted(date:.abbreviated,time:.shortened) : title
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in

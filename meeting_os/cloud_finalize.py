@@ -416,6 +416,20 @@ def assign_identities(scored):
     return assignment
 
 
+def read_markers(capture_dir, limit=200):
+    """Moments the user marked with ⌘M while recording: {seconds, kind, created}. Written by the app, read once here."""
+    path=Path(capture_dir)/'markers.jsonl'
+    if not path.is_file(): return []
+    out=[]
+    for line in path.read_text(encoding='utf-8').splitlines()[:limit]:
+        try: d=json.loads(line)
+        except ValueError: continue
+        secs=d.get('seconds');kind=d.get('kind')
+        if isinstance(secs,(int,float)) and math.isfinite(secs) and secs>=0 and kind in ('important','decision','task','later'):
+            out.append({'seconds':round(float(secs),1),'kind':kind,'created':d.get('created')})
+    return out
+
+
 def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
     """Capture-directory recordings and cloud-only file imports share this resumable path."""
     _consent(consent)
@@ -450,6 +464,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         if not mode:
             with store.db: store.db.execute('DELETE FROM segments WHERE meeting=?',(mid,))  # provisional live text is replaced by the cloud transcript
         metadata.update({'engine':'openrouter','model':model,'cloud_mode':mode or 'capture','cloud_upload_authorized':True,'paths':sources,'provisional':False})
+        if capture and mode!='file': metadata['markers']=read_markers(capture)
         metadata.update(current_job_metadata())
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
         try:

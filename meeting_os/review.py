@@ -1,4 +1,5 @@
 """Critical review queue: the few places a person should listen to instead of reading a whole transcript."""
+import json
 from .memory import Memory
 
 
@@ -30,6 +31,12 @@ def review_queue(store, mid):
             continue
         if 'low_asr_confidence' in r['flags'] or 'possible_non_speech' in r['flags'] or 'repetition' in r['flags']:
             items.append({**base,'kind':'asr','severity':3,'reason':'Model bu bölümde emin değil; dinleyerek kontrol edin'})
+    meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0] or '{}')
+    labels={'important':'Önemli an','decision':'Karar anı','task':'Bana görev','later':'Sonra bak'}
+    for marker in meta.get('markers') or []:
+        secs=marker.get('seconds',0);near=min(rows,key=lambda r:abs((r['start'] or 0)-secs)) if rows else None
+        items.append({'segment_id':near['id'] if near else None,'start':secs,'speaker':(near or {}).get('speaker_name') or (near or {}).get('speaker'),'text':(near or {}).get('text','')[:120],
+                      'kind':'marker','severity':0,'reason':f"Kayıt sırasında ⌘M ile işaretledin: {labels.get(marker.get('kind'),'Önemli an')}",'marker':marker.get('kind')})
     memory=Memory(store)
     for task in memory.actions(meeting=mid):
         if task.get('state') in ('done','dismissed'): continue

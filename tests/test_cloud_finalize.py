@@ -420,3 +420,15 @@ class ParallelUploadTests(unittest.TestCase):
             self.assertEqual(store.db.execute('SELECT status FROM meetings WHERE id=?',(mid,)).fetchone()[0],'complete')
             self.assertLess(len(calls)-before,4)   # only the missing pieces were re-sent
             store.close()
+
+class MarkerTests(unittest.TestCase):
+    def test_markers_written_during_recording_land_in_metadata_and_review_queue(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);(d/'markers.jsonl').write_text('{"seconds":3.2,"kind":"decision","created":"x"}\n{"seconds":-1,"kind":"decision"}\n{"seconds":5,"kind":"nope"}\nbozuk\n')
+            db=Path(tmp)/'db.sqlite';store=Store(db);mid=store.create_meeting('M',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=FakeEmbedder())
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);store.close()
+            self.assertEqual(meta['markers'],[{'seconds':3.2,'kind':'decision','created':'x'}])
+            q=dispatch({'action':'review_queue','meeting':mid},db)
+            self.assertEqual(q['items'][0]['kind'],'marker');self.assertIn('Karar anı',q['items'][0]['reason']);self.assertEqual(q['items'][0]['start'],3.2)

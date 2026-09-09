@@ -120,6 +120,10 @@ struct TranscriptBlockView:View {
                 Text(model.hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
                 let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")
                 if !notices.isEmpty { Label(notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
+                let marks=Markers.inBlock(Markers.parse(model.meeting?.metadata ?? [:]),start:block.start,end:block.end)
+                if !marks.isEmpty {
+                    HStack(spacing:6) { ForEach(marks) { m in Label("\(m.label) · \(m.time)",systemImage:"bookmark.fill").font(.caption).foregroundStyle(MeetingStyle.accent).padding(.horizontal,8).padding(.vertical,4).background(MeetingStyle.accent.opacity(0.12),in:Capsule()) } }
+                }
                 if showAsides && !block.asides.isEmpty {
                     HStack(spacing:6) {
                         ForEach(block.asides) { aside in

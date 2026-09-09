@@ -46,6 +46,18 @@ struct SidebarView:View {
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
+                if model.recording {
+                    VStack(alignment:.leading,spacing:6) {
+                        Text("ÖNEMLİ AN İŞARETLE").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
+                        HStack(spacing:6) {
+                            Button("⌘M An") { model.markMoment("important") }.keyboardShortcut("m",modifiers:.command)
+                            Button("Karar") { model.markMoment("decision") }.keyboardShortcut("m",modifiers:[.command,.shift])
+                            Button("Görev") { model.markMoment("task") }.keyboardShortcut("m",modifiers:[.command,.option])
+                            Button("Sonra") { model.markMoment("later") }.keyboardShortcut("m",modifiers:[.command,.control])
+                        }.controlSize(.small)
+                        Text(model.markerCount==0 ? "Konuşmayı bölmeden işaretle; kayıt bitince Kontrol sekmesinde sırayla görürsün. ⌘⇧M karar, ⌘⌥M görev, ⌘⌃M sonra bak." : "\(model.markerCount) an işaretlendi · Kontrol sekmesinde görünecek").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
                 VStack(alignment:.leading,spacing:6) {
                     Text("YAZIYA ÇEVİRME").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
                     Picker("Yazıya çevirme",selection:$model.transcriptionMode) { Text("OpenRouter").tag("openrouter");Text("Yerel model").tag("local") }

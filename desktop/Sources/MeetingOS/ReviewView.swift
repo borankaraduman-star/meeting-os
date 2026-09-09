@@ -15,6 +15,7 @@ struct ReviewItem:Identifiable, Equatable {
         case "ambiguous": return "Çakışan konuşma"
         case "short_match": return "Kısa sesle tanındı"
         case "task_owner": return "Görev sahibi belirsiz"
+        case "marker": return "İşaretlediğin an"
         default: return "Kontrol edin"
         }
     }
@@ -32,7 +33,7 @@ struct ReviewView:View {
             ForEach(model.review) { item in
                 VStack(alignment:.leading,spacing:8) {
                     HStack(spacing:8) {
-                        Image(systemName:item.severity==1 ? "exclamationmark.circle.fill" : (item.severity==2 ? "questionmark.circle" : "ear")).foregroundStyle(item.severity==1 ? .orange : .secondary)
+                        Image(systemName:item.kind=="marker" ? "bookmark.fill" : (item.severity==1 ? "exclamationmark.circle.fill" : (item.severity==2 ? "questionmark.circle" : "ear"))).foregroundStyle(item.kind=="marker" ? MeetingStyle.accent : (item.severity==1 ? .orange : .secondary))
                         Text(item.title).font(.headline)
                         if !item.time.isEmpty { Text(item.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
                         if !item.speaker.isEmpty { Text("· "+item.speaker).font(.caption).foregroundStyle(.secondary) }
