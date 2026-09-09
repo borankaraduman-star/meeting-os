@@ -531,3 +531,7 @@ Segmentlerde açık görev sayıları (“Boran’ın görevleri (0) · Bu topla
 ## 2026-09-09 14:55 — 1.2.11: Kurulum durumu kartı
 
 `SetupStatus` (Swift: AVCaptureDevice/CGPreflightScreenCaptureAccess/EventKit/UNUserNotificationCenter) + `setup_status` köprü eylemi (Keychain’de anahtar varlığı `security find-generic-password` ile -w olmadan, sözlük, `updater.check`). Ekranda doğrulandı: bu Mac’te bildirim izni dışında her şey yeşil. Amaç: ikinci Mac’te “izin istiyor / çalışmıyor” durumlarını tek bakışta görmek.
+
+## 2026-09-09 15:05 — 1.2.12: Kurulum kartında “İzin iste / Ayarları aç”, ⌘,
+
+Hiç sorulmamış izinlerde macOS sorusu açılır; reddedilmiş izinlerde ilgili Sistem Ayarları bölmesi açılır (bildirimler için doğrulandı: AX ile basıldı → System Settings açıldı). `⌘,` ayarları açar. Not: kartın `accessibilityIdentifier`’ı çocuk düğmelerin kimliğini eziyordu (`accessibilityElement(children:.contain)` ile düzeltildi); CGEvent tıklamaları bu pencerede güvenilmez, AX yolu `scroll area 1 of group 1 of sheet 1`.

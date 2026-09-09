@@ -372,7 +372,7 @@ struct SettingsSheet:View {
                             }
                         }
                         Text("Kırmızı: kayıt ya da güncelleme bu izin/ayar olmadan çalışmaz. Gri: isteğe bağlı.").font(.caption2).foregroundStyle(.secondary)
-                    }.padding(14).meetingCard().accessibilityIdentifier("setupStatus")
+                    }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
                 }
                 Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın.")
                 TextEditor(text:$model.vocabulary).font(.body.monospaced()).frame(height:160).border(.quaternary)
