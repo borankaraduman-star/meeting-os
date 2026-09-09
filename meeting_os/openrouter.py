@@ -127,6 +127,12 @@ class OpenRouterClient:
         try:
             with self._transport(req, timeout=timeout) as response: raw=response.read(self.MAX_RESPONSE_BYTES+1)
         except urllib.error.HTTPError as exc:
+            detail=''
+            if 400<=exc.code<500:
+                try: detail=exc.read(2000).decode('utf-8','replace')
+                except Exception: detail=''
+                detail=re.sub(r'\s+',' ',detail)[:220]
+            if detail: print(f'OpenRouter sağlayıcı ayrıntısı (HTTP {exc.code}): {detail}',file=__import__('sys').stderr,flush=True)  # log only; the user-facing message stays free of provider/request echoes
             raise OpenRouterError(http_error_message(exc.code)) from None
         except (OSError, TimeoutError):
             raise OpenRouterError('OpenRouter bağlantısı tamamlanamadı. Ücret oluşmuş olabilir; otomatik tekrar yapılmadı.') from None
@@ -171,6 +177,7 @@ class OpenRouterClient:
 
 
 class OpenRouterLLM:
+    supports_const_choices=False   # strict JSON schema mode rejects anyOf/const evidence menus; quotes are verified locally instead
     def __init__(self,client,model):self.client,self.model_id=client,model
     def count(self,text):return max(1,len(text.encode('utf-8'))//3)  # ≈ tokens for Turkish; no tokenizer download
     def complete(self,system,user,max_tokens=1800,schema=None):

@@ -432,3 +432,15 @@ class MarkerTests(unittest.TestCase):
             self.assertEqual(meta['markers'],[{'seconds':3.2,'kind':'decision','created':'x'}])
             q=dispatch({'action':'review_queue','meeting':mid},db)
             self.assertEqual(q['items'][0]['kind'],'marker');self.assertIn('Karar anı',q['items'][0]['reason']);self.assertEqual(q['items'][0]['start'],3.2)
+
+class EvidenceDropTests(unittest.TestCase):
+    def test_unlocatable_quote_drops_the_evidence_not_the_analysis(self):
+        from meeting_os.intelligence import validate_record
+        rows=[{'id':1,'start':0,'end':5,'text':'Yarın raporu ben çıkaracağım.','source':'system','speaker':'A','speaker_name':'Ayşe','flags':[]},
+              {'id':2,'start':5,'end':9,'text':'iOS önce gidecek.','source':'system','speaker':'B','speaker_name':None,'flags':[]}]
+        record={'summary':[{'text':'Rapor yarın.','evidence':[{'segment_id':1,'quote':'yarın raporu ben çıkaracağım'},{'segment_id':2,'quote':'tamamen uydurma bir cümle burada'}]},
+                           {'text':'Uydurma madde','evidence':[{'segment_id':2,'quote':'hiç yok böyle bir şey'}]}],'decisions':[],'risks':[],'questions':[],'actions':[]}
+        out=validate_record(record,rows)
+        self.assertEqual(len(out['summary']),1);self.assertEqual(out['summary'][0]['evidence'][0]['quote'],'Yarın raporu ben çıkaracağım')
+        self.assertEqual((out['dropped_quotes'],out['dropped_items']),(2,1))
+        with self.assertRaises(ValueError):validate_record({'summary':[{'text':'x','evidence':[{'segment_id':2,'quote':'yok'}]}],'decisions':[],'risks':[],'questions':[],'actions':[]},rows)

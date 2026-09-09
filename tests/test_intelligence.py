@@ -11,7 +11,9 @@ def record():
 class IntelligenceTests(unittest.TestCase):
  def test_bad_evidence_is_rejected(self):
   d=record();d['actions'][0]['evidence'][0]['segment_id']=99
-  with self.assertRaises(ValueError): validate_record(d,ROWS)
+  r=validate_record(d,ROWS);self.assertEqual(r['actions'],[]);self.assertEqual(r['dropped_items'],1)   # the item vanishes, the rest of the analysis survives
+  bad={k:[] for k in ('summary','decisions','risks','questions','actions')};bad['actions']=[d['actions'][0]]
+  with self.assertRaises(ValueError): validate_record(bad,ROWS)   # a batch with nothing verifiable is rejected so the caller retries
  def test_unknown_owner_and_invented_deadline_abstain(self):
   d=record();d['actions'][0]['owner']='Can';d['actions'][0]['due_text']='2026-09-20'
   r=validate_record(d,ROWS);self.assertIsNone(r['actions'][0]['owner']);self.assertIsNone(r['actions'][0]['due_text']);self.assertTrue(r['actions'][0]['needs_review'])
