@@ -8,8 +8,11 @@ struct VoiceSample:Identifiable, Equatable {
 
 struct IdentityCandidate:Identifiable, Equatable {
     let name:String; let score:Double; let centroid:Double; let bestSample:Double; let samples:Int
+    /// Why this person is hard or easy to hit: one sample, a sample that does not fit, or a bar the user's own
+    /// corrections have moved. The bar itself is `thresholdUsed` (0 when the bridge did not send one).
+    let personNote:String; let thresholdUsed:Double
     var id:String { name }
-    init(_ d:[String:Any]) { name=d["name"] as? String ?? ""; score=d["score"] as? Double ?? 0; centroid=d["centroid"] as? Double ?? 0; bestSample=d["best_sample"] as? Double ?? 0; samples=d["samples"] as? Int ?? 0 }
+    init(_ d:[String:Any]) { name=d["name"] as? String ?? ""; score=d["score"] as? Double ?? 0; centroid=d["centroid"] as? Double ?? 0; bestSample=d["best_sample"] as? Double ?? 0; samples=d["samples"] as? Int ?? 0; personNote=d["person_note"] as? String ?? ""; thresholdUsed=d["threshold_used"] as? Double ?? 0 }
 }
 
 /// "Why did it think this was Ayşe?" — scores against every saved person, with the thresholds that decide.
@@ -18,44 +21,132 @@ struct IdentityExplanation:Equatable {
     static func parse(_ d:[String:Any])->IdentityExplanation {
         IdentityExplanation(candidates:(d["candidates"] as? [[String:Any]] ?? []).map(IdentityCandidate.init),threshold:d["threshold"] as? Double ?? 0.87,margin:d["margin"] as? Double ?? 0.05,suggest:d["suggest"] as? Double ?? 0.83,seconds:d["seconds"] as? Double ?? 0,reason:d["reason"] as? String ?? "")
     }
+    /// The bar this person actually had to clear: their own when corrections have moved it, otherwise the global one.
+    func bar(for c:IdentityCandidate)->Double { c.thresholdUsed>0 ? c.thresholdUsed : threshold }
     func verdict(for c:IdentityCandidate,rank:Int)->String {
         let gap=rank==0 && candidates.count>1 ? c.score-candidates[1].score : 1.0
         if rank>0 { return "" }
-        if c.score>=threshold && gap>=margin { return "isim verildi" }
+        let bar=bar(for:c)
+        if c.score>=bar && gap>=margin { return "isim verildi" }
         if c.score>=suggest && gap>=margin { return "öneri (soru işaretli)" }
-        if c.score>=threshold && gap<margin { return "ikinci adaya çok yakın, isim verilmedi" }
+        if c.score>=bar && gap<margin { return "ikinci adaya çok yakın, isim verilmedi" }
         return "eşik altı, isim verilmedi"
     }
 }
 
-/// Per-person sample list with delete and rename/merge, shown inside the settings sheet.
+/// Q8: one person's profile as the maintenance screen sees it — how it is built, how well it holds together,
+/// and when this voice was last heard. Comes from `store.profile_health()` via the `maintenance` action.
+struct ProfileHealth:Equatable {
+    let name:String; let model:String; let samples:Int; let autoSamples:Int; let seconds:Double; let rejections:Int
+    let weakestFit:Double?; let weakestSample:Int?; let weak:Bool; let lastMeetingTitle:String
+    init(_ d:[String:Any]) {
+        name=d["name"] as? String ?? ""; model=d["model"] as? String ?? ""; samples=d["samples"] as? Int ?? 0
+        autoSamples=d["auto_samples"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; rejections=d["rejections"] as? Int ?? 0
+        weakestFit=d["weakest_fit"] as? Double; weakestSample=d["weakest_sample"] as? Int; weak=d["weak"] as? Bool ?? false
+        lastMeetingTitle=d["last_meeting_title"] as? String ?? ""
+    }
+    /// One line under the name; everything a person needs before deciding to add or drop a sample.
+    var line:String {
+        var parts=["\(samples) örnek (\(autoSamples) otomatik, \(max(0,samples-autoSamples)) elle)"]
+        parts.append(seconds>=60 ? "\(Int(seconds/60)) dk ses" : "\(Int(seconds)) sn ses")
+        if let fit=weakestFit { parts.append("en zayıf örnek "+String(format:"%.2f",fit).replacingOccurrences(of:".",with:",")+(weak ? " · zayıf" : "")) }
+        if rejections>0 { parts.append("\(rejections) ret") }
+        parts.append(lastMeetingTitle.isEmpty ? "hiç duyulmadı" : "son: "+lastMeetingTitle)
+        return parts.joined(separator:" · ")
+    }
+}
+
+/// A turn that could become a voice sample: long enough, no uncertainty flag, vector already stored.
+struct CleanCandidate:Identifiable, Equatable {
+    let id:Int; let meeting:String; let meetingTitle:String; let start:Double; let seconds:Double; let source:String; let text:String
+    init(_ d:[String:Any]) {
+        id=d["id"] as? Int ?? 0; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "bilinmeyen toplantı"
+        start=d["start"] as? Double ?? 0; seconds=d["seconds"] as? Double ?? 0; source=d["source"] as? String ?? ""; text=d["text"] as? String ?? ""
+    }
+}
+
+/// Q8: "Temiz örnek ekle…" — the person's own longest clean turns, so a thin profile can be thickened
+/// without hunting through transcripts. Listening first is the point; the button below each row enrolls it.
+struct CleanSamplePicker:View {
+    @ObservedObject var model:Model
+    let name:String
+    @Binding var open:Bool
+    @State private var candidates:[CleanCandidate]?=nil
+    var body:some View {
+        VStack(alignment:.leading,spacing:10) {
+            Text("“\(name)” için temiz örnek").font(.headline)
+            Text("Bu kişinin adıyla kayıtlı, en az 6 saniyelik, belirsizlik işareti taşımayan en uzun bölümler. Dinleyip emin olun; seçtiğiniz bölüm ses profiline eklenir.").font(.caption).foregroundStyle(.secondary)
+            if let list=candidates {
+                if list.isEmpty { Text("Uygun bölüm yok · bu kişinin uzun ve temiz bir bölümü henüz kaydedilmemiş ya da hepsi zaten örnek olmuş.").font(.caption).foregroundStyle(.secondary) }
+                ForEach(list) { c in
+                    HStack(spacing:8) {
+                        VStack(alignment:.leading,spacing:1) {
+                            Text("\(Int(c.seconds)) sn · \(c.meetingTitle)").font(.caption.weight(.medium))
+                            Text(c.text).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer(minLength:8)
+                        if !model.recording { Button { model.playCandidate(c) } label: { Image(systemName:"play.circle") }.buttonStyle(.plain).help("Bu bölümü dinle") }
+                        Button("Bu bölümü örnek yap") { Task { await model.enrollCandidate(c,name:name); candidates=await model.loadCleanCandidates(name) } }.controlSize(.small).disabled(model.busy)
+                    }
+                }
+            } else { Text("Yükleniyor…").font(.caption).foregroundStyle(.secondary) }
+            HStack { Spacer(); Button("Kapat") { open=false }.keyboardShortcut(.cancelAction) }
+        }.padding(18).frame(width:480).task { candidates=await model.loadCleanCandidates(name) }
+        .accessibilityElement(children:.contain).accessibilityIdentifier("cleanSamplePicker")
+    }
+}
+
+/// Q8: one person as a compact card — how the profile is built, how well it holds together, when the voice was
+/// last heard — with the three things anyone ever wants to do to it: rename, drop the weak sample, add a clean one.
 struct ProfileMaintenanceRow:View {
     @ObservedObject var model:Model
     let profile:Profile
     @State private var samples:[VoiceSample]=[]
     @State private var expanded=false
     @State private var newName=""
+    @State private var picking=false
+    private var health:ProfileHealth? {
+        (model.maintenance?["profiles"] as? [[String:Any]] ?? []).map(ProfileHealth.init).first { $0.name==profile.name && $0.model==profile.model }
+    }
     var body:some View {
         DisclosureGroup(isExpanded:$expanded) {
             VStack(alignment:.leading,spacing:6) {
+                HStack(spacing:8) {
+                    Button("Temiz örnek ekle…") { picking=true }.controlSize(.small).accessibilityIdentifier("addCleanSample-\(profile.name)").help("Bu kişinin en uzun temiz bölümlerinden birini profile ekleyin; ikinci bir iyi örnek isabeti belirgin artırır")
+                    if let h=health, h.weak, let weakest=h.weakestSample {
+                        Button("Zayıf örneği sil",role:.destructive) { Task { await model.deleteWeakSample(weakest); samples=await model.loadSamples(profile.name) } }.controlSize(.small).help("Başka bir ses ya da bozuk kayıt olabilir; silmek profili keskinleştirir")
+                    }
+                    Spacer()
+                }
                 ForEach(samples) { s in
                     HStack {
                         Text("\(s.kind) · \(s.meetingTitle) · \(String(format:"%.0f",s.seconds)) sn").font(.caption)
                         Spacer()
-                        Button("Örneği sil",role:.destructive) { Task { await model.deleteSample(s.id); samples=await model.loadSamples(profile.name) } }.controlSize(.small)
+                        Button("Örneği sil",role:.destructive) { Task { await model.deleteSample(s.id); samples=await model.loadSamples(profile.name); await model.loadMaintenance() } }.controlSize(.small)
                     }
                 }
                 if samples.isEmpty { Text("Örnek yok").font(.caption).foregroundStyle(.secondary) }
                 HStack {
                     TextField("Yeni isim (var olan bir isim yazarsanız birleştirilir)",text:$newName).textFieldStyle(.roundedBorder)
-                    Button("Yeniden adlandır") { Task { await model.renameProfile(profile.name,to:newName); newName="" } }.disabled(newName.trimmingCharacters(in:.whitespaces).isEmpty)
+                    Button("Yeniden adlandır") { Task { await model.renameProfile(profile.name,to:newName); newName=""; await model.loadMaintenance() } }.disabled(newName.trimmingCharacters(in:.whitespaces).isEmpty)
                 }
                 Text("Yanlış kişiden gelen örneği silmek sonraki tanımaları düzeltir; profil silinmez. Aynı kişiyi iki isimle kaydettiyseniz yeniden adlandırarak birleştirin.").font(.caption2).foregroundStyle(.secondary)
             }.padding(.leading,8)
         } label: {
-            HStack { Text(profile.name); Text("\(profile.samples) örnek").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Profili sil",role:.destructive) { Task { await model.deleteProfile(profile.name) } }.controlSize(.small).accessibilityIdentifier("deleteProfile-\(profile.name)") }
+            HStack(alignment:.firstTextBaseline,spacing:8) {
+                VStack(alignment:.leading,spacing:2) {
+                    HStack(spacing:5) {
+                        Text(profile.name)
+                        if health?.weak==true { Image(systemName:"exclamationmark.triangle.fill").font(.caption2).foregroundStyle(.orange).help("Bu profilde diğerlerine uymayan bir örnek var") }
+                    }
+                    Text(health?.line ?? "\(profile.samples) örnek").font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Profili sil",role:.destructive) { Task { await model.deleteProfile(profile.name); await model.loadMaintenance() } }.controlSize(.small).accessibilityIdentifier("deleteProfile-\(profile.name)")
+            }.accessibilityIdentifier("profileCard-\(profile.name)")
         }
         .onChange(of:expanded) { open in if open { Task { samples=await model.loadSamples(profile.name) } } }
+        .sheet(isPresented:$picking) { CleanSamplePicker(model:model,name:profile.name,open:$picking) }
     }
 }
 

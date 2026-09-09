@@ -36,7 +36,9 @@ struct SettingsSheet:View {
                         Label("Henüz ses profili yok",systemImage:"person.wave.2")
                         Text("Bir transkript bölümünde Düzelt düğmesine basarak temiz bir konuşma örneğinden profil kaydedebilirsiniz.").font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
-                } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
+                } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard()
+                    .task { await model.loadMaintenance() }   // the person cards read profile health: samples, weakest fit, last meeting
+                }
                 Divider()
                 }
                 if group=="sesler" {

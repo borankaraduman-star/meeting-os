@@ -320,8 +320,12 @@ def dispatch(request, db=None):
             segments=None if request.get('segments_hash')==seg_hash else store.display_segments(selected)
             return {'meetings':meetings,'profiles':store.profiles(),'segments':segments,'segments_hash':seg_hash,'intel_hash':intel_hash}
         if action=='label_speaker':
-            if request.get('enroll'): return store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
-            store.correct(request['meeting'],request['speaker'],request['name']); return {'labeled':True,'profile_saved':False}
+            if request.get('enroll'): result=store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
+            else: store.correct(request['meeting'],request['speaker'],request['name']);result={'labeled':True,'profile_saved':False}
+            # Q9: naming one voice changes what the others can be (a new person exists, a rejected sample is gone),
+            # so the meeting's still-unnamed clusters are re-scored right away. Both paths: correcting a wrong
+            # automatic name also drops samples and adds a rejection.
+            return {**result,**store.resuggest(request['meeting'])}
         if action=='undo_correction': return store.undo_correction(request['meeting'])
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}
@@ -333,6 +337,7 @@ def dispatch(request, db=None):
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
         if action=='profile_samples': return {'name':request['name'],'samples':store.profile_samples(request['name'])}
+        if action=='clean_candidates': return {'name':request['name'],'candidates':store.clean_candidates(request['name'],int(request.get('limit',8)))}
         if action=='delete_sample': store.delete_sample(request['sample']); return {'deleted':True}
         if action=='rename_profile': return store.rename_profile(request['name'],request['new_name'])
         if action=='explain_identity':
@@ -340,7 +345,7 @@ def dispatch(request, db=None):
             if not rows: return {'candidates':[],'reason':'Bu konuşmacı için ses vektörü yok (3 saniyeden kısa veya henüz işlenmedi)'}
             from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid
             model=rows[0]['embedding_model'];centroid=linked_centroid(rows,model)   # the same vector the pipeline scored
-            return {'candidates':store.explain_identity(centroid,model),'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD,'seconds':round(sum(r['end']-r['start'] for r in rows),1)}
+            return {'candidates':store.explain_identity(centroid,model,base=IDENTITY_THRESHOLD),'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD,'seconds':round(sum(r['end']-r['start'] for r in rows),1)}
         if action in ('update_check','update_start','update_status'):
             from . import updater
             if action=='update_check': return updater.check(ROOT)

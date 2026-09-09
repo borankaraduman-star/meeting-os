@@ -173,7 +173,7 @@ extension Model {
     /// Name a diarized cluster straight from Kontrol (calendar attendee chip). Enrolls like a confirmed suggestion.
     func nameSpeaker(_ speakerKey:String,_ name:String) async {
         guard let mid=selected, !speakerKey.isEmpty, !name.isEmpty else { return }
-        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":speakerKey,"name":name,"enroll":true]); activity="“\(name)” adlandırıldı · profil güncellendi"; canUndoNaming=true; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
+        do { let r=try await request(["action":"label_speaker","meeting":mid,"speaker":speakerKey,"name":name,"enroll":true]); activity="“\(name)” adlandırıldı · profil güncellendi"+adaptationNote(r); canUndoNaming=true; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
         catch { self.error=error.localizedDescription }
     }
 

@@ -180,14 +180,15 @@ def replay_identity(store, threshold=None, margin=None):
             seconds=round(sum(r['end']-r['start'] for r in members),1)
             top=[{'name':s['name'],'score':round(s['score'],3)} for s in scores[:2]]
             score=top[0]['score'] if top else None;gap=(scores[0]['score']-scores[1]['score']) if len(scores)>1 else (scores[0]['score']+1 if scores else None)
-            named=top[0]['name'] if top and score>=threshold and gap>=margin else None
+            bar=store.person_threshold(top[0]['name'],threshold,exclude=m['id']) if top else threshold   # this meeting's own corrections do not lower its own bar
+            named=top[0]['name'] if top and score>=bar and gap>=margin else None
             if not any(s['name']==name for s in scores): outcome='no_profile'
             elif named==name: outcome='ok'
             elif named: outcome='wrong'
-            elif score is not None and score>=threshold: outcome='abstained'   # over the threshold but two profiles too close
+            elif score is not None and score>=bar: outcome='abstained'   # over the threshold but two profiles too close
             else: outcome='missed'
             clusters.append({'meeting':m['id'],'title':m['title'],'speaker':speaker,'name':name,'seconds':seconds,'segments':len(members),'outcome':outcome,'named':named,
-                             'score':score,'margin':round(gap,3) if gap is not None else None,'nearest':top})
+                             'score':score,'margin':round(gap,3) if gap is not None else None,'threshold_used':round(bar,3),'nearest':top})
             p=people.setdefault(name,{'ok':0,'wrong':0,'missed':0,'abstained':0,'no_profile':0});p[outcome]+=1
     counts={k:sum(c['outcome']==k for c in clusters) for k in ('ok','wrong','missed','abstained','no_profile')}
     return {'threshold':threshold,'margin':margin,'clusters':len(clusters),**counts,'people':people,'misses':[c for c in clusters if c['outcome'] in ('wrong','missed','abstained')],'items':clusters}

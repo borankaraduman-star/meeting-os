@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -81,4 +82,165 @@ class UndoTests(unittest.TestCase):
             self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)
             self.assertEqual(db.identify(v,'m',threshold=0.5,margin=0.0)['name'],'Ali')
             with self.assertRaises(ValueError): db.undo_correction(mid)
+            db.close()
+
+
+def at(similarity):
+    """A 2-D unit vector whose cosine against [1,0] is exactly `similarity`. With one sample per person the blended
+    score is that cosine, so a test can name the number it wants instead of hoping a random vector lands there."""
+    import math
+    angle=math.acos(similarity); return [math.cos(angle),math.sin(angle)]
+
+def cluster(db, mid, vector, speaker, key, name=None, identity=None, seconds=12.0, text='uzun bir konuşma'):
+    seg=Segment(0,seconds,text,'system',speaker,metrics={'cluster':key,'identity':identity or {}},flags=['cloud_diarization'])
+    seg.embedding=vector; seg.embedding_model='m'
+    sid=db.add_segment(mid,seg)
+    if name: db.db.execute('UPDATE segments SET speaker_name=? WHERE id=?',(name,sid)); db.db.commit()
+    return sid
+
+def by_speaker(db, mid, speaker):
+    return [r for r in db.segments(mid) if r['speaker']==speaker][0]
+
+
+class ResuggestTests(unittest.TestCase):
+    """Q9: naming one voice must change what the meeting's other unnamed voices are taken to be, right away."""
+    def test_naming_a_cluster_suggests_the_same_voice_for_another(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            cluster(db,mid,[1.0,0.0],'system:S1','0:S1')
+            cluster(db,mid,at(0.85),'system:S2','0:S2')     # the same person, a little further away: suggestion band
+            db.enroll_speaker(mid,'system:S1','Ali')
+            self.assertEqual(db.resuggest(mid),{'renamed':0,'suggested':1})
+            second=by_speaker(db,mid,'system:S2')
+            self.assertEqual(second['metrics']['identity']['suggested'],'Ali')
+            self.assertIsNone(second['speaker_name'])       # a suggestion is never written as a name
+            db.close()
+    def test_a_close_second_cluster_is_named_outright(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            cluster(db,mid,[1.0,0.0],'system:S1','0:S1')
+            cluster(db,mid,at(0.95),'system:S2','0:S2')
+            db.enroll_speaker(mid,'system:S1','Ali')
+            self.assertEqual(db.resuggest(mid),{'renamed':1,'suggested':0})
+            self.assertEqual(by_speaker(db,mid,'system:S2')['speaker_name'],'Ali')
+            db.close()
+    def test_a_rejected_person_is_never_suggested_for_that_voice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            v=[1.0,0.0]; db.enroll('Ali',v,'m',10,'manual')
+            cluster(db,mid,v,'system:S1','0:S1',identity={'name':None,'suggested':'Ali'})
+            cluster(db,mid,v,'system:S2','0:S2')            # the same voice, split into a second cluster
+            db.enroll_speaker(mid,'system:S1','Ayşe')       # "no, that is Ayşe"
+            db.resuggest(mid)
+            second=by_speaker(db,mid,'system:S2')
+            self.assertEqual(second['speaker_name'],'Ayşe')
+            self.assertNotEqual(second['metrics']['identity'].get('suggested'),'Ali')
+            self.assertNotEqual(second['metrics']['identity'].get('name'),'Ali')
+            db.close()
+    def test_a_name_the_user_gave_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            v=[1.0,0.0]; db.enroll('Veli',v,'m',10,'manual')   # a perfect match for the cluster below
+            cluster(db,mid,v,'system:S1','0:S1')
+            db.correct(mid,'system:S1','Ali')
+            self.assertEqual(db.resuggest(mid),{'renamed':0,'suggested':0})
+            self.assertEqual(by_speaker(db,mid,'system:S1')['speaker_name'],'Ali')
+            db.close()
+    def test_the_bridge_reports_what_naming_changed(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'db'; db=Store(path); mid=db.create_meeting('t'); db.status(mid,'complete')
+            cluster(db,mid,[1.0,0.0],'system:S1','0:S1')
+            cluster(db,mid,at(0.85),'system:S2','0:S2')
+            db.close()
+            result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'system:S1','name':'Ali','enroll':True},path)
+            self.assertEqual((result['renamed'],result['suggested']),(0,1))
+
+
+class PersonThresholdTests(unittest.TestCase):
+    """Q5: the bar moves only for people the user has already judged, and only by his own corrections."""
+    def _profile(self, db, name='Ali'):
+        db.enroll(name,[1.0,0.0],'m',10,'manual'); return [1.0,0.0]
+    def test_two_confirmed_suggestions_lower_the_bar(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); self._profile(db)
+            probe=at(0.855)
+            self.assertIsNone(db.identify(probe,'m',0.87,0.05)['name'])          # today's bar: not confident enough
+            for i in range(2):
+                mid=db.create_meeting(f't{i}')
+                cluster(db,mid,[1.0,0.0],'system:S1','0:S1',identity={'name':None,'suggested':'Ali'})
+                db.correct(mid,'system:S1','Ali')                                 # the user confirms the suggestion
+            self.assertEqual(db.db.execute('SELECT confirmed,wrong FROM profile_stats WHERE name=?',('Ali',)).fetchone()[0],2)
+            self.assertAlmostEqual(db.person_threshold('Ali',0.87),0.85)
+            named=db.identify(probe,'m',0.87,0.05)
+            self.assertEqual(named['name'],'Ali'); self.assertAlmostEqual(named['threshold_used'],0.85)
+            db.close()
+    def test_one_overruled_automatic_name_raises_the_bar_and_undo_lowers_it_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); self._profile(db,'Veli')
+            probe=at(0.88)
+            self.assertEqual(db.identify(probe,'m',0.87,0.05)['name'],'Veli')     # today's bar: named
+            mid=db.create_meeting('t')
+            cluster(db,mid,[0.0,1.0],'system:S1','0:S1',name='Veli',identity={'name':'Veli','suggested':None})   # a different voice the app called Veli
+            db.correct(mid,'system:S1','Kaya')                                    # the user overrules the automatic name
+            self.assertEqual(db.db.execute('SELECT wrong FROM profile_stats WHERE name=?',('Veli',)).fetchone()[0],1)
+            self.assertAlmostEqual(db.person_threshold('Veli',0.87),0.89)
+            careful=db.identify(probe,'m',0.87,0.05)
+            self.assertIsNone(careful['name']); self.assertEqual(careful['candidate'],'Veli')   # a suggestion now, not a name
+            db.undo_correction(mid)
+            self.assertEqual(db.db.execute('SELECT wrong FROM profile_stats WHERE name=?',('Veli',)).fetchone()[0],0)
+            self.assertEqual(db.identify(probe,'m',0.87,0.05)['name'],'Veli')
+            db.close()
+    def test_existing_corrections_are_backfilled_once(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'db'
+            raw=sqlite3.connect(path)   # a database written before profile_stats existed
+            raw.executescript('''CREATE TABLE meetings(id TEXT PRIMARY KEY, title TEXT, created TEXT, status TEXT, metadata TEXT);
+            CREATE TABLE segments(id INTEGER PRIMARY KEY, meeting TEXT, start REAL, end REAL, source TEXT, speaker TEXT, speaker_name TEXT, payload TEXT);
+            CREATE TABLE corrections(id INTEGER PRIMARY KEY, meeting TEXT, speaker TEXT, name TEXT, created TEXT);''')
+            raw.execute("INSERT INTO meetings VALUES('m','t','2026-01-01','complete','{}')")
+            raw.execute("INSERT INTO segments(meeting,start,end,source,speaker,speaker_name,payload) VALUES('m',0,10,'system','system:S1','Ali',?)",
+                        (json.dumps({'metrics':{'identity':{'name':None,'suggested':'Ali'}}}),))
+            raw.execute("INSERT INTO corrections(meeting,speaker,name,created) VALUES('m','system:S1','Ali','2026-01-01')")
+            raw.commit(); raw.close()
+            db=Store(path)
+            self.assertEqual(db.db.execute('SELECT confirmed FROM profile_stats WHERE name=?',('Ali',)).fetchone()[0],1)
+            self.assertAlmostEqual(db.person_threshold('Ali',0.87),0.86)
+            self.assertAlmostEqual(db.person_threshold('Ali',0.87,exclude='m'),0.87)   # a meeting never vouches for itself
+            db.close()
+            Store(path).close()   # reopening must not count the same correction twice
+            db=Store(path); self.assertEqual(db.db.execute('SELECT confirmed FROM profile_stats WHERE name=?',('Ali',)).fetchone()[0],1); db.close()
+
+
+class CleanCandidateTests(unittest.TestCase):
+    """Q8: the picker offers only turns that would actually make a good sample."""
+    def test_longest_clean_turns_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('Pazartesi'); db.status(mid,'complete')
+            good=cluster(db,mid,[1.0,0.0],'system:S1','0:S1',name='Ali',seconds=20.0,text='uzun ve temiz')
+            cluster(db,mid,[1.0,0.0],'system:S1','0:S1',name='Ali',seconds=4.0)                  # too short
+            short=Segment(0,30,'çakışma','system','system:S2',flags=['cloud_diarization','speaker_ambiguous'])
+            short.embedding=[1.0,0.0];short.embedding_model='m'
+            sid=db.add_segment(mid,short);db.db.execute('UPDATE segments SET speaker_name=? WHERE id=?',('Ali',sid));db.db.commit()   # flagged
+            plain=Segment(0,40,'vektörsüz','system','system:S3',flags=['cloud_diarization'])
+            sid=db.add_segment(mid,plain);db.db.execute('UPDATE segments SET speaker_name=? WHERE id=?',('Ali',sid));db.db.commit()   # no embedding
+            got=db.clean_candidates('Ali')
+            self.assertEqual([c['id'] for c in got],[good])
+            self.assertEqual(got[0]['meeting_title'],'Pazartesi'); self.assertEqual(got[0]['seconds'],20.0)
+            db.enroll_segment(mid,good,'Ali')
+            self.assertEqual(db.clean_candidates('Ali'),[])                                       # already enrolled, not offered again
+            self.assertEqual(db.profile_health()[0]['last_meeting_title'],'Pazartesi')
+            db.close()
+    def test_person_note_explains_a_thin_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); db.enroll('Ali',[1.0,0.0],'m',10,'manual')
+            note=db.explain_identity([1.0,0.0],'m',base=0.87)[0]
+            self.assertEqual(note['person_note'],'tek örnek — ikinci bir temiz örnek isabeti artırır')
+            self.assertAlmostEqual(note['threshold_used'],0.87)
+            mid=db.create_meeting('t')
+            cluster(db,mid,[1.0,0.0],'system:S1','0:S1',identity={'name':None,'suggested':'Ali'})
+            db.correct(mid,'system:S1','Ali')
+            note=db.explain_identity([1.0,0.0],'m',base=0.87)[0]
+            self.assertIn('1 onaylı öneri → eşik 0,86',note['person_note'])
             db.close()

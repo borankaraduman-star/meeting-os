@@ -105,7 +105,7 @@ class IdentityTests(unittest.TestCase):
             meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['identity'],{'embedded':2,'named':1,'suggested':0,'fed':0})
             store.close()
             result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Mehmet','enroll':True},db)
-            self.assertEqual(result,{'labeled':1,'profile_saved':True,'seconds':3.5})
+            self.assertEqual(result,{'labeled':1,'profile_saved':True,'seconds':3.5,'renamed':0,'suggested':0})   # Q9: the only other cluster is already named
             snap=dispatch({'action':'snapshot','meeting':mid},db)
             self.assertEqual([s['speaker_name'] for s in snap['segments']],['Ayşe','Mehmet']);self.assertEqual({p['name'] for p in snap['profiles']},{'Ayşe','Mehmet'})
             dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Mehmet','enroll':True},db)  # idempotent

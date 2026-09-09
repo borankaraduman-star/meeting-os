@@ -51,7 +51,10 @@ struct EditSegmentSheet:View {
                             VStack(alignment:.leading,spacing:3) {
                                 if !ex.reason.isEmpty { Text(ex.reason).font(.caption) }
                                 ForEach(Array(ex.candidates.enumerated()),id:\.element.id) { i,c in
-                                    Text("\(c.name): \(String(format:"%.2f",c.score)) (merkez \(String(format:"%.2f",c.centroid)), en yakın örnek \(String(format:"%.2f",c.bestSample)), \(c.samples) örnek) \(ex.verdict(for:c,rank:i))").font(.caption.monospacedDigit())
+                                    VStack(alignment:.leading,spacing:1) {
+                                        Text("\(c.name): \(String(format:"%.2f",c.score)) (merkez \(String(format:"%.2f",c.centroid)), en yakın örnek \(String(format:"%.2f",c.bestSample)), \(c.samples) örnek) \(ex.verdict(for:c,rank:i))").font(.caption.monospacedDigit())
+                                        if !c.personNote.isEmpty { Text(c.personNote).font(.caption2).foregroundStyle(.secondary) }   // why this person is hard or easy to hit
+                                    }
                                 }
                                 Text("İsim eşiği \(String(format:"%.2f",ex.threshold)), öneri eşiği \(String(format:"%.2f",ex.suggest)), ikinci adaya en az \(String(format:"%.2f",ex.margin)) fark · bu kümede \(String(format:"%.0f",ex.seconds)) sn ses").font(.caption2).foregroundStyle(.secondary)
                             }

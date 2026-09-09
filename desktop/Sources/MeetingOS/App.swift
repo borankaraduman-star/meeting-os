@@ -162,20 +162,28 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard let mid=selected else { review=[]; return }
         do { let r=try await request(["action":"review_queue","meeting":mid]); review=(r["items"] as? [[String:Any]] ?? []).map(ReviewItem.init) } catch { review=[] }
     }
+    /// Q9: naming one voice re-scores the meeting's other unnamed clusters. Say what that changed, or say nothing.
+    func adaptationNote(_ r:[String:Any])->String {
+        var parts:[String]=[]
+        if let named=r["renamed"] as? Int, named>0 { parts.append("\(named) kişi daha tanındı") }
+        if let suggested=r["suggested"] as? Int, suggested>0 { parts.append("\(suggested) kişi daha önerildi") }
+        return parts.isEmpty ? "" : " · "+parts.joined(separator:", ")
+    }
     func confirmReview(_ item:ReviewItem) async {
         guard let mid=selected, !item.suggested.isEmpty, !item.speakerKey.isEmpty else { return }
-        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; canUndoNaming=true; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
+        do { let r=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"+adaptationNote(r); canUndoNaming=true; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
         catch { self.error=error.localizedDescription }
     }
     /// One pass over every suggested name; a single refresh at the end keeps the transcript from repainting per person.
     func confirmAll(_ items:[ReviewItem]) async {
         guard let mid=selected else { return }
-        var named:[String]=[]
+        var named:[String]=[]; var last:[String:Any]=[:]
         for item in items where !item.suggested.isEmpty && !item.speakerKey.isEmpty {
-            do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); named.append(item.suggested) }
+            do { last=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); named.append(item.suggested) }
             catch { self.error=error.localizedDescription; break }
         }
-        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"; canUndoNaming=true }
+        // The last call's counts describe the meeting after every confirmation, which is what the user now sees.
+        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"+adaptationNote(last); canUndoNaming=true }
         await refresh(); await loadReview(); refreshSummaryIfNamesDone()
     }
     /// ⌘Z after a naming: labels, the learned sample and the rejection all go back. Only the newest naming of the open meeting.
@@ -411,7 +419,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do {
             let result=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":editName,"enroll":enroll])
             editRow=nil
-            if enroll { activity=(result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi" } else { activity="Konuşmacı yalnız bu toplantıda adlandırıldı" }
+            if enroll { activity=((result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi")+adaptationNote(result) } else { activity="Konuşmacı yalnız bu toplantıda adlandırıldı"+adaptationNote(result) }
             canUndoNaming=true
             await refresh(); await loadReview(); refreshSummaryIfNamesDone()
         } catch { self.error=error.localizedDescription }
@@ -563,6 +571,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func loadSamples(_ name:String) async -> [VoiceSample] { ((try? await request(["action":"profile_samples","name":name]))?["samples"] as? [[String:Any]] ?? []).map(VoiceSample.init) }
     func deleteSample(_ id:Int) async { do { _=try await request(["action":"delete_sample","sample":id]); await refresh() } catch { self.error=error.localizedDescription } }
+    func loadCleanCandidates(_ name:String) async -> [CleanCandidate] { ((try? await request(["action":"clean_candidates","name":name]))?["candidates"] as? [[String:Any]] ?? []).map(CleanCandidate.init) }
+    /// Q8: turn one of the person's own long clean turns into a voice sample. The bridge's clean filter (length,
+    /// flags, stored vector) is the confirmation here — the picker offers nothing it would refuse.
+    func enrollCandidate(_ c:CleanCandidate,name:String) async {
+        guard !busy else { return }
+        do { _=try await request(["action":"enroll","meeting":c.meeting,"segment":c.id,"name":name,"confirmed_clean":true])
+            activity="“\(name)” profiline temiz örnek eklendi · \(Int(c.seconds)) sn · \(c.meetingTitle)"
+            await refresh(); await loadMaintenance() }
+        catch { self.error=error.localizedDescription }
+    }
+    func playCandidate(_ c:CleanCandidate) {
+        guard let m=meetings.first(where:{ $0.id==c.meeting }) else { error="Bu bölümün toplantısı bulunamadı"; return }
+        play(source:c.source,start:c.start,seconds:c.seconds,metadata:m.metadata)
+    }
     func renameProfile(_ name:String,to newName:String) async {
         do { let r=try await request(["action":"rename_profile","name":name,"new_name":newName]); activity=(r["merged"] as? Bool)==true ? "“\(name)” → “\(newName)” birleştirildi" : "“\(name)” → “\(newName)” yeniden adlandırıldı"; await refresh() } catch { self.error=error.localizedDescription }
     }
@@ -662,20 +684,26 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
     func play(_ row:Row) {
-        guard let m=meeting, !recording else { return }   // never play audio into the room during a recording
+        guard let m=meeting else { return }
+        play(source:row.source,start:row.start,seconds:row.end-row.start,metadata:m.metadata)
+    }
+    /// One span of one meeting's audio. Takes the metadata rather than reading `meeting`, so the settings sheet
+    /// can preview a turn from a meeting that is not the open one.
+    func play(source:String,start rowStart:Double,seconds:Double,metadata:[String:Any]) {
+        guard !recording else { return }   // never play audio into the room during a recording
         do {
-            var path=(m.metadata["paths"] as? [String:String])?[row.source]; var start=row.start
-            if path==nil, let dir=m.metadata["capture_dir"] as? String {
+            var path=(metadata["paths"] as? [String:String])?[source]; var start=rowStart
+            if path==nil, let dir=metadata["capture_dir"] as? String {
                 let base=URL(fileURLWithPath:dir); let native=base.appendingPathComponent("capture-native.jsonl")
                 let journal=FileManager.default.fileExists(atPath:native.path) ? native : base.appendingPathComponent("events.jsonl")
                 let lines=try String(contentsOf:journal,encoding:.utf8).split(separator:"\n")
                 for line in lines {
-                    if let d=try? JSONSerialization.jsonObject(with:Data(line.utf8)) as? [String:Any], d["source"] as? String==row.source, let a=d["start"] as? Double, let duration=d["duration"] as? Double, row.start>=a, row.start<a+duration { path=d["path"] as? String; start=row.start-a; break }
+                    if let d=try? JSONSerialization.jsonObject(with:Data(line.utf8)) as? [String:Any], d["source"] as? String==source, let a=d["start"] as? Double, let duration=d["duration"] as? Double, rowStart>=a, rowStart<a+duration { path=d["path"] as? String; start=rowStart-a; break }
                 }
             }
             guard let path=path else { throw NSError(domain:"MeetingOS",code:1,userInfo:[NSLocalizedDescriptionKey:"Ses dosyası bulunamadı"]) }
             player?.stop(); let p=try AVAudioPlayer(contentsOf:URL(fileURLWithPath:path)); player=p; p.currentTime=start; p.play()
-            Task { try? await Task.sleep(for:.seconds(max(0.1,row.end-row.start))); if self.player===p { p.stop() } }
+            Task { try? await Task.sleep(for:.seconds(max(0.1,seconds))); if self.player===p { p.stop() } }
         } catch { self.error=error.localizedDescription }
     }
 }
