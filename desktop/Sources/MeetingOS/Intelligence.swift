@@ -117,7 +117,10 @@ struct ActionsView:View {
     @ObservedObject var m:Model
     @State var draftEdit:DraftItem?;@State var draftText=""
     @State var filter="boran";@State var edit:ActionItem?;@State var title="";@State var owner="";@State var due=""
-    var visible:[ActionItem] { m.actions.filter { filter=="all" || (filter=="boran" ? $0.owner.lowercased(with:Locale(identifier:"tr_TR"))=="boran" : $0.meeting==m.selected) } }
+    func matches(_ item:ActionItem,_ f:String)->Bool { f=="all" || (f=="boran" ? item.owner.lowercased(with:Locale(identifier:"tr_TR"))=="boran" : item.meeting==m.selected) }
+    var visible:[ActionItem] { m.actions.filter { matches($0,filter) } }
+    /// Open tasks behind each segment, so an empty "Boran’ın görevleri" never hides the meeting's tasks.
+    func count(_ f:String)->Int { m.actions.filter { matches($0,f) && !["done","dismissed"].contains($0.state) }.count }
     func statePicker(_ item:ActionItem)->some View {
         Picker("Durum",selection:Binding(get:{item.state},set:{value in Task { await m.updateAction(item,changes:["state":value]) }})) { Text("Açık").tag("open");Text("Devam ediyor").tag("in_progress");Text("Tamamlandı").tag("done");Text("Kaldırıldı").tag("dismissed") }
             .frame(width:220).accessibilityIdentifier("actionState-\(item.id)")
@@ -140,7 +143,7 @@ struct ActionsView:View {
     }
     var body:some View { VStack(alignment:.leading) {
         HStack { Text("Sonraki adımlar").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)
-        HStack { Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri").tag("boran");Text("Bu toplantı").tag("meeting");Text("Tüm görevler").tag("all") }.pickerStyle(.segmented); Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }.help("Son 5 toplantının açık görev, soru ve kararlarından düzenlenebilir bir gündem taslağı kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("agendaButton"); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }.help("Bugün kaydedilen toplantılardan sana düşen görevleri, senden beklenen cevapları ve alınan kararları kaynaklarıyla bir Markdown dosyasına kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("digestButton") }.padding().task(id:m.selected) { await m.loadContinuity() }.accessibilityIdentifier("actionsFilterPicker")
+        HStack { Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri (\(count("boran")))").tag("boran");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }.help("Son 5 toplantının açık görev, soru ve kararlarından düzenlenebilir bir gündem taslağı kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("agendaButton"); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }.help("Bugün kaydedilen toplantılardan sana düşen görevleri, senden beklenen cevapları ve alınan kararları kaynaklarıyla bir Markdown dosyasına kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("digestButton") }.padding().task(id:m.selected) { await m.loadContinuity() }.accessibilityIdentifier("actionsFilterPicker")
         ScrollView { LazyVStack(alignment:.leading,spacing:18) {
             if visible.isEmpty { ContentUnavailableView("Görev bulunamadı",systemImage:"checklist",description:Text("İsimsiz görevler Tüm görevler altında görünür. Sahipliği kaynakla doğrulayarak düzeltebilirsiniz.")) }
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
