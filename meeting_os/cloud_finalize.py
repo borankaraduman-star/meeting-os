@@ -261,6 +261,7 @@ def identify_clusters(store, mid, sources, embedder=None):
             r['embedding']=[sum(col)/len(parts) for col in zip(*parts)];r['embedding_model']=embedder.model_id;embedded+=1
             with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
     embedded+=embed_short_clusters(store,mid,sources,embedder)
+    link_clusters(store,mid,embedder.model_id)
     named=0
     clusters={}
     for r in store.segments(mid):
@@ -335,6 +336,47 @@ FEED_THRESHOLD=0.93       # a match this strong adds one more sample to the prof
 FEED_MARGIN=0.08          # correct real matches showed margins 0.086–0.144; 0.10 skipped a 0.941 match
 FEED_MIN_SECONDS=10.0
 MAX_AUTO_SAMPLES=8        # per person; manual samples count too
+LINK_THRESHOLD=0.90       # same voice across 5-minute pieces measured 0.991; different people ≤0.85
+
+def link_clusters(store, mid, model_id):
+    """Provider speaker numbers restart in every piece. Clusters whose voiceprints agree (≥0.90) get one
+    shared label, numbered by first appearance, so a 40-minute meeting reads as N people, not N×pieces."""
+    rows=[r for r in store.segments(mid) if 'cloud_diarization' in r['flags'] and (r.get('metrics') or {}).get('cluster') is not None]
+    if not rows: return 0
+    clusters={}
+    for r in rows: clusters.setdefault(r['metrics']['cluster'],[]).append(r)
+    if len(clusters)<2: return 0
+    order=sorted(clusters,key=lambda k:min(r['start'] for r in clusters[k]))
+    centroid={}
+    for k,members in clusters.items():
+        vs=[r['embedding'] for r in members if r.get('embedding') and r.get('embedding_model')==model_id]
+        if vs: centroid[k]=[sum(col)/len(vs) for col in zip(*vs)]
+    parent={k:k for k in order}
+    def find(k):
+        while parent[k]!=k: k=parent[k]
+        return k
+    def cos(a,b):
+        na=math.sqrt(sum(x*x for x in a));nb=math.sqrt(sum(x*x for x in b))
+        return sum(x*y for x,y in zip(a,b))/(na*nb) if na and nb else 0.0
+    for i,a in enumerate(order):
+        for b in order[i+1:]:
+            if a in centroid and b in centroid and a.split(':')[0]!=b.split(':')[0] and cos(centroid[a],centroid[b])>=LINK_THRESHOLD:
+                parent[find(b)]=find(a)
+    label={}
+    for k in order:
+        root=find(k)
+        if root not in label: label[root]=f'Konuşmacı {len(label)+1}'
+    changed=0
+    for k,members in clusters.items():
+        name=label[find(k)]
+        for r in members:
+            if r['speaker']!=name:
+                r['speaker']=name;r['metrics']['linked']=find(k)
+                with store.db: store.db.execute('UPDATE segments SET speaker=?,payload=? WHERE id=? AND meeting=?',(name,json.dumps(r,ensure_ascii=False),r['id'],mid))
+                changed+=1
+    return changed
+
+
 IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap
 IDENTITY_MARGIN=0.05
 OVERSPLIT_THRESHOLD=0.93  # a second cluster may share a name only when it is nearly as close as the best one

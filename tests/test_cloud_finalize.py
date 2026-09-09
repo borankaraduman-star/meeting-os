@@ -380,3 +380,19 @@ class PlanChangeTests(unittest.TestCase):
             try: finalize_capture(store,mid,tmp,consent=True,client=FakeClient())
             finally: cf.FINE_PIECE_SECONDS=original
             self.assertEqual(store.db.execute('SELECT status FROM meetings WHERE id=?',(mid,)).fetchone()[0],'complete');store.close()
+
+class LinkClustersTests(unittest.TestCase):
+    def test_same_voice_in_two_pieces_gets_one_label(self):
+        from meeting_os.cloud_finalize import link_clusters
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');mid=store.create_meeting('L',{});flags=['cloud_transcript','cloud_diarization']
+            def seg(a,b,sp,cl,vec):return Segment(a,b,'x','system',sp,metrics={'cluster':cl},flags=flags,embedding=vec,embedding_model='m')
+            store.add_segment(mid,seg(0,10,'Konuşmacı 1-1','0:0',[1.0,0.0]))
+            store.add_segment(mid,seg(10,20,'Konuşmacı 1-2','0:1',[0.0,1.0]))
+            store.add_segment(mid,seg(300,310,'Konuşmacı 2-1','1:0',[0.05,1.0]))   # ≈ 0.998 to 0:1 → same person
+            store.add_segment(mid,seg(310,320,'Konuşmacı 2-2','1:1',[0.7,0.7]))    # ≈ 0.7 to both → new person
+            self.assertEqual(link_clusters(store,mid,'m'),4)
+            labels={r['metrics']['cluster']:r['speaker'] for r in store.segments(mid)}
+            self.assertEqual(labels,{'0:0':'Konuşmacı 1','0:1':'Konuşmacı 2','1:0':'Konuşmacı 2','1:1':'Konuşmacı 3'})
+            self.assertEqual(link_clusters(store,mid,'m'),0);store.close()   # idempotent
