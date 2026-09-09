@@ -98,7 +98,7 @@ struct SidebarView:View {
                         .tag(meeting.id)
                         .contextMenu { Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(model.busy || meeting.recoveryState=="active") }
                         .accessibilityIdentifier("meetingRow-\(meeting.id)")
-                        .accessibilityLabel("\(meeting.title.isEmpty ? "Adsız toplantı" : meeting.title), \(statusLabel(meeting.displayStatus))")
+                        .accessibilityLabel("\(meeting.title.isEmpty ? "Adsız toplantı" : meeting.title), \(meeting.sidebarDetail)")
                 }
             }
             .listStyle(.sidebar)

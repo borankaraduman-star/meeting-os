@@ -44,6 +44,13 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM cloud_chunks').fetchone()[0],0)
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],1);s.close()
    with self.assertRaises(ValueError):dispatch({'action':'delete_meeting','meeting':mid},db)
+ def test_snapshot_carries_per_meeting_stats(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';s=Store(db);a=s.create_meeting('A',{});b=s.create_meeting('B',{})
+   s.add_segment(a,Segment(0,70,'x','system','Konuşmacı 1',speaker_name='Ayşe'));s.add_segment(a,Segment(70,90,'y','system','Konuşmacı 2'));s.add_segment(a,Segment(0,60,'echo','mic','mic:S0'))
+   s.status(a,'complete');s.status(b,'complete');s.close()
+   st={m['id']:m['stats'] for m in dispatch({'action':'snapshot'},db)['meetings']}
+   self.assertEqual(st[a],{'segments':2,'seconds':90.0,'speakers':2});self.assertEqual(st[b],{'segments':0,'seconds':0.0,'speakers':0})
  def test_delete_meeting_refuses_active_job(self):
   from meeting_os.recovery import current_job_metadata
   with tempfile.TemporaryDirectory() as tmp:

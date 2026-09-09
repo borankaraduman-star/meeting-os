@@ -31,7 +31,7 @@ struct MeetingNavigation:View {
 }
 struct MeetingLibraryRow:View {
     let meeting:Meeting
-    var body:some View { VStack(alignment:.leading,spacing:8) { Text(meeting.title).font(.system(size:13,weight:.semibold)).lineLimit(2);HStack(spacing:5) { Circle().fill(MeetingStyle.statusColor(meeting.displayStatus)).frame(width:5,height:5);Text(statusLabel(meeting.displayStatus));Spacer();Text(String(meeting.created.prefix(10))).monospacedDigit() }.font(.system(size:10)).foregroundStyle(.secondary) }.padding(.vertical,9) }
+    var body:some View { VStack(alignment:.leading,spacing:8) { Text(meeting.title).font(.system(size:13,weight:.semibold)).lineLimit(2);HStack(spacing:5) { Circle().fill(meeting.status=="complete" && meeting.segments==0 ? Color.secondary : MeetingStyle.statusColor(meeting.displayStatus)).frame(width:5,height:5);Text(meeting.sidebarDetail);Spacer();Text(String(meeting.created.prefix(10))).monospacedDigit() }.font(.system(size:10)).foregroundStyle(.secondary) }.padding(.vertical,9) }
 }
 
 struct TaskStatusBadge:View {

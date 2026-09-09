@@ -6,10 +6,19 @@ import AVFoundation
 
 struct Meeting: Identifiable {
     let id: String; let title: String; let status: String; let displayStatus:String; let recoveryState:String; let created: String; let capture:[String:Any]; let metadata: [String:Any]
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; displayStatus=d["display_status"] as? String ?? status; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:] }
+    let segments:Int; let seconds:Double; let speakers:Int
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; status=d["status"] as? String ?? ""; displayStatus=d["display_status"] as? String ?? status; recoveryState=d["recovery_state"] as? String ?? "unknown"; created=d["created"] as? String ?? ""; metadata=d["metadata"] as? [String:Any] ?? [:]; capture=d["capture"] as? [String:Any] ?? [:]
+        let st=d["stats"] as? [String:Any] ?? [:]; segments=st["segments"] as? Int ?? 0; seconds=st["seconds"] as? Double ?? 0; speakers=st["speakers"] as? Int ?? 0 }
 }
 extension Meeting {
     var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
+    /// Sidebar line under the title: what the finished recording holds, or a plain "no speech" for an empty one.
+    var sidebarDetail:String {
+        guard status=="complete" else { return statusLabel(displayStatus) }
+        if segments==0 { return "Konuşma bulunmadı" }
+        let length=seconds>=60 ? "\(Int(seconds/60)) dk" : "\(Int(seconds)) sn"
+        return speakers>0 ? "\(length) · \(speakers) kişi" : length
+    }
 }
 struct Row: Identifiable, Equatable {
     let id:Int; let start:Double; let end:Double; let text:String; let speaker:String; let name:String; let source:String; let flags:[String]; let suggested:String
