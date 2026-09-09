@@ -1,7 +1,8 @@
 """Project glossary: terms, abbreviations and names that a speech model is likely to misspell.
 
 Source: `glossary.jsonl` in the data directory (one JSON object per line, e.g. exported by a Slack
-agent) plus the legacy `vocabulary.txt` (one term per line). The glossary is used three ways:
+agent) plus the legacy `vocabulary.txt` (one term per line, also in the data directory; the copy in the
+repo is only a seed). The glossary is used three ways:
 1. as a spelling hint for cloud STT models that accept a prompt,
 2. to propose corrections on the finished transcript (never applied blindly),
 3. as context for analysis so abbreviations are expanded in summaries.
@@ -17,6 +18,7 @@ ICLOUD = Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs'
 SHARED_DIR = ICLOUD / 'MeetingOS-Shared'   # synced by iCloud Drive: one glossary for every Mac, never in the public git repo
 CATEGORIES = {'kısaltma', 'ürün', 'proje', 'ekip', 'kişi', 'teknik terim', 'müşteri', 'jargon', 'diğer'}
 FILENAME = 'glossary.jsonl'
+VOCABULARY = 'vocabulary.txt'
 
 
 def _clean(value, limit=80):
@@ -89,6 +91,25 @@ def merge_into(path, entries):
     return {'added': added, 'total': len(kept), 'path': str(path)}
 
 
+def vocabulary_path(data_dir, repo_root=None):
+    """`<data_dir>/vocabulary.txt` — the writable copy the Settings box edits.
+
+    The repo ships a starter list, but the Settings box used to write straight back into the checkout.
+    That made `git status` dirty, so `updater.check` reported `dirty` and `update.sh` refused to run:
+    saving a single word disabled updates for good. The repo file is a seed now — copied into the data
+    folder once, the first time the list is needed, and never written to again."""
+    data = Path(data_dir) / VOCABULARY
+    if not data.exists() and repo_root:
+        seed = Path(repo_root) / VOCABULARY
+        if seed.is_file():
+            try:
+                data.parent.mkdir(parents=True, exist_ok=True)
+                data.write_text(seed.read_text(encoding='utf-8'), encoding='utf-8')
+            except OSError:
+                return seed   # unwritable data folder: still read the seed, just never edit it
+    return data
+
+
 def load(data_dir, repo_root=None, with_counts=False):
     """Entries from the local and iCloud-shared glossary.jsonl, then vocabulary.txt terms not already present.
     Deduplicated, capped. with_counts also returns how many of the kept entries came from a glossary file, so
@@ -100,8 +121,8 @@ def load(data_dir, repo_root=None, with_counts=False):
             e = parse_line(line)
             if e and e['term'].casefold() not in seen: seen.add(e['term'].casefold()); entries.append(e)
     from_file = len(entries)
-    vocab = Path(repo_root) / 'vocabulary.txt' if repo_root else None
-    if vocab and vocab.is_file():
+    vocab = vocabulary_path(data_dir, repo_root)
+    if vocab.is_file():
         for line in vocab.read_text(encoding='utf-8').splitlines():
             term = _clean(line.split('#')[0])
             if term and term.casefold() not in seen: seen.add(term.casefold()); entries.append({'term': term, 'expansion': None, 'category': 'diğer', 'aliases': [], 'mishearings': [], 'context': None, 'confidence': None, 'source_count': None})

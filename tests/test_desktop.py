@@ -44,6 +44,25 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM cloud_chunks').fetchone()[0],0)
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],1);s.close()
    with self.assertRaises(ValueError):dispatch({'action':'delete_meeting','meeting':mid},db)
+ def test_vocabulary_is_saved_next_to_the_data_and_never_dirties_the_checkout(self):
+  # Saving the Settings vocabulary box used to write into the git checkout: git went dirty, updater.check
+  # reported dirty and update.sh refused, so one saved word disabled updates for good.
+  from meeting_os import glossary as G
+  from meeting_os.cli import ROOT
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';Store(db).close()
+   repo=Path(tmp)/'repo';repo.mkdir();seed=repo/'vocabulary.txt';seed.write_text('Tohum\n',encoding='utf-8')
+   before=(ROOT/'vocabulary.txt').read_text(encoding='utf-8')
+   self.assertEqual(dispatch({'action':'vocabulary'},db)['text'],before)      # first read seeds from the checkout
+   self.assertTrue((Path(tmp)/'vocabulary.txt').is_file())
+   self.assertEqual(dispatch({'action':'vocabulary','text':'PMD\nOKR\n'},db)['text'],'PMD\nOKR\n')
+   self.assertEqual((Path(tmp)/'vocabulary.txt').read_text(encoding='utf-8'),'PMD\nOKR\n')
+   self.assertEqual((ROOT/'vocabulary.txt').read_text(encoding='utf-8'),before)   # the tracked seed is untouched
+   self.assertIn('PMD',[e['term'] for e in G.load(tmp,ROOT)])
+   # the seed is copied once; later reads keep what the user saved
+   self.assertEqual(G.vocabulary_path(tmp,repo).read_text(encoding='utf-8'),'PMD\nOKR\n')
+   fresh=Path(tmp)/'fresh';fresh.mkdir()
+   self.assertEqual(G.vocabulary_path(fresh,repo).read_text(encoding='utf-8'),'Tohum\n')
  def test_setup_status_reports_key_presence_and_glossary(self):
   from unittest.mock import patch
   with tempfile.TemporaryDirectory() as tmp:
