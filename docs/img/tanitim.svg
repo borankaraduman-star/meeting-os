@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1125" viewBox="0 0 1800 1125" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f1f1a"/><stop offset="1" stop-color="#16302a"/>
+    </linearGradient>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#34ad8a"/><stop offset="1" stop-color="#7fd6b6"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7fd6b6"/>
+    </marker>
+  </defs>
+  <rect width="1800" height="1125" fill="url(#bg)"/>
+  <!-- subtle waveform -->
+  <g stroke="#34ad8a" stroke-opacity="0.18" stroke-width="6" stroke-linecap="round">
+    <line x1="1380" y1="120" x2="1380" y2="180"/><line x1="1404" y1="100" x2="1404" y2="200"/><line x1="1428" y1="130" x2="1428" y2="170"/><line x1="1452" y1="85" x2="1452" y2="215"/><line x1="1476" y1="115" x2="1476" y2="185"/><line x1="1500" y1="140" x2="1500" y2="160"/><line x1="1524" y1="95" x2="1524" y2="205"/><line x1="1548" y1="125" x2="1548" y2="175"/><line x1="1572" y1="105" x2="1572" y2="195"/><line x1="1596" y1="135" x2="1596" y2="165"/><line x1="1620" y1="110" x2="1620" y2="190"/><line x1="1644" y1="145" x2="1644" y2="155"/><line x1="1668" y1="120" x2="1668" y2="180"/>
+  </g>
+
+  <!-- title -->
+  <text x="100" y="150" font-size="76" font-weight="800" fill="#f2f7f4" letter-spacing="-1">Meeting OS</text>
+  <text x="100" y="205" font-size="30" fill="#b9cfc6">Toplantıyı kaydeder, kim ne dedi bilir, kararları ve görevleri kaynağıyla çıkarır.</text>
+  <text x="100" y="245" font-size="22" fill="#7fa898">Zoom açıkken ⌃⌥R · Türkçe · macOS · bu Mac’te model yüklenmez · hiçbir şey kendiliğinden dışarı gönderilmez</text>
+
+  <!-- pipeline -->
+  <g font-size="22" fill="#f2f7f4">
+    <!-- step boxes -->
+    <g>
+      <rect x="100" y="320" width="290" height="150" rx="18" fill="#1d3b33" stroke="#2f5a4e" stroke-width="2"/>
+      <text x="124" y="358" font-size="15" fill="#7fd6b6" font-weight="700" letter-spacing="2">1 · KAYIT</text>
+      <text x="124" y="395" font-size="24" font-weight="700">⌃⌥R ile başlat</text>
+      <text x="124" y="425" font-size="18" fill="#b9cfc6">Yüzen panel, an işaretleri,</text>
+      <text x="124" y="450" font-size="18" fill="#b9cfc6">Zoom’da otomatik (isteğe bağlı)</text>
+    </g>
+    <line x1="392" y1="395" x2="440" y2="395" stroke="#7fd6b6" stroke-width="3" marker-end="url(#arrow)"/>
+    <g>
+      <rect x="445" y="320" width="290" height="150" rx="18" fill="#1d3b33" stroke="#2f5a4e" stroke-width="2"/>
+      <text x="469" y="358" font-size="15" fill="#7fd6b6" font-weight="700" letter-spacing="2">2 · TRANSKRİPT</text>
+      <text x="469" y="395" font-size="24" font-weight="700">OpenRouter’da Türkçe</text>
+      <text x="469" y="425" font-size="18" fill="#b9cfc6">Konuşmacı ayrımı, yankı atlanır,</text>
+      <text x="469" y="450" font-size="18" fill="#b9cfc6">≈ $0,10 / saat</text>
+    </g>
+    <line x1="737" y1="395" x2="785" y2="395" stroke="#7fd6b6" stroke-width="3" marker-end="url(#arrow)"/>
+    <g>
+      <rect x="790" y="320" width="290" height="150" rx="18" fill="#1d3b33" stroke="#2f5a4e" stroke-width="2"/>
+      <text x="814" y="358" font-size="15" fill="#7fd6b6" font-weight="700" letter-spacing="2">3 · KİŞİ TANIMA</text>
+      <text x="814" y="395" font-size="24" font-weight="700">Bir kez adlandır</text>
+      <text x="814" y="425" font-size="18" fill="#b9cfc6">Ses profili kaydedilir, sonraki</text>
+      <text x="814" y="450" font-size="18" fill="#b9cfc6">toplantılarda kendiliğinden tanır</text>
+    </g>
+    <line x1="1082" y1="395" x2="1130" y2="395" stroke="#7fd6b6" stroke-width="3" marker-end="url(#arrow)"/>
+    <g>
+      <rect x="1135" y="320" width="290" height="150" rx="18" fill="#1d3b33" stroke="#2f5a4e" stroke-width="2"/>
+      <text x="1159" y="358" font-size="15" fill="#7fd6b6" font-weight="700" letter-spacing="2">4 · ÖZET · KARAR · GÖREV</text>
+      <text x="1159" y="395" font-size="24" font-weight="700">Her madde kaynaklı</text>
+      <text x="1159" y="425" font-size="18" fill="#b9cfc6">Alıntıya tıkla, konuşmaya git;</text>
+      <text x="1159" y="450" font-size="18" fill="#b9cfc6">doğrulanamayan alıntı atılır</text>
+    </g>
+    <line x1="1427" y1="395" x2="1475" y2="395" stroke="#7fd6b6" stroke-width="3" marker-end="url(#arrow)"/>
+    <g>
+      <rect x="1480" y="320" width="220" height="150" rx="18" fill="#245346" stroke="#34ad8a" stroke-width="2"/>
+      <text x="1504" y="358" font-size="15" fill="#7fd6b6" font-weight="700" letter-spacing="2">5 · HAFIZA</text>
+      <text x="1504" y="395" font-size="24" font-weight="700">Hafta boyunca</text>
+      <text x="1504" y="425" font-size="18" fill="#b9cfc6">Kararlar, sorular,</text>
+      <text x="1504" y="450" font-size="18" fill="#b9cfc6">beklediklerim, karne</text>
+    </g>
+  </g>
+
+  <!-- three columns -->
+  <g fill="#f2f7f4">
+    <text x="100" y="560" font-size="16" fill="#7fd6b6" font-weight="700" letter-spacing="2">TOPLANTI SIRASINDA</text>
+    <rect x="100" y="575" width="60" height="3" fill="url(#acc)"/>
+    <text x="100" y="620" font-size="21">• Her yerden ⌃⌥R; Zoom öndeyken de</text>
+    <text x="100" y="655" font-size="21">• ⌃⌥M: önemli an, karar, görev işareti</text>
+    <text x="100" y="690" font-size="21">• Yüzen panel: süre, mikrofon/sistem sinyali</text>
+    <text x="100" y="725" font-size="21">• Takvimden başlık ve katılımcı adları</text>
+    <text x="100" y="760" font-size="21">• Uyku/uyanmada kayıt kopmaz, yük vermez</text>
+
+    <text x="650" y="560" font-size="16" fill="#7fd6b6" font-weight="700" letter-spacing="2">TOPLANTIDAN SONRA</text>
+    <rect x="650" y="575" width="60" height="3" fill="url(#acc)"/>
+    <text x="650" y="620" font-size="21">• Belge gibi okunan transkript, dolgular gizli</text>
+    <text x="650" y="655" font-size="21">• Kontrol: yalnız şüpheli yerler, tek tık onay</text>
+    <text x="650" y="690" font-size="21">• Görevler: vade önerisi, Hatırlatıcılar’a tek tık</text>
+    <text x="650" y="725" font-size="21">• Sözlük düzeltmeleri modelce doğrulanır</text>
+    <text x="650" y="760" font-size="21">• PRD, hata raporu, müşteri talebi, paylaşım maskesi</text>
+
+    <text x="1200" y="560" font-size="16" fill="#7fd6b6" font-weight="700" letter-spacing="2">HAFTA BOYUNCA</text>
+    <rect x="1200" y="575" width="60" height="3" fill="url(#acc)"/>
+    <text x="1200" y="620" font-size="21">• Karar defteri, cevapsız soru radarı</text>
+    <text x="1200" y="655" font-size="21">• Beklediklerim: kim ne söz verdi, kaç gündür</text>
+    <text x="1200" y="690" font-size="21">• Toplantı öncesi brifing, hafta özeti</text>
+    <text x="1200" y="725" font-size="21">• Karne: saat, karar, görev, konuşma payı</text>
+    <text x="1200" y="760" font-size="21">• Hafıza: bütün toplantılarda ara, kaynaklı yanıt</text>
+  </g>
+
+  <!-- bottom facts -->
+  <rect x="100" y="840" width="1600" height="2" fill="#2f5a4e"/>
+  <g font-size="20" fill="#b9cfc6">
+    <text x="100" y="905" font-size="40" font-weight="800" fill="#f2f7f4">$0,10</text>
+    <text x="100" y="935">saatlik transkript ücreti</text>
+    <text x="420" y="905" font-size="40" font-weight="800" fill="#f2f7f4">0</text>
+    <text x="420" y="935">Mac’te yüklenen model</text>
+    <text x="740" y="905" font-size="40" font-weight="800" fill="#f2f7f4">1 tık</text>
+    <text x="740" y="935">iki Mac arası güncelleme</text>
+    <text x="1060" y="905" font-size="40" font-weight="800" fill="#f2f7f4">FLAC</text>
+    <text x="1060" y="935">41 dk ≈ 82 MB, 30 günde temizlik</text>
+    <text x="1400" y="905" font-size="40" font-weight="800" fill="#f2f7f4">%0</text>
+    <text x="1400" y="935">boşta CPU; toplantıyı yavaşlatmaz</text>
+  </g>
+  <text x="100" y="1040" font-size="18" fill="#6f9587">macOS · SwiftUI + Python · OpenRouter (MAI-Transcribe 2, gpt-4.1-mini) · Resemblyzer ses profili · iCloud ile sözlük ve teşhis raporları · v1.2.24</text>
+</svg>

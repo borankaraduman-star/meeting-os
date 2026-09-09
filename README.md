@@ -6,6 +6,8 @@ profilleri. Yerel özet, karar, risk, açık soru ve görev çıkarımı; Boran�
 kuyruğu; kaynaklı arşiv araması ve görev taslakları. Varsayılan işleme bu Mac’te
 yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktur.
 
+![Meeting OS tek bakışta](docs/img/tanitim.png)
+
 Tam kullanım kılavuzu: [docs/KULLANIM.md](docs/KULLANIM.md) (bütün özellikler, sekmeler, ayarlar, kısayollar, sınırlar).
 
 ## Bu Mac’te aç
