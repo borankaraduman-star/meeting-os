@@ -41,6 +41,8 @@ struct SidebarView:View {
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(model.recording ? .red:MeetingStyle.accent)
                 .disabled(model.busy && !model.recording)
+                .keyboardShortcut("r",modifiers:.command)   // ⌘R starts or ends the recording without touching the mouse
+                .help(model.recording ? "Kaydı bitir (⌘R)" : "Yeni kayıt (⌘R)")
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
