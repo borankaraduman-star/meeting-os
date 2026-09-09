@@ -89,6 +89,14 @@ class DesktopTests(unittest.TestCase):
    meta=[m for m in dispatch({'action':'snapshot'},db)['meetings'] if m['id']==mid][0]['metadata']
    self.assertEqual((meta['calendar']['title'],meta['calendar']['attendees'],meta['engine']),('Sprint planlama',['Ayşe Yılmaz','Ali'],'openrouter'))
    with self.assertRaises(ValueError):dispatch({'action':'meeting_context','meeting':'yok','calendar':{}},db)
+ def test_snapshot_skips_segments_when_fingerprint_matches(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';s=Store(db);a=s.create_meeting('A',{})
+   s.add_segment(a,Segment(0,5,'x','system','Konuşmacı 1'));s.status(a,'complete');s.close()
+   r=dispatch({'action':'snapshot','meeting':a},db);self.assertEqual(len(r['segments']),1);h=r['segments_hash']
+   r2=dispatch({'action':'snapshot','meeting':a,'segments_hash':h},db);self.assertIsNone(r2['segments']);self.assertEqual(r2['segments_hash'],h)
+   Store(db).correct(a,'Konuşmacı 1','Ayşe')
+   r3=dispatch({'action':'snapshot','meeting':a,'segments_hash':h},db);self.assertEqual(r3['segments'][0]['speaker_name'],'Ayşe');self.assertNotEqual(r3['segments_hash'],h)
  def test_snapshot_carries_per_meeting_stats(self):
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'meeting-os.sqlite';s=Store(db);a=s.create_meeting('A',{});b=s.create_meeting('B',{})

@@ -19,7 +19,9 @@ struct TranscriptView:View {
                 if let notice=TranscriptBlocks.meetingNotice(model.rows) {
                     HStack(spacing:8) {
                         Image(systemName:"info.circle").foregroundStyle(.secondary).help(notice)
-                        Text("Bulut transkript · OpenRouter").font(.caption).foregroundStyle(.secondary).help(notice)
+                        if model.readingMode && model.search.isEmpty, TranscriptBlocks.asideCount(model.blocks)>0 {
+                            Button(model.showAsides ? "\(TranscriptBlocks.asideCount(model.blocks)) kısa onay gösteriliyor" : "\(TranscriptBlocks.asideCount(model.blocks)) kısa onay katlandı") { model.showAsides.toggle() }.buttonStyle(.plain).font(.caption).foregroundStyle(.secondary).help("“hı hı”, “tabii” gibi kısa onaylar paragraf altında gösterilir veya katlanır").accessibilityIdentifier("toggleAsides")
+                        } else { Text("Bulut transkript").font(.caption).foregroundStyle(.secondary).help(notice) }
                         if model.readingMode { Toggle("Dolgu seslerini gizle",isOn:$model.hideFillers).toggleStyle(.checkbox).font(.caption).foregroundStyle(.secondary).help("eee, ııı, yarım kelimeler yalnız okuma görünümünde gizlenir; kayıt ve arama ham metni kullanır").accessibilityIdentifier("toggleFillers") }
                         Spacer()
                         Picker("Görünüm",selection:$model.readingMode) { Text("Okuma").tag(true);Text("Bölümler").tag(false) }.pickerStyle(.segmented).labelsHidden().frame(width:170).accessibilityIdentifier("transcriptViewMode")
@@ -29,14 +31,6 @@ struct TranscriptView:View {
                 let canEdit = model.meeting?.status == "complete"
                 if model.readingMode && model.search.isEmpty && model.focusedSegment == nil {
                     let blocks=model.blocks
-                    if TranscriptBlocks.asideCount(blocks)>0 {
-                        HStack(spacing:8) {
-                            Image(systemName:"text.bubble").foregroundStyle(.secondary)
-                            Text(model.showAsides ? "Kısa onaylar paragraf altında gösteriliyor" : "\(TranscriptBlocks.asideCount(blocks)) kısa onay (“hı hı”, “tabii”) paragraflara katlandı").font(.caption).foregroundStyle(.secondary)
-                            Spacer()
-                            Button(model.showAsides ? "Gizle" : "Göster") { model.showAsides.toggle() }.font(.caption).accessibilityIdentifier("toggleAsides")
-                        }
-                    }
 
                     ForEach(Array(blocks.enumerated()),id:\.element.id) { i,block in
                         if i>0, blocks[i-1].label != block.label { Divider().padding(.leading,62).padding(.vertical,4) }

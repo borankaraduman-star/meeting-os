@@ -74,8 +74,7 @@ struct SidebarView:View {
                         Text(model.markerCount==0 ? "Konuşmayı bölmeden işaretle; kayıt bitince Kontrol sekmesinde sırayla görürsün. ⌘⇧M karar, ⌘⌥M görev, ⌘⌃M sonra bak." : "\(model.markerCount) an işaretlendi · Kontrol sekmesinde görünecek").font(.caption2).foregroundStyle(.secondary)
                     }
                 }
-                VStack(alignment:.leading,spacing:6) {
-                    Text("YAZIYA ÇEVİRME").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
+                DisclosureGroup(isExpanded:$model.showTranscriptionOptions) {
                     Picker("Yazıya çevirme",selection:$model.transcriptionMode) { Text("OpenRouter").tag("openrouter");Text("Yerel model").tag("local") }
                         .pickerStyle(.segmented).labelsHidden().disabled(model.recording || model.busy).accessibilityIdentifier("transcriptionModePicker")
                     if model.transcriptionMode=="openrouter" {
@@ -88,6 +87,8 @@ struct SidebarView:View {
                     } else {
                         Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
                     }
+                } label: {
+                    Text(model.transcriptionMode=="openrouter" ? "OpenRouter · \(model.cloudModels.first { $0.id==model.cloudModel }?.name ?? "model")" : "Yerel model").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }.task { await model.loadCloudModels() }
             }.padding(18)
             HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text(model.filter.isEmpty ? "\(model.meetings.count)" : "\(model.visibleMeetings.count)/\(model.meetings.count)").monospacedDigit().font(.caption) }
@@ -162,7 +163,6 @@ struct DetailView:View {
             }
             if let meeting=model.meeting,meeting.metadata["engine"] as? String=="openrouter" {
                 HStack {
-                    Text("\(meeting.metadata["model"] as? String ?? "") · OpenRouter | Konuşmacı ayrımı bu Mac’te").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if meeting.status != "complete" { Button("İşlemi sürdür") { if meeting.metadata["cloud_mode"] != nil { model.finalizeWithOpenRouter(meeting.id,model:nil) } else { model.showOpenRouter=true } }.disabled(model.busy || meeting.recoveryState=="active") }
                 }.padding(.horizontal,24).padding(.bottom,8)
@@ -371,10 +371,13 @@ struct EditSegmentSheet:View {
 
 struct SettingsSheet:View {
     @ObservedObject var model:Model
+    @AppStorage("settingsSection") private var section="genel"
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
-                Text("Sözlük ve ses profilleri").font(.title2.bold())
+                HStack { Text("Ayarlar").font(.title2.bold()); Spacer(); Text("⌘,").font(.caption.monospaced()).foregroundStyle(.secondary) }
+                Picker("Bölüm",selection:$section) { Text("Genel").tag("genel"); Text("Sözlük ve sesler").tag("sozluk"); Text("Depolama").tag("depolama"); Text("Güncelleme ve raporlar").tag("guncelleme"); Text("Kurulum durumu").tag("durum") }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("settingsSection")
+                if section=="durum" {
                 if !model.setupChecks.isEmpty {
                     VStack(alignment:.leading,spacing:6) {
                         HStack { Text("Kurulum durumu").font(.headline);Spacer();Button("Yenile") { Task { await model.loadSetupStatus() } }.controlSize(.small) }
@@ -390,6 +393,8 @@ struct SettingsSheet:View {
                         Text("Uygulama yoklaması · \(BridgeStats.shared.summary)").font(.caption2).foregroundStyle(.secondary).help("Python köprüsüne yapılan çağrıların süresi; p95 birkaç yüz ms üzerindeyse Mac yavaşlamış demektir")
                     }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
                 }
+                }
+                if section=="sozluk" {
                 Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın.")
                 TextEditor(text:$model.vocabulary).font(.body.monospaced()).frame(height:160).border(.quaternary)
                 Text("Proje sözlüğü (glossary.jsonl)").font(.headline)
@@ -398,6 +403,8 @@ struct SettingsSheet:View {
                     Button("glossary.jsonl içe aktar…") { Task { await model.importGlossary() } }.accessibilityIdentifier("importGlossaryButton")
                     Text("Sözlük üç yerde kullanılır: bulut STT’ye yazım ipucu (etkisi sağlayıcıya bağlı), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham metin hiçbir zaman kendiliğinden değiştirilmez.").font(.caption2).foregroundStyle(.secondary)
                 }
+                }
+                if section=="guncelleme" {
                 if let cost=model.cost, let month=cost["month"] as? [String:Any], let all=cost["all"] as? [String:Any] {
                     VStack(alignment:.leading,spacing:6) {
                         Text("Bulut maliyeti").font(.headline)
@@ -424,6 +431,8 @@ struct SettingsSheet:View {
                     Button("Rapor klasörünü aç") { NSWorkspace.shared.open(URL(fileURLWithPath:model.reportSettings.reportDir)) }
                 }
                 Text("Raporlar yalnız sayı, puan, maliyet, model adı ve hata satırı içerir; iCloud Drive üzerinden diğer Mac’e geçer. Geliştirme oradaki raporlara bakılarak sürer.").font(.caption2).foregroundStyle(.secondary)
+                }
+                if section=="sozluk" {
                 Text("Kaydedilmiş sesler").font(.headline)
                 Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary)
                 if model.profiles.isEmpty {
@@ -432,6 +441,8 @@ struct SettingsSheet:View {
                         Text("Bir transkript bölümünde Düzelt düğmesine basarak temiz bir konuşma örneğinden profil kaydedebilirsiniz.").font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
                 } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
+                }
+                if section=="genel" {
                 Text("Görünüm").font(.headline)
                 HStack(spacing:10) {
                     Picker("Tema",selection:$model.appearance) { Text("Sistem").tag("system"); Text("Açık").tag("light"); Text("Koyu").tag("dark") }.pickerStyle(.segmented).frame(width:220).accessibilityIdentifier("appearancePicker")
@@ -446,7 +457,10 @@ struct SettingsSheet:View {
                 Toggle("Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat, pencere kapanınca 1 dk sonra bitir (elle başlatılan kayıtlara dokunmaz)",isOn:$model.zoomAutoRecord)
                 Toggle("Kayıt sırasında her pencerenin üstünde küçük kayıt paneli göster (süre, an işaretleri, bitir)",isOn:$model.showRecorderPanel)
                 Toggle("Kayıt başlarken takvimdeki toplantının adını başlık yap, katılımcılarını adlandırmada öner (takvim yalnız okunur)",isOn:$model.useCalendar)
+                }
+                if section=="depolama" {
                 if let storage=model.storage { StorageSection(model:model,storage:storage) }
+                }
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
                     Spacer()

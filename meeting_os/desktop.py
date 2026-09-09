@@ -236,7 +236,18 @@ def dispatch(request, db=None):
                 if m['id']!=selected:
                     for key in SNAPSHOT_HEAVY_KEYS: m['metadata'].pop(key,None)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
-            return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(selected)}
+            # Two cheap fingerprints let the app skip the heavy parts of the poll when nothing changed:
+            # segments (full rows) and intelligence (a second bridge call for analysis/tasks/drafts).
+            tables={r[0] for r in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            seg=store.db.execute("SELECT count(*),coalesce(max(id),0),coalesce(total(length(payload)),0),coalesce(group_concat(speaker_name),'') FROM segments WHERE meeting=?",(selected,)).fetchone() if selected else (0,0,0,'')
+            seg_hash=f"{seg[0]}:{seg[1]}:{int(seg[2])}:{hash(seg[3])&0xffffffff}"
+            parts=[]
+            if selected and 'analyses' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(id),0) FROM analyses WHERE meeting=?",(selected,)).fetchone()[0]))
+            if selected and 'tasks' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(updated),'') FROM tasks WHERE meeting=?",(selected,)).fetchone()[0]))
+            if selected and 'drafts' in tables and 'tasks' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(id),'') FROM drafts WHERE task IN (SELECT id FROM tasks WHERE meeting=?)",(selected,)).fetchone()[0]))
+            intel_hash='|'.join(parts)
+            segments=None if request.get('segments_hash')==seg_hash else store.display_segments(selected)
+            return {'meetings':meetings,'profiles':store.profiles(),'segments':segments,'segments_hash':seg_hash,'intel_hash':intel_hash}
         if action=='label_speaker':
             if request.get('enroll'): return store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
             store.correct(request['meeting'],request['speaker'],request['name']); return {'labeled':True,'profile_saved':False}

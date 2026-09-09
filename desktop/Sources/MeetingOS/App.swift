@@ -58,7 +58,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks() } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -204,7 +204,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if wanted != (selected ?? "") { Task { await self.refresh() } }
         }
         do {
-            let result=try await request(["action":"snapshot","meeting":wanted])
+            let result=try await request(["action":"snapshot","meeting":wanted,"segments_hash":wanted==lastSegmentsMeeting ? segmentsHash : ""])
             meetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
             profiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
@@ -231,7 +231,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
-            if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); let changed=rows != nextRows; if changed { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted); if changed, !recording, meeting?.status=="complete" { await loadReview() } }
+            if wanted==selected {
+                var changed=false
+                if let raw=result["segments"] as? [[String:Any]] { let nextRows=raw.map(Row.init); changed=rows != nextRows; if changed { rows=nextRows } }
+                segmentsHash=result["segments_hash"] as? String ?? ""; lastSegmentsMeeting=wanted
+                resolvePendingEvidence()
+                let intel=result["intel_hash"] as? String ?? ""
+                if intel != intelHash || changed || analysis==nil && actions.isEmpty { intelHash=intel; try await refreshIntelligence(wanted) }
+                if changed, !recording, meeting?.status=="complete" { await loadReview() }
+            }
         } catch { self.error=error.localizedDescription }
     }
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
@@ -420,6 +428,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// Sidebar: the transcription mode/model pickers are folded behind one caption line by default.
+    @Published var showTranscriptionOptions=UserDefaults.standard.bool(forKey:"showTranscriptionOptions") { didSet { UserDefaults.standard.set(showTranscriptionOptions,forKey:"showTranscriptionOptions") } }
+    /// Poll fingerprints: rows and intelligence are re-fetched only when the Python side reports a change.
+    var segmentsHash=""; var lastSegmentsMeeting=""; var intelHash=""
     /// Görünüm: "system" | "light" | "dark", and the accent preset key.
     @Published var appearance=UserDefaults.standard.string(forKey:"appearance") ?? "system" { didSet { UserDefaults.standard.set(appearance,forKey:"appearance") } }
     @Published var accentKey=UserDefaults.standard.string(forKey:"accentKey") ?? "green" { didSet { UserDefaults.standard.set(accentKey,forKey:"accentKey"); MeetingStyle.accent=Accents.color(accentKey) } }
