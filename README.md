@@ -115,13 +115,12 @@ Salt okunur MCP bağlantısı için [V1 kullanım rehberi](docs/V1_USAGE.md).
 
 ## Model seçimi ve ölçülmüş kalite
 
-- Canlı STT: **MLX Whisper large-v3-turbo**.
-- Nihai / içe aktarılan ses: **MLX Whisper large-v3**.
-- Konuşma bölgeleri: **Silero VAD**.
-- Nihai konuşmacı ayrımı: **sherpa-onnx, pyannote segmentation 3.0 + TitaNet-small**.
-- Kalıcı kişi eşleştirme: **Resemblyzer**, model sürümüne bağlı SQLite profilleri.
-- Yerel analiz: **Qwen3-4B-Instruct-2507, MLX 4-bit**; JSON yapısı üretim sırasında sınırlandırılır, kaynak alıntıları ayrıca doğrulanır.
-- Whisper CPU, whisper.cpp ve ECAPA karşılaştırma için CLI’de bulunur.
+Varsayılan yol **bulut** (1.2.x, 9 Eylül 2026 kararı): bu Mac’te model yüklenmez, toplantı sırasında yük yoktur.
+
+- Transkript ve konuşmacı ayrımı: **OpenRouter · `microsoft/mai-transcribe-2`** (Opus 32 kbps parçalar, ≈ $0,10/saat; mikrofona düşen hoparlör yankısı yüklenmeden atlanır).
+- Özet / karar / görev: **OpenRouter · `openai/gpt-4.1-mini`**; kaynak alıntıları yerelde doğrulanır, doğrulanamayan atılır.
+- Kalıcı kişi eşleştirme: **Resemblyzer** (tek yerel model, hafif), model sürümüne bağlı SQLite profilleri; eşikler 0,87 / marj 0,05 / öneri 0,83 / otomatik örnek 0,93; `quality replay` ile regresyon (gerçek veri: 16 küme, 14 doğru, 0 yanlış, 2 atlanmış).
+- Yerel yol (MLX Whisper, sherpa-onnx, Silero VAD, Qwen3-4B MLX) CLI’de durur; uygulama artık kullanmaz.
 
 M4 / 16 GB üzerinde 12 Türkçe insan okuma kaydında kelime hata oranı büyük
 modelde **%8,2**, turbo modelde **%11,9** ölçüldü. Bu küçük set gerçek toplantı
