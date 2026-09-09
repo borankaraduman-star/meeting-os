@@ -140,7 +140,7 @@ def parser():
     a=sub.add_parser('handoff'); a.add_argument('task'); a.add_argument('path',type=Path)
     a=sub.add_parser('search'); a.add_argument('query'); a.add_argument('--speaker')
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
-    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
+    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
     dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',default='Boran'); dg.add_argument('--output',type=Path)
     wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',default='Boran'); wt.add_argument('--output',type=Path)
@@ -351,6 +351,9 @@ def main(supervised=False):
             elif args.command=='quality':
                 from . import quality
                 if args.action=='report': output(quality.report(store))
+                elif args.action=='replay':
+                    summary,full=quality.replay(store,args.db.parent,identity=args.identity or not args.text,text=args.text or not args.identity)
+                    output(full if args.json else summary)
                 else:
                     from .openrouter import OpenRouterClient
                     output(quality.compare(store,args.model or ['microsoft/mai-transcribe-2'],OpenRouterClient(max_audio_bytes=24*1024*1024),consent=args.allow_upload,limit=args.limit))

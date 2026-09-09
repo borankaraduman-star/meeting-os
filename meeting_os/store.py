@@ -178,25 +178,13 @@ class Store:
             n = self.db.execute('UPDATE samples SET name=? WHERE name=?', (new_name, name)).rowcount
             self.db.execute('UPDATE segments SET speaker_name=? WHERE speaker_name=?', (new_name, name))
         return {'renamed': n, 'merged': merged}
-    def explain_identity(self, vector, model, limit=5):
-        """Why a voice matched: similarity to every person's centroid and to their nearest sample."""
+    def _scores(self, vector, model, exclude=None):
+        """Every person's blended score for one voice: mean of centroid similarity and best single-sample similarity.
+        `exclude` drops the samples that came from one meeting (replay: a meeting must not vouch for itself)."""
         v = unit(vector); groups = {}
-        for row in self.db.execute('SELECT name,vector FROM samples WHERE model=?', (model,)):
-            x = json.loads(row['vector'])
-            if len(x) == len(v): groups.setdefault(row['name'], []).append(x)
-        scores = []
-        for name, xs in groups.items():
-            try: centroid = unit([sum(col)/len(xs) for col in zip(*xs)])
-            except ValueError: continue
-            best = max(cosine(v, unit(x)) for x in xs)
-            scores.append({'name': name, 'centroid': round(cosine(v, centroid), 3), 'best_sample': round(best, 3), 'score': round((cosine(v, centroid) + best) / 2, 3), 'samples': len(xs)})
-        return sorted(scores, key=lambda s: -s['score'])[:limit]
-    def identify(self, vector, model, threshold=0.80, margin=0.08):
-        """Score = mean of centroid similarity and best single-sample similarity: the centroid is stable,
-        the nearest sample tolerates a person recorded under different conditions."""
-        v = unit(vector)
-        groups = {}
-        for row in self.db.execute('SELECT name,vector FROM samples WHERE model=?', (model,)):
+        sql = 'SELECT name,vector FROM samples WHERE model=?'; args = [model]
+        if exclude: sql += ' AND provenance NOT LIKE ? AND provenance NOT LIKE ?'; args += [f'{exclude}:%', f'auto:{exclude}:%']
+        for row in self.db.execute(sql, args):
             x = json.loads(row['vector'])
             if len(x) == len(v): groups.setdefault(row['name'], []).append(x)
         scores = []
@@ -204,11 +192,18 @@ class Store:
             try: centroid = unit([sum(col)/len(xs) for col in zip(*xs)])
             except ValueError: continue  # contradictory samples cannot identify anyone
             best = max(cosine(v, unit(x)) for x in xs)
-            scores.append(((cosine(v, centroid) + best) / 2, name))
-        scores.sort(reverse=True)
+            scores.append({'name': name, 'centroid': round(cosine(v, centroid), 3), 'best_sample': round(best, 3), 'score': (cosine(v, centroid) + best) / 2, 'samples': len(xs)})
+        return sorted(scores, key=lambda s: -s['score'])
+    def explain_identity(self, vector, model, limit=5):
+        """Why a voice matched: similarity to every person's centroid and to their nearest sample."""
+        return [{**s, 'score': round(s['score'], 3)} for s in self._scores(vector, model)[:limit]]
+    def identify(self, vector, model, threshold=0.80, margin=0.08, exclude=None):
+        """Score = mean of centroid similarity and best single-sample similarity: the centroid is stable,
+        the nearest sample tolerates a person recorded under different conditions."""
+        scores = self._scores(vector, model, exclude)
         if not scores: return {'name': None, 'candidate': None, 'similarity': None, 'margin': None}
-        score, name = scores[0]
-        gap = score - scores[1][0] if len(scores) > 1 else score + 1
+        score, name = scores[0]['score'], scores[0]['name']
+        gap = score - scores[1]['score'] if len(scores) > 1 else score + 1
         return {'name': name if score >= threshold and gap >= margin else None, 'candidate': name, 'similarity': score, 'margin': gap}
     def add_sample_if_new(self, name, vector, model, duration, provenance, cap=8):
         """Self-feeding profiles: one more sample per meeting for a confident match, bounded per person."""

@@ -419,6 +419,21 @@ def link_clusters(store, mid, model_id):
     return changed
 
 
+def linked_centroid(members, model_id):
+    """One vector for a linked speaker: each provider sub-cluster (piece:speaker) is averaged on its own, then the
+    sub-clusters are blended by speaking time, so a 10 s sub-cluster does not outweigh a 4-minute one."""
+    subs={}
+    for r in members: subs.setdefault((r.get('metrics') or {}).get('cluster'),[]).append(r)
+    parts=[]
+    for rows in subs.values():
+        vs=[r['embedding'] for r in rows if r.get('embedding') and r.get('embedding_model')==model_id]
+        if not vs: continue
+        parts.append((sum(r['end']-r['start'] for r in rows) or 1.0,[sum(col)/len(vs) for col in zip(*vs)]))
+    if not parts: return None
+    total=sum(w for w,_ in parts)
+    return [sum(w*v[i] for w,v in parts)/total for i in range(len(parts[0][1]))]
+
+
 IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap
 IDENTITY_MARGIN=0.05
 OVERSPLIT_THRESHOLD=0.93  # a second cluster may share a name only when it is nearly as close as the best one
