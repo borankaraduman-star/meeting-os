@@ -22,7 +22,10 @@ class LiveTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'device gone'): record(binary,root/'capture',1,1,store=db)
             self.assertEqual(db.meetings()[0]['status'],'incomplete')
             db.close()
-    def test_capture_error_stops_helper_and_preserves_audio_without_receipt(self):
+    # Reviewed behaviour changed: audio that reached disk is never withheld. A capture error still winds the
+    # helper down at once, but the meeting now ends provisional with a receipt that carries the error, so the
+    # app can finalize it instead of showing "Kayıt tamamlanamadı" over a folder full of chunks.
+    def test_capture_error_stops_helper_and_hands_over_the_audio_it_saved(self):
         import json,signal,threading,time
         from unittest.mock import patch
         # Removing error-triggered shutdown must fail before the fallback EOF.
@@ -56,8 +59,7 @@ class LiveTests(unittest.TestCase):
                 old_handler=signal.getsignal(signal.SIGINT)
                 started=time.monotonic()
                 with patch('meeting_os.recovery.current_job_metadata',return_value={}),patch('meeting_os.live.subprocess.Popen',return_value=helper),patch('meeting_os.live.open_lifeline',return_value=(None,None)),patch('meeting_os.live.close_lifeline') as close,patch('meeting_os.live.signal.signal') as handler,patch('meeting_os.live.CAPTURE_STOP_GRACE_SECONDS',.05):
-                    with self.assertRaisesRegex(RuntimeError,'device gone'):
-                        record('/fake',root/'capture',60,12,store=db,pipeline_factory=warmed,result_path=receipt)
+                    record('/fake',root/'capture',60,12,store=db,pipeline_factory=warmed,result_path=receipt)
                 self.assertLess(time.monotonic()-started,.6)
                 self.assertEqual(helper.signals,[signal.SIGINT])
                 self.assertEqual(helper.killed,not graceful)
@@ -66,8 +68,9 @@ class LiveTests(unittest.TestCase):
                 journal=(root/'capture/events.jsonl').read_text()
                 self.assertIn('saved.wav',journal);self.assertIn('tail.wav',journal)
                 self.assertIn('device gone',journal)
-                self.assertFalse(receipt.exists())
-                self.assertEqual(db.meetings()[0]['status'],'incomplete');db.close()
+                result=json.loads(receipt.read_text())
+                self.assertEqual(result['status'],'provisional');self.assertIn('device gone',result['errors'])
+                self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
     def test_model_warmup_failure_leaves_recoverable_meeting(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t); binary=self.recorder(root,'{"event":"started"}')
@@ -236,18 +239,21 @@ class SupervisedHelperTests(unittest.TestCase):
             self.assertEqual(relaunch[0]['start_offset'],0.0)   # nothing was captured, so nothing is skipped
             self.assertTrue((root/'capture/relaunched').exists())
             self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
-    def test_exhausted_relaunch_budget_surfaces_the_error_and_keeps_the_audio(self):
+    # Reviewed behaviour changed: an exhausted relaunch budget with audio on disk used to raise, so no receipt
+    # was written and nothing ever picked the meeting up again. The complaint now rides the receipt instead.
+    def test_exhausted_relaunch_budget_keeps_the_audio_and_hands_it_over(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);binary=self.helper(root,{'chunks':1,'chunks_after':0,'exit':4})
             db=Store(root/'db');receipt=root/'receipt.json'
             with patch('meeting_os.live.RELAUNCH_MIN_UPTIME_SECONDS',0),patch('meeting_os.live.RELAUNCH_WAIT_SECONDS',.01),\
                  patch('meeting_os.live.RELAUNCH_LIMIT',2):
-                with self.assertRaisesRegex(RuntimeError,'2 kez yeniden başlatıldı'):
-                    record(binary,root/'capture',600,12,store=db,result_path=receipt)
+                record(binary,root/'capture',600,12,store=db,result_path=receipt)
             self.assertEqual(len([e for e in self.journal(root) if e.get('event')=='relaunch']),2)
-            self.assertEqual(db.meetings()[0]['status'],'incomplete')
-            self.assertFalse(receipt.exists())
+            self.assertEqual(db.meetings()[0]['status'],'provisional')
+            import json as _json;result=_json.loads(receipt.read_text())
+            self.assertEqual(result['status'],'provisional');self.assertEqual(result['finalized_chunks'],1)
+            self.assertTrue(any('2 kez yeniden başlatıldı' in e for e in result['errors']))
             self.assertEqual((root/'capture/mic-000000.wav').read_bytes(),b'audio')   # captured audio is never touched
             self.assertEqual(len([e for e in self.journal(root) if e.get('event')=='chunk']),1);db.close()
     def test_startup_failure_is_reported_instead_of_relaunched(self):

@@ -34,7 +34,8 @@ class CorrectionMemoryTests(unittest.TestCase):
             self.assertEqual((r['segments'],r['fixes']),(1,2))
             row=next(x for x in db.segments(m3) if x['id']==s1)
             self.assertEqual(row['text'],'Splendo ve Splendo, ama Spilendoya değil.')
-            self.assertIn('auto_corrected',row['flags']); self.assertEqual(row['original_text'],'Spilendo ve spilendo, ama Spilendoya değil.')
+            self.assertIn('auto_corrected',row['flags']); self.assertEqual(row['pre_auto_text'],'Spilendo ve spilendo, ama Spilendoya değil.')
+            self.assertIsNone(row.get('original_text'))   # original_text belongs to the user's own edits
             self.assertEqual(cm.apply_rules(db,m3)['fixes'],0)   # idempotent
             self.assertEqual(cm.revert(db,m3,s1)['reverted'],1)
             row=next(x for x in db.segments(m3) if x['id']==s1)
@@ -43,6 +44,34 @@ class CorrectionMemoryTests(unittest.TestCase):
             cm.accept_rule(db,'Spilendo'); self.assertEqual(len(cm.learned_rules(db)),1)
             self.assertEqual(cm.apply_rules(db,m3)['segments'],1)
             self.assertEqual(next(x for x in db.segments(m3) if x['id']==s2)['text'],'Alakasız cümle')
+            db.close()
+    def test_revert_gives_back_the_manual_edit_not_the_asr_text(self):
+        """The user fixed a segment by hand, the automatic pass then ran over it. Undoing the automatic fix
+        must return the sentence the user wrote — sharing `original_text` returned the raw ASR text instead."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db,m1,m2,m3=self._store(tmp)
+            self._edit(db,m1,'Spilendo ekibi','Splendo ekibi'); self._edit(db,m2,'spilendo sürümü','Splendo sürümü')
+            sid=db.add_segment(m3,Segment(0,5,'Yarın spilendo demusu var','system','system:S1'))
+            db.correct_text(m3,sid,'Yarın spilendo demosu var')   # the user's own edit: demusu → demosu
+            self.assertEqual(cm.apply_rules(db,m3)['fixes'],1)
+            row=next(x for x in db.segments(m3) if x['id']==sid)
+            self.assertEqual(row['text'],'Yarın Splendo demosu var')
+            cm.revert(db,m3,sid)
+            row=next(x for x in db.segments(m3) if x['id']==sid)
+            self.assertEqual(row['text'],'Yarın spilendo demosu var')      # the manual edit survives
+            self.assertEqual(row['original_text'],'Yarın spilendo demusu var')
+            db.close()
+    def test_capitalization_follows_turkish_letters(self):
+        self.assertEqual(cm._upper_first('istanbul'),'İstanbul')
+        self.assertEqual(cm._upper_first('ışık'),'Işık')
+        self.assertEqual(cm._upper_first('splendo'),'Splendo')
+        self.assertEqual(cm._upper_first(''),'')
+        with tempfile.TemporaryDirectory() as tmp:
+            db,m1,m2,m3=self._store(tmp)
+            self._edit(db,m1,'burada istinbul var','burada istanbul var'); self._edit(db,m2,'yine istinbul geldi','yine istanbul geldi')
+            sid=db.add_segment(m3,Segment(0,5,'Istinbul toplantısı','system','system:S1'))
+            cm.apply_rules(db,m3)
+            self.assertEqual(next(x for x in db.segments(m3) if x['id']==sid)['text'],'İstanbul toplantısı')
             db.close()
     def test_glossary_proposals(self):
         rules=[{'original':'Spilendo','replacement':'Splendo','count':2,'meetings':2},{'original':'foo','replacement':'bar','count':2,'meetings':2}]

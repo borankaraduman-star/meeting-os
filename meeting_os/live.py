@@ -22,7 +22,7 @@ RELAUNCH_MIN_UPTIME_SECONDS = 20.0
 STALL_MARGIN_SECONDS = 20.0           # added to 2*chunk_seconds before a silent-but-alive helper is replaced
 RECORDING_HEARTBEAT_SECONDS = 60.0
 
-def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None, result_path=None, data_dir=None):
+def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None, result_path=None, data_dir=None, cloud=False):
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     if (directory/'events.jsonl').exists(): raise ValueError('Use a new capture directory; existing recordings are never overwritten')
@@ -34,16 +34,18 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     pending=queue.Queue(); errors=[]; captured=[0]; preview_failed=0
     capture_failed=threading.Event()
     from .recovery import current_job_metadata
-    mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True}) if store else None
+    mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True,
+        **({'cloud_intent':'capture'} if cloud else {})}) if store else None   # marker only: finalize still writes cloud_mode
     relaunches=0; relaunched_at=[]; last_end=0.0; last_chunk_at=None; per_source={}
     process=None; guardian=None; lifeline=None; thread=None; launched_at=0.0; error_mark=0; marker=None
+    last_beat=0.0   # read by the finally; must exist before the first thing that can fail (model warm-up)
     def completed(status):
         if result_path is not None:
             target=Path(result_path);temp=None
             try:
                 with tempfile.NamedTemporaryFile(mode='w',dir=target.parent,prefix='.meeting-os-record-',delete=False) as out:
                     temp=Path(out.name)
-                    json.dump({'meeting':mid,'capture_dir':str(directory),'status':status,'finalized_chunks':captured[0],'preview_failed_chunks':preview_failed,'relaunches':relaunches},out)
+                    json.dump({'meeting':mid,'capture_dir':str(directory),'status':status,'finalized_chunks':captured[0],'preview_failed_chunks':preview_failed,'relaunches':relaunches,'errors':errors[:8]},out,ensure_ascii=False)
                     out.flush();os.fsync(out.fileno())
                 temp.replace(target)
             finally:
@@ -84,9 +86,12 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             if child.poll() is None: child.send_signal(signal.SIGTERM)
         finally: pending.put(sentinel)
     def attach(offset):
+        """`offset is None` is the first launch. Any number — 0.0 included — is a relaunch, and the helper is
+        told so by the presence of --start-offset, not by its value: a helper that stalls before its first
+        chunk hands back 0.000 seconds, and that meeting must still be recoverable."""
         nonlocal process,guardian,lifeline,thread,launched_at,error_mark,marker
-        command=[binary,'--output',str(directory),'--seconds',str(seconds if not offset else max(1.0,float(seconds)-offset)),'--chunk-seconds',str(chunk_seconds)]
-        if offset: command+=['--start-offset',f'{offset:.3f}']
+        command=[binary,'--output',str(directory),'--seconds',str(seconds if offset is None else max(1.0,float(seconds)-offset)),'--chunk-seconds',str(chunk_seconds)]
+        if offset is not None: command+=['--start-offset',f'{offset:.3f}']
         process=subprocess.Popen(command,stdout=subprocess.PIPE,text=True,start_new_session=True)
         guardian,lifeline=open_lifeline(process)
         launched_at=time.monotonic(); error_mark=len(errors); marker=object()   # end-of-stdout token for this helper only
@@ -102,7 +107,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         try: process.stdout.close()
         except Exception: pass
         close_lifeline(guardian,lifeline); guardian=lifeline=None   # the outer cleanup must not close this pipe twice
-    try: attach(0)
+    try: attach(None)
     except Exception:
         if store: store.status(mid,'failed')
         raise
@@ -158,11 +163,11 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             'last_chunk_age_seconds':None if last_chunk_at is None else round(time.monotonic()-last_chunk_at,1),
             **{k:health[k] for k in ('restarts','wakes','gap_seconds','wake_gap_seconds')}})
     signal.signal(signal.SIGINT,stop)
+    outcome=None   # the receipt status, decided by the normal path and written by the finally whatever happens
     try:
         # Capture and its durable journal start before expensive model warm-up.
         if pipeline_factory is not None: pipeline=pipeline_factory()
         if hasattr(pipeline,"cancel_requested"):pipeline.cancel_requested=lambda:stopping
-        last_beat=0.0
         while True:
             # A failed helper can leave stdout open. Give it the same bounded
             # shutdown and finalized-chunk drain as an explicit user stop.
@@ -215,12 +220,17 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             process.kill(); code=process.wait(); errors.append('Capture did not exit')
         if stopping and not errors and captured[0]==0 and code in (0,-2,-15):
             if store: store.status(mid,'canceled')
-            return completed('canceled')
-        if code: errors.append(f'Capture exited {code}')
-        if store: store.status(mid,'incomplete' if errors else 'provisional')
-        if errors: raise RuntimeError('; '.join(errors))
+            outcome='canceled'
+        else:
+            if code: errors.append(f'Capture exited {code}')
+            # Audio on disk outranks a supervisor complaint. A recording that produced chunks is provisional and
+            # finalizable whatever else went wrong, so it reaches the app as a receipt (with its errors) and a
+            # zero exit; only a capture that produced nothing at all is a failure the user has to be told about.
+            if store: store.status(mid,'provisional' if captured[0] else 'incomplete')
+            outcome='provisional' if captured[0] else 'incomplete'
+            if errors and not captured[0]: raise RuntimeError('; '.join(errors))
     except BaseException:
-        if store: store.status(mid,'incomplete')
+        if store and outcome is None: store.status(mid,'incomplete')
         raise
     finally:
         signal.signal(signal.SIGINT,old_handler)
@@ -233,4 +243,8 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         if data_dir is not None and last_beat:
             from .reports import clear_recording_heartbeat
             clear_recording_heartbeat(data_dir)   # never leave a line claiming a meeting is still being taped
-    return completed('provisional')
+        # Leave a receipt whenever there is audio, even when the supervisor is dying: without it the app shows
+        # "Kayıt tamamlanamadı", nothing auto-finalizes and retry_candidates never learns the meeting exists.
+        # A capture that produced nothing has nothing to hand over and stays a plain error.
+        if captured[0] or outcome=='canceled': completed(outcome or 'provisional')
+    return mid

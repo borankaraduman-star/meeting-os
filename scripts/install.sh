@@ -50,19 +50,33 @@ MEETING_OS_PYTHON="$(command -v python3.12)"; export MEETING_OS_PYTHON
 if [ ! -f build/signing-identity.json ] && [ -z "${MEETING_OS_SIGNING_IDENTITY:-}" ]; then
   identities="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | grep -c ') [0-9A-F]\{40\} ' || true)"
   if [ "$identities" = 0 ]; then
-    # No certificate at all (a fresh Mac): make one self-signed code-signing identity in the login keychain.
-    # The trust step opens one macOS password dialog; that is the only interactive part of the whole install.
-    echo "Kod imzalama sertifikası yok; 'Meeting OS Local' adıyla kendinden imzalı bir tane oluşturuluyor (macOS bir kez parola soracak)…"
+    keychain="$HOME/Library/Keychains/login.keychain-db"
     certdir="$(mktemp -d -t meeting-os-cert)"
-    (
-      cd "$certdir" &&
-      openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Meeting OS Local/O=Meeting OS" -keyout key.pem -out cert.pem \
-        -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=critical,codeSigning" -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1 &&
-      { openssl pkcs12 -export -inkey key.pem -in cert.pem -out id.p12 -passout pass:meetingos -legacy >/dev/null 2>&1 || openssl pkcs12 -export -inkey key.pem -in cert.pem -out id.p12 -passout pass:meetingos >/dev/null 2>&1; } &&
-      security import id.p12 -k "$HOME/Library/Keychains/login.keychain-db" -P meetingos -T /usr/bin/codesign -T /usr/bin/security >/dev/null &&
-      security add-trusted-cert -r trustRoot -p codeSign -k "$HOME/Library/Keychains/login.keychain-db" cert.pem
-    ) || echo "Sertifika kendiliğinden oluşturulamadı; aşağıdaki elle adımı uygulayın." >&2
+    # An earlier run whose trust dialog was cancelled left the certificate imported but untrusted, so
+    # find-identity still reports 0. Importing a second one would make "Meeting OS Local" ambiguous and this
+    # step would fail forever: if the certificate is already there, only the trust step is repeated.
+    if /usr/bin/security find-certificate -c 'Meeting OS Local' -Z "$keychain" >/dev/null 2>&1; then
+      echo "'Meeting OS Local' sertifikası zaten var ama güvenilir değil; yalnızca güven adımı yineleniyor (macOS parola soracak)…"
+      ( /usr/bin/security find-certificate -c 'Meeting OS Local' -p "$keychain" > "$certdir/cert.pem" &&
+        security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$certdir/cert.pem"
+      ) || echo "Sertifikaya güven verilemedi; aşağıdaki elle adımı uygulayın." >&2
+    else
+      # No certificate at all (a fresh Mac): make one self-signed code-signing identity in the login keychain.
+      # The trust step opens one macOS password dialog; that is the only interactive part of the whole install.
+      echo "Kod imzalama sertifikası yok; 'Meeting OS Local' adıyla kendinden imzalı bir tane oluşturuluyor (macOS bir kez parola soracak)…"
+      (
+        cd "$certdir" &&
+        openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Meeting OS Local/O=Meeting OS" -keyout key.pem -out cert.pem \
+          -addext "keyUsage=critical,digitalSignature" -addext "extendedKeyUsage=critical,codeSigning" -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1 &&
+        { openssl pkcs12 -export -inkey key.pem -in cert.pem -out id.p12 -passout pass:meetingos -legacy >/dev/null 2>&1 || openssl pkcs12 -export -inkey key.pem -in cert.pem -out id.p12 -passout pass:meetingos >/dev/null 2>&1; } &&
+        security import id.p12 -k "$keychain" -P meetingos -T /usr/bin/codesign -T /usr/bin/security >/dev/null &&
+        security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" cert.pem
+      ) || echo "Sertifika kendiliğinden oluşturulamadı; aşağıdaki elle adımı uygulayın." >&2
+    fi
     rm -rf "$certdir"
+    # Anahtar zinciri erişimini parolasız açamayız (set-key-partition-list Mac parolasını ister), bu yüzden
+    # derleme sırasında imzalama izni penceresi bir-iki kez çıkacak. Orada "Her Zaman İzin Ver"i seçin.
+    echo "Not: Derleme sırasında macOS 'anahtar zincirine erişmek istiyor' diye soracak. 'Her Zaman İzin Ver'i seçin; bir daha sormaz."
     identities="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | grep -c ') [0-9A-F]\{40\} ' || true)"
   fi
   if [ "$identities" != 1 ]; then

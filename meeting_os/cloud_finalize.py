@@ -61,6 +61,18 @@ def note_cloud_failure(store, mid, exc):
     return meta['cloud_error']
 
 
+def note_cloud_cancel(store, mid):
+    """The user stopped this job (⌘. or quit). It leaves no `cloud_error`, so without a mark of its own the
+    idle queue would read a plain `incomplete` meeting and restart the upload ten minutes later — work the
+    user just refused. The mark is cleared the moment they start a finalize by hand."""
+    row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
+    if not row: return None
+    meta=json.loads(row['metadata'] or '{}')
+    meta['cloud_canceled']=True
+    with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),mid))
+    return True
+
+
 def pieces(duration, length):
     if not math.isfinite(duration) or duration<=0: raise ValueError('Ses süresi geçersiz')
     result=[];start=0.0
@@ -526,10 +538,13 @@ def compact_capture(store, mid):
     full={k:Path(v) for k,v in paths.items() if isinstance(v,str)}
     if not full or not all(f.is_file() and f.stat().st_size>0 for f in full.values()): return 0
     freed=0;removed=0
-    for chunk in directory.glob('*-[0-9][0-9][0-9][0-9][0-9][0-9].wav'):
-        if chunk.resolve() in {f.resolve() for f in full.values()}: continue
-        try: freed+=chunk.stat().st_size;chunk.unlink();removed+=1
-        except OSError: pass
+    # `*.partial.wav` is a chunk the helper was still writing when it was killed. Its audio is in the assembled
+    # *-full.wav either way, and nothing else ever sweeps it, so it stayed on disk for the life of the meeting.
+    for pattern in ('*-[0-9][0-9][0-9][0-9][0-9][0-9].wav','*-[0-9][0-9][0-9][0-9][0-9][0-9].partial.wav'):
+        for chunk in directory.glob(pattern):
+            if chunk.resolve() in {f.resolve() for f in full.values()}: continue
+            try: freed+=chunk.stat().st_size;chunk.unlink();removed+=1
+            except OSError: pass
     if removed:
         meta['chunks_removed']=removed;meta['chunks_freed_bytes']=freed
         with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),mid))
@@ -571,7 +586,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         if not mode:
             with store.db: store.db.execute('DELETE FROM segments WHERE meeting=?',(mid,))  # provisional live text is replaced by the cloud transcript
         metadata.update({'engine':'openrouter','model':model,'cloud_mode':mode or 'capture','cloud_upload_authorized':True,'paths':sources,'provisional':False})
-        metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None)   # an attempt is under way; the old verdict is stale
+        metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_canceled',None)   # an attempt is under way; the old verdict is stale
         if capture and mode!='file': metadata['markers']=read_markers(capture)
         metadata.update(current_job_metadata())
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
@@ -604,4 +619,5 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             store.status(mid,'incomplete')
             # A deliberate stop (⌘. / quit) is not a cloud failure and must not schedule an unwanted retry.
             if isinstance(exc,Exception): note_cloud_failure(store,mid,exc)
+            else: note_cloud_cancel(store,mid)   # KeyboardInterrupt/SystemExit: the user's decision, not a retryable failure
             raise
