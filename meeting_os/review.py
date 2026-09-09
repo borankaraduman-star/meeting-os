@@ -12,15 +12,15 @@ def review_queue(store, mid):
         excerpt=(r.get('text') or '')[:120]
         base={'segment_id':r['id'],'start':r['start'],'speaker':r.get('speaker_name') or r.get('speaker'),'text':excerpt}
         if identity.get('suggested') and not r.get('speaker_name'):
-            if (cluster,'suggest') in seen_clusters: continue
-            seen_clusters.add((cluster,'suggest'))
+            if (r['speaker'],'suggest') in seen_clusters: continue
+            seen_clusters.add((r['speaker'],'suggest'))
             items.append({**base,'kind':'suggested_name','severity':1,'reason':f"Ses profili “{identity['suggested']}” kişisine benziyor (benzerlik {identity.get('similarity',0):.2f}); tek tıkla onaylayın veya düzeltin",'suggested':identity['suggested'],'speaker_key':r['speaker']})
             continue
         if 'speaker_ambiguous' in r['flags']:
             items.append({**base,'kind':'ambiguous','severity':1,'reason':'Çakışan konuşma; sağlayıcı iki kişiyi ayıramadı'});continue
-        if 'cloud_diarization' in r['flags'] and not r.get('speaker_name') and cluster is not None and (cluster,'unnamed') not in seen_clusters:
-            total=sum(x['end']-x['start'] for x in rows if (x.get('metrics') or {}).get('cluster')==cluster)
-            seen_clusters.add((cluster,'unnamed'))
+        if 'cloud_diarization' in r['flags'] and not r.get('speaker_name') and cluster is not None and (r['speaker'],'unnamed') not in seen_clusters:
+            total=sum(x['end']-x['start'] for x in rows if x['speaker']==r['speaker'] and x['source']==r['source'])   # linked clusters share one label
+            seen_clusters.add((r['speaker'],'unnamed'))
             sim=identity.get('similarity')
             why=f"Kayıtlı profillere yeterince benzemedi (en yakın {identity.get('candidate')} {sim:.2f})" if sim else 'Bu ses için kayıtlı profil yok'
             items.append({**base,'kind':'unnamed_speaker','severity':2,'reason':f'İsimsiz konuşmacı, toplam {total:.0f} sn · {why}','speaker_key':r['speaker']})
