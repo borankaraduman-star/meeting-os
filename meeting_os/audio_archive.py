@@ -32,9 +32,10 @@ def archive_file(src, dst=None):
     return dst, before - dst.stat().st_size
 
 
-def archive_meeting(store, mid):
-    """Archive every `paths` entry of a completed meeting; metadata paths are rewritten. Returns bytes saved."""
-    row = store.db.execute('SELECT status,metadata FROM meetings WHERE id=?', (mid,)).fetchone()
+def archive_meeting(store, mid, row=None):
+    """Archive every `paths` entry of a completed meeting; metadata paths are rewritten. Returns bytes saved.
+    A caller that already holds the meeting row passes it in rather than making the database find it again."""
+    if row is None: row = store.db.execute('SELECT status,metadata FROM meetings WHERE id=?', (mid,)).fetchone()
     if not row or row['status'] != 'complete': return 0
     meta = json.loads(row['metadata'] or '{}'); paths = meta.get('paths') or {}
     saved = 0; changed = False
@@ -56,6 +57,6 @@ def archive_all(store):
     total = 0; count = 0
     for m in store.meetings():
         if m['status'] != 'complete': continue
-        gain = archive_meeting(store, m['id'])
+        gain = archive_meeting(store, m['id'], m)
         if gain: total += gain; count += 1
     return {'meetings': count, 'bytes': total}
