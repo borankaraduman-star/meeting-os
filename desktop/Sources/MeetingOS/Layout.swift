@@ -120,7 +120,7 @@ struct SidebarView:View {
                     .accessibilityIdentifier("diagnosticsButton")
                     .accessibilityLabel("Tanılama raporu kaydet")
                 Divider()
-                Button { Task { await model.settings() } } label:{ Label("Sözlük ve ses profilleri",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }
+                Button { Task { await model.settings() } } label:{ Label("Sözlük ve ses profilleri",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.keyboardShortcut(",",modifiers:.command).help("Ayarlar (⌘,)")
                     .buttonStyle(.plain).font(.callout).frame(minHeight:28)
                     .accessibilityIdentifier("settingsButton")
                     .accessibilityLabel("Ayarlar: sözlük ve ses profilleri")
