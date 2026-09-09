@@ -220,6 +220,7 @@ def identify_clusters(store, mid, sources, embedder=None):
             if not parts: continue
             r['embedding']=[sum(col)/len(parts) for col in zip(*parts)];r['embedding_model']=embedder.model_id;embedded+=1
             with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
+    embedded+=embed_short_clusters(store,mid,sources,embedder)
     named=0
     clusters={}
     for r in store.segments(mid):
@@ -239,6 +240,44 @@ def identify_clusters(store, mid, sources, embedder=None):
             with store.db: store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(name,json.dumps(r,ensure_ascii=False),r['id'],mid))
         if name: named+=len(members)
     return {'embedded':embedded,'named':named}
+
+
+CLUSTER_MIN_SECONDS=2.0   # concatenated back-channels; the embedder accepts ≥1 s, the margin rule guards weak vectors
+CLUSTER_MAX_SECONDS=60.0
+
+def embed_short_clusters(store, mid, sources, embedder):
+    """Back-channel speakers (“hı hı”, “aynen”) never reach 3 s in one turn. Their cluster's pieces are
+    concatenated into one private snapshot and embedded once, so the cluster can still be matched or enrolled."""
+    import tempfile
+    clusters={}
+    for r in store.segments(mid):
+        cl=(r.get('metrics') or {}).get('cluster')
+        if cl is not None and 'cloud_diarization' in r['flags'] and r['source'] in sources: clusters.setdefault((r['source'],cl),[]).append(r)
+    count=0
+    for (source,cl),members in clusters.items():
+        if any(r.get('embedding') for r in members): continue
+        total=sum(r['end']-r['start'] for r in members)
+        if total<CLUSTER_MIN_SECONDS: continue
+        with sf.SoundFile(sources[source]) as f:
+            pieces=[];kept=0.0
+            for r in sorted(members,key=lambda r:r['start']):
+                a=max(0,round(r['start']*f.samplerate));b=min(f.frames,round(r['end']*f.samplerate))
+                if b<=a: continue
+                f.seek(a);pieces.append(f.read(b-a,dtype='float32'));kept+=(b-a)/f.samplerate
+                if kept>=CLUSTER_MAX_SECONDS: break
+        if not pieces or kept<CLUSTER_MIN_SECONDS: continue
+        audio=np.concatenate(pieces)
+        with tempfile.TemporaryDirectory(prefix='meeting-os-cluster-') as tmp:
+            snapshot=Path(tmp)/'cluster.wav';sf.write(snapshot,audio,16000,subtype='FLOAT')
+            with contextlib.redirect_stdout(__import__('sys').stderr):
+                vectors=embedder.embed_file(str(snapshot),[(0,len(audio))])
+        vector=vectors[0] if vectors else None
+        if vector is None: continue
+        for r in members:
+            r['embedding']=vector;r['embedding_model']=embedder.model_id;r.setdefault('metrics',{})['cluster_embedding']=round(kept,2)
+            with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
+        count+=1
+    return count
 
 
 IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap

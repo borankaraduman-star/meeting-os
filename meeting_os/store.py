@@ -112,10 +112,10 @@ class Store:
         if not name: raise ValueError('Name cannot be empty')
         rows=[r for r in self.segments(mid) if r['speaker']==speaker]
         if not rows: raise ValueError('Speaker not found in meeting')
-        voiced=[r for r in rows if r.get('embedding') and r['end']-r['start']>=3 and 'speaker_ambiguous' not in r['flags']]
+        voiced=[r for r in rows if r.get('embedding') and (r['end']-r['start']>=3 or (r.get('metrics') or {}).get('cluster_embedding')) and 'speaker_ambiguous' not in r['flags']]
         model=voiced[0]['embedding_model'] if voiced else None
         vectors=[unit(r['embedding']) for r in voiced if r['embedding_model']==model]
-        duration=sum(r['end']-r['start'] for r in voiced)
+        duration=sum(r['end']-r['start'] for r in rows if 'speaker_ambiguous' not in r['flags'])  # cluster-level samples pool every short turn
         provenance=f'{mid}:speaker:{speaker}'
         with self.db:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))

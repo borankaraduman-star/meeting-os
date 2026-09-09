@@ -217,3 +217,34 @@ class EchoAnalysisTests(unittest.TestCase):
             self.assertIn("'possible_echo' not in r['flags']",src)
             rows=[r for r in store.display_segments(mid) if 'possible_echo' not in r['flags']]
             self.assertEqual([r['source'] for r in rows],['system']);store.close()
+
+class BackchannelClient(FakeClient):
+    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+        self.calls.append({'diarize':diarize})
+        return {'text':'x','usage':{'seconds':8},'segments':[{'start':0.0,'end':4.0,'text':'Uzun konuşma.','speaker':'0'},{'start':4.0,'end':5.5,'text':'Hı hı.','speaker':'1'},
+                {'start':5.5,'end':6.0,'text':'Devam.','speaker':'0'},{'start':6.0,'end':8.0,'text':'Aynen öyle.','speaker':'1'}]}
+
+class SnapshotEmbedder:
+    model_id='resemblyzer:test'
+    def __init__(self):self.calls=[]
+    def embed_file(self,path,spans):
+        self.calls.append((str(path),spans))
+        return [[0.0,1.0] if 'cluster' in str(path) else [1.0,0.0] for _ in spans]
+
+class ShortClusterTests(unittest.TestCase):
+    def test_backchannel_cluster_is_embedded_from_concatenated_pieces_and_enrollable(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);db=Path(tmp)/'db.sqlite';store=Store(db)
+            store.enroll('Sağ üst',[0.0,1.0],'resemblyzer:test',10.0,'earlier')
+            mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            emb=SnapshotEmbedder();finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=BackchannelClient(),embedder=emb)
+            rows=store.segments(mid)
+            short=[r for r in rows if r['speaker']=='Konuşmacı 2']
+            self.assertEqual(len(short),2);self.assertTrue(all(r['embedding']==[0.0,1.0] for r in short))
+            self.assertEqual([r['speaker_name'] for r in short],['Sağ üst','Sağ üst'])
+            self.assertEqual(short[0]['metrics']['cluster_embedding'],3.5)
+            self.assertTrue(any('cluster.wav' in c[0] for c in emb.calls))
+            store.close()
+            result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Sağ üst','enroll':True},db)
+            self.assertTrue(result['profile_saved']);self.assertAlmostEqual(result['seconds'],3.5)

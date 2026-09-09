@@ -467,3 +467,7 @@ Kullanıcı bir konuşmacıyı adlandırınca uygulama yine 100% CPU ile dondu; 
 ## 2026-09-09 — Kullanıcı teyidi: yankı satırı aynı kişi, kısa küme Gözlük’tü
 
 Kullanıcı: mikrofon “yankı” satırı Sağ üst’ün aynı konuşması; Konuşmacı 2 gerçekte Gözlük. Düzeltmeler: (1) yankı satırları varsayılan gizli, “N mikrofon yankısı bölümü gizlendi · Göster” satırıyla açılabilir (`CloudTranscription.visibleRows`); (2) eşik 0.88→0.87 (gerçek veri: farklı kişiler ≤0.853, teyitli aynı kişi 0.878; marj 0.05 korunuyor); (3) 4:06 K2 kullanıcı adına Gözlük olarak adlandırıldı ve 5.1 s’lik ikinci örnek profile eklendi (Gözlük artık 2 örnek; identify merkez vektörü kullanır). 50 Swift testi geçti.
+
+## 2026-09-09 — Kısa onay kümeleri isimsiz kalıyordu (4:15 kaydı)
+
+4:15 kaydında Gözlük 0.937 ile tanındı; Konuşmacı 2/3 yalnız kısa onaylardan (“Hı hı”, “Aynen”, 0.1–2.6 s) oluştuğu için hiçbir parça 3 s eşiğini geçmedi, vektör çıkmadı, kümeler isimsiz kaldı; kullanıcı bunları “yeni konuşmacı” sandı. Düzeltme: `embed_short_clusters` — vektörsüz kümenin parçaları (≥2 s toplam, ≤60 s) tek özel anlık dosyada birleştirilip bir kez gömülüyor; vektör kümenin tüm parçalarına yazılıyor (`metrics.cluster_embedding`), `enroll_speaker` bu kümeleri kabul ediyor. Gerçek sonuç: K2 (5.1 s) → Sağ üst 0.891/marj 0.065 otomatik; K3 (2.999 s) → en yakın Sol Üst 0.852, eşik altı, kullanıcı beyanıyla (Gözlük/Sağ üst/Sol Üst) elenerek elle Sol Üst etiketlendi (3 s altı olduğu için profil örneği eklenmedi). Python-only; yeniden kurulum gerekmedi. Testler: cloud_finalize 17 geçti.
