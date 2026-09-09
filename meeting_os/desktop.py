@@ -167,7 +167,8 @@ def delete_meeting(store, mid, data_dir):
     for folder in folders:
         if folder.is_dir() and not folder.is_symlink():
             shutil.rmtree(folder,ignore_errors=True); removed.append(str(folder))
-    return {'deleted':True,'removed_folders':removed}
+    from .reports import remove_meeting_report
+    return {'deleted':True,'removed_folders':removed,'removed_reports':remove_meeting_report(mid,data_dir)}
 
 
 def dispatch(request, db=None):

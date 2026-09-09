@@ -125,6 +125,19 @@ def write_meeting_report(store, mid, data_dir, *, version=None, commit=None):
         import sys; print(f'Rapor yazılamadı: {type(exc).__name__}', file=sys.stderr); return None
 
 
+def remove_meeting_report(mid, data_dir):
+    """Delete this host's report for a meeting that was deleted, so the shared folder mirrors the app. Never raises."""
+    removed = []
+    try:
+        folder = host_dir(load_settings(data_dir))
+        if folder.is_dir():
+            for path in folder.glob(f'*_{mid}.json'):
+                path.unlink(); removed.append(str(path))
+    except Exception as exc:
+        import sys; print(f'Rapor silinemedi: {type(exc).__name__}', file=sys.stderr)
+    return removed
+
+
 def summarize(report_dir, limit=30):
     """Digest of every host's reports in the shared folder: newest first."""
     root = Path(report_dir)

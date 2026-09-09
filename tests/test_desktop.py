@@ -137,6 +137,7 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(json.loads(Path(path).read_text())['transcript'][0]['speaker'],'Ayşe')
    summary=dispatch({'action':'reports_summary'},db);self.assertEqual(summary['reports'][0]['named'],1);self.assertEqual(list(summary['hosts'].values())[0]['reports'],1)
    reports.save_settings(data,{'share_reports':False});self.assertIsNone(reports.write_meeting_report(Store(db),mid,data))
+   self.assertTrue(Path(path).exists());self.assertEqual(dispatch({'action':'delete_meeting','meeting':mid},db)['removed_reports'],[path]);self.assertFalse(Path(path).exists())
  def test_update_check_parses_git_state(self):
   from unittest.mock import patch
   from meeting_os import updater
