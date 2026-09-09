@@ -41,7 +41,7 @@ enum SetupStatus {
     static func openPane(_ pane:String) { open("x-apple.systempreferences:com.apple.preference.security?\(pane)") }
     /// Button label: a prompt is still possible only while macOS has never been asked.
     static func fixLabel(_ c:SetupCheck)->String { c.state == .unknown ? "İzin iste" : "Ayarları aç" }
-    static func open(_ url:String) { if let u=URL(string:url) { NSWorkspace.shared.open(u) } }
+    static func open(_ url:String) { DispatchQueue.main.async { if let u=URL(string:url) { NSWorkspace.shared.open(u) } } }   // callbacks arrive off the main thread
     static func fixable(_ c:SetupCheck)->Bool { ["mic","screen","calendar","reminders","notify"].contains(c.id) && c.state != .ok }
     static func permissionChecks(calendarWanted:Bool)->[SetupCheck] {
         var out:[SetupCheck]=[]
