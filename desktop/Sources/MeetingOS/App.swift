@@ -200,7 +200,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
             zoomMeetingOpen=zoomNow
-            switch zoomAuto.evaluate(zoomOpen:zoomNow,recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
+            switch zoomAuto.evaluate(zoomOpen:zoomNow && ZoomWatch.current(strict:true),recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
             case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"; notifyDone("Kayıt başladı","Zoom toplantısı açık; bitirmek için ⌃⌥R veya menü çubuğu.")
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
@@ -242,6 +242,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
         if title.isEmpty, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
+        recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end(); RecorderPanel.hide()
@@ -377,6 +378,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
     }
     var pendingCalendar:CalendarEvent?
+    /// Title of the recording in progress, shown on the floating panel.
+    @Published var recordingTitle=""
     /// Hands-free Zoom: start when a meeting window has been open ~10 s, stop an auto-started recording 60 s after it closes.
     @Published var zoomAutoRecord=UserDefaults.standard.object(forKey:"zoomAutoRecord") as? Bool ?? false { didSet { UserDefaults.standard.set(zoomAutoRecord,forKey:"zoomAutoRecord") } }
     var zoomAuto=ZoomAutoRecord()

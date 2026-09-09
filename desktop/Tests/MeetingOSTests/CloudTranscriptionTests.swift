@@ -76,6 +76,10 @@ final class ZoomWatchTests:XCTestCase {
         XCTAssertFalse(ZoomWatch.meetingOpen(windows:win,runningBundles:["com.apple.Safari"]))
         XCTAssertFalse(ZoomWatch.meetingOpen(windows:[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Workplace","kCGWindowLayer":25]],runningBundles:["us.zoom.xos"]))
         XCTAssertFalse(ZoomWatch.meetingOpen(windows:[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom","kCGWindowLayer":0]],runningBundles:["us.zoom.xos"]))
+        let home:[[String:Any]]=[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Workplace","kCGWindowLayer":0]]
+        XCTAssertTrue(ZoomWatch.meetingOpen(windows:home,runningBundles:["us.zoom.xos"]))            // reminder may mention the home window
+        XCTAssertFalse(ZoomWatch.meetingOpen(windows:home,runningBundles:["us.zoom.xos"],strict:true))   // hands-free recording must not
+        XCTAssertTrue(ZoomWatch.meetingOpen(windows:win,runningBundles:["us.zoom.xos"],strict:true))
         XCTAssertEqual(GlobalHotkeys.keyName(GlobalHotkeys.record),"⌃⌥R")
     }
 }

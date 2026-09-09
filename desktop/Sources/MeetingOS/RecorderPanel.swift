@@ -8,7 +8,7 @@ enum RecorderPanel {
     static func show(model:Model) {
         if panel != nil { return }
         let view=NSHostingView(rootView:RecorderPanelView(model:model))
-        view.frame=NSRect(x:0,y:0,width:300,height:56)
+        view.frame=NSRect(x:0,y:0,width:340,height:56)
         let p=NSPanel(contentRect:view.frame,styleMask:[.nonactivatingPanel,.titled,.fullSizeContentView,.utilityWindow],backing:.buffered,defer:false)
         p.titleVisibility = .hidden; p.titlebarAppearsTransparent=true; p.isMovableByWindowBackground=true
         p.level = .floating; p.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary,.stationary]
@@ -25,11 +25,11 @@ struct RecorderPanelView:View {
         HStack(spacing:10) {
             Circle().fill(.red).frame(width:10,height:10)
             Text(model.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
-            Text("Meeting OS").font(.caption).foregroundStyle(.secondary)
+            Text(model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).frame(maxWidth:120,alignment:.leading).help(model.recordingTitle)
             Spacer()
             Button("An") { model.markMoment("important") }.help("Önemli an (⌃⌥M)")
             Button("Karar") { model.markMoment("decision") }.help("Karar anı (⌘⇧M)")
             Button("Bitir") { model.stop() }.buttonStyle(.borderedProminent).tint(.red).help("Kaydı bitir (⌃⌥R)")
-        }.controlSize(.small).padding(.horizontal,12).padding(.vertical,8).frame(width:300,height:56)
+        }.controlSize(.small).padding(.horizontal,12).padding(.vertical,8).frame(width:340,height:56)
     }
 }

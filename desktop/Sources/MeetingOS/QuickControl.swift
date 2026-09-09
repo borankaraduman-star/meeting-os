@@ -5,20 +5,22 @@ import Carbon.HIToolbox
 /// Zoom detection from the window list: cheap enough for the two-second refresh, no permissions needed.
 enum ZoomWatch {
     static let bundle="us.zoom.xos"
-    static func meetingOpen(windows:[[String:Any]],runningBundles:Set<String>)->Bool {
+    /// `strict` ignores the "Zoom Workplace" home window: hands-free recording must only follow a real meeting window.
+    static func meetingOpen(windows:[[String:Any]],runningBundles:Set<String>,strict:Bool=false)->Bool {
         guard runningBundles.contains(bundle) else { return false }
         return windows.contains { w in
             let owner=(w["kCGWindowOwnerName"] as? String ?? "").lowercased()
             let name=(w["kCGWindowName"] as? String ?? "")
             let layer=w["kCGWindowLayer"] as? Int ?? 0
-            return owner.contains("zoom") && layer==0 && (name.localizedCaseInsensitiveContains("Zoom Meeting") || name.localizedCaseInsensitiveContains("Toplantı") || name.localizedCaseInsensitiveContains("Zoom Workplace"))
+            let meeting=name.localizedCaseInsensitiveContains("Zoom Meeting") || name.localizedCaseInsensitiveContains("Toplantı")
+            return owner.contains("zoom") && layer==0 && (meeting || (!strict && name.localizedCaseInsensitiveContains("Zoom Workplace")))
         }
     }
-    static func current()->Bool {
+    static func current(strict:Bool=false)->Bool {
         let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
         guard running.contains(bundle) else { return false }
         let list=(CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []
-        return meetingOpen(windows:list,runningBundles:running)
+        return meetingOpen(windows:list,runningBundles:running,strict:strict)
     }
 }
 
