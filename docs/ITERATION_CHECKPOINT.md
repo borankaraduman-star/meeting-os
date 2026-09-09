@@ -503,3 +503,7 @@ Kullanıcının Slack agent çıktısı (300 satır, hepsi geçerli: 125 teknik 
 ## 2026-09-09 öğleden sonra — /goal turu: arayüz, simge, özellik teslimleri
 
 Simge: CoreGraphics ile üretilen `desktop/Icon/AppIcon.icns` (bundle’a kopyalanır, `CFBundleIconFile`). Arayüz: Türkçe varsayılan başlıklar (“9 Eyl 2026 14:05”), boş kayıtta analiz başlatılmaz, kenar çubuğu ipuçları sadeleşti, transkript üstü tek satır (bulut notu, dolgu anahtarı, görünüm seçici), boş durum metni. Özellikler: ses profili bakım ekranı (örnek listesi/silme, yeniden adlandırma=birleştirme, “Neden bu isim?” puan açıklaması), Zoom bildirimi (opt-in, 20 dk’da bir), toplantılar arası devamlılık (benzer görevler + “eskisini kapat”, karar geçmişi), toplantıdan belge (PRD / hata raporu / müşteri talebi / Claude Code istemi; sayı ve başlık doğrulamalı; gerçek 9 dk kayıtta 5 bölüm, 7 kaynak), ajan: gün sonu kişisel özet ve paylaşım önizlemesi/maskeleme (birleşti). Testler: Python 75+ (ilgili setler), Swift 71. UI otomasyonu (AX/CGEvent) ayarlar penceresini açamadığından ayarlar/paylaşım sayfaları yalnız derleme ve mantık testleriyle doğrulandı.
+
+## 2026-09-09 13:35 — 1.2.0 ara sürüm; 2 saatlik iterasyon başlangıcı
+
+1.2.0: bulut transkript/analiz, kişi tanıma, Kontrol, sözlük, güncelleyici, raporlar, menü çubuğu/kısayollar, belge/özet/paylaşım, depolama. Plan: 15:35’e kadar her ~30 dk dala ara sürüm (1.2.x), diğer Mac’ten gelen iCloud raporlarına göre düzeltme.
