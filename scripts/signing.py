@@ -11,6 +11,7 @@ from pathlib import Path
 import plistlib
 import re
 import subprocess
+import shutil
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +64,9 @@ def publish(stage, target):
     if target.exists():
         backup.parent.mkdir(parents=True, exist_ok=True)
         target.rename(backup)
+        # keep the two newest backups only; each is ~40 MB and they used to accumulate forever
+        for old in sorted(backup.parent.parent.iterdir(), key=lambda p: p.name)[:-2]:
+            if old.is_dir(): shutil.rmtree(old, ignore_errors=True)
     try:
         stage.rename(target)
     except BaseException:

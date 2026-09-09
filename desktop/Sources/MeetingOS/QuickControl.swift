@@ -12,17 +12,18 @@ enum ZoomWatch {
             let owner=(w["kCGWindowOwnerName"] as? String ?? "").lowercased()
             let name=(w["kCGWindowName"] as? String ?? "")
             let layer=w["kCGWindowLayer"] as? Int ?? 0
-            let meeting=name.localizedCaseInsensitiveContains("Zoom Meeting") || name.localizedCaseInsensitiveContains("Toplantı")
-            return owner.contains("zoom") && layer==0 && (meeting || (!strict && name.localizedCaseInsensitiveContains("Zoom Workplace")))
+            // A meeting window, or the share toolbar/status bar Zoom shows while the meeting window is minimised for screen sharing.
+            let meeting=name.localizedCaseInsensitiveContains("Zoom Meeting") || name.localizedCaseInsensitiveContains("Toplantı") || name.localizedCaseInsensitiveContains("share") || name.localizedCaseInsensitiveContains("Paylaş")
+            return owner.contains("zoom") && (meeting ? true : (layer==0 && !strict && name.localizedCaseInsensitiveContains("Zoom Workplace")))
         }
     }
-    static func current(strict:Bool=false)->Bool { state().strict || (!strict && state().open) }
+    static func current(strict:Bool=false)->Bool { let st=state(); return st.strict || (!strict && st.open) }
     /// One window-list read per poll: `open` for reminders and the menu bar, `strict` for hands-free recording.
-    static func state()->(open:Bool,strict:Bool) {
+    static func state()->(open:Bool,strict:Bool,running:Bool) {
         let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        guard running.contains(bundle) else { return (false,false) }
-        let list=(CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []
-        return (meetingOpen(windows:list,runningBundles:running),meetingOpen(windows:list,runningBundles:running,strict:true))
+        guard running.contains(bundle) else { return (false,false,false) }
+        let list=(CGWindowListCopyWindowInfo([.optionAll,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []   // all Spaces: a full-screen Keynote must not hide the meeting
+        return (meetingOpen(windows:list,runningBundles:running),meetingOpen(windows:list,runningBundles:running,strict:true),true)
     }
 }
 
@@ -76,5 +77,21 @@ struct QuickMenu:View {
         if !model.recording, let last=model.meetings.first { Button("Son toplantıyı aç · \(String(last.title.prefix(28)))") { model.selected=last.id; model.tab="analysis"; model.showMainWindow() } }
         if !model.recording, model.meeting != nil { Button("Kontrol sekmesini aç") { model.tab="review"; model.showMainWindow() } }
         Button("Meeting OS’i kapat") { NSApp.terminate(nil) }
+    }
+}
+
+
+import CoreAudio
+/// Is the default input device in use by any process (Zoom, Meet, Teams…)? Needs no permission; used so a
+/// hands-free recording is never ended while somebody is still on a call.
+enum AudioInUse {
+    static func microphoneBusy()->Bool {
+        var device=AudioDeviceID(0); var size=UInt32(MemoryLayout<AudioDeviceID>.size)
+        var addr=AudioObjectPropertyAddress(mSelector:kAudioHardwarePropertyDefaultInputDevice,mScope:kAudioObjectPropertyScopeGlobal,mElement:kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),&addr,0,nil,&size,&device)==noErr, device != 0 else { return false }
+        var running=UInt32(0); size=UInt32(MemoryLayout<UInt32>.size)
+        addr=AudioObjectPropertyAddress(mSelector:kAudioDevicePropertyDeviceIsRunningSomewhere,mScope:kAudioObjectPropertyScopeGlobal,mElement:kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(device,&addr,0,nil,&size,&running)==noErr else { return false }
+        return running != 0
     }
 }

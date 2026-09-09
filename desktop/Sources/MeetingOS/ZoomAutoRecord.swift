@@ -6,18 +6,19 @@ import Foundation
 struct ZoomAutoRecord: Equatable {
     enum Action: Equatable { case start, stop }
     static let confirmSeconds:TimeInterval=10
-    static let graceSeconds:TimeInterval=60
+    static let graceSeconds:TimeInterval=300   // screen shares and Space switches hide the window for minutes
     private(set) var openSince:Date?
     private(set) var closedSince:Date?
     private(set) var autoStarted=false
 
-    mutating func evaluate(zoomOpen:Bool,recording:Bool,busy:Bool,enabled:Bool,now:Date=Date())->Action? {
+    /// `meetingLikely`: Zoom is still running and the microphone is in use — never end a call on window heuristics alone.
+    mutating func evaluate(zoomOpen:Bool,meetingLikely:Bool=false,recording:Bool,busy:Bool,enabled:Bool,now:Date=Date())->Action? {
         if !recording && autoStarted { autoStarted=false; closedSince=nil }   // user ended it, or the capture finished
         guard enabled else { openSince=nil; closedSince=nil; return nil }
         if recording {
             openSince=nil
             guard autoStarted else { return nil }
-            if zoomOpen { closedSince=nil; return nil }
+            if zoomOpen || meetingLikely { closedSince=nil; return nil }
             if closedSince==nil { closedSince=now; return nil }
             if now.timeIntervalSince(closedSince!) >= Self.graceSeconds { closedSince=nil; autoStarted=false; return .stop }
             return nil

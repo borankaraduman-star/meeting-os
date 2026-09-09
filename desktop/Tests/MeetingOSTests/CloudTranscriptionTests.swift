@@ -81,6 +81,8 @@ final class ZoomWatchTests:XCTestCase {
         XCTAssertTrue(ZoomWatch.meetingOpen(windows:home,runningBundles:["us.zoom.xos"]))            // reminder may mention the home window
         XCTAssertFalse(ZoomWatch.meetingOpen(windows:home,runningBundles:["us.zoom.xos"],strict:true))   // hands-free recording must not
         XCTAssertTrue(ZoomWatch.meetingOpen(windows:win,runningBundles:["us.zoom.xos"],strict:true))
+        let share:[[String:Any]]=[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"zoom share toolbar window","kCGWindowLayer":25]]
+        XCTAssertTrue(ZoomWatch.meetingOpen(windows:share,runningBundles:["us.zoom.xos"],strict:true))   // screen share hides the meeting window
         XCTAssertEqual(GlobalHotkeys.keyName(GlobalHotkeys.record),"⌃⌥R")
     }
 }

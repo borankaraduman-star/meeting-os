@@ -46,6 +46,7 @@ struct Runtime:Decodable { let python:String; let repo:String }
 
 func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os.desktop"]; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo)
+    let key=OpenRouterCredential.environment(); if !key.isEmpty { p.environment=ProcessInfo.processInfo.environment.merging(key) { _,new in new } }
     let input=Pipe(), output=Pipe(); p.standardInput=input; p.standardOutput=output; p.standardError=FileHandle.nullDevice
     try p.run()
     let deadline=DispatchWorkItem { if p.isRunning { kill(-p.processIdentifier,SIGTERM); p.terminate() } }
@@ -209,12 +210,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             zoomMeetingOpen=zoomNow
             applyLivePriority(zoomOpen:zoomState.strict)
             heartbeatIfDue()
-            switch zoomAuto.evaluate(zoomOpen:zoomState.strict,recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
-            case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"; notifyDone("Kayıt başladı","Zoom toplantısı açık; bitirmek için ⌃⌥R veya menü çubuğu.")
+            switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {
+            case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
-            if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
+            if recording, let started=recordStartedAt { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
+            if !recording && !zoomMeetingOpen && !queuedNotifications.isEmpty { for (t,b) in queuedNotifications { deliver(t,b) }; queuedNotifications.removeAll() }   // meeting-safe mode: notifications wait
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
             if wanted==selected {
@@ -228,31 +230,38 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             }
         } catch { self.error=error.localizedDescription }
     }
+    /// Recording has its own process slot: a finalize/analyze job from the previous meeting must never block ⌃⌥R.
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
-        guard job==nil else { return }
+        let isRecord=JobPriority.isRealtime(args)
+        guard isRecord ? recordProcess==nil : job==nil else { return }
         do {
             try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true)
             let log=dataDir.appendingPathComponent("last-job.log")
             FileManager.default.createFile(atPath:log.path,contents:nil)
             let handle=try FileHandle(forWritingTo:log)
-            resourceStopMessage="";jobCanceled=false;jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args)
+            resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
-            progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor"
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor" }
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
                 Task { @MainActor in
-                    guard let self=self else { return }; self.job=nil; self.jobKind=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress)
+                    guard let self=self else { return }
+                    if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; try? FileManager.default.removeItem(at:progress) }
+                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress) }
                     if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
-                    complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
+                    complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
+                    if !isRecord, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
+                    if self.requestedQuit && self.job==nil && self.recordProcess==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }
-            try p.run(); job=p; busy=true; error=""; jobBackgrounded=false
-        } catch { self.error=error.localizedDescription; busy=false; jobKind=nil; recording=false; recordingNavigation.cancel() }
+            try p.run(); error=""
+            if isRecord { recordProcess=p; recordStartedAt=Date() } else { job=p; busy=true; jobBackgrounded=false }
+        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil } }
     }
     func start() {
-        guard job==nil else { return }
+        guard recordProcess==nil else { return }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
@@ -273,7 +282,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             else { self.activity="Kayıt saklandı · Son işlem otomatik başlatılamadı" }
         }
     }
-    func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
+    func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; stopArmedAt=nil; recordProcess?.interrupt() }
     func finishRecordedMeeting(_ mid:String) {
         if let cal=pendingCalendar { pendingCalendar=nil; Task { _=try? await request(["action":"meeting_context","meeting":mid,"calendar":cal.payload]) } }
         if transcriptionMode=="openrouter" { finalizeWithOpenRouter(mid,model:cloudModel); return }
@@ -289,7 +298,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// Cloud-only transcription of a stopped recording. Pass a model only for a recording that has not started in the cloud yet.
     func finalizeWithOpenRouter(_ mid:String,model:String?) {
-        guard job==nil else { return }
+        guard job==nil else { if !finalizeQueue.contains(mid) { finalizeQueue.append(mid); activity="Sıradaki toplantı yazıya çevrilecek · önceki iş bitince" }; return }
         let result=dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
         let stored=meetings.first(where:{ $0.id==mid })?.metadata["cloud_mode"] != nil
         activity="Yazıya çevriliyor…"
@@ -399,9 +408,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// Recording lives in its own process slot (see launch); jobs never block it.
+    var recordProcess:Process?; var recordStartedAt:Date?; var stopArmedAt:Date?
+    var finalizeQueue:[String]=[]
     /// A meeting that finished while the user was reading another one; the status line offers to open it.
     @Published var pendingReady:String?
-    var lastZoomState:(open:Bool,strict:Bool)=(false,false)
+    var lastZoomState:(open:Bool,strict:Bool,running:Bool)=(false,false,false)
     /// Talk shares depend on rows only; computed once per row change instead of in the Özet body every poll.
     @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
@@ -448,10 +460,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(["action":"rename_meeting","meeting":mid,"title":renameText]); renaming=false; await refresh() } catch { self.error=error.localizedDescription }
     }
     /// Finished work reaches the user even when Zoom or another app is in front.
+    /// Meeting-safe: nothing pops while recording or while a Zoom meeting is on screen; it is delivered afterwards, silently.
     func notifyDone(_ title:String,_ body:String) {
-        let content=UNMutableNotificationContent(); content.title=title; content.body=body
+        if recording || zoomMeetingOpen { queuedNotifications.append((title,body)); return }
+        deliver(title,body)
+    }
+    private func deliver(_ title:String,_ body:String) {
+        let content=UNMutableNotificationContent(); content.title=title; content.body=body; content.interruptionLevel = .passive
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier:"done-"+UUID().uuidString,content:content,trigger:nil))
     }
+    var queuedNotifications:[(String,String)]=[]
     struct CleanupPreview:Equatable { let days:Int; let count:Int; let bytes:Int; let titles:[String] }
     @Published var cleanupPreview:CleanupPreview?
     @Published var cleanupDays=30
@@ -483,7 +501,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func showMainWindow() { NSApp.activate(ignoringOtherApps:true); NSApp.windows.first(where:{ $0.title=="Meeting OS" })?.makeKeyAndOrderFront(nil) }
     /// Global hot key dispatch (⌃⌥R / ⌃⌥M) — same guards as the buttons.
     func hotkey(_ id:UInt32) {
-        if id==GlobalHotkeys.record { if recording { stop() } else if !busy { start(); activity="Kayıt başladı · ⌃⌥R ile bitir, ⌃⌥M ile an işaretle" } }
+        if id==GlobalHotkeys.record {
+            if recording {
+                let age=Date().timeIntervalSince(recordStartedAt ?? .distantPast)
+                if age<3 { return }   // key repeat / double press right after start: ignore
+                if age<15 { if let armed=stopArmedAt, Date().timeIntervalSince(armed)<2 { stop() } else { stopArmedAt=Date(); activity="Bitirmek için ⌃⌥R’ye bir kez daha bas" }; return }
+                stop()
+            } else { start(); activity="Kayıt başladı · ⌃⌥R ile bitir, ⌃⌥M ile an işaretle" }
+        }
         else if id==GlobalHotkeys.mark, recording { markMoment("important") }
     }
     @Published var update:UpdateInfo?; @Published var updating=false; @Published var reportSettings=ReportSettings(shareReports:true,shareText:false,autoUpdate:false,reportDir:"")
@@ -563,7 +588,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
     func play(_ row:Row) {
-        guard let m=meeting else { return }
+        guard let m=meeting, !recording else { return }   // never play audio into the room during a recording
         do {
             var path=(m.metadata["paths"] as? [String:String])?[row.source]; var start=row.start
             if path==nil, let dir=m.metadata["capture_dir"] as? String {
@@ -598,7 +623,7 @@ func statusLabel(_ status:String)->String {
         }
     }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
-        guard let m=Self.model, m.job != nil else { return .terminateNow }
+        guard let m=Self.model, m.job != nil || m.recordProcess != nil else { return .terminateNow }
         m.requestedQuit=true
         if m.recording { m.stop() }
         m.activity="İşlem güvenle tamamlandıktan sonra kapanacak…"

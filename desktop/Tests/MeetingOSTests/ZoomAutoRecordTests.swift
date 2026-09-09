@@ -12,7 +12,9 @@ final class ZoomAutoRecordTests: XCTestCase {
         XCTAssertNil(m.evaluate(zoomOpen:true,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(40)))    // and comes back: grace resets
         XCTAssertNil(m.evaluate(zoomOpen:false,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(50)))
         XCTAssertNil(m.evaluate(zoomOpen:false,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(100)))
-        XCTAssertEqual(m.evaluate(zoomOpen:false,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(111)),.stop)
+        XCTAssertNil(m.evaluate(zoomOpen:false,meetingLikely:true,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(400)))   // mic still in use: keep going
+        XCTAssertNil(m.evaluate(zoomOpen:false,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(410)))
+        XCTAssertEqual(m.evaluate(zoomOpen:false,recording:true,busy:true,enabled:true,now:t0.addingTimeInterval(711)),.stop)
     }
     func testManualRecordingsAreNeverStoppedAndDisabledDoesNothing() {
         var m=ZoomAutoRecord(); let t0=Date()

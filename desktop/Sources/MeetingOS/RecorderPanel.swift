@@ -12,6 +12,7 @@ enum RecorderPanel {
         let p=NSPanel(contentRect:view.frame,styleMask:[.nonactivatingPanel,.titled,.fullSizeContentView,.utilityWindow],backing:.buffered,defer:false)
         p.titleVisibility = .hidden; p.titlebarAppearsTransparent=true; p.isMovableByWindowBackground=true
         p.level = .floating; p.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary,.stationary]
+        p.sharingType = .none   // excluded from screen sharing and screenshots: nobody in the meeting sees the recorder
         p.contentView=view; p.isReleasedWhenClosed=false; p.hidesOnDeactivate=false
         if let screen=NSScreen.main { let f=screen.visibleFrame; p.setFrameOrigin(NSPoint(x:f.maxX-view.frame.width-16,y:f.maxY-view.frame.height-16)) }
         p.orderFrontRegardless(); panel=p

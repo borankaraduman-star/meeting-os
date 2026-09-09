@@ -10,13 +10,14 @@ mkdir -p "$DATA"
 status() { printf '{"state":"%s","from":"%s","to":"%s","message":"%s","time":"%s"}\n' "$1" "$FROM" "$2" "$3" "$(date '+%Y-%m-%d %H:%M:%S')" > "$STATUS"; }
 FROM="$(git rev-parse --short HEAD 2>/dev/null)"
 exec >> "$LOG" 2>&1
+trap 'open -a "Meeting OS" 2>/dev/null || open "$REPO/build/Meeting OS.app"' EXIT   # whatever happens, the app comes back
 echo "== $(date '+%F %T') güncelleme başladı ($FROM)"
 status running "$FROM" "Uygulamanın kapanması bekleniyor"
 i=0; while pgrep -x MeetingOS >/dev/null && [ $i -lt 60 ]; do sleep 1; i=$((i+1)); done
 if pgrep -x MeetingOS >/dev/null; then status failed "$FROM" "Uygulama kapanmadı; güncelleme iptal"; exit 1; fi
 if [ -n "$(git status --porcelain)" ]; then status failed "$FROM" "Yerel değişiklikler var; güncelleme yapılmadı"; exit 1; fi
-if ! git fetch origin v0.1; then status failed "$FROM" "GitHub'a ulaşılamadı"; open -a "Meeting OS" 2>/dev/null || open "$REPO/build/Meeting OS.app"; exit 1; fi
-if ! git merge --ff-only origin/v0.1; then status failed "$FROM" "Dal ileri sarılamadı"; open "$REPO/build/Meeting OS.app"; exit 1; fi
+if ! git fetch origin v0.1; then status failed "$FROM" "GitHub'a ulaşılamadı"; exit 1; fi
+if ! git merge --ff-only origin/v0.1; then status failed "$FROM" "Dal ileri sarılamadı"; exit 1; fi
 TO="$(git rev-parse --short HEAD)"
 status running "$TO" "Bağımlılıklar kontrol ediliyor"
 if [ "$FROM" != "$TO" ] && ! git diff --quiet "$FROM" "$TO" -- requirements-macos-tested.txt pyproject.toml; then
@@ -31,5 +32,4 @@ if nice -n 19 /bin/sh scripts/build-desktop.sh; then
 else
   status failed "$TO" "Derleme başarısız; önceki sürüm build/app-backups içinde"
 fi
-open "$REPO/build/Meeting OS.app"
 echo "== $(date '+%F %T') bitti ($TO)"

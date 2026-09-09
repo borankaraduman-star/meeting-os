@@ -76,6 +76,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             # A failed helper can leave stdout open. Give it the same bounded
             # shutdown and finalized-chunk drain as an explicit user stop.
             if capture_failed.is_set() and not stopping:stop(None,None)
+            if os.getppid()==1 and not stopping: errors.append('Uygulama kapandı; kayıt güvenle durduruldu'); stop(None,None)   # orphaned by an app crash: never record for hours unattended
             # The reader may never reach EOF if the native helper hangs.
             # Check the deadline before waiting, including when chunks are queued.
             if stop_deadline is not None and time.monotonic() >= stop_deadline:
