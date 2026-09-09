@@ -1,9 +1,7 @@
-import argparse
 import contextlib
 import json
 import os
 from pathlib import Path
-import shutil
 import sys
 from .progress import emit
 
@@ -105,7 +103,13 @@ def run_retry(args,store):
     cleanup_workspaces(retry,meeting=args.meeting)
     return retry_capture(retry,args.meeting,current_job_metadata()['worker_identity'],process)
 
+def which(name):
+    """shutil costs a tenth of a second to import and only the doctor and the audio converter need it."""
+    import shutil
+    return shutil.which(name)
+
 def parser():
+    import argparse   # the bridge imports this module for DATA_DIR and never builds a command line
     p=argparse.ArgumentParser(description='Meeting OS V1 — local Turkish meetings and memory')
     p.add_argument('--db',type=Path,default=DATA_DIR/'meeting-os.sqlite')
     sub=p.add_subparsers(dest='command',required=True)
@@ -186,7 +190,7 @@ def main(supervised=False):
             import platform, importlib.util
             output({'python':sys.version.split()[0],'machine':platform.machine(),'macos':platform.mac_ver()[0],
                 'capture_binary':(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture').exists(),
-                'ffmpeg':shutil.which('ffmpeg'),'whisper_cpp':str(ROOT/'build/whisper-cpp/bin/whisper-cli') if (ROOT/'build/whisper-cpp/bin/whisper-cli').exists() else shutil.which('whisper-cli'),
+                'ffmpeg':which('ffmpeg'),'whisper_cpp':str(ROOT/'build/whisper-cpp/bin/whisper-cli') if (ROOT/'build/whisper-cpp/bin/whisper-cli').exists() else which('whisper-cli'),
                 'offline':os.environ['HF_HUB_OFFLINE'],
                 'packages':{name:importlib.util.find_spec(name) is not None for name in ['mlx_whisper','resemblyzer','silero_vad','sherpa_onnx','speechbrain','pyannote','whisper','mlx_lm','outlines']},
                 'models':[str(x) for x in (ROOT/'models').glob('*/meeting-os-model.json')],
@@ -238,7 +242,7 @@ def main(supervised=False):
                 dest=DATA_DIR/'imports'/uuid.uuid4().hex
                 dest.mkdir(parents=True,mode=0o700)
                 target=dest/'audio.wav'
-                ffmpeg=shutil.which('ffmpeg') or '/opt/homebrew/bin/ffmpeg'
+                ffmpeg=which('ffmpeg') or '/opt/homebrew/bin/ffmpeg'
                 converted=subprocess.run([ffmpeg,'-nostdin','-v','error','-i',str(args.audio.resolve()),'-vn','-ar','16000','-ac','1',str(target)],capture_output=True,text=True)
                 if converted.returncode: raise ValueError('Audio conversion failed: '+converted.stderr[-1500:])
                 output(run_transcribe(args,store,{'system':str(target)}))

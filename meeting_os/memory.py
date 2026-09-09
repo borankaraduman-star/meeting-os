@@ -1,5 +1,5 @@
 """Versioned analysis and durable task state on the existing local SQLite store."""
-import json,hashlib,uuid
+import json
 from datetime import datetime,timezone
 from .intelligence import fingerprint
 from .metrics import normalize
@@ -65,6 +65,7 @@ class Memory:
         if not row:return None
         d=dict(row);d['payload']=json.loads(d['payload']);d['stale']=d['input_hash']!=self.current_hash(mid);return d
     def save_analysis(self,mid,input_hash,model,record):
+        import hashlib   # only a save needs it; every report imports this module and none of them do
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if self.current_hash(mid)!=input_hash:raise ValueError('Transkript analiz sırasında değişti; yeniden analiz edin')

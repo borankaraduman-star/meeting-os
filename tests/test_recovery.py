@@ -94,5 +94,5 @@ class RecoveryTests(unittest.TestCase):
         from unittest.mock import Mock
         from meeting_os.recovery import process_identity
         lib=Mock();lib.proc_pidinfo.return_value=0
-        with patch('meeting_os.recovery.sys.platform','darwin'),patch('meeting_os.recovery.boot_identity',return_value='boot-a'),patch('meeting_os.recovery.ctypes.CDLL',return_value=lib),patch('meeting_os.recovery.ctypes.get_errno',return_value=errno.EPERM):
+        with patch('meeting_os.recovery.sys.platform','darwin'),patch('meeting_os.recovery.boot_identity',return_value='boot-a'),patch('ctypes.CDLL',return_value=lib),patch('ctypes.get_errno',return_value=errno.EPERM):   # recovery imports ctypes only when it looks a pid up
             self.assertIsNone(process_identity(123))

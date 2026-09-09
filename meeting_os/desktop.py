@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 from .capture_metrics import journal_events
-from .cli import DATA_DIR, ROOT, parser, run_transcribe
+from .cli import DATA_DIR, ROOT
 from .store import Store
 
 
