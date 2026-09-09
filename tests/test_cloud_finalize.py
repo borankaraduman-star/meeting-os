@@ -367,3 +367,16 @@ class QualitySetTests(unittest.TestCase):
             self.assertEqual(out['segments'],1);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer'],0.0);self.assertEqual(out['models']['openai/whisper-large-v3']['mean_wer'],0.75)
             with self.assertRaises(Exception):compare(store,['x/y'],C(),consent=True)
             store.close()
+
+class PlanChangeTests(unittest.TestCase):
+    def test_plan_change_is_adopted_when_only_skipped_chunks_exist(self):
+        from meeting_os import cloud_finalize as cf
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('P',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            client=FakeClient(fail_at=1)
+            with self.assertRaises(OpenRouterError):finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=client)
+            self.assertEqual([json.loads(u[0]) for u in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,))],[{'skipped':'silent'}])  # silent mic skipped, system failed
+            original=cf.FINE_PIECE_SECONDS;cf.FINE_PIECE_SECONDS=4   # mic plan changes → different plan JSON
+            try: finalize_capture(store,mid,tmp,consent=True,client=FakeClient())
+            finally: cf.FINE_PIECE_SECONDS=original
+            self.assertEqual(store.db.execute('SELECT status FROM meetings WHERE id=?',(mid,)).fetchone()[0],'complete');store.close()

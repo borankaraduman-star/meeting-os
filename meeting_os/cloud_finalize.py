@@ -21,7 +21,7 @@ from .openrouter import OpenRouterClient, STT_MODEL, _consent, validate_stt_mode
 from .progress import emit
 from .types import Segment
 
-PIECE_SECONDS = 1200          # one request per ≤20 minutes keeps provider speaker labels consistent inside a piece
+PIECE_SECONDS = 300           # MAI-Transcribe 2 returned HTTP 500 for a 552 s piece and succeeded at 300 s (63 s latency); labels stay consistent inside a piece
 FINE_PIECE_SECONDS = 30       # models without diarization get short windows so timing stays useful
 MAX_PIECE_BYTES = 24*1024*1024
 REQUEST_TIMEOUT = 600
@@ -156,7 +156,12 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         with store.db:store.db.execute("ALTER TABLE cloud_sources ADD COLUMN model TEXT NOT NULL DEFAULT 'openai/gpt-transcribe'")
     plan_json=json.dumps(plan)
     old=store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
-    if old and (old['digest']!=signature or old['plan']!=plan_json or old['model']!=model): raise ValueError('Kaynak ses veya plan değişti; devam edilmedi')
+    if old and (old['digest']!=signature or old['plan']!=plan_json or old['model']!=model):
+        paid=[u for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if u and ('"cost"' in u or '"seconds"' in u)]  # silent/echo windows cost nothing
+        if paid or old['digest']!=signature or old['model']!=model: raise ValueError('Kaynak ses veya plan değişti; devam edilmedi')
+        with store.db:  # only free (skipped) checkpoints exist: adopt the new piece plan without losing anything
+            store.db.execute('DELETE FROM cloud_chunks WHERE meeting=?',(mid,));store.db.execute('UPDATE cloud_sources SET plan=? WHERE meeting=?',(plan_json,mid))
+        old=store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
     if not old:
         with store.db:store.db.execute('INSERT INTO cloud_sources(meeting,digest,plan,model) VALUES(?,?,?,?)',(mid,signature,plan_json,model))
     done={r[0] for r in store.db.execute('SELECT position FROM cloud_chunks WHERE meeting=?',(mid,))}
@@ -167,7 +172,8 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         segments=[];usage={}
         if source=='mic' and 'system' in sources and not is_silent(path,a,b) and is_echo(path,sources['system'],a,b):
             usage={'skipped':'echo'}   # nothing uploaded: this window is the speakers bleeding into the mic
-        elif not is_silent(path,a,b):
+        elif is_silent(path,a,b): usage={'skipped':'silent'}
+        else:
             audio=encode_piece(path,a,b,ffmpeg)
             if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
             result=client.transcribe(audio,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT)
