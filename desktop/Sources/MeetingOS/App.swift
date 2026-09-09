@@ -217,11 +217,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard job==nil else { return }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin()
+        recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
         let name=title.isEmpty ? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR"))) : title   // "9 Eyl 2026 14:05"
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
-            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end()
+            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
             if !ok { self.activity="Kayıt tamamlanamadı · Arşivdeki kayıt durumunu kontrol edin" }
@@ -338,6 +338,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
+    @Published var showRecorderPanel=UserDefaults.standard.object(forKey:"showRecorderPanel") as? Bool ?? true { didSet { UserDefaults.standard.set(showRecorderPanel,forKey:"showRecorderPanel"); if !showRecorderPanel { RecorderPanel.hide() } else if recording { RecorderPanel.show(model:self) } } }
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
     @Published var continuity=Continuity()

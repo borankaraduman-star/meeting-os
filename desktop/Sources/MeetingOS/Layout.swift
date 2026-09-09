@@ -380,6 +380,7 @@ struct SettingsSheet:View {
                     }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
                 } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
                 Toggle("Zoom toplantısı açılınca bildirim gönder (kayıt yokken, 20 dakikada en fazla bir)",isOn:$model.zoomNotify)
+                Toggle("Kayıt sırasında her pencerenin üstünde küçük kayıt paneli göster (süre, an işaretleri, bitir)",isOn:$model.showRecorderPanel)
                 if let storage=model.storage { StorageSection(model:model,storage:storage) }
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
