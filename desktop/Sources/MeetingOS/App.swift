@@ -331,6 +331,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
+    @Published var continuity=Continuity()
+    func loadContinuity() async { guard let mid=selected else { continuity=Continuity(); return }; continuity=(try? await request(["action":"continuity","meeting":mid])).map(Continuity.parse) ?? Continuity() }
+    func supersede(old:String,new:String) async {
+        do { _=try await request(["action":"supersede_task","old":old,"new":new]); activity="Önceki görev kapatıldı; bu görev devamı sayılıyor"; if let mid=selected { try await refreshIntelligence(mid) }; await loadContinuity() } catch { self.error=error.localizedDescription }
+    }
     func loadSamples(_ name:String) async -> [VoiceSample] { ((try? await request(["action":"profile_samples","name":name]))?["samples"] as? [[String:Any]] ?? []).map(VoiceSample.init) }
     func deleteSample(_ id:Int) async { do { _=try await request(["action":"delete_sample","sample":id]); await refresh() } catch { self.error=error.localizedDescription } }
     func renameProfile(_ name:String,to newName:String) async {

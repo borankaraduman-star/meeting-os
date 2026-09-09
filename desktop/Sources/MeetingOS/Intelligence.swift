@@ -105,11 +105,11 @@ struct AnalysisView:View {
         if let payload=m.analysis?["payload"] as? [String:Any] {
             ForEach(categories,id:\.0) { key,label in VStack(alignment:.leading,spacing:10) { Text(label).font(.headline);let items=(payload[key] as? [[String:Any]] ?? []).map(Insight.init)
                 if items.isEmpty { Text("Kayıtlarda açık bir madde bulunmadı.").foregroundStyle(.secondary) }
-                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled);if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
+                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled);if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };if key=="decisions", let prev=m.continuity.historyByDecision[item.text], !prev.isEmpty { VStack(alignment:.leading,spacing:3) { ForEach(prev) { p in Label("Önceki karar · \(p.meetingTitle): \(p.text)",systemImage:"clock.arrow.circlepath").font(.caption).foregroundStyle(.secondary) } } };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
             } }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout)
         } else { ContentUnavailableView("Henüz analiz yok",systemImage:"text.bubble",description:Text(m.transcriptionMode=="openrouter" ? "Transkript hazır olunca özet, kararlar ve görevler OpenRouter’daki \(m.analysisModel) modeliyle çıkarılır; bu Mac’te model yüklenmez." : "Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }
-    }.padding(24) } }
+    }.padding(24).task(id:m.selected) { await m.loadContinuity() } } }
 }
 struct ActionsView:View {
     @ObservedObject var m:Model
@@ -132,13 +132,19 @@ struct ActionsView:View {
     }
     var body:some View { VStack(alignment:.leading) {
         HStack { Text("Sonraki adımlar").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)
-        HStack { Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri").tag("boran");Text("Bu toplantı").tag("meeting");Text("Tüm görevler").tag("all") }.pickerStyle(.segmented); Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }.help("Son 5 toplantının açık görev, soru ve kararlarından düzenlenebilir bir gündem taslağı kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("agendaButton") }.padding().accessibilityIdentifier("actionsFilterPicker")
+        HStack { Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri").tag("boran");Text("Bu toplantı").tag("meeting");Text("Tüm görevler").tag("all") }.pickerStyle(.segmented); Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }.help("Son 5 toplantının açık görev, soru ve kararlarından düzenlenebilir bir gündem taslağı kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("agendaButton") }.padding().task(id:m.selected) { await m.loadContinuity() }.accessibilityIdentifier("actionsFilterPicker")
         ScrollView { LazyVStack(alignment:.leading,spacing:18) {
             if visible.isEmpty { ContentUnavailableView("Görev bulunamadı",systemImage:"checklist",description:Text("İsimsiz görevler Tüm görevler altında görünür. Sahipliği kaynakla doğrulayarak düzeltebilirsiniz.")) }
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
                 HStack(alignment:.top) { Text(item.title).font(.headline).strikethrough(["done","dismissed"].contains(item.state)).textSelection(.enabled);Spacer();TaskStatusBadge(state:item.state) }
                 Text("\(item.owner.isEmpty ? "Sahibi belirsiz" : item.owner) · \(item.due.isEmpty ? "Tarih belirtilmedi" : item.due) · \(item.meetingTitle)").font(.caption).foregroundStyle(.secondary)
                 if item.stale { Label("Kaynak değişti · Görevi yeniden doğrulayın",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
+                if let rel=m.continuity.relatedByTask[item.id], let first=rel.first(where:{ $0.supersededBy.isEmpty && $0.state != "dismissed" }) {
+                    HStack(spacing:8) {
+                        Label("Önceki toplantıda benzer görev · \(first.meetingTitle): “\(first.title)” (\(first.state=="done" ? "tamamlandı" : "açık"))",systemImage:"arrow.triangle.branch").font(.caption).foregroundStyle(.secondary)
+                        if first.state != "done" { Button("Aynı görev, eskisini kapat") { Task { await m.supersede(old:first.id,new:item.id) } }.controlSize(.small).help("Eski görev “kaldırıldı” olur ve bu göreve bağlanır; kaynaklar korunur") }
+                    }
+                }
                 ViewThatFits(in:.horizontal) {
                     HStack { statePicker(item);Button("Düzenle") { edit=item;title=item.title;owner=item.owner;due=item.due }.accessibilityIdentifier("editAction-\(item.id)");Spacer() }
                     VStack(alignment:.leading,spacing:8) { statePicker(item);Button("Düzenle") { edit=item;title=item.title;owner=item.owner;due=item.due }.accessibilityIdentifier("editAction-\(item.id)") }

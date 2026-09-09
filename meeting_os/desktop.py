@@ -230,6 +230,12 @@ def dispatch(request, db=None):
                 from .openrouter import OpenRouterClient,validate_analysis_model
                 llm=OpenRouterClient().analysis(validate_analysis_model(request['openrouter_model']),consent=True)
             return {'suggestions':G.suggest_for_meeting(store,request['meeting'],entries,llm)}
+        if action=='continuity':
+            from .continuity import related_tasks,decision_history
+            return {'related_tasks':related_tasks(store,request['meeting']),'decision_history':decision_history(store,request['meeting'])}
+        if action=='supersede_task':
+            from .continuity import supersede
+            return supersede(store,request['old'],request['new'])
         if action=='agenda':
             from .agenda import build_agenda,render_agenda
             agenda=build_agenda(store,int(request.get('limit',5)));text=render_agenda(agenda)

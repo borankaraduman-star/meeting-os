@@ -163,6 +163,25 @@ class DesktopTests(unittest.TestCase):
    snap=dispatch({'action':'snapshot','meeting':mid},db);self.assertEqual(snap['segments'][0]['speaker_name'],'Ayşe');self.assertEqual([p['samples'] for p in snap['profiles']],[3])
    dispatch({'action':'delete_sample','sample':samples[1]['id']},db);self.assertEqual([p['samples'] for p in dispatch({'action':'snapshot'},db)['profiles']],[2])
    with self.assertRaises(ValueError):dispatch({'action':'delete_sample','sample':999},db)
+ def test_continuity_links_similar_tasks_and_decisions_across_meetings(self):
+  from meeting_os.memory import Memory
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mem=Memory(s)
+   def meeting(title,task,decision):
+    mid=s.create_meeting(title,{});sid=s.add_segment(mid,Segment(0,5,task+' '+decision,'system','S0'));s.status(mid,'complete')
+    payload={'summary':[],'decisions':[{'text':decision,'evidence':[{'segment_id':sid,'quote':decision[:12]}]}],'risks':[],'questions':[],'actions':[{'title':task,'owner':'Boran','due_text':None,'evidence':[{'segment_id':sid,'quote':task[:10]}]}]}
+    mem.save_analysis(mid,mem.current_hash(mid),'test',payload);return mid
+   a=meeting('Pazartesi','Raporu cuma günü çıkarmak','Önce Android sürümü çıkacak')
+   b=meeting('Perşembe','Raporu pazartesiye çıkarmak','Önce iOS sürümü çıkacak, Android sonra')
+   s.close()
+   c=dispatch({'action':'continuity','meeting':b},db)
+   self.assertEqual(len(c['related_tasks']),1);self.assertEqual(c['related_tasks'][0]['related'][0]['meeting_title'],'Pazartesi')
+   self.assertEqual(len(c['decision_history']),1);self.assertEqual(c['decision_history'][0]['previous'][0]['text'],'Önce Android sürümü çıkacak')
+   old=c['related_tasks'][0]['related'][0]['id'];new=c['related_tasks'][0]['task']
+   r=dispatch({'action':'supersede_task','old':old,'new':new},db);self.assertEqual(r['superseded'],old)
+   tasks={t['id']:t for t in Memory(Store(db)).actions()}
+   self.assertEqual(tasks[old]['state'],'dismissed');self.assertEqual(tasks[old]['payload']['superseded_by'],new);self.assertEqual(tasks[new]['payload']['continues'],old)
+   with self.assertRaises(ValueError):dispatch({'action':'supersede_task','old':new,'new':new},db)
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):
