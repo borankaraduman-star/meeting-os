@@ -1,0 +1,60 @@
+import SwiftUI
+
+/// One row of the critical review queue: why this spot deserves a listen, and the one action that fixes it.
+struct ReviewItem:Identifiable, Equatable {
+    let id:String; let segment:Int?; let start:Double?; let speaker:String; let text:String; let kind:String; let severity:Int; let reason:String; let suggested:String; let speakerKey:String; let task:String
+    init(_ d:[String:Any]) {
+        segment=d["segment_id"] as? Int; start=d["start"] as? Double; speaker=d["speaker"] as? String ?? ""; text=d["text"] as? String ?? ""; kind=d["kind"] as? String ?? ""
+        severity=d["severity"] as? Int ?? 3; reason=d["reason"] as? String ?? ""; suggested=d["suggested"] as? String ?? ""; speakerKey=d["speaker_key"] as? String ?? ""; task=d["task"] as? String ?? ""
+        id=kind+":"+(segment.map(String.init) ?? task)
+    }
+    var title:String {
+        switch kind {
+        case "suggested_name": return "İsim onayı bekliyor"
+        case "unnamed_speaker": return "İsimsiz konuşmacı"
+        case "ambiguous": return "Çakışan konuşma"
+        case "short_match": return "Kısa sesle tanındı"
+        case "task_owner": return "Görev sahibi belirsiz"
+        default: return "Kontrol edin"
+        }
+    }
+    var time:String { start.map { String(format:"%02d:%02d",Int($0)/60,Int($0)%60) } ?? "" }
+}
+
+struct ReviewView:View {
+    @ObservedObject var model:Model
+    var body:some View {
+        ScrollView { VStack(alignment:.leading,spacing:14) {
+            HStack { Text("Kontrol kuyruğu").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary) }
+            Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
+            if model.review.isEmpty { ContentUnavailableView("Kontrol gerektiren bir şey yok",systemImage:"checkmark.seal",description:Text("Konuşmacı adları, çakışan konuşmalar ve görev sahipleri için şüpheli bir bölüm bulunmadı.")) }
+            ForEach(model.review) { item in
+                VStack(alignment:.leading,spacing:8) {
+                    HStack(spacing:8) {
+                        Image(systemName:item.severity==1 ? "exclamationmark.circle.fill" : (item.severity==2 ? "questionmark.circle" : "ear")).foregroundStyle(item.severity==1 ? .orange : .secondary)
+                        Text(item.title).font(.headline)
+                        if !item.time.isEmpty { Text(item.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                        if !item.speaker.isEmpty { Text("· "+item.speaker).font(.caption).foregroundStyle(.secondary) }
+                        Spacer()
+                    }
+                    Text(item.reason).font(.callout)
+                    if !item.text.isEmpty { Text("“"+item.text+"”").font(.system(size:14)).foregroundStyle(.secondary).lineLimit(3) }
+                    HStack(spacing:10) {
+                        if let seg=item.segment {
+                            Button("Bölüme git") { model.focusedSegment=seg;model.tab="transcript" }.accessibilityIdentifier("reviewGo-\(item.id)")
+                            if model.rows.contains(where:{ $0.id==seg }) { Button("Dinle") { if let row=model.rows.first(where:{ $0.id==seg }) { model.play(row) } } }
+                        }
+                        if item.kind=="suggested_name", !item.suggested.isEmpty {
+                            Button("“\(item.suggested)” olarak onayla") { Task { await model.confirmReview(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).accessibilityIdentifier("reviewConfirm-\(item.id)")
+                        }
+                        if item.kind=="unnamed_speaker" || item.kind=="short_match" || item.kind=="suggested_name", let seg=item.segment, let row=model.rows.first(where:{ $0.id==seg }) {
+                            Button("Adlandır…") { model.editRow=row;model.editName=row.name;model.editText=row.text;model.clean=false }
+                        }
+                        if item.kind=="task_owner" { Button("Görevlerim’de aç") { model.tab="actions" } }
+                    }.font(.callout)
+                }.padding(18).meetingCard()
+            }
+        }.padding(24) }
+        .task(id:model.selected) { await model.loadReview() }
+    }
+}

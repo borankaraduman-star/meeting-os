@@ -150,6 +150,9 @@ def dispatch(request, db=None):
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action=='review_queue':
+            from .review import review_queue
+            return review_queue(store,request['meeting'])
         if action=='delete_meeting':
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='export_analysis':

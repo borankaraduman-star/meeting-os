@@ -29,14 +29,15 @@ extension Model {
         drafts=(result["drafts"] as? [[String:Any]] ?? []).map(DraftItem.init)
     }
     func analyzeAutomatically(_ mid:String) {
+        if transcriptionMode=="openrouter" { analyzeMeeting(mid); return }   // cloud analysis loads no local model; safe on 16 GB
         if ProcessInfo.processInfo.physicalMemory <= 16*1024*1024*1024 {
             activity="Transkript hazır · Özet ve görevleri Analiz sekmesinden isteğe bağlı hazırlayabilirsiniz."
         } else { analyzeMeeting(mid) }
     }
     func analyzeMeeting(_ mid:String?=nil) {
         guard let mid=mid ?? selected else { return }
-        activity="Özet, kararlar ve görevler bu Mac’te hazırlanıyor…"
-        launch(["analyze",mid]) { [weak self] ok in self?.activity=ok ? "Özet ve görevler hazır · Kaynakları gözden geçirin" : "Analiz tamamlanamadı · Transkript korunuyor" }
+        activity=transcriptionMode=="openrouter" ? "Özet, kararlar ve görevler OpenRouter’da hazırlanıyor (\(analysisModel))…" : "Özet, kararlar ve görevler bu Mac’te hazırlanıyor…"
+        launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in self?.activity=ok ? "Özet ve görevler hazır · Kaynakları gözden geçirin" : "Analiz tamamlanamadı · Transkript korunuyor" }
     }
     func resultMeeting(_ url:URL) -> String? {
         guard let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return nil }
@@ -47,7 +48,7 @@ extension Model {
     }
     func prepareAction(_ item:ActionItem,force:Bool=false) {
         activity="Görev için yerel taslak hazırlanıyor…"
-        launch(["prepare",item.id]+(force ? ["--force"]:[])) { [weak self] ok in self?.activity=ok ? "Taslak hazır · Henüz hiçbir yere gönderilmedi" : "Taslak hazırlanamadı" }
+        launch(["prepare",item.id]+(force ? ["--force"]:[])+cloudAnalysisArguments) { [weak self] ok in self?.activity=ok ? "Taslak hazır · Henüz hiçbir yere gönderilmedi" : "Taslak hazırlanamadı" }
     }
     func exportHandoff(_ item:ActionItem) async {
         let panel=NSSavePanel();panel.nameFieldStringValue="Görev-\(item.id).md"
@@ -61,7 +62,7 @@ extension Model {
         guard !memoryQuery.trimmingCharacters(in:.whitespaces).isEmpty else { return }
         let url=dataDir.appendingPathComponent("answer-\(UUID().uuidString).json")
         activity="Toplantı kayıtlarında yanıt aranıyor…";answer="";answerEvidence=[]
-        launch(["ask",memoryQuery,"--output",url.path]) { [weak self] ok in
+        launch(["ask",memoryQuery,"--output",url.path]+cloudAnalysisArguments) { [weak self] ok in
             guard let self=self else { return }
             if ok, let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] { self.answer=result["answer"] as? String ?? ""; self.answerEvidence=(result["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); self.activity="Arşiv yanıtı hazır · Kaynaklarla birlikte kontrol edin" }
         }
@@ -107,7 +108,7 @@ struct AnalysisView:View {
                 ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled);if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
             } }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout)
-        } else { ContentUnavailableView("Henüz analiz yok",systemImage:"text.bubble",description:Text("Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }
+        } else { ContentUnavailableView("Henüz analiz yok",systemImage:"text.bubble",description:Text(m.transcriptionMode=="openrouter" ? "Transkript hazır olunca özet, kararlar ve görevler OpenRouter’daki \(m.analysisModel) modeliyle çıkarılır; bu Mac’te model yüklenmez." : "Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }
     }.padding(24) } }
 }
 struct ActionsView:View {

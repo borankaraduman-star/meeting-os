@@ -50,6 +50,20 @@ class DesktopTests(unittest.TestCase):
    db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Canlı',current_job_metadata());s.close()
    with self.assertRaises(ValueError):dispatch({'action':'delete_meeting','meeting':mid},db)
    self.assertEqual(len(dispatch({'action':'snapshot'},db)['meetings']),1)
+ def test_review_queue_lists_reasons_in_priority_order(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('R',{})
+   flags=['cloud_transcript','cloud_diarization']
+   s.add_segment(mid,Segment(0,20,'uzun','system','Konuşmacı 1',metrics={'cluster':'0:0','identity':{'name':None,'candidate':'Ayşe','similarity':0.85,'suggested':'Ayşe'}},flags=flags))
+   s.add_segment(mid,Segment(20,25,'devam','system','Konuşmacı 1',metrics={'cluster':'0:0','identity':{'name':None,'candidate':'Ayşe','similarity':0.85,'suggested':'Ayşe'}},flags=flags))
+   s.add_segment(mid,Segment(25,40,'isimsiz','system','Konuşmacı 2',metrics={'cluster':'0:1','identity':{'name':None,'candidate':'Mehmet','similarity':0.7,'suggested':None}},flags=flags))
+   s.add_segment(mid,Segment(40,43,'kısa','system','Konuşmacı 3',speaker_name='Ali',metrics={'cluster':'0:2','cluster_embedding':3.0,'identity':{'name':'Ali','similarity':0.9}},flags=flags))
+   s.add_segment(mid,Segment(43,50,'çakışma','system','unknown',flags=flags+['speaker_ambiguous']))
+   s.status(mid,'complete');s.close()
+   q=dispatch({'action':'review_queue','meeting':mid},db)
+   kinds=[i['kind'] for i in q['items']]
+   self.assertEqual(kinds,['suggested_name','ambiguous','unnamed_speaker','short_match']);self.assertEqual(q['count'],4)
+   self.assertEqual(q['items'][0]['suggested'],'Ayşe');self.assertIn('Mehmet',q['items'][2]['reason']);self.assertIn('15 sn',q['items'][2]['reason'])
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

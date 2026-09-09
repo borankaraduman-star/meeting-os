@@ -133,6 +133,7 @@ struct DetailView:View {
                 switch model.tab {
                 case "analysis": AnalysisView(m:model)
                 case "actions": ActionsView(m:model)
+                case "review": ReviewView(model:model)
                 case "memory": MemoryView(m:model)
                 default: TranscriptView(model:model)
                 }

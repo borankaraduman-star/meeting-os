@@ -80,6 +80,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var meeting:Meeting? { meetings.first { $0.id==selected } }
     @Published var showEchoRows=false
+    @Published var review:[ReviewItem]=[]
+    @Published var analysisModel=UserDefaults.standard.string(forKey:"cloudAnalysisModel") ?? "openai/gpt-4.1-mini" { didSet { UserDefaults.standard.set(analysisModel,forKey:"cloudAnalysisModel") } }
+    /// analyze/prepare/ask run through OpenRouter whenever transcription does; the local Qwen path stays for local mode.
+    var cloudAnalysisArguments:[String] { transcriptionMode=="openrouter" ? ["--openrouter-model",analysisModel] : [] }
+    func loadReview() async {
+        guard let mid=selected else { review=[]; return }
+        do { let r=try await request(["action":"review_queue","meeting":mid]); review=(r["items"] as? [[String:Any]] ?? []).map(ReviewItem.init) } catch { review=[] }
+    }
+    func confirmReview(_ item:ReviewItem) async {
+        guard let mid=selected, !item.suggested.isEmpty, !item.speakerKey.isEmpty else { return }
+        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
     @Published var readingMode=true
     @Published var showAsides=false
     var filteredRows:[Row] {

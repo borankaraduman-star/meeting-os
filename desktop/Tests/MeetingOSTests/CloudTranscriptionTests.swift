@@ -28,6 +28,14 @@ final class TranscriptBlocksTests:XCTestCase {
         XCTAssertEqual(Row(["id":1,"speaker":"Konuşmacı 3","speaker_name":"Sol Üst","suggested":"Sol Üst","flags":["cloud_transcript"]]).label,"Sol Üst")
     }
 }
+final class ReviewItemTests:XCTestCase {
+    func testItemsParseTitlesAndIds() {
+        let a=ReviewItem(["segment_id":7,"start":65.0,"speaker":"Konuşmacı 2","text":"x","kind":"suggested_name","severity":1,"reason":"r","suggested":"Ayşe","speaker_key":"Konuşmacı 2"])
+        XCTAssertEqual(a.title,"İsim onayı bekliyor");XCTAssertEqual(a.time,"01:05");XCTAssertEqual(a.id,"suggested_name:7")
+        let t=ReviewItem(["kind":"task_owner","severity":2,"reason":"r","task":"t9","text":"Rapor"])
+        XCTAssertEqual(t.title,"Görev sahibi belirsiz");XCTAssertEqual(t.id,"task_owner:t9");XCTAssertNil(t.segment);XCTAssertEqual(t.time,"")
+    }
+}
 final class CloudTranscriptionTests:XCTestCase {
     func testOpenRouterModeRecordsWithoutLivePreview() {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))
