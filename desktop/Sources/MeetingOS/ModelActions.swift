@@ -1,0 +1,158 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+import UserNotifications
+
+/// Model behaviour that is not the poll loop: exports, cross-meeting loaders, housekeeping, naming.
+extension Model {
+    /// Draft agenda for the next meeting from recent open tasks, questions and decisions; saved where the user chooses.
+    /// Brief for the next calendar meeting (or the selected meeting's attendees): each person's open promises, questions and decisions.
+    func exportBrief() async {
+        var title=""; var attendees:[String]=[]
+        if useCalendar, let e=CalendarContext.upcoming() { title=e.title; attendees=e.attendees }
+        if attendees.isEmpty { attendees=calendarAttendees; if title.isEmpty { title=meeting?.title ?? "" } }
+        guard !attendees.isEmpty else { error=useCalendar ? "Yakın takvim etkinliğinde katılımcı adı yok; brifing için katılımcılı bir etkinlik gerekir." : "Brifing için takvim bağlamını açın (Ayarlar → Genel) ya da katılımcılı bir toplantı seçin."; return }
+        let panel=NSSavePanel(); panel.nameFieldStringValue="brifing-\(title.isEmpty ? "toplanti" : String(title.prefix(30))).md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"brief","title":title,"attendees":attendees,"path":url.path]); activity="Brifing kaydedildi · \(r["people"] as? Int ?? 0) kişi, \(r["owed"] as? Int ?? 0) açık söz, \(r["questions"] as? Int ?? 0) soru" }
+        catch { self.error=error.localizedDescription }
+    }
+
+    func exportAgenda() async {
+        let panel=NSSavePanel();panel.nameFieldStringValue="sonraki-toplanti-gundemi.md";panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"agenda","path":url.path,"limit":5]); activity="Gündem taslağı kaydedildi · \(r["open_tasks"] as? Int ?? 0) açık görev, \(r["questions"] as? Int ?? 0) soru, \(r["decisions"] as? Int ?? 0) karar" }
+        catch { self.error=error.localizedDescription }
+    }
+
+    /// End-of-day personal digest: today's tasks, expected answers and decisions that concern the user, with sources; saved where the user chooses.
+    func exportDigest() async {
+        let formatter=DateFormatter();formatter.dateFormat="yyyy-MM-dd"
+        let panel=NSSavePanel();panel.nameFieldStringValue="gun-sonu-ozeti-\(formatter.string(from:Date())).md";panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"digest","path":url.path]); activity="Gün sonu özeti kaydedildi · \(r["meetings"] as? Int ?? 0) toplantı, \(r["tasks"] as? Int ?? 0) söz, \(r["questions"] as? Int ?? 0) soru, \(r["decisions"] as? Int ?? 0) karar" }
+        catch { self.error=error.localizedDescription }
+    }
+
+    func exportWeeklyDigest() async {
+        let f=DateFormatter(); f.dateFormat="yyyy-MM-dd"; let to=Date(); let from=Calendar.current.date(byAdding:.day,value:-6,to:to) ?? to
+        let panel=NSSavePanel(); panel.nameFieldStringValue="hafta-ozeti-\(f.string(from:to)).md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"digest","path":url.path,"from":f.string(from:from),"to":f.string(from:to)]); activity="Hafta özeti kaydedildi · \(r["meetings"] as? Int ?? 0) toplantı, \(r["decisions"] as? Int ?? 0) karar, \(r["tasks"] as? Int ?? 0) söz" }
+        catch { self.error=error.localizedDescription }
+    }
+
+    func loadDecisions(query:String) async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"decision_log","query":query,"limit":200]) { decisions=(r["decisions"] as? [[String:Any]] ?? []).enumerated().map { DecisionEntry($0.element,index:$0.offset) } }
+    }
+
+    func exportDecisions(query:String) async {
+        let panel=NSSavePanel(); panel.nameFieldStringValue="karar-defteri.md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"decision_log_export","path":url.path,"query":query]); activity="Karar defteri kaydedildi · \(r["decisions"] as? Int ?? 0) karar" } catch { self.error=error.localizedDescription }
+    }
+
+    func loadWaiting() async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"waiting_board"]) { waiting=(r["people"] as? [[String:Any]] ?? []).map(WaitingPerson.init) }
+    }
+
+    func loadReviewDebt() async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"review_debt","days":7]) {
+            debt=(r["items"] as? [[String:Any]] ?? []).map(DebtItem.init)
+            let counts=r["counts"] as? [String:Int] ?? [:]
+            let names=["unnamed_speaker":"isimsiz konuşmacı","suggested_name":"isim onayı","glossary":"sözlük","task_owner":"sahipsiz görev","short_match":"kısa eşleşme","ambiguous":"çakışma","marker":"işaret"]
+            debtSummary=counts.sorted { $0.value>$1.value }.map { "\($0.value) \(names[$0.key] ?? $0.key)" }.joined(separator:", ")
+        }
+    }
+
+    func loadQuestions(query:String) async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"question_radar","query":query,"limit":100]) { questions=(r["groups"] as? [[String:Any]] ?? []).enumerated().map { QuestionGroup($0.element,index:$0.offset) } }
+    }
+
+    func loadPeriodScorecard() async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"scorecard"]) { scorePeriod=r["period"] as? [String:Any]; scoreMeetings=(r["meetings"] as? [[String:Any]] ?? []).map(ScoreMeeting.init) }
+    }
+
+    /// One search field for the whole Hafıza tab: the active segment decides what it queries.
+    func runMemoryQuery(mode:String) async {
+        switch mode { case "decisions": await loadDecisions(query:memoryQuery); case "questions": await loadQuestions(query:memoryQuery); case "waiting": await loadWaiting(); default: if !memoryQuery.isEmpty { await memorySearch() } }
+    }
+
+    func heartbeatIfDue() {
+        guard !recording, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
+        lastHeartbeat=Date()
+        Task {
+            _=try? await request(["action":"heartbeat","app":["version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "","bridge":BridgeStats.shared.snapshot]])
+            if !recording, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
+                let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
+                if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
+            }
+        }
+    }
+
+    func applyLivePriority(zoomOpen:Bool) {
+        guard let p=job, jobKind != "record" else { if jobBackgrounded { jobBackgrounded=false; try? FileManager.default.removeItem(at:lowPriorityFlag) }; return }
+        guard zoomOpen != jobBackgrounded else { return }
+        jobBackgrounded=zoomOpen
+        setpriority(PRIO_DARWIN_PROCESS,id_t(p.processIdentifier),zoomOpen ? PRIO_DARWIN_BG : 0)   // 0 = PRIO_DARWIN_NORMAL (not exported to Swift)
+        if zoomOpen { try? Data().write(to:lowPriorityFlag); activity="Zoom toplantısı açıldı · arka plan işi yavaşlatıldı, tek yükleyici" }
+        else { try? FileManager.default.removeItem(at:lowPriorityFlag); activity="Zoom toplantısı bitti · arka plan işi normal hızda" }
+    }
+
+    func loadSetupStatus() async {
+        var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
+        let settings=await UNUserNotificationCenter.current().notificationSettings()
+        checks.append(SetupStatus.notificationCheck(settings))
+        if let r=try? await request(["action":"setup_status"]) { checks+=SetupStatus.serviceChecks(r) }
+        setupChecks=checks
+    }
+
+    /// Send one task to Apple Reminders; asks for reminders access on first use.
+    func addReminder(_ item:ActionItem) {
+        let go={ [weak self] in
+            guard let self=self else { return }
+            do { try RemindersBridge.add(title:item.title,meetingTitle:item.meetingTitle,owner:item.owner,due:item.due,dueDate:item.dueDate.isEmpty ? nil : item.dueDate); self.activity="Hatırlatıcılar’a eklendi · “\(item.title.prefix(60))”"+(item.dueDate.isEmpty ? "" : " · \(MeetingDates.dayLabel(item.dueDate)) 09:00") }
+            catch { self.error="Hatırlatıcı eklenemedi: \(error.localizedDescription)" }
+        }
+        if RemindersBridge.authorized { go() }
+        else { RemindersBridge.requestAccess { [weak self] ok in if ok { go() } else { self?.error="Hatırlatıcılar erişimi verilmedi · Sistem Ayarları → Gizlilik ve Güvenlik → Hatırlatıcılar" } } }
+    }
+
+    /// Name a diarized cluster straight from Kontrol (calendar attendee chip). Enrolls like a confirmed suggestion.
+    func nameSpeaker(_ speakerKey:String,_ name:String) async {
+        guard let mid=selected, !speakerKey.isEmpty, !name.isEmpty else { return }
+        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":speakerKey,"name":name,"enroll":true]); activity="“\(name)” adlandırıldı · profil güncellendi"; await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+
+    func compactStorage() async {
+        do { let r=try await request(["action":"storage_compact"]); let ab=r["archived_bytes"] as? Int ?? 0; activity="Sesler sıkıştırıldı · parçalardan \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)), FLAC’ten \(StorageReport.format(bytes:ab)) boşaldı (\(r["archived_meetings"] as? Int ?? 0) toplantı)"; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
+        catch { self.error=error.localizedDescription }
+    }
+
+    func exportDiagnostics() async {
+        let panel=NSSavePanel();panel.nameFieldStringValue="MeetingOS-tanilama-\(UUID().uuidString.prefix(8)).json"
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        var payload:[String:Any]=["action":"diagnostics","path":url.path]
+        if let progress=progressURL { payload["progress"]=progress.path }
+        do { _=try await request(payload);activity="Tanılama raporu kaydedildi · Toplantı içeriği dahil değil" }
+        catch { self.error=error.localizedDescription }
+    }
+
+    /// Dry run first; nothing is removed until the confirmation button calls with dryRun=false.
+    func previewCleanup() async {
+        do { let r=try await request(["action":"storage_cleanup","days":cleanupDays,"dry_run":true]); let list=r["meetings"] as? [[String:Any]] ?? []
+            cleanupPreview=CleanupPreview(days:cleanupDays,count:list.count,bytes:r["bytes"] as? Int ?? 0,titles:list.prefix(6).compactMap { $0["title"] as? String }) }
+        catch { self.error=error.localizedDescription }
+    }
+
+    func runCleanup() async {
+        do { let r=try await request(["action":"storage_cleanup","days":cleanupDays,"dry_run":false]); activity="Eski sesler temizlendi · \((r["meetings"] as? [[String:Any]])?.count ?? 0) toplantı, \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)) boşaldı · transkriptler duruyor"; cleanupPreview=nil; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
+        catch { self.error=error.localizedDescription }
+    }
+}
