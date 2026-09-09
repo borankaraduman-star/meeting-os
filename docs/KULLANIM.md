@@ -53,6 +53,7 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 - Anahtar geçersiz (401) ya da kredi bitmişse kenar çubuğunda tek satır görürsünüz (“Anahtar geçersiz · Ayarlar → Sistem → OpenRouter anahtarı”); ses silinmez. Sorunu giderince toplantı, Mac boştayken kendiliğinden yeniden alınır (10 dk → 30 dk → 2 sa → 6 sa → günlük); Ayarlar → Sistem’den kapatılabilir.
 - Kayıt sırasında yardımcı süreç ölür ya da takılırsa aynı klasöre kaldığı saniyeden devam eder (saatte en çok 5 kez); uyku/uyanmada ses akışı yeniden kurulur. Panelde “Kayıt devam ediyor · N sn boşluk” görürsünüz; rapor `capture` bloğunda `relaunches`/`wakes` sayıları kalır.
 - Kayıt bittiğinde önceki toplantının işi sürüyorsa yeni toplantı kuyruğa girer; ⌃⌥R hiçbir zaman beklemez.
+- Kayıt sürerken (Zoom, Meet ya da yüz yüze fark etmez) önceki toplantının yükleme/özet işi arka plan önceliğine iner ve tek parça yükler; kayıt bitince normal hıza döner. Bellek baskısında yalnız o iş durur, kayıt asla.
 
 ## 4. Kenar çubuğu
 
