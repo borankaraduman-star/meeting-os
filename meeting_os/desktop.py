@@ -228,7 +228,7 @@ def dispatch(request, db=None):
                 m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in UNSETTLED else m['status']
                 live=m['recovery_state']=='active' and m['metadata'].get('provisional') is True and not m['metadata'].get('retry_attempt')
                 if m['status'] in UNSETTLED or m['id']==selected:
-                    m['capture']=capture_state(m['metadata'],include_signal=live)
+                    m['capture']=capture_state(m['metadata'],include_signal=live and request.get('signals',True) is not False)   # the app asks for signal analysis every third poll
                     if live and m['capture'] is not None:
                         from .preview_failures import summarize
                         m['capture']['preview']=summarize(m['metadata']['capture_dir'],DATA_DIR/'last-job.log' if db is None else None)

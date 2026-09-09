@@ -204,13 +204,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if wanted != (selected ?? "") { Task { await self.refresh() } }
         }
         do {
-            let result=try await request(["action":"snapshot","meeting":wanted,"segments_hash":wanted==lastSegmentsMeeting ? segmentsHash : ""])
+            let result=try await request(["action":"snapshot","meeting":wanted,"segments_hash":wanted==lastSegmentsMeeting ? segmentsHash : "","signals":pollTick%3==0])   // chunk-level signal analysis every 6 s, not every 2 s
             meetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
             profiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
-                activity=CaptureSignalPresentation.label(active.capture)
-                captureDots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
+                if active.capture["signals"] != nil {   // polls without signal analysis keep the last reading
+                    activity=CaptureSignalPresentation.label(active.capture)
+                    captureDots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
+                }
             }
             if !restoredOnLaunch {
                 restoredOnLaunch=true
