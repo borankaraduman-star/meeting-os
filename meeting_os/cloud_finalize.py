@@ -25,6 +25,7 @@ PIECE_SECONDS = 300           # MAI-Transcribe 2 returned HTTP 500 for a 552 s p
 FINE_PIECE_SECONDS = 30       # models without diarization get short windows so timing stays useful
 MAX_PIECE_BYTES = 24*1024*1024
 REQUEST_TIMEOUT = 600
+UPLOAD_WORKERS = 3            # pieces in flight at once; MAI answered a 5-minute piece in ~63 s
 SOURCE_LABELS = {'mic':'Boran','system':'Karşı taraf'}
 
 
@@ -165,19 +166,18 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     if not old:
         with store.db:store.db.execute('INSERT INTO cloud_sources(meeting,digest,plan,model) VALUES(?,?,?,?)',(mid,signature,plan_json,model))
     done={r[0] for r in store.db.execute('SELECT position FROM cloud_chunks WHERE meeting=?',(mid,))}
-    for position,(source,a,b,index) in enumerate(plan):
-        emit('transcribing',position,len(plan),'OpenRouter')
-        if position in done: continue
-        path=sources[source]
-        segments=[];usage={}
-        if source=='mic' and 'system' in sources and not is_silent(path,a,b) and is_echo(path,sources['system'],a,b):
-            usage={'skipped':'echo'}   # nothing uploaded: this window is the speakers bleeding into the mic
-        elif is_silent(path,a,b): usage={'skipped':'silent'}
-        else:
-            audio=encode_piece(path,a,b,ffmpeg)
-            if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
-            result=client.transcribe(audio,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT)
-            usage=result['usage']
+    def prepare(position):
+        """Main-thread decision per piece: skip (echo/silent) or hand encoded audio to an upload worker."""
+        source,a,b,index=plan[position];path=sources[source]
+        if source=='mic' and 'system' in sources and not is_silent(path,a,b) and is_echo(path,sources['system'],a,b): return ('skip',{'skipped':'echo'})
+        if is_silent(path,a,b): return ('skip',{'skipped':'silent'})
+        audio=encode_piece(path,a,b,ffmpeg)
+        if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
+        return ('upload',audio)
+    def commit(position,usage,result):
+        source,a,b,index=plan[position]
+        segments=[]
+        if result is not None:
             flags=['cloud_transcript','confidence_unavailable','speaker_unverified']
             multi=counts[source]>1
             provider_segments=merge_segments(result.get('segments') or [])
@@ -195,6 +195,26 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
                 store.db.execute('INSERT INTO segments(meeting,start,end,source,speaker,speaker_name,payload) VALUES(?,?,?,?,?,?,?)',
                     (mid,segment.start,segment.end,source,segment.speaker,None,json.dumps(d,ensure_ascii=False)))
             store.db.execute('INSERT INTO cloud_chunks VALUES(?,?,?)',(mid,position,json.dumps(usage)))
+    pending=[i for i in range(len(plan)) if i not in done]
+    finished=len(plan)-len(pending)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
+        for start in range(0,len(pending),UPLOAD_WORKERS):
+            batch=pending[start:start+UPLOAD_WORKERS]
+            emit('transcribing',finished,len(plan),'OpenRouter')
+            futures={}
+            for position in batch:
+                kind,payload=prepare(position)
+                if kind=='skip': commit(position,payload,None);finished+=1;continue
+                source=plan[position][0]
+                futures[position]=pool.submit(client.transcribe,payload,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT)
+            failure=None
+            for position in sorted(futures):   # every paid success is checkpointed even when a sibling fails
+                try: result=futures[position].result()
+                except Exception as exc:
+                    failure=failure or exc;continue
+                commit(position,result['usage'],result);finished+=1
+            if failure is not None: raise failure
     emit('transcribing',len(plan),len(plan),'OpenRouter')
     return plan
 

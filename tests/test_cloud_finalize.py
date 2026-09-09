@@ -402,3 +402,21 @@ class UncertaintyFlagTests(unittest.TestCase):
         from meeting_os.intelligence import uncertain
         self.assertFalse(uncertain({'flags':['cloud_transcript','cloud_diarization','confidence_unavailable','speaker_unverified','coarse_timing']}))
         self.assertTrue(uncertain({'flags':['cloud_transcript','speaker_ambiguous']}));self.assertFalse(uncertain({}))
+
+class ParallelUploadTests(unittest.TestCase):
+    def test_sibling_success_is_checkpointed_when_one_piece_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=95);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('P',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            calls=[]
+            class C:
+                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+                    calls.append(len(audio))
+                    if len(calls)==3: raise OpenRouterError('network')   # first upload of the last batch fails; its sibling must still be checkpointed
+                    return {'text':'metin','usage':{'seconds':30,'cost':0.001}}
+            with self.assertRaises(OpenRouterError):finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            paid=[json.loads(u[0]) for u in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=? ORDER BY position',(mid,)) if 'cost' in u[0]]
+            self.assertGreaterEqual(len(paid),2)   # pieces 1 and 3 of the batch survived the failure of piece 2
+            before=len(calls);finalize_capture(store,mid,tmp,consent=True,client=C())
+            self.assertEqual(store.db.execute('SELECT status FROM meetings WHERE id=?',(mid,)).fetchone()[0],'complete')
+            self.assertLess(len(calls)-before,4)   # only the missing pieces were re-sent
+            store.close()
