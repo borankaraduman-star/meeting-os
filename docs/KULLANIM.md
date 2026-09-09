@@ -2,6 +2,10 @@
 
 Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Hiçbir şey kendiliğinden dışarı gönderilmez: bütün dışa aktarımlar dosya olarak kaydedilir.
 
+![Ana pencere. Sol: “Toplantıya bir ad ver” alanı, Yeni kayıt, sürüm satırı (Kontrol et), katlı yazıya çevirme satırı, arama, Bugün/Dün grupları; altta Son durum ve Ayarlar. Sağ: başlık, özet şeridi (tarih · süre · kişi · açık görev · kontrol maddesi), sekmeler ve rozetler, konuşmada ara, okuma görünümü.](img/sidebar.jpg)
+
+*Ana pencere. Sol: “Toplantıya bir ad ver” alanı, Yeni kayıt, sürüm satırı (Kontrol et), katlı yazıya çevirme satırı, arama, Bugün/Dün grupları; altta Son durum ve Ayarlar. Sağ: başlık, özet şeridi (tarih · süre · kişi · açık görev · kontrol maddesi), sekmeler ve rozetler, konuşmada ara, okuma görünümü.*
+
 ---
 
 ## 1. İlk kurulum
@@ -22,6 +26,10 @@ Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi Op
 | Zoom’da elle dokunmadan (isteğe bağlı) | Ayarlar → Genel → “Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat”: pencere 10 sn açık kalınca başlar, kapanınca 60 sn sonra biter; elle başlatılan kayıtlara dokunmaz. |
 
 Kayıt sırasında:
+
+![Yüzen kayıt paneli: süre, toplantı adı, Mik/Sis sinyal noktaları, ⌘M sayacı, An / Karar / Bitir. Her pencerenin üstünde durur, odağı almaz.](img/panel.jpg)
+
+*Yüzen kayıt paneli: süre, toplantı adı, Mik/Sis sinyal noktaları, ⌘M sayacı, An / Karar / Bitir. Her pencerenin üstünde durur, odağı almaz.*
 - **Yüzen panel** her pencerenin üstünde: süre, toplantı adı, mikrofon/sistem sinyal noktaları (yeşil sinyal var, gri sessiz, turuncu eski okuma), ⌘M sayacı, An / Karar / Bitir. Ayarlar → Genel’den kapatılabilir.
 - **An işaretleri:** ⌃⌥M (her yerden) veya ⌘M önemli an, ⌘⇧M karar, ⌘⌥M bana görev, ⌘⌃M sonra bak. İşaretler kayıt bitince Kontrol sekmesinin üstünde ve ilgili paragrafın yanında görünür.
 - **Takvim bağlamı (isteğe bağlı):** Ayarlar → Genel’de açıksa kayıt başlarken o andaki takvim etkinliğinin adı başlık olur, katılımcıları konuşmacı adlandırmada tek tıkla seçilir. Takvim yalnız okunur.
@@ -52,6 +60,14 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 ## 5. Sekmeler (⌘1–⌘5)
 
 ### Transkript (⌘1)
+
+![Transkript → Okuma: zaman ve ▶ solda, konuşmacı adı bir menü (▾), aynı kişinin ardışık paragrafları başlıksız sürer, sağda Düzelt. Üst satırda katlanan kısa onaylar ve “Dolgu seslerini gizle”; sağda Okuma / Bölümler.](img/transcript.jpg)
+
+*Transkript → Okuma: zaman ve ▶ solda, konuşmacı adı bir menü (▾), aynı kişinin ardışık paragrafları başlıksız sürer, sağda Düzelt. Üst satırda katlanan kısa onaylar ve “Dolgu seslerini gizle”; sağda Okuma / Bölümler.*
+
+![Özet ya da Kontrol’den “Bölüme git” / bir alıntıya tıklayınca transkript o paragrafa kaydırılır ve 2,5 saniye yeşil çerçeveyle vurgulanır; çevresi görünür kalır.](img/reveal.jpg)
+
+*Özet ya da Kontrol’den “Bölüme git” / bir alıntıya tıklayınca transkript o paragrafa kaydırılır ve 2,5 saniye yeşil çerçeveyle vurgulanır; çevresi görünür kalır.*
 - **Okuma** görünümü belge gibidir: zaman solda, aynı kişinin ardışık paragrafları başlıksız sürer, konuşmacı değişiminde ayraç, dolgu sesleri (“eee”) gizli (kapatılabilir), kısa onaylar (“hı hı”) katlı. **Bölümler** ham kayıtları gösterir.
 - Konuşmacı adına tıklayın → menü: ses profilleri, takvim katılımcıları, “Yeni isim…”. Seçim o kişinin bütün paragraflarını adlandırır ve profili kaydeder.
 - **Düzenle** metin ve isim düzeltir; “Ses profilini kaydet” için önce bölümü dinleyip temiz olduğunu onaylayın. **Neden bu isim?** benzerlik puanlarını gösterir.
@@ -59,11 +75,23 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 - Mikrofon yankısı bölümleri gizlidir; üstteki satırdan gösterilebilir.
 
 ### Özet (⌘2)
+
+![Özet: bölüm / açık görev / özet durumu kartları, konuşma payı çubukları, ardından kaynak alıntılı özet maddeleri. Sağ üstte “Özeti güncelle”.](img/summary.jpg)
+
+*Özet: bölüm / açık görev / özet durumu kartları, konuşma payı çubukları, ardından kaynak alıntılı özet maddeleri. Sağ üstte “Özeti güncelle”.*
 - Konuşma bölümü / açık görev / özet durumu kartları, **konuşma payı** çubukları (yankı hariç).
 - Özet, kararlar (önceki toplantıdaki hâliyle), riskler, açık sorular; her madde kaynak alıntısıyla. Alıntıya tıklayınca transkript o paragrafa kaydırılıp vurgulanır.
 - **Özet ve görevleri hazırla / Özeti güncelle**: metin ya da isim değiştiyse “güncel değil” uyarısı çıkar.
 
 ### Görevlerim (⌘3)
+
+![Görevlerim: filtre (Bana ait · Bu toplantı · Tüm görevler) ve sağda Dışa aktar menüsü (Brifing, gündem, gün/hafta özeti). Her satırda durum seçici, “Hatırlatıcılar’a ekle” ve ⋯ menü (Düzenle, Taslak hazırla, paket kaydet); altında kaynak alıntısı.](img/actions.jpg)
+
+*Görevlerim: filtre (Bana ait · Bu toplantı · Tüm görevler) ve sağda Dışa aktar menüsü (Brifing, gündem, gün/hafta özeti). Her satırda durum seçici, “Hatırlatıcılar’a ekle” ve ⋯ menü (Düzenle, Taslak hazırla, paket kaydet); altında kaynak alıntısı.*
+
+![Vade önerisi çipi: transkriptteki “haftaya salı” toplantı tarihine göre “Öneri: 15 Eyl” olur; Onayla’ya basmadan hiçbir yere yazılmaz.](img/due.jpg)
+
+*Vade önerisi çipi: transkriptteki “haftaya salı” toplantı tarihine göre “Öneri: 15 Eyl” olur; Onayla’ya basmadan hiçbir yere yazılmaz.*
 - Filtre: **Bana ait (n) · Bu toplantı (n) · Tüm görevler (n)**; bana ait görev yoksa “Bu toplantı” ile açılır.
 - Satırda: durum (Açık / Devam ediyor / Tamamlandı / Kaldırıldı), **vade çipi**, **Hatırlatıcılar’a ekle**, ⋯ menü (Düzenle, Taslak hazırla, ChatGPT/Codex/Claude Code için paket kaydet).
 - **Vade önerisi:** transkriptteki “yarın / haftaya salı / ay sonu / 15 Eylül / 3 gün içinde” toplantı tarihine göre tarihe çevrilir, “Öneri: 15 Eyl · Onayla” olarak gelir; onaylamadan hiçbir yere yazılmaz. Onaylı tarih Hatırlatıcılar’a o gün 09:00 alarmıyla gider; geçmiş tarihli açık görev turuncu görünür.
@@ -71,12 +99,28 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 - **Dışa aktar** menüsü: **Brifing…** (sıradaki takvim toplantısının katılımcıları için verdikleri sözler, açık sorular, kararlar), **Sonraki toplantı gündemi…**, **Gün sonu özeti…** (yalnız sana düşenler), **Hafta özeti…** (son 7 gün, toplantı toplantı; CLI ile isim maskeli).
 
 ### Kontrol (⌘4)
+
+![Kontrol: üstte “Son 7 gün · 18 madde” borç satırı (Tümünü göster), adlandırma isabeti satırı, sonra şüpheli maddeler; her maddede Bölüme git / Dinle / Adlandır…](img/review.jpg)
+
+*Kontrol: üstte “Son 7 gün · 18 madde” borç satırı (Tümünü göster), adlandırma isabeti satırı, sonra şüpheli maddeler; her maddede Bölüme git / Dinle / Adlandır…*
+
+![Kontrol’de isimsiz konuşmacı: takvim bağlamı açıksa katılımcı çipleri gelir; tek tıkla adlandırır ve profil kaydeder.](img/reviewchips.jpg)
+
+*Kontrol’de isimsiz konuşmacı: takvim bağlamı açıksa katılımcı çipleri gelir; tek tıkla adlandırır ve profil kaydeder.*
+
+![Karne (1.2.23’ten itibaren Kontrol sekmesinde katlanır grup): son 7 günün saati, kararı, görevi, sorusu, ücreti; toplantı başına konuşma payı yüzdeleri.](img/scorecard.jpg)
+
+*Karne (1.2.23’ten itibaren Kontrol sekmesinde katlanır grup): son 7 günün saati, kararı, görevi, sorusu, ücreti; toplantı başına konuşma payı yüzdeleri.*
 - Şüpheli yerler sırayla: onay bekleyen isim (tek tık Onayla), isimsiz konuşmacı (takvim katılımcı çipleriyle adlandırma), çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev, sözlük düzeltmesi.
 - Üstte **Son 7 gün · N madde** (bütün toplantıların kontrol borcu; “Aç” ilgili bölüme götürür) ve katlanır **Son 7 gün karnesi** (toplantı saati, karar, görev, soru, ücret; toplantı başına konuşma payı).
 - **Sözlükle tara** transkripti sözlükle karşılaştırır; öneriler analiz modeline doğrulatılır. **Doğrulananları uygula (N)** hepsini tek seferde işler, **Uygula** tek tek, **Yoksay** düşürür. Özgün metin ve düzeltme geçmişi korunur.
 - **Adlandırma isabeti** satırı: otomatik doğru/yanlış, onaylanan/reddedilen öneri sayıları.
 
 ### Hafıza (⌘5, ⌘⇧F)
+
+![Hafıza → Sorular: cevapsız sorular, hangi toplantıdan geldiği, kaynak alıntı ve “Toplantıyı aç”. Tekrar eden sorular turuncu “N toplantıdır” rozetiyle üstte.](img/questions.jpg)
+
+*Hafıza → Sorular: cevapsız sorular, hangi toplantıdan geldiği, kaynak alıntı ve “Toplantıyı aç”. Tekrar eden sorular turuncu “N toplantıdır” rozetiyle üstte.*
 Tek arama alanı; bölüme göre çalışır:
 - **Ara:** bütün tamamlanmış toplantılarda sözcük araması (Türkçe eklere dayanıklı: “modülleri” → “modülü”). **Kayıtlardan yanıtla** en fazla 12 alıntıyla kaynaklı yanıt üretir; yeterli kaynak yoksa kaçınır.
 - **Kararlar:** bütün toplantıların kararları tek listede, kaynak ve önceki hâliyle; **Markdown…** dışa aktarır.
@@ -87,6 +131,18 @@ Tek arama alanı; bölüme göre çalışır:
 Özet ve görevler (Markdown), Transkript (Markdown), Altyazı (SRT), JSON; **Belge hazırla (OpenRouter):** PRD, hata raporu, müşteri talebi, Claude Code istemi (bilinen/eksik ayrımı, kaynak bölümler, kaynakta olmayan sayı reddedilir); **Paylaş…** önizleme + **İsimleri maskele** (Kişi A, Kişi B…) + yalnız kararlar seçeneği.
 
 ## 7. Ayarlar (⌘,)
+
+![Ayarlar (⌘,): üstte bölüm seçici (Genel · Sözlük ve sesler · Depolama · Güncelleme ve raporlar · Kurulum durumu). Genel: tema ve vurgu rengi, Zoom bildirimi, elle dokunmadan kayıt, yüzen panel, takvim bağlamı.](img/settings.jpg)
+
+*Ayarlar (⌘,): üstte bölüm seçici (Genel · Sözlük ve sesler · Depolama · Güncelleme ve raporlar · Kurulum durumu). Genel: tema ve vurgu rengi, Zoom bildirimi, elle dokunmadan kayıt, yüzen panel, takvim bağlamı.*
+
+![Kurulum durumu kartı: her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta teşhis raporu satırı ve uygulama yoklama gecikmesi.](img/setup.jpg)
+
+*Kurulum durumu kartı: her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta teşhis raporu satırı ve uygulama yoklama gecikmesi.*
+
+![Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.](img/theme.jpg)
+
+*Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.*
 - **Genel:** tema (Sistem / Açık / Koyu) ve vurgu rengi; Zoom bildirimi; Zoom’da kendiliğinden kayıt; yüzen panel; takvim bağlamı.
 - **Sözlük ve sesler:** kişi adları / özel terimler (satır başına bir), glossary.jsonl içe aktarma, kayıtlı ses profilleri (örnekleri görme/silme, yeniden adlandırma, profil silme).
 - **Depolama:** toplam kullanım, en büyük toplantılar (sil), **Sesleri sıkıştır** (ham parçaları siler, sesi FLAC yapar), **Eski toplantıların sesi** silinmesin / 14 / 30 / 60 / 90 gün sonra (varsayılan 30; yazı kalır, “Sesi koru” işaretli toplantılara dokunulmaz), **Eski sesleri temizle** önizlemeli manuel silme.
