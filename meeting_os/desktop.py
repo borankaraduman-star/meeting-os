@@ -265,9 +265,8 @@ def dispatch(request, db=None):
         if action=='explain_identity':
             rows=[r for r in store.segments(request['meeting']) if r['speaker']==request['speaker'] and r.get('embedding')]
             if not rows: return {'candidates':[],'reason':'Bu konuşmacı için ses vektörü yok (3 saniyeden kısa veya henüz işlenmedi)'}
-            model=rows[0]['embedding_model'];vs=[r['embedding'] for r in rows if r.get('embedding_model')==model]
-            centroid=[sum(col)/len(vs) for col in zip(*vs)]
-            from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD
+            from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid
+            model=rows[0]['embedding_model'];centroid=linked_centroid(rows,model)   # the same vector the pipeline scored
             return {'candidates':store.explain_identity(centroid,model),'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD,'seconds':round(sum(r['end']-r['start'] for r in rows),1)}
         if action in ('update_check','update_start','update_status'):
             from . import updater

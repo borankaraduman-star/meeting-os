@@ -407,13 +407,64 @@ class QualitySetTests(unittest.TestCase):
             store.enroll_speaker(mid,'Konuşmacı 2','Mehmet') # suggestion confirmed
             refs=reference_set(store);self.assertEqual(len(refs),1);self.assertEqual(refs[0]['reference'],'Yarın rapor hazır olur.');self.assertAlmostEqual(refs[0]['wer'],0.25)
             rep=report(store);self.assertEqual(rep['text_edits'],1);self.assertEqual(rep['mean_wer_by_model'],{'microsoft/mai-transcribe-2':0.25})
+            self.assertEqual((rep['wer'],rep['wer_no_filler'],rep['transcript_words'],rep['edits_per_1000_words']),(0.25,0.25,5,200.0))
             ident=rep['identity'];self.assertEqual((ident['auto_wrong'],ident['suggestion_confirmed'],ident['auto_precision']),(1,1,0.0))
             class C:
-                def transcribe(self,audio,fmt,*,model,consent,**k):return {'text':'Yarın rapor hazır olur' if 'mai' in model else 'yarin rapor','usage':{'cost':0.001}}
-            out=compare(store,['microsoft/mai-transcribe-2','openai/whisper-large-v3'],C(),consent=True,encode=lambda p,a,b:b'OggS')
-            self.assertEqual(out['segments'],1);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer'],0.0);self.assertEqual(out['models']['openai/whisper-large-v3']['mean_wer'],0.75)
+                hints=[]
+                def transcribe(self,audio,fmt,*,model,consent,hint=None,**k):
+                    self.hints.append(hint);return {'text':'Eee yarın rapor hazır olur' if 'mai' in model else 'yarin rapor','usage':{'cost':0.001}}
+            out=compare(store,['microsoft/mai-transcribe-2','openai/whisper-large-v3'],C(),consent=True,encode=lambda p,a,b:b'OggS',hint='PMD, Trendyol')
+            self.assertEqual(C.hints,['PMD, Trendyol']*2);self.assertTrue(out['hint'])
+            self.assertEqual(out['segments'],1);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer'],0.25);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer_no_filler'],0.0)
+            self.assertEqual(out['models']['openai/whisper-large-v3']['mean_wer'],0.75);self.assertEqual(out['stored_model_mean_wer_no_filler'],0.25)
             with self.assertRaises(Exception):compare(store,['x/y'],C(),consent=True)
             store.close()
+
+class ReplayTests(unittest.TestCase):
+    """Three people, four meetings, tiny 3-d voiceprints: a meeting must never vouch for itself."""
+    def build(self,tmp):
+        from meeting_os.types import Segment
+        store=Store(Path(tmp)/'meeting-os.sqlite');flags=['cloud_transcript','cloud_diarization']
+        def meeting(title,clusters):
+            mid=store.create_meeting(title,{'model':'microsoft/mai-transcribe-2'});t=0
+            for speaker,vec in clusters:
+                store.add_segment(mid,Segment(t,t+10,'konuşma','system',speaker,metrics={'cluster':f'0:{t//10}'},flags=flags,embedding=vec,embedding_model='m'));t+=10
+            store.status(mid,'complete');return mid
+        m1=meeting('M1',[('Konuşmacı 1',[1.0,0.0,0.0]),('Konuşmacı 2',[0.0,1.0,0.0])]);store.enroll_speaker(m1,'Konuşmacı 1','Ayşe');store.enroll_speaker(m1,'Konuşmacı 2','Burak')
+        m2=meeting('M2',[('Konuşmacı 1',[0.98,0.2,0.0]),('Konuşmacı 2',[0.0,0.0,1.0])]);store.enroll_speaker(m2,'Konuşmacı 1','Ayşe');store.enroll_speaker(m2,'Konuşmacı 2','Ceren')
+        m3=meeting('M3',[('Konuşmacı 1',[0.0,0.97,0.24]),('Konuşmacı 2',[0.1,0.0,1.0])]);store.enroll_speaker(m3,'Konuşmacı 1','Burak');store.enroll_speaker(m3,'Konuşmacı 2','Ceren')
+        # M4: Ayşe sounds like Burak here (the only sample that would rescue her comes from this very meeting); Ceren's cluster is Burak's exact voice
+        m4=meeting('M4',[('Konuşmacı 1',[0.6,0.8,0.0]),('Konuşmacı 2',[0.0,1.0,0.0])]);store.enroll_speaker(m4,'Konuşmacı 1','Ayşe');store.correct(m4,'Konuşmacı 2','Ceren')
+        store.add_sample_if_new('Ayşe',[0.6,0.8,0.0],'m',10,f'auto:{m4}:0:0')
+        return store,(m1,m2,m3,m4)
+    def test_identity_replay_excludes_own_meeting_samples(self):
+        from meeting_os.quality import replay_identity, replay
+        with tempfile.TemporaryDirectory() as tmp:
+            store,(m1,m2,m3,m4)=self.build(tmp)
+            self.assertEqual(store.identify([0.6,0.8,0.0],'m',0.87,0.05)['name'],'Ayşe')             # with its own samples the meeting names itself
+            self.assertIsNone(store.identify([0.6,0.8,0.0],'m',0.87,0.05,exclude=m4)['name'])       # without them it is an honest miss
+            out=replay_identity(store)
+            self.assertEqual((out['clusters'],out['ok'],out['wrong'],out['missed'],out['abstained'],out['no_profile']),(8,6,1,1,0,0))
+            self.assertEqual(out['people']['Ayşe'],{'ok':2,'wrong':0,'missed':1,'abstained':0,'no_profile':0});self.assertEqual(out['people']['Ceren']['wrong'],1)
+            miss=[c for c in out['misses'] if c['outcome']=='missed'][0];self.assertEqual((miss['meeting'],miss['name'],miss['nearest'][0]['name']),(m4,'Ayşe','Burak'));self.assertLess(miss['score'],0.87)
+            wrong=[c for c in out['misses'] if c['outcome']=='wrong'][0];self.assertEqual((wrong['name'],wrong['named']),('Ceren','Burak'))
+            self.assertEqual(replay_identity(store,threshold=0.99)['ok'],2)   # tighter threshold: only exact voices survive
+            summary,full=replay(store,tmp);self.assertEqual(summary['identity']['ok'],6);self.assertTrue(Path(summary['path']).is_file())
+            self.assertEqual(json.loads(Path(summary['path']).read_text())['identity']['clusters'],8);store.close()
+    def test_text_replay_drops_noop_pairs_and_ignores_fillers(self):
+        from meeting_os.quality import replay_text, strip_fillers, wer_no_filler
+        from meeting_os.types import Segment
+        self.assertEqual(strip_fillers('Şimdi çok şey, eee az önce hoşuma giden de oydu.'),'Şimdi çok şey, az önce hoşuma giden de oydu.')
+        self.assertEqual(strip_fillers('Eee uğraşmasak bile zaten hani kişi sayısından ııı dolayı.'),'uğraşmasak bile zaten hani kişi sayısından dolayı.')
+        self.assertEqual(strip_fillers('Ee-commerce ve e-posta iyi.'),'Ee-commerce ve e-posta iyi.');self.assertEqual(strip_fillers('Bi- mesela ben.'),'mesela ben.')
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');mid=store.create_meeting('T',{'model':'microsoft/mai-transcribe-2'})
+            a=store.add_segment(mid,Segment(0,2,'Yarın rapor hazır olur.','system','K1'));b=store.add_segment(mid,Segment(2,4,'Eee bugün ııı rapor hazır, bi- değil mi?','system','K1'));store.status(mid,'complete')
+            store.correct_text(mid,a,'Yarın rapor hazır olsun.');store.correct_text(mid,a,'Yarın rapor hazır olur.')   # edited, then reverted: not a correction
+            self.assertEqual(replay_text(store)['edits'],0)
+            store.correct_text(mid,b,'Bugün rapor hazır, değil mi?')
+            out=replay_text(store);self.assertEqual(out['edits'],1);self.assertGreater(out['mean_wer'],0);self.assertEqual(out['mean_wer_no_filler'],0.0)
+            self.assertEqual(out['by_model']['microsoft/mai-transcribe-2']['mean_wer_no_filler'],0.0);self.assertEqual(wer_no_filler('Hı hı, tamam.','tamam'),0.0);store.close()
 
 class PlanChangeTests(unittest.TestCase):
     def test_plan_change_is_adopted_when_only_skipped_chunks_exist(self):
@@ -443,6 +494,41 @@ class LinkClustersTests(unittest.TestCase):
             labels={r['metrics']['cluster']:r['speaker'] for r in store.segments(mid)}
             self.assertEqual(labels,{'0:0':'Konuşmacı 1','0:1':'Konuşmacı 2','1:0':'Konuşmacı 2','1:1':'Konuşmacı 3'})
             self.assertEqual(link_clusters(store,mid,'m'),0);store.close()   # idempotent
+
+class LinkedIdentityTests(unittest.TestCase):
+    def test_linked_speaker_is_scored_and_named_as_one_cluster(self):
+        """Three 5-minute pieces, one colleague: the provider restarts speaker numbers per piece, link_clusters joins them,
+        and the identity must land on the whole linked speaker (and feed the profile with the linked duration), not on
+        the single sub-cluster that happens to score best."""
+        from meeting_os.cloud_finalize import identify_clusters
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');wav=Path(tmp)/'sys.wav';sf.write(wav,np.zeros(16000*2,dtype='float32'),16000,subtype='FLOAT')
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',10,'earlier')
+            mid=store.create_meeting('L',{'paths':{'system':str(wav)}});flags=['cloud_transcript','cloud_diarization']
+            def seg(a,b,sp,cl,vec):return Segment(a,b,'x','system',sp,metrics={'cluster':cl},flags=flags,embedding=vec,embedding_model='resemblyzer:test')
+            store.add_segment(mid,seg(0,4,'Konuşmacı 1-1','0:0',[1.0,0.0]))          # exact
+            store.add_segment(mid,seg(300,304,'Konuşmacı 2-1','1:0',[0.92,0.392]))   # 0.92 to the profile: linked (≥0.90) but alone not ≥0.93
+            store.add_segment(mid,seg(600,604,'Konuşmacı 3-1','2:0',[0.95,0.312]))   # 0.95: linked, alone would not share the name (1.0-0.95>0.03)
+            store.add_segment(mid,seg(605,609,'Konuşmacı 3-2','2:1',[0.0,1.0]))      # someone else
+            out=identify_clusters(store,mid,{'system':str(wav)},FakeEmbedder())
+            rows=store.segments(mid);named={r['metrics']['cluster']:r['speaker_name'] for r in rows}
+            self.assertEqual({r['speaker'] for r in rows},{'Konuşmacı 1','Konuşmacı 2'})
+            self.assertEqual(named,{'0:0':'Ayşe','1:0':'Ayşe','2:0':'Ayşe','2:1':None})
+            self.assertEqual((out['named'],out['fed']),(3,1))   # 12 s linked ≥ FEED_MIN_SECONDS although every sub-cluster is 4 s
+            ident={r['metrics']['identity']['similarity'] for r in rows if r['speaker']=='Konuşmacı 1'};self.assertEqual(len(ident),1)   # one score for the linked speaker
+            self.assertEqual([s['provenance'] for s in store.db.execute("SELECT provenance FROM samples WHERE name='Ayşe'")],['earlier',f'auto:{mid}:0:0']);store.close()
+    def test_conflicting_linked_speaker_still_abstains(self):
+        from meeting_os.cloud_finalize import identify_clusters
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');wav=Path(tmp)/'sys.wav';sf.write(wav,np.zeros(16000*2,dtype='float32'),16000,subtype='FLOAT')
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',10,'a');store.enroll('Mehmet',[0.95,0.312],'resemblyzer:test',10,'b')   # two profiles 0.95 apart
+            mid=store.create_meeting('C',{'paths':{'system':str(wav)}});flags=['cloud_transcript','cloud_diarization']
+            store.add_segment(mid,Segment(0,20,'x','system','Konuşmacı 1',metrics={'cluster':'0:0'},flags=flags,embedding=[0.99,0.16],embedding_model='resemblyzer:test'))
+            out=identify_clusters(store,mid,{'system':str(wav)},FakeEmbedder())
+            r=store.segments(mid)[0];self.assertIsNone(r['speaker_name']);self.assertIsNone(r['metrics']['identity']['suggested']);self.assertLess(r['metrics']['identity']['margin'],0.05)
+            self.assertEqual(out,{'embedded':0,'named':0,'suggested':0,'fed':0});store.close()
 
 class UncertaintyFlagTests(unittest.TestCase):
     def test_cloud_information_flags_do_not_mark_items_for_review(self):
