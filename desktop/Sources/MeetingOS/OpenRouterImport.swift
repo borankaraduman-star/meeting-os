@@ -36,6 +36,9 @@ struct OpenRouterImportView:View {
     @State private var consent=false
     @State private var message=""
     @State private var saving=false
+    @State private var duplicate:ImportDuplicate?
+    @State private var digest:String?          // SHA-256 of the picked file, registered on the new meeting after a successful import
+    @State private var fileSize:Int?
     private var resumable:String? {
         guard let m=model.meeting,m.metadata["engine"] as? String=="openrouter",m.status != "complete",m.recoveryState != "active" else { return nil }
         return m.id
@@ -69,9 +72,20 @@ struct OpenRouterImportView:View {
             HStack {
                 Button("Ses dosyası seç") {
                     let panel=NSOpenPanel();panel.canChooseDirectories=false;panel.allowsMultipleSelection=false
-                    if panel.runModal() == .OK,let url=panel.url { path=url;title=url.deletingPathExtension().lastPathComponent }
+                    if panel.runModal() == .OK,let url=panel.url { path=url;title=url.deletingPathExtension().lastPathComponent;Task { await checkDuplicate(url) } }
                 }
                 Text(path?.lastPathComponent ?? "Dosya seçilmedi").lineLimit(2).foregroundStyle(.secondary)
+            }
+            if let duplicate {
+                HStack(alignment:.top,spacing:10) {
+                    Image(systemName:"doc.on.doc.fill").foregroundStyle(.orange)
+                    VStack(alignment:.leading,spacing:4) {
+                        Text(duplicate.notice).font(.callout.weight(.semibold))
+                        Text("Aynı dosyayı yeniden göndermek yeni bir toplantı oluşturur ve API ücreti alınır.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Mevcut toplantıyı aç") { model.selected=duplicate.meeting;model.tab="transcript";dismiss() }.accessibilityIdentifier("openDuplicateMeetingButton")
+                }.padding(12).background(.orange.opacity(0.12),in:RoundedRectangle(cornerRadius:10)).accessibilityIdentifier("duplicateImportNotice")
             }
             Text("Ücretli API. Ücret seçilen model, sağlayıcı ve kullanıma bağlıdır. ChatGPT aboneliği API kredisi değildir.").font(.callout)
             Text("Konuşmacı etiketleri tahminidir; isimleri düzeltebilirsiniz. Zamanlar konuşma parçası sınırlarıdır. Özel kelime ipuçları bu bağlantıda doğrulanmadığından gönderilmez.").font(.caption).foregroundStyle(.secondary)
@@ -84,7 +98,7 @@ struct OpenRouterImportView:View {
                 Button("Vazgeç") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 if let mid=resumable { Button("Seçili işlemi sürdür") { start(resume:mid) }.disabled(!consent || model.busy || selectedModel != model.meeting?.metadata["model"] as? String) }
-                Button("Yükle ve yazıya çevir") { start(resume:nil) }.buttonStyle(.borderedProminent)
+                Button(ImportDuplicate.uploadLabel(duplicate:duplicate != nil)) { start(resume:nil) }.buttonStyle(.borderedProminent)
                     .disabled(!consent || models.isEmpty || path==nil || title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.busy)
             }
         }.padding(24).frame(width:640)
@@ -98,17 +112,28 @@ struct OpenRouterImportView:View {
             } catch { message=error.localizedDescription;models=[] }
         }
     }
+    /// Hashes the picked file locally and asks the bridge whether a meeting already came from it. Never blocks the upload.
+    private func checkDuplicate(_ url:URL) async {
+        duplicate=nil;digest=nil;fileSize=nil
+        guard let response=try? await model.request(["action":"check_duplicate","path":url.path]), path==url else { return }
+        duplicate=ImportDuplicate.parse(response);digest=response["digest"] as? String;fileSize=response["size"] as? Int
+    }
     private func start(resume:String?) {
         guard consent,!model.busy,models.contains(where:{$0.id==selectedModel}) else { return }
         let result=model.dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
         let args:[String]
+        var registration:[String:Any]?   // digest of the picked file; only a fresh import owns the new meeting
         if let resume, let meeting=model.meetings.first(where:{ $0.id==resume }) { args=CloudTranscription.resumeArguments(meeting:meeting,model:selectedModel,output:result.path) }
-        else if let path { args=CloudTranscription.importArguments(path:path.path,title:title.isEmpty ? "OpenRouter toplantısı":title,model:selectedModel,output:result.path) }
+        else if let path {
+            args=CloudTranscription.importArguments(path:path.path,title:title.isEmpty ? "OpenRouter toplantısı":title,model:selectedModel,output:result.path)
+            if let digest { registration=["action":"register_import_digest","digest":digest];if let fileSize { registration?["size"]=fileSize } }
+        }
         else { return }
         model.activity="Ses OpenRouter’a gönderiliyor · Bu Mac’te model yüklenmiyor"
         model.launch(args) { [weak model] ok in
             guard let model else { return }
             if ok,let mid=model.resultMeeting(result) {
+                if var registration { registration["meeting"]=mid;Task { _=try? await model.request(registration);await model.refresh() } }
                 model.selected=mid;model.tab="transcript";model.analyzeAutomatically(mid)
             } else { model.activity="İşlem tamamlanamadı · Kaydedilen parçalar korunuyor. OpenRouter penceresinden sürdürebilirsiniz." }
         }
