@@ -23,6 +23,28 @@ def journal_events(path, tail=JOURNAL_TAIL_BYTES):
     return events
 
 
+def capture_health(events):
+    """What the owner asks about after a meeting: how often the audio stream was rebuilt, how often the
+    supervisor had to replace the whole helper, how many times the Mac woke, and how many seconds were lost.
+    Sleep costs wall-clock seconds that never reach the audio timeline, so they are counted separately from
+    the chunk discontinuities the helper writes as 'gap'."""
+    out = {'restarts': 0, 'relaunches': 0, 'wakes': 0, 'gap_seconds': 0.0, 'wake_gap_seconds': 0.0, 'capture_errors': 0}
+    for event in events:
+        kind = event.get('event')
+        if kind == 'restarted': out['restarts'] += 1
+        elif kind == 'relaunch': out['relaunches'] += 1
+        elif kind == 'error': out['capture_errors'] += 1
+        elif kind == 'wake':
+            out['wakes'] += 1
+            gap = event.get('gap')
+            if type(gap) in (int, float) and math.isfinite(gap) and gap > 0: out['wake_gap_seconds'] += float(gap)
+        elif kind == 'gap':
+            a, b = event.get('start'), event.get('end')
+            if type(a) in (int, float) and type(b) in (int, float) and b > a: out['gap_seconds'] += float(b-a)
+    out['gap_seconds'] = round(out['gap_seconds'], 2); out['wake_gap_seconds'] = round(out['wake_gap_seconds'], 2)
+    return out
+
+
 def timeline_metrics(events):
     sources = {'mic': [], 'system': []}
     for count, event in enumerate(events):

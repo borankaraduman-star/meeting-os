@@ -42,6 +42,38 @@ class CaptureStateTests(unittest.TestCase):
     self.assertEqual(measured['signals']['system']['state'],'digital_silence')
     self.assertEqual(measured['signals']['mic']['state'],'unavailable')
     probe.assert_called_once()
+ def test_resilience_counters_reach_the_owner_without_disturbing_the_old_fields(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);meta={'capture_dir':tmp}
+   plain=[{'event':'started'},{'event':'chunk','source':'mic','start':0,'duration':12}]
+   (root/'capture-native.jsonl').write_text('\n'.join(json.dumps(e) for e in plain))
+   before=capture_state(meta)
+   for key in ('restarts','relaunches','wakes','gap_seconds','wake_gap_seconds'): self.assertNotIn(key,before)
+   self.assertLess(before['last_event_age'],5)
+   rich=plain+[{'event':'restarted','attempt':1},{'event':'wake','gap':180.0},{'event':'relaunch','attempt':1,'reason':'stall'},
+               {'event':'gap','source':'mic','start':12,'end':14.5},{'event':'chunk','source':'mic','start':14.5,'duration':12}]
+   (root/'capture-native.jsonl').write_text('\n'.join(json.dumps(e) for e in rich))
+   after=capture_state(meta)
+   self.assertEqual((after['restarts'],after['relaunches'],after['wakes']),(1,1,1))
+   self.assertEqual((after['gap_seconds'],after['wake_gap_seconds']),(2.5,180.0))
+   self.assertEqual(after['state'],'capturing');self.assertEqual(after['sources'],{'mic':26.5})
+ def test_supervisor_events_do_not_change_how_capture_audio_assembles(self):
+  import numpy as np, soundfile as sf
+  with tempfile.TemporaryDirectory() as tmp:
+   def build(name,extra):
+    root=Path(tmp)/name;root.mkdir()
+    events=[]
+    for index,start in enumerate((0.0,1.0)):
+     path=root/('mic-%06d.wav'%index)
+     sf.write(path,np.full(16000,0.25,dtype=np.float32),16000,subtype='FLOAT')
+     events.append({'event':'chunk','source':'mic','path':str(path),'start':start,'duration':1.0})
+    (root/'capture-native.jsonl').write_text('\n'.join(json.dumps(e) for e in events[:1]+extra+events[1:])+'\n')
+    return root
+   # A relaunched helper's journal carries lines the assembler never saw before. The audio it produces for
+   # the same chunks must stay byte-for-byte what a recording made before this change produces.
+   old=assemble_capture(build('old',[]))['mic']
+   new=assemble_capture(build('new',[{'event':'wake','gap':90.0},{'event':'relaunch','attempt':1,'reason':'exit','start_offset':1.0},{'event':'restarted','attempt':1}]))['mic']
+   self.assertEqual(Path(old).read_bytes(),Path(new).read_bytes())
  def test_snapshot_only_probes_live_owner_not_retries_or_completed_history(self):
   from unittest.mock import patch
   from meeting_os.desktop import dispatch

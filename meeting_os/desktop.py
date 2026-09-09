@@ -2,6 +2,7 @@
 import contextlib
 import json
 import sys
+import time
 from pathlib import Path
 from .capture_metrics import journal_events
 from .cli import DATA_DIR, ROOT
@@ -36,8 +37,16 @@ def capture_state(metadata, include_signal=False):
         if e.get('event') in ('started','chunk','restarted'): state='capturing'
         elif e.get('event') in ('error','stopped'):state=e['event']
     result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
-    restarts=sum(1 for e in events if e.get('event')=='restarted'); low=[e for e in events if e.get('event')=='low_disk']
-    if restarts: result['restarts']=restarts
+    from .capture_metrics import capture_health
+    health=capture_health(events)
+    # What the owner needs to see during and after a meeting: the stream was rebuilt, the whole helper was
+    # replaced, the Mac slept — and how many seconds that cost. Zeros stay out of the poll payload.
+    for key in ('restarts','relaunches','wakes','gap_seconds','wake_gap_seconds'):
+        if health[key]: result[key]=health[key]
+    # The helper writes a line per chunk, so the journal's own mtime is the cheapest honest "still alive?".
+    try: result['last_event_age']=round(max(0.0,time.time()-path.stat().st_mtime),1)
+    except OSError: pass
+    low=[e for e in events if e.get('event')=='low_disk']
     if low: result['low_disk_bytes']=low[-1].get('free_bytes')
     if include_signal:
         from .source_signal import inspect_signal

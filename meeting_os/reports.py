@@ -17,6 +17,8 @@ from .capture_metrics import journal_events
 
 SETTINGS_FILE = 'settings.json'
 HEARTBEAT_FILE = 'heartbeat.json'
+RECORDING_HEARTBEAT_FILE = 'recording-heartbeat.json'
+RECORDING_HEARTBEAT_STALE_SECONDS = 300   # the recorder writes once a minute; older than this means it is gone, not quiet
 CHUNK_SECONDS = 12.0            # MeetingCapture --chunk-seconds default; the expected chunk count comes from it
 ICLOUD = Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs'
 DEFAULT_SUBDIR = 'MeetingOS-Reports'
@@ -78,6 +80,58 @@ def _errors(log_path, limit=8):
     return out[-limit:]
 
 
+def recording_line(beat):
+    """One line for a recording that is happening right now: 'kayıt sürüyor · 41 dk · son parça 4 sn önce'."""
+    if not isinstance(beat, dict): return None
+    seconds = beat.get('elapsed_seconds')
+    seconds = float(seconds) if isinstance(seconds, (int, float)) else 0.0
+    parts = ['kayıt sürüyor', f'{int(seconds//60)} dk' if seconds >= 60 else f'{int(seconds)} sn']
+    age = beat.get('last_chunk_age_seconds')
+    parts.append(f'son parça {int(age)} sn önce' if isinstance(age, (int, float)) else 'henüz parça yok')
+    if beat.get('relaunches'): parts.append(f"{beat['relaunches']} kez yeniden başlatıldı")
+    elif beat.get('restarts'): parts.append(f"{beat['restarts']} kez ses akışı yenilendi")
+    lost = (beat.get('gap_seconds') or 0) + (beat.get('wake_gap_seconds') or 0)
+    if lost >= 1: parts.append(f'{int(round(lost))} sn boşluk')
+    return ' · '.join(parts)
+
+
+def write_recording_heartbeat(data_dir, state):
+    """Overwrite <report_dir>/<host>/recording-heartbeat.json while a recording runs, so 'reports heartbeat' and
+    the shared folder answer 'is it still recording?' without touching the meeting database. At most once a
+    minute from the recorder's own drain loop; never raises, and never writes when sharing is off."""
+    try:
+        settings = load_settings(data_dir)
+        if not settings.get('share_reports'): return None
+        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True)
+        payload = {'recording_heartbeat_version': 1, 'host': host_name(), 'written': datetime.now(timezone.utc).isoformat(), **state}
+        payload['line'] = recording_line(payload)
+        target = folder / RECORDING_HEARTBEAT_FILE
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding='utf-8')
+        return str(target)
+    except Exception: return None
+
+
+def clear_recording_heartbeat(data_dir):
+    """The recording ended: remove the file rather than leave a line that says a meeting is still being taped."""
+    try:
+        (host_dir(load_settings(data_dir)) / RECORDING_HEARTBEAT_FILE).unlink(missing_ok=True)
+    except Exception: pass
+
+
+def read_recording_heartbeat(source):
+    """The live recording state a folder claims, or None when there is none or it is too old to trust."""
+    path = Path(source)
+    if path.is_dir(): path = path / RECORDING_HEARTBEAT_FILE
+    try: beat = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError): return None
+    if not isinstance(beat, dict): return None
+    try: age = (datetime.now(timezone.utc) - datetime.fromisoformat(beat['written'])).total_seconds()
+    except (KeyError, TypeError, ValueError): return None
+    if age > RECORDING_HEARTBEAT_STALE_SECONDS or age < -RECORDING_HEARTBEAT_STALE_SECONDS: return None
+    beat['age_seconds'] = round(age, 1)
+    return beat
+
+
 def capture_block(directory, duration_seconds=0.0):
     """Numbers only from a meeting's capture folder: chunk files per source against the count the duration
     implies, the capture journal's gap/error events, and the assembled *-full.* sizes. The journal records
@@ -95,20 +149,19 @@ def capture_block(directory, duration_seconds=0.0):
             if found: chunks[found.group(1)] = chunks.get(found.group(1), 0) + 1
         journal = root/'capture-native.jsonl'
         if not journal.is_file(): journal = root/'events.jsonl'
-        gaps = 0; gap_seconds = 0.0; errors = 0; announced = {}
-        for event in journal_events(journal):
+        gaps = 0; announced = {}
+        events = journal_events(journal)
+        for event in events:
             kind = event.get('event')
-            if kind == 'gap':
-                gaps += 1
-                a, b = event.get('start'), event.get('end')
-                if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b > a: gap_seconds += b-a
-            elif kind == 'error': errors += 1
+            if kind == 'gap': gaps += 1
             elif kind == 'chunk' and isinstance(event.get('source'), str):
                 announced[event['source']] = announced.get(event['source'], 0) + 1
+        from .capture_metrics import capture_health
+        health = capture_health(events)
         expected = math.ceil(float(duration_seconds or 0)/CHUNK_SECONDS)
+        # restarts/relaunches/wakes are how the owner sees, after the fact, that the recording survived something.
         return {'chunk_files': chunks, 'announced_chunks': announced, 'expected_chunks': expected, 'chunk_seconds': CHUNK_SECONDS,
-                'gaps': gaps, 'gap_seconds': round(gap_seconds, 2), 'capture_errors': errors,
-                'full_bytes': full, 'journal': journal.name if journal.is_file() else None}
+                'gaps': gaps, 'full_bytes': full, 'journal': journal.name if journal.is_file() else None, **health}
     except Exception:  # a report must never fail on a folder that is being written
         return None
 
@@ -211,6 +264,7 @@ def build_heartbeat(store, data_dir, *, app=None):
         'written': datetime.now(timezone.utc).isoformat(), 'meetings': sum(statuses.values()), 'statuses': statuses, 'last_complete': last,
         'sizes': {'recordings': folder_bytes(data/'recordings'), 'imports': folder_bytes(data/'imports'), 'database': database, 'free_disk': free},
         'memory_pressure': _memory_pressure(), 'thermal': _thermal(), 'load_average': load,
+        'recording': read_recording_heartbeat(host_dir(load_settings(data_dir))),   # a meeting being taped right now
         'errors': _errors(data/'last-job.log', limit=5),
     }
 
@@ -247,7 +301,7 @@ def summarize(report_dir, limit=30):
     root = Path(report_dir)
     out = []
     if not root.is_dir(): return {'hosts': {}, 'reports': []}
-    files = [p for p in root.glob('*/*.json') if p.name != HEARTBEAT_FILE]
+    files = [p for p in root.glob('*/*.json') if p.name not in (HEARTBEAT_FILE, RECORDING_HEARTBEAT_FILE)]
     for path in sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
         try: r = json.loads(path.read_text(encoding='utf-8'))
         except ValueError: continue
@@ -264,4 +318,11 @@ def summarize(report_dir, limit=30):
         hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})
         hosts[host]['heartbeat'] = {'last_seen': beat.get('written'), 'free_disk': (beat.get('sizes') or {}).get('free_disk'), 'thermal': beat.get('thermal'),
                                     'memory_pressure': beat.get('memory_pressure'), 'meetings': beat.get('meetings'), 'app_version': beat.get('app_version')}
+    for path in sorted(root.glob('*/'+RECORDING_HEARTBEAT_FILE)):   # a Mac that is in a meeting right now says so
+        beat = read_recording_heartbeat(path)
+        if not beat: continue
+        host = beat.get('host') or path.parent.name
+        hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})
+        hosts[host]['recording'] = {'line': beat.get('line') or recording_line(beat), 'meeting': beat.get('meeting'), 'elapsed_seconds': beat.get('elapsed_seconds'),
+                                    'last_chunk_age_seconds': beat.get('last_chunk_age_seconds'), 'restarts': beat.get('restarts'), 'relaunches': beat.get('relaunches')}
     return {'hosts': hosts, 'reports': out}
