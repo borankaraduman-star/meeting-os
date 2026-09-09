@@ -92,6 +92,16 @@ class SupervisorTests(unittest.TestCase):
         self.assertEqual(result['peak_footprint_bytes'],128*1024**2)
         self.assertGreater(result['samples'],0);self.assertGreater(result['elapsed_seconds'],0)
 
+    def test_resource_probes_run_once_a_second_with_an_immediate_first_sample(self):
+        from meeting_os import supervisor
+        with patch.object(supervisor,'check_pressure') as pressure,patch.object(supervisor,'footprint',return_value=1):
+            short=supervisor.run_guarded([sys.executable,'-c','import time;time.sleep(.05)'])
+            longer=supervisor.run_guarded([sys.executable,'-c','import time;time.sleep(1.3)'])
+        self.assertEqual(short['samples'],1)          # the first sample is immediate, so a short job still reports a peak
+        self.assertEqual(short['peak_footprint_bytes'],2)
+        self.assertIn(longer['samples'],(2,3))        # about 1 Hz, not the ~13 samples a .1 s loop produced
+        self.assertEqual(pressure.call_count,short['samples']+longer['samples']+2)   # one admission check per run, then one per sample
+
     @unittest.skipUnless(sys.platform == 'darwin', 'Darwin protected diagnostic helpers')
     def test_nested_monitoring_does_not_fail_on_protected_helpers(self):
         from meeting_os.supervisor import run_guarded

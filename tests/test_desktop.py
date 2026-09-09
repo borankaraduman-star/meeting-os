@@ -311,6 +311,45 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(result['meetings'][0]['recovery_state'],'unknown')
    self.assertEqual(result['meetings'][0]['status'],'processing')
 
+ def test_snapshot_reads_the_capture_journal_only_where_it_changes_the_display(self):
+  from unittest.mock import patch
+  from meeting_os.desktop import capture_state
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);db=root/'db';s=Store(db)
+   done=s.create_meeting('Biten',{'capture_dir':tmp});s.status(done,'complete')
+   open_one=s.create_meeting('Seçili',{'capture_dir':tmp});s.status(open_one,'complete')
+   broken=s.create_meeting('Yarım',{'capture_dir':tmp});s.status(broken,'incomplete')
+   s.close()
+   with patch('meeting_os.desktop.capture_state',wraps=capture_state) as probe:
+    snap=dispatch({'action':'snapshot','meeting':open_one},db)
+   self.assertEqual(probe.call_count,2)   # the selected meeting and the unfinished one; never the finished history
+   by={m['id']:m for m in snap['meetings']}
+   self.assertIsNone(by[done]['capture'])
+   self.assertEqual(by[done]['display_status'],'complete');self.assertEqual(by[done]['recovery_state'],'complete')
+   self.assertIsNotNone(by[open_one]['capture']);self.assertIsNotNone(by[broken]['capture'])
+   self.assertEqual(by[broken]['display_status'],'not_started')
+   self.assertEqual(sorted(by),sorted([done,open_one,broken]))
+ def test_snapshot_strips_heavy_metadata_from_unselected_meetings_and_honours_limit(self):
+  heavy={'capture_dir':'/tmp/x','engine':'openrouter','model':'deepgram/nova-3','cloud_mode':'capture','keep':True,'text_only':False,'provisional':True,
+         'calendar':{'title':'Sprint'},'glossary_suggestions':[{'original':'a','replacement':'b'}],'markers':[{'seconds':4}],
+         'job_usage':{'seconds':900},'identity':{'embedded':3},'echo_segments':[1,2,3],'identity_error':'yok'}
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db)
+   ids=[s.create_meeting('T%02d'%i,dict(heavy)) for i in range(5)]
+   for mid in ids: s.status(mid,'complete')
+   s.close()
+   selected=ids[0]
+   meetings={m['id']:m for m in dispatch({'action':'snapshot','meeting':selected},db)['meetings']}
+   for key in ('glossary_suggestions','markers','job_usage','identity','echo_segments'):
+    self.assertIn(key,meetings[selected]['metadata'])
+    self.assertNotIn(key,meetings[ids[1]]['metadata'])
+   for key in ('calendar','keep','engine','model','cloud_mode','text_only','capture_dir','provisional','identity_error'):
+    self.assertIn(key,meetings[ids[1]]['metadata'])
+   limited=dispatch({'action':'snapshot','limit':2},db)['meetings']
+   self.assertEqual(len(limited),2);self.assertEqual([m['id'] for m in limited],ids[::-1][:2])   # newest first
+   with_selected=dispatch({'action':'snapshot','meeting':ids[0],'limit':2},db)['meetings']
+   self.assertEqual([m['id'] for m in with_selected],ids[::-1][:2]+[ids[0]])   # the open meeting is never dropped
+   self.assertEqual(len(dispatch({'action':'snapshot','limit':0},db)['meetings']),5)   # junk limit falls back to the default
  def test_diagnostics_uses_destination_volume_and_missing_progress_is_safe(self):
   from unittest.mock import patch
   from meeting_os.diagnostics import collect

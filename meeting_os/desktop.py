@@ -47,8 +47,14 @@ def capture_state(metadata, include_signal=False):
     return result
 
 
+# Statuses whose display still depends on the capture folder and the job owner.
+UNSETTLED=('processing','provisional','incomplete','failed')
+SNAPSHOT_LIMIT=300          # newest first; the sidebar never shows more, the open meeting is always included
+SNAPSHOT_HEAVY_KEYS=('glossary_suggestions','markers','job_usage','identity','echo_segments')   # only the selected meeting carries these
+
+
 def capture_presentation(status, owner, capture, metadata=None):
-    if status not in ('processing','provisional','incomplete','failed') or capture is None:
+    if status not in UNSETTLED or capture is None:
         return status
     live_processing = status=='processing' and (metadata or {}).get('provisional') is True and not (metadata or {}).get('retry_attempt')
     if live_processing:
@@ -198,23 +204,36 @@ def dispatch(request, db=None):
         if action=='search_memory':return {'hits':memory.search(request['query'],speaker=request.get('speaker'))}
         if action=='handoff':return handoff(store,request['task'],request['path'])
         if action=='snapshot':
-            meetings=store.meetings()
+            from .recovery import metadata,classify
+            selected=request.get('meeting','')
+            limit=request.get('limit',SNAPSHOT_LIMIT)
+            if type(limit) is not int or limit<=0: limit=SNAPSHOT_LIMIT
+            everything=store.meetings()   # newest first
+            meetings=everything[:limit]
+            if selected and not any(m['id']==selected for m in meetings):
+                meetings=meetings+[m for m in everything[limit:] if m['id']==selected]   # the open meeting is never dropped
             stats={r[0]:{'segments':r[1],'seconds':float(r[2] or 0),'speakers':r[3],'names':sorted({n for n in (r[4] or '').split('\x1f') if n})} for r in store.db.execute(
                 "SELECT meeting,count(*),max(end),count(DISTINCT coalesce(nullif(speaker_name,''),speaker)),group_concat(DISTINCT speaker_name) FROM segments WHERE source='system' OR speaker_name<>'' GROUP BY meeting")}
             for v in stats.values(): v['names']=sorted({n.strip() for n in ','.join(v['names']).split(',') if n.strip()})
             for m in meetings:
-                from .recovery import metadata,classify
                 m['stats']=stats.get(m['id'],{'segments':0,'seconds':0.0,'speakers':0})
                 m['metadata']=metadata(m)
                 m['metadata'].pop('raw_source_text',None)
-                m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in ('processing','provisional','incomplete','failed') else m['status']
+                m['recovery_state']=classify(m['metadata'].get('worker_identity')) if m['status'] in UNSETTLED else m['status']
                 live=m['recovery_state']=='active' and m['metadata'].get('provisional') is True and not m['metadata'].get('retry_attempt')
-                m['capture']=capture_state(m['metadata'],include_signal=live)
-                if live and m['capture'] is not None:
-                    from .preview_failures import summarize
-                    m['capture']['preview']=summarize(m['metadata']['capture_dir'],DATA_DIR/'last-job.log' if db is None else None)
+                if m['status'] in UNSETTLED or m['id']==selected:
+                    m['capture']=capture_state(m['metadata'],include_signal=live)
+                    if live and m['capture'] is not None:
+                        from .preview_failures import summarize
+                        m['capture']['preview']=summarize(m['metadata']['capture_dir'],DATA_DIR/'last-job.log' if db is None else None)
+                else:
+                    # A finished meeting's display_status and retry offer never depend on the journal,
+                    # so every poll skips its 64 KB read; the key stays for the desktop contract.
+                    m['capture']=None
+                if m['id']!=selected:
+                    for key in SNAPSHOT_HEAVY_KEYS: m['metadata'].pop(key,None)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
-            return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(request.get('meeting',''))}
+            return {'meetings':meetings,'profiles':store.profiles(),'segments':store.display_segments(selected)}
         if action=='label_speaker':
             if request.get('enroll'): return store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
             store.correct(request['meeting'],request['speaker'],request['name']); return {'labeled':True,'profile_saved':False}
@@ -242,13 +261,14 @@ def dispatch(request, db=None):
             if action=='update_check': return updater.check(ROOT)
             if action=='update_start': return updater.start(ROOT,DATA_DIR)
             return updater.status(DATA_DIR)
-        if action in ('report_settings','report_settings_set','report_write','reports_summary'):
+        if action in ('report_settings','report_settings_set','report_write','reports_summary','heartbeat'):
             from . import reports
             base=DATA_DIR if db is None else Path(db).parent
             if action=='report_settings': return reports.load_settings(base)
             if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
             if action=='reports_summary': return reports.summarize(reports.load_settings(base)['report_dir'])
             from . import __version__
+            if action=='heartbeat': return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G
