@@ -1,19 +1,11 @@
 """Beklediklerim: açık görevlerin başkalarına düşen kısmı, kişi kişi, yaşı ve kaynağıyla.
 Deterministic only — no model call; nothing is sent anywhere and nothing stored is changed."""
-from datetime import datetime, timezone
-from .continuity import similarity
+from .continuity import similarity_index
+from .insights import age_days, prepared_header
 from .memory import Memory, normalize
 
 OPEN = ('open', 'in_progress')
 REPEAT_THRESHOLD = 0.6
-
-
-def age_days(created):
-    """Days since the task was first recorded; None when the timestamp is unusable."""
-    try: dt = datetime.fromisoformat(created or '')
-    except ValueError: return None
-    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
-    return max(0, (datetime.now(timezone.utc) - dt).days)
 
 
 def first_quote(task):
@@ -41,11 +33,13 @@ def build_waiting(store, owner='Boran', threshold=REPEAT_THRESHOLD):
     dates = {m['id']: (m['created'] or '')[:10] for m in store.meetings()}
     everything = [t for t in memory.actions() if t.get('state') in OPEN]
     mine = normalize(owner or '')
+    links = {}
+    for i, j in similarity_index([t['title'] for t in everything], threshold): links.setdefault(i, []).append(j)
     people = {}
-    for t in everything:
+    for n, t in enumerate(everything):
         who = (t.get('owner') or '').strip()
         if not who or (mine and normalize(who) == mine): continue
-        meetings = {o['meeting'] for o in everything if o['meeting'] != t['meeting'] and similarity(t['title'], o['title']) >= threshold}
+        meetings = {everything[j]['meeting'] for j in links.get(n, ()) if everything[j]['meeting'] != t['meeting']}
         meetings.add(t['meeting'])
         item = {'task': t['id'], 'title': t['title'], 'owner': who, 'meeting': t['meeting'], 'meeting_title': t.get('meeting_title'),
                 'meeting_date': dates.get(t['meeting']), 'created': t.get('created'), 'due_text': t.get('due_text'), 'state': t.get('state'),
@@ -62,9 +56,8 @@ def build_waiting(store, owner='Boran', threshold=REPEAT_THRESHOLD):
 
 
 def render_waiting(board):
-    lines = ['# Beklediklerim', '',
-             f"Hazırlanma: {datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M')} · {len(board['people'])} kişi · {board['total']} madde", '',
-             'Yalnız kayıtlı açık görevlerden çıkarılmıştır; hatırlatma metinleri taslaktır, hiçbir yere gönderilmez.', '']
+    lines = prepared_header('Beklediklerim', f"{len(board['people'])} kişi · {board['total']} madde",
+                            'Yalnız kayıtlı açık görevlerden çıkarılmıştır; hatırlatma metinleri taslaktır, hiçbir yere gönderilmez.')
     if not board['people']: lines.append('- Kimseden bekleyen kayıtlı görev yok.')
     for g in board['people']:
         lines += ['', f"## {g['owner']} · {len(g['items'])} madde"]

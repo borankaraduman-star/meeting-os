@@ -13,11 +13,11 @@ import socket
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from .capture_metrics import journal_events
 
 SETTINGS_FILE = 'settings.json'
 HEARTBEAT_FILE = 'heartbeat.json'
 CHUNK_SECONDS = 12.0            # MeetingCapture --chunk-seconds default; the expected chunk count comes from it
-MAX_JOURNAL_BYTES = 8*1024*1024
 ICLOUD = Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs'
 DEFAULT_SUBDIR = 'MeetingOS-Reports'
 
@@ -78,54 +78,33 @@ def _errors(log_path, limit=8):
     return out[-limit:]
 
 
-def _folder_bytes(path):
-    """Total size of regular files under a directory; symlinks skipped, nothing modified."""
-    root = Path(path)
-    if not root.is_dir(): return 0
-    total = 0
-    for p in root.rglob('*'):
-        try:
-            if p.is_file() and not p.is_symlink(): total += p.stat().st_size
-        except OSError: continue
-    return total
-
-
 def capture_block(directory, duration_seconds=0.0):
     """Numbers only from a meeting's capture folder: chunk files per source against the count the duration
-    implies, the capture journal's gap/error events, and the assembled *-full.wav sizes. The journal records
+    implies, the capture journal's gap/error events, and the assembled *-full.* sizes. The journal records
     'gap' (a discontinuity between two chunks) and 'error'; there is no dropped-frame event. Never raises."""
     try:
         if not isinstance(directory, str) or not directory: return None
         root = Path(directory)
         if not root.is_dir(): return None
         chunks = {}; full = {}
+        for p in root.glob('*-full.*'):   # audio_archive writes FLAC, the capture tool WAV
+            try: full[p.name.split('-full.')[0]] = p.stat().st_size
+            except OSError: pass
         for p in root.glob('*.wav'):
-            if p.name.endswith(('-full.wav','-full.flac')):
-                try: full[p.name.split('-full.')[0]] = p.stat().st_size
-                except OSError: pass
-                continue
             found = re.fullmatch(r'([A-Za-z]+)-\d{6}\.wav', p.name)
             if found: chunks[found.group(1)] = chunks.get(found.group(1), 0) + 1
         journal = root/'capture-native.jsonl'
         if not journal.is_file(): journal = root/'events.jsonl'
         gaps = 0; gap_seconds = 0.0; errors = 0; announced = {}
-        if journal.is_file():
-            read = 0
-            with journal.open('r', encoding='utf-8', errors='replace') as f:
-                for line in f:
-                    read += len(line)
-                    if read > MAX_JOURNAL_BYTES: break
-                    try: event = json.loads(line)
-                    except ValueError: continue
-                    if not isinstance(event, dict): continue
-                    kind = event.get('event')
-                    if kind == 'gap':
-                        gaps += 1
-                        a, b = event.get('start'), event.get('end')
-                        if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b > a: gap_seconds += b-a
-                    elif kind == 'error': errors += 1
-                    elif kind == 'chunk' and isinstance(event.get('source'), str):
-                        announced[event['source']] = announced.get(event['source'], 0) + 1
+        for event in journal_events(journal):
+            kind = event.get('event')
+            if kind == 'gap':
+                gaps += 1
+                a, b = event.get('start'), event.get('end')
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b > a: gap_seconds += b-a
+            elif kind == 'error': errors += 1
+            elif kind == 'chunk' and isinstance(event.get('source'), str):
+                announced[event['source']] = announced.get(event['source'], 0) + 1
         expected = math.ceil(float(duration_seconds or 0)/CHUNK_SECONDS)
         return {'chunk_files': chunks, 'announced_chunks': announced, 'expected_chunks': expected, 'chunk_seconds': CHUNK_SECONDS,
                 'gaps': gaps, 'gap_seconds': round(gap_seconds, 2), 'capture_errors': errors,
@@ -214,6 +193,7 @@ def _memory_pressure():
 
 def build_heartbeat(store, data_dir, *, app=None):
     """This Mac's current state, independent of any single meeting: counts, sizes, disk, thermal, errors."""
+    from .desktop import folder_bytes   # the bridge owns the one copy; importing it here keeps this module light
     data = Path(data_dir)
     version = commit = None
     if isinstance(app, dict): version, commit = app.get('version'), app.get('commit')
@@ -229,7 +209,7 @@ def build_heartbeat(store, data_dir, *, app=None):
     return {
         'heartbeat_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
         'written': datetime.now(timezone.utc).isoformat(), 'meetings': sum(statuses.values()), 'statuses': statuses, 'last_complete': last,
-        'sizes': {'recordings': _folder_bytes(data/'recordings'), 'imports': _folder_bytes(data/'imports'), 'database': database, 'free_disk': free},
+        'sizes': {'recordings': folder_bytes(data/'recordings'), 'imports': folder_bytes(data/'imports'), 'database': database, 'free_disk': free},
         'memory_pressure': _memory_pressure(), 'thermal': _thermal(), 'load_average': load,
         'errors': _errors(data/'last-job.log', limit=5),
     }

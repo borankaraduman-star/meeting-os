@@ -2,7 +2,8 @@
 ve bir dönemin toplamı. Read-only — no model call, nothing stored is changed.
 Talk share repeats the app's own computation (TalkShare.compute + Row.label): echo rows out, grouped by display label."""
 from datetime import datetime, timedelta, timezone
-from .digest import local_day, parse_range
+from .digest import parse_range
+from .insights import local_day
 from .memory import Memory
 
 DEFAULT_DAYS = 7

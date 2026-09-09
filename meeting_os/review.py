@@ -1,5 +1,6 @@
 """Critical review queue: the few places a person should listen to instead of reading a whole transcript."""
 import json
+from .insights import first_evidence
 from .memory import Memory
 
 
@@ -48,8 +49,7 @@ def review_queue(store, mid):
     for task in memory.actions(meeting=mid):
         if task.get('state') in ('done','dismissed'): continue
         if not task.get('owner'):
-            evidence=(task.get('payload') or {}).get('evidence') or []
-            seg=evidence[0].get('segment_id') if evidence and isinstance(evidence[0],dict) else None
+            seg=(first_evidence(task.get('payload') or {}) or {}).get('segment_id')
             items.append({'segment_id':seg,'start':None,'speaker':None,'text':task['title'][:120],'kind':'task_owner','severity':2,'reason':'Görev sahibi belirsiz; kaynağı dinleyip sahibini yazın','task':task['id']})
     items.sort(key=lambda i:(i['severity'],i['start'] if i['start'] is not None else 1e9))
     return {'items':items,'count':len(items)}

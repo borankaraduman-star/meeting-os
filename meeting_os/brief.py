@@ -1,6 +1,6 @@
 """Pre-meeting brief for named attendees: what each person still owes, what they asked, what was decided with them.
 Deterministic, from recorded meetings only; a draft the user reads before walking in."""
-from datetime import datetime, timezone
+from .insights import prepared_header
 from .memory import Memory
 from .metrics import normalize
 
@@ -39,7 +39,7 @@ def build_brief(store, title, attendees, limit=5):
 
 
 def render_brief(brief):
-    lines = [f"# Brifing · {brief['title']}", '', f"Hazırlanma: {datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M')} · yalnız kayıtlı toplantılardan; dışarı gönderilmez.", '']
+    lines = prepared_header(f"Brifing · {brief['title']}", 'yalnız kayıtlı toplantılardan; dışarı gönderilmez.')
     if not brief['people']: lines.append('- Katılımcı adı yok; takvim etkinliğinde katılımcı bulunamadı.')
     for p in brief['people']:
         seen = f" · son görüşme: {p['last_meeting']['title']} ({p['last_meeting']['created'][:10]})" if p['last_meeting'] else ' · kayıtlı toplantı yok'

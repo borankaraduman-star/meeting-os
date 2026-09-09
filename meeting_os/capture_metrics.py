@@ -1,5 +1,26 @@
 """Bounded metadata-only timeline metrics. No audio quality or queue inference."""
+import json
 import math
+import os
+
+JOURNAL_TAIL_BYTES = 64*1024
+
+
+def journal_events(path, tail=JOURNAL_TAIL_BYTES):
+    """Parsed events from the end of a capture journal, newest last. Only the last `tail` bytes are read:
+    a long recording writes thousands of chunk lines and the state anyone asks about is at the end. A line the
+    window cuts in half simply fails to parse and is dropped, as a truncated line always was."""
+    try:
+        with open(path, 'rb') as f:
+            f.seek(max(0, os.path.getsize(path) - tail))
+            data = f.read().decode('utf-8', errors='replace')
+    except OSError: return []
+    events = []
+    for line in data.splitlines():
+        try: event = json.loads(line)
+        except ValueError: continue
+        if isinstance(event, dict): events.append(event)
+    return events
 
 
 def timeline_metrics(events):

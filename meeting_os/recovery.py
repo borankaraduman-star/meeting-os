@@ -1,15 +1,14 @@
 """Conservative job recovery. Never signal processes or alter audio/transcripts."""
-import ctypes
 import errno
 import json
 import os
-import subprocess
 import sys
 from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def boot_identity():
     if sys.platform != 'darwin':return None
+    import subprocess
     try:
         value=subprocess.check_output(['/usr/sbin/sysctl','-n','kern.bootsessionuuid'],timeout=2,text=True).strip()
         return value or None
@@ -19,6 +18,7 @@ def process_identity(pid):
     if type(pid)!=int or pid<=0 or sys.platform!='darwin':return None
     boot=boot_identity()
     if not boot:return None
+    import ctypes   # the bridge imports this module for its json helpers and never asks about a pid
     # SDK sys/proc_info.h: PROC_PIDTBSDINFO=3; proc_bsdinfo, 136 bytes.
     class BSDInfo(ctypes.Structure):
         _fields_=[('head',ctypes.c_uint32*12),('comm',ctypes.c_char*16),
