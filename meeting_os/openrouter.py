@@ -19,6 +19,17 @@ STT_MODELS = (
     {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo (ayrım yok)','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
 )
 DIARIZATION_DEFAULT_MODEL = 'microsoft/mai-transcribe-2'
+ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on OpenRouter endpoints 2026-09-09
+    {'id':'openai/gpt-4.1-mini','name':'GPT-4.1 mini','pricing':'$0.40/M giriş, $1.60/M çıkış; 40 dk toplantı ≈ 1 cent'},
+    {'id':'openai/gpt-4o-mini','name':'GPT-4o mini','pricing':'$0.15/M giriş, $0.60/M çıkış'},
+    {'id':'google/gemini-2.5-flash','name':'Gemini 2.5 Flash','pricing':'$0.30/M giriş, $2.50/M çıkış'},
+)
+ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
+
+def validate_analysis_model(model):
+    if model not in {m['id'] for m in ANALYSIS_MODELS}:
+        raise OpenRouterError('Desteklenmeyen analiz modeli; model otomatik değiştirilmedi.')
+    return model
 
 def diarization_options(model):
     """Provider-specific diarization switch verified on 2026-09-09, or None when the model has none."""
@@ -161,7 +172,7 @@ class OpenRouterClient:
 
 class OpenRouterLLM:
     def __init__(self,client,model):self.client,self.model_id=client,model
-    def count(self,text):return len(text.encode('utf-8'))  # conservative upper bound; no tokenizer download
+    def count(self,text):return max(1,len(text.encode('utf-8'))//3)  # ≈ tokens for Turkish; no tokenizer download
     def complete(self,system,user,max_tokens=1800,schema=None):
         payload={'model':self.model_id,'messages':[{'role':'system','content':system},{'role':'user','content':user}],
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True}}

@@ -37,6 +37,37 @@ def pieces(duration, length):
     return result
 
 
+ECHO_HOP=800            # 50 ms RMS envelope
+ECHO_THRESHOLD=0.5      # measured: speaker bleed 0.72–0.88, unrelated speech 0.07
+
+def _envelope(x):
+    n=len(x)//ECHO_HOP
+    if n==0: return np.zeros(0,dtype='float32')
+    return np.sqrt((x[:n*ECHO_HOP].reshape(n,ECHO_HOP)**2).mean(axis=1))
+
+def envelope_correlation(mic, system, max_lag=20):
+    """Peak normalized correlation of 50 ms loudness envelopes within ±1 s. Waveform correlation fails
+    (room acoustics and clock offsets); loudness envelopes still line up when the mic only hears the speakers."""
+    em=_envelope(mic);es=_envelope(system)
+    if len(em)<10 or len(es)<10 or em.max()<1e-4 or es.max()<1e-4: return 0.0
+    em=(em-em.mean())/(em.std()+1e-9);es=(es-es.mean())/(es.std()+1e-9)
+    best=0.0
+    for lag in range(-max_lag,max_lag+1):
+        a=em[lag:] if lag>=0 else em[:lag];b=es[:len(es)-lag] if lag>0 else (es if lag==0 else es[-lag:])
+        n=min(len(a),len(b))
+        if n>=10: best=max(best,float((a[:n]*b[:n]).mean()))
+    return best
+
+def is_echo(mic_path, system_path, start, end):
+    """True when the microphone window is the system audio bleeding through the speakers."""
+    with sf.SoundFile(mic_path) as f:
+        f.seek(round(start*f.samplerate));m=f.read(round((end-start)*f.samplerate),dtype='float32')
+    with sf.SoundFile(system_path) as f:
+        if round(start*f.samplerate)>=f.frames: return False
+        f.seek(round(start*f.samplerate));s=f.read(round((end-start)*f.samplerate),dtype='float32')
+    return envelope_correlation(m,s)>=ECHO_THRESHOLD
+
+
 def is_silent(path, start, end, threshold=1e-4):
     with sf.SoundFile(path) as f:
         f.seek(round(start*f.samplerate));remaining=round((end-start)*f.samplerate)
@@ -115,7 +146,8 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     for source in sorted(sources):
         info=sf.info(sources[source])
         if info.samplerate!=16000 or info.channels!=1 or not 0<info.duration<=14400: raise ValueError('Ses mono 16 kHz ve en fazla dört saat olmalı')
-        for index,(a,b) in enumerate(pieces(info.duration,length)): plan.append((source,a,b,index))
+        piece_length=FINE_PIECE_SECONDS if source=='mic' else length   # the mic is never diarized; short windows let echo be skipped per window
+        for index,(a,b) in enumerate(pieces(info.duration,piece_length)): plan.append((source,a,b,index))
     counts={s:sum(1 for p in plan if p[0]==s) for s in sources}
     signature=digest_files([sources[s] for s in sorted(sources)])
     store.db.executescript('''CREATE TABLE IF NOT EXISTS cloud_sources(meeting TEXT PRIMARY KEY REFERENCES meetings(id), digest TEXT, plan TEXT);
@@ -133,7 +165,9 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         if position in done: continue
         path=sources[source]
         segments=[];usage={}
-        if not is_silent(path,a,b):
+        if source=='mic' and 'system' in sources and not is_silent(path,a,b) and is_echo(path,sources['system'],a,b):
+            usage={'skipped':'echo'}   # nothing uploaded: this window is the speakers bleeding into the mic
+        elif not is_silent(path,a,b):
             audio=encode_piece(path,a,b,ffmpeg)
             if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
             result=client.transcribe(audio,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT)
@@ -353,6 +387,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         try:
             transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg)
             metadata['echo_segments']=flag_echo(store,mid)
+            metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))
             try:
                 identity=identify_clusters(store,mid,sources,embedder)
                 metadata['identity']=identity;metadata.pop('identity_error',None)

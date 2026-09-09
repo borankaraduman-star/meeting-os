@@ -282,3 +282,53 @@ class SuggestionAndFeedingTests(unittest.TestCase):
         self.assertFalse(is_backchannel({'text':'Evet, ben.','start':0,'end':2.0}))
         self.assertTrue(is_backchannel({'text':'Tamam yarın.','start':0,'end':1.0}))
         self.assertFalse(is_backchannel({'text':'Yarın rapor hazır olur.','start':0,'end':1.0}))
+
+class EchoSkipTests(unittest.TestCase):
+    def make(self,tmp,mic_is_echo):
+        d=Path(tmp)/'rec';d.mkdir();t=np.arange(16000*8)/16000;rng=np.random.default_rng(1)
+        speech=(0.3*np.sin(2*np.pi*220*t)*(rng.random(len(t))>0.5)).astype('float32')   # bursty like speech
+        for i in range(8):  # loudness pattern: on/off per second
+            if i%2: speech[i*16000:(i+1)*16000]*=0.05
+        system=speech
+        mic=(0.4*np.roll(system,80)+0.02*rng.standard_normal(len(t))).astype('float32') if mic_is_echo else (0.3*np.sin(2*np.pi*330*t)*np.concatenate([np.ones(16000*4),np.zeros(16000*4)])).astype('float32')
+        events=[]
+        for source,signal in (('mic',mic),('system',system)):
+            path=d/f'{source}-000000.wav';sf.write(path,signal,16000,subtype='FLOAT')
+            events.append({'event':'chunk','source':source,'start':0,'duration':8,'path':str(path),'sample_rate':16000,'index':0})
+        (d/'capture-native.jsonl').write_text('\n'.join(json.dumps(e) for e in events)+'\n');return d
+    def test_echo_windows_are_not_uploaded_but_real_mic_speech_is(self):
+        from meeting_os.cloud_finalize import envelope_correlation
+        for echo in (True,False):
+            with tempfile.TemporaryDirectory() as tmp:
+                d=self.make(tmp,echo);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('E',{'capture_dir':str(d)});store.status(mid,'incomplete')
+                client=FakeClient();finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=client)
+                usage=[json.loads(u[0]) for u in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=? ORDER BY position',(mid,))]
+                mic_rows=[r for r in store.segments(mid) if r['source']=='mic']
+                meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+                if echo:
+                    self.assertEqual(usage[0],{'skipped':'echo'});self.assertEqual(mic_rows,[]);self.assertEqual(meta['echo_windows_skipped'],1);self.assertEqual(len(client.calls),1)
+                else:
+                    self.assertNotIn('skipped',usage[0]);self.assertEqual(len(mic_rows),1);self.assertEqual(meta['echo_windows_skipped'],0);self.assertEqual(len(client.calls),2)
+                store.close()
+        self.assertEqual(envelope_correlation(np.zeros(16000*4,dtype='float32'),np.ones(16000*4,dtype='float32')),0.0)
+
+class CloudAnalysisWiringTests(unittest.TestCase):
+    def test_models_and_token_estimate(self):
+        from meeting_os.openrouter import validate_analysis_model, OpenRouterError, OpenRouterClient, ANALYSIS_DEFAULT_MODEL
+        self.assertEqual(validate_analysis_model(ANALYSIS_DEFAULT_MODEL),'openai/gpt-4.1-mini')
+        with self.assertRaises(OpenRouterError):validate_analysis_model('openai/gpt-4o')
+        llm=OpenRouterClient(api_key='k',transport=lambda r,timeout:None).analysis('openai/gpt-4.1-mini',consent=True)
+        self.assertEqual(llm.count('a'*300),100);self.assertEqual(llm.model_id,'openai/gpt-4.1-mini')
+    def test_cli_cloud_analysis_skips_local_guard(self):
+        import sys
+        from unittest.mock import patch
+        from meeting_os import cli
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'db.sqlite';Store(db).close()
+            fake_llm=type('L',(),{'model_id':'openai/gpt-4.1-mini','count':lambda s,t:1,'complete':lambda s,*a,**k:'{}'})()
+            with patch.object(sys,'argv',['meeting_os','--db',str(db),'analyze','nope','--openrouter-model','openai/gpt-4.1-mini']), patch('meeting_os.supervisor.run_guarded') as rg, patch('meeting_os.openrouter.OpenRouterClient') as oc:
+                oc.return_value.analysis.return_value=fake_llm
+                with self.assertRaises(SystemExit) as ex: cli.main()
+                self.assertEqual(ex.exception.code,1)   # meeting not found -> plain error, but…
+                rg.assert_not_called()                  # …no local-model guard and no supervised child were involved
+                oc.return_value.analysis.assert_called_once_with('openai/gpt-4.1-mini',consent=True)

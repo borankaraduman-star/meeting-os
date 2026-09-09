@@ -129,13 +129,13 @@ def parser():
     b=sub.add_parser('benchmark'); b.add_argument('manifest',type=Path); b.add_argument('--output',type=Path,required=True)
     a=sub.add_parser('openrouter-import'); a.add_argument('audio',type=Path,nargs='?'); a.add_argument('--title',default='OpenRouter toplantısı'); a.add_argument('--resume'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--no-local',action='store_true',help='Cloud-only: provider diarization, no local models'); a.add_argument('--output',type=Path)
     a=sub.add_parser('openrouter-finalize',help='Transcribe a finished recording through OpenRouter only; no local models'); a.add_argument('meeting'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--output',type=Path)
-    a=sub.add_parser('analyze'); a.add_argument('meeting'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('analyze'); a.add_argument('meeting'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model',help='Cloud analysis via OpenRouter; no local model is loaded')
     a=sub.add_parser('actions'); a.add_argument('--owner'); a.add_argument('--meeting')
     a=sub.add_parser('action-update'); a.add_argument('task'); a.add_argument('--state',choices=['open','in_progress','done','dismissed']); a.add_argument('--title'); a.add_argument('--owner'); a.add_argument('--due-text')
-    a=sub.add_parser('prepare'); a.add_argument('task'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('prepare'); a.add_argument('task'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     a=sub.add_parser('handoff'); a.add_argument('task'); a.add_argument('path',type=Path)
     a=sub.add_parser('search'); a.add_argument('query'); a.add_argument('--speaker')
-    a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     sub.add_parser('mcp')
     return p
 
@@ -143,7 +143,8 @@ def main(supervised=False):
     args=parser().parse_args()
     os.umask(0o077)
     try:
-        if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask','openrouter-import'):
+        cloud_llm=getattr(args,'openrouter_model',None)
+        if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask','openrouter-import') and not cloud_llm:
             from .supervisor import run_guarded
             def interrupted(pid):
                 from .store import Store
@@ -185,9 +186,13 @@ def main(supervised=False):
             if args.command in ('analyze','prepare','ask','handoff','actions','action-update','search','mcp'):
                 from . import assistant
                 from .memory import Memory
-                if args.command=='analyze':result=assistant.analyze(store,args.meeting,force=args.force)
-                elif args.command=='prepare':result=assistant.prepare(store,args.task,force=args.force)
-                elif args.command=='ask':result=assistant.ask(store,args.question)
+                llm=None
+                if cloud_llm:
+                    from .openrouter import OpenRouterClient,validate_analysis_model
+                    llm=OpenRouterClient().analysis(validate_analysis_model(cloud_llm),consent=True)
+                if args.command=='analyze':result=assistant.analyze(store,args.meeting,llm=llm,force=args.force)
+                elif args.command=='prepare':result=assistant.prepare(store,args.task,llm=llm,force=args.force)
+                elif args.command=='ask':result=assistant.ask(store,args.question,llm=llm)
                 elif args.command=='handoff':result=assistant.handoff(store,args.task,args.path)
                 elif args.command=='actions':result=Memory(store).actions(args.owner,args.meeting)
                 elif args.command=='action-update':result=Memory(store).update_action(args.task,{k:getattr(args,k) for k in ('state','title','owner','due_text') if getattr(args,k) is not None})
