@@ -304,6 +304,13 @@ def dispatch(request, db=None):
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='storage_report':
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
+        if action=='storage_compact':
+            from .cloud_finalize import compact_capture
+            freed=0;count=0
+            for m in store.meetings():
+                b=compact_capture(store,m['id'])
+                if b: freed+=b;count+=1
+            return {'meetings':count,'bytes':freed}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='keep_meeting':

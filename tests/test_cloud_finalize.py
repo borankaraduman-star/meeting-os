@@ -492,3 +492,15 @@ class GlossaryTests(unittest.TestCase):
         c=OpenRouterClient(api_key='k',transport=transport)
         c.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True,hint='PMD, Trendyol');c.transcribe(b'OggS','ogg',model='microsoft/mai-transcribe-2',consent=True,hint='PMD')
         self.assertEqual(bodies[0]['prompt'],'PMD, Trendyol');self.assertNotIn('prompt',bodies[1])
+
+class CompactTests(unittest.TestCase):
+    def test_chunks_are_removed_after_completion_and_full_files_stay(self):
+        from meeting_os.cloud_finalize import compact_capture
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('C',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=FakeEmbedder())
+            names=sorted(p.name for p in d.iterdir())
+            self.assertIn('system-full.wav',names);self.assertIn('mic-full.wav',names);self.assertNotIn('system-000000.wav',names);self.assertNotIn('mic-000000.wav',names);self.assertIn('capture-native.jsonl',names)
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['chunks_removed'],2)
+            self.assertEqual(compact_capture(store,mid),0)   # idempotent
+            store.close()

@@ -430,6 +430,28 @@ def read_markers(capture_dir, limit=200):
     return out
 
 
+def compact_capture(store, mid):
+    """After a cloud transcript is complete the assembled *-full.wav files carry everything playback and
+    identity need; the 12-second capture chunks (48 kHz float, several times larger) are removed. The
+    journal stays so the capture history remains readable. Returns bytes freed."""
+    row=store.db.execute('SELECT status,metadata FROM meetings WHERE id=?',(mid,)).fetchone()
+    if not row or row['status']!='complete': return 0
+    meta=json.loads(row['metadata'] or '{}');capture=meta.get('capture_dir');paths=meta.get('paths') or {}
+    if not capture or meta.get('cloud_mode')!='capture': return 0
+    directory=Path(capture)
+    full={k:Path(v) for k,v in paths.items() if isinstance(v,str)}
+    if not full or not all(f.is_file() and f.stat().st_size>0 for f in full.values()): return 0
+    freed=0;removed=0
+    for chunk in directory.glob('*-[0-9][0-9][0-9][0-9][0-9][0-9].wav'):
+        if chunk.resolve() in {f.resolve() for f in full.values()}: continue
+        try: freed+=chunk.stat().st_size;chunk.unlink();removed+=1
+        except OSError: pass
+    if removed:
+        meta['chunks_removed']=removed;meta['chunks_freed_bytes']=freed
+        with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),mid))
+    return freed
+
+
 def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
     """Capture-directory recordings and cloud-only file imports share this resumable path."""
     _consent(consent)
@@ -482,6 +504,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
                 metadata['identity_error']='Bellek baskısı; ses profili eşleştirmesi atlandı' if isinstance(exc,(MemoryPressureError,ResourceProbeError)) else 'Ses profili eşleştirmesi yapılamadı'
             with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(metadata),mid))
             store.status(mid,'complete');emit('complete')
+            compact_capture(store,mid)
             from .reports import write_meeting_report
             from . import __version__
             write_meeting_report(store,mid,data_dir,version=__version__)

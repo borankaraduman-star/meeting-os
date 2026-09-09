@@ -354,6 +354,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { let r=try await request(["action":"storage_cleanup","days":cleanupDays,"dry_run":false]); activity="Eski sesler temizlendi · \((r["meetings"] as? [[String:Any]])?.count ?? 0) toplantı, \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)) boşaldı · transkriptler duruyor"; cleanupPreview=nil; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
         catch { self.error=error.localizedDescription }
     }
+    func compactStorage() async {
+        do { let r=try await request(["action":"storage_compact"]); activity="Parçalar sıkıştırıldı · \(r["meetings"] as? Int ?? 0) toplantı, \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)) boşaldı"; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
+        catch { self.error=error.localizedDescription }
+    }
     func keepMeeting(_ id:String,keep:Bool) async { do { _=try await request(["action":"keep_meeting","meeting":id,"keep":keep]); await refresh() } catch { self.error=error.localizedDescription } }
     /// Meeting → PRD / bug report / customer request / Claude Code prompt, saved where the user chooses. Cloud mode only.
     func exportDocument(kind:String) async {

@@ -411,6 +411,8 @@ struct StorageSection:View {
                 Text("Silme, arşivdeki onay penceresinden yapılır.").font(.caption2).foregroundStyle(.secondary)
             }
             Divider()
+            HStack { Button("Kayıt parçalarını sıkıştır") { Task { await model.compactStorage() } }.disabled(model.busy); Text("Tamamlanmış bulut kayıtlarında 12 saniyelik ham parçalar silinir, birleştirilmiş ses ve dinleme kalır. Yeni kayıtlarda kendiliğinden yapılır.").font(.caption2).foregroundStyle(.secondary) }
+            Divider()
             Text("Eski sesleri temizle").font(.caption.weight(.semibold))
             Text("Transkript, özet, görevler ve ses profilleri kalır; yalnız tamamlanmış eski toplantıların ses dosyaları silinir. “Sesi koru” işaretli toplantılara dokunulmaz. Önce liste gösterilir.").font(.caption2).foregroundStyle(.secondary)
             HStack {
