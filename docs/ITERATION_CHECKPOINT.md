@@ -519,3 +519,7 @@ Ayarlar’da gerçek OpenRouter transkript harcaması (bu ay/toplam; ekranda $0.
 ## 2026-09-09 14:40 — 1.2.8: Hafıza araması Türkçe eklere dayanıklı
 
 `memory.query_terms` (işlev sözcükleri atılır) + `match_score` (ortak kök ≥ max(4, %60·kısa uzunluk) → 0.8, tam alt dize → 1.0). Gerçek soru “İsviçre'de kaç eğitmen… modüller kaç günde?”: önce yalnız eğitmen sayısı bulunuyordu, şimdi “toplam 3 günde” kanıtı (24:11) da geliyor. Bu turda GitHub’a çıkan sürümler: 1.2.3 → 1.2.8. Diğer Mac’ten rapor hâlâ yok.
+
+## 2026-09-09 14:45 — 1.2.9: Görevlerim → Apple Hatırlatıcılar
+
+`RemindersBridge` (EventKit, yalnız hatırlatıcı yazma; takvim okuma ayrı). Görev satırında “Hatırlatıcılar’a ekle”; not = kaynak toplantı + sahip + transkriptteki zaman ifadesi (tarih tahmin edilmez). Uçtan uca doğrulandı: düğme → EventKit kaydı → Reminders’ta “Kitapları farklı dillere…” bulundu, notu doğru, deneme silindi. Not: tam test paketi bir kez geçici `JobTimeoutError` (supervisor) hatalarıyla düştü, iki tekrar temiz; sürüm zincirinde `tail -1` sonucu maskeledi, sonraki zincirlerde `set -o pipefail` kullan.
