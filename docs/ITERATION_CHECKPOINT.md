@@ -543,3 +543,7 @@ Hiç sorulmamış izinlerde macOS sorusu açılır; reddedilmiş izinlerde ilgil
 ## 2026-09-09 15:15 — 1.2.14: toplantı sırasında yük koruması
 
 Boran diğer Mac’te “internet yavaşladı / dondu” bildirdi; uygulamayla ilişkisi doğrulanamadı (o Mac’ten rapor yok). Ölçülenler: köprü yoklaması 30–40 ms / 2 sn (≈%2 CPU), yükleme Opus 32 kbps (saatte ≈14 MB), boşta uygulama %0–2.5 CPU / 120–156 MB. Ağır adaylar: güncelleme derlemesi (`swift build`, tek çekirdek dakikalarca), kayıt sonrası Resemblyzer/PyTorch, art arda toplantıda önceki toplantının finalize’ı. Önlemler: `JobPriority` (kayıt userInitiated, diğer işler utility, Zoom açıkken background + `MEETING_OS_LOW_PRIORITY` → `os.nice(10)` + tek yükleyici), Zoom açıkken güncelleme yasak (UI + otomatik), `update.sh` `nice 19`, boşta yoklama 6 sn (`RefreshCadence`), `job_usage` (CPU s, tepe RSS, süre) metadata + rapor. Canlı doğrulama: `nice` 10 oldu; QoS/Zoom yolu bu Mac’te Zoom olmadığı için denenmedi.
+
+## 2026-09-09 17:10 — Kurul turu başladı; 1.2.15
+
+Kurul (3 ajan: UX, PM, güvenilirlik) fikir üretti; canlı sürüm günlüğü artefaktı açıldı. 1.2.15 (UX #6/#7): kenar çubuğunda Bugün/Dün/Bu hafta/Daha eski grupları, “Bugün 14:05” etiketleri (`MeetingDates`), arama her zaman görünür ve konuşmacı adında da eşleşir (snapshot `stats.names`); ⌘1–⌘5 sekmeler, ⌘F konuşmada ara, ⌘⇧F hafızada ara (Git menüsü), Esc aramayı temizler. Ekranda doğrulandı (⌘2 → Özet, gruplar/etiketler).
