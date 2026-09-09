@@ -83,12 +83,14 @@ extension Model {
         switch mode { case "decisions": await loadDecisions(query:memoryQuery); case "questions": await loadQuestions(query:memoryQuery); case "waiting": await loadWaiting(); default: if !memoryQuery.isEmpty { await memorySearch() } }
     }
 
+    /// `recording` goes false the moment ⌃⌥R is pressed, but the helper keeps writing for another 15–30 s.
+    /// Housekeeping must wait for the process to be gone, not for the flag — that drain is the recording.
     func heartbeatIfDue() {
-        guard !recording, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
+        guard !recording, recordProcess==nil, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
         lastHeartbeat=Date()
         Task {
             _=try? await request(["action":"heartbeat","app":["version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "","bridge":BridgeStats.shared.snapshot]])
-            if !recording, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
+            if !recording, recordProcess==nil, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
                 if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
             }
@@ -109,13 +111,13 @@ extension Model {
     /// may we try it again now? The first candidate goes through the ordinary finalize path at background
     /// priority; key/credit failures only raise a standing hint, because retrying them would change nothing.
     func idleRetryIfDue() {
-        guard IdleRetry.shouldAsk(enabled:reportSettings.autoRetry,recording:recording,hasJob:job != nil,queued:!finalizeQueue.isEmpty,
+        guard IdleRetry.shouldAsk(enabled:reportSettings.autoRetry,recording:recording || recordProcess != nil,hasJob:job != nil,queued:!finalizeQueue.isEmpty,
                                   zoomOpen:zoomMeetingOpen,pressureAt:memoryPressureAt,last:lastIdleRetry) else { return }
         lastIdleRetry=Date()
         Task { [weak self] in
             guard let self, let r=try? await self.request(["action":"retry_candidates"]) else { return }
             // The answer may be seconds old: everything is checked again before a process is started.
-            guard self.reportSettings.autoRetry, !self.recording, self.job==nil, self.finalizeQueue.isEmpty, !self.zoomMeetingOpen,
+            guard self.reportSettings.autoRetry, !self.recording, self.recordProcess==nil, self.job==nil, self.finalizeQueue.isEmpty, !self.zoomMeetingOpen,
                   let first=(r["candidates"] as? [[String:Any]])?.first, let mid=first["meeting"] as? String else { return }
             self.idleRetry=true
             self.activity="Boşta yeniden deneniyor · “\((first["title"] as? String ?? "").prefix(40))”"

@@ -8,6 +8,14 @@ struct ResourceGuard {
         if command=="record" { return jobArguments.contains("--live") }
         return !["openrouter-finalize","openrouter-import"].contains(command)
     }
+    /// What an OS memory-pressure event is allowed to stop. Recording owns a process slot of its own, so the
+    /// only thing under pressure is the background job — there is deliberately no case that stops a recording:
+    /// a meeting is never sacrificed for an analyze/retry/prepare/ask pass that happens to be running beside it.
+    enum PressureAction { case none, terminateJob }
+    static func pressureAction(hasJob:Bool,stopsOnPressure:Bool,recording:Bool,alreadyStopped:Bool)->PressureAction {
+        guard hasJob, stopsOnPressure, !alreadyStopped else { return .none }
+        return .terminateJob
+    }
     static func budget(physical:UInt64)->UInt64 { min(10*1024*1024*1024,physical/4) }
     static func footprint(pid:pid_t)->UInt64? {
         var info=rusage_info_v2()

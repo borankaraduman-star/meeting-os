@@ -132,19 +132,21 @@ def load(data_dir, repo_root=None, with_counts=False):
 
 def import_file(source, data_dir, shared=False):
     """Validate a glossary.jsonl and store it where every Mac reads it (iCloud-shared when available,
-    else the local data folder). When a team folder is set and sharing is on, the same terms are also
-    merged into the team file — merged, not overwritten, because teammates write to it too."""
+    else the local data folder). Any file other Macs also write — the iCloud-shared one, the team one — is
+    merged, never overwritten: an import on this Mac must not delete the terms another Mac added."""
     text = Path(source).read_text(encoding='utf-8')
     lines = [l for l in text.splitlines() if l.strip()]
     parsed = [parse_line(l) for l in lines]; good = [p for p in parsed if p]
     if not good: raise ValueError('Dosyada geçerli sözlük satırı yok (JSON Lines, her satırda "term" alanı gerekir)')
-    target = (shared_path() if shared else None) or (Path(data_dir) / FILENAME)
+    local = Path(data_dir) / FILENAME
+    target = (shared_path() if shared else None) or local
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text('\n'.join(json.dumps(p, ensure_ascii=False) for p in good[:MAX_TERMS]) + '\n', encoding='utf-8')
-    result = {'imported': min(len(good), MAX_TERMS), 'skipped': len(lines) - len(good), 'path': str(target), 'shared': target != Path(data_dir) / FILENAME}
+    if target == local: target.write_text('\n'.join(json.dumps(p, ensure_ascii=False) for p in good[:MAX_TERMS]) + '\n', encoding='utf-8')
+    else: merge_into(target, good)   # the shared file is every Mac's, not this import's
+    result = {'imported': min(len(good), MAX_TERMS), 'skipped': len(lines) - len(good), 'path': str(target), 'shared': target != local}
     team = team_path(data_dir)
     from .reports import load_settings
-    if team and load_settings(data_dir).get('share_glossary') is not False:
+    if team and team != target and load_settings(data_dir).get('share_glossary') is not False:
         try: result['team'] = merge_into(team, good)
         except OSError as exc:  # an unmounted share must not fail the user's own import
             result['team_error'] = type(exc).__name__

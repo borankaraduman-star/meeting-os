@@ -16,6 +16,14 @@ def _fold(s): return s.replace('İ', 'i').replace('I', 'ı').casefold()
 def _tokens(text): return TOKEN.findall(text or '')
 
 
+def _upper_first(word):
+    """Turkish capitalization: 'i'→'İ' and 'ı'→'I'. str.upper() turns 'istanbul' into 'Istanbul', which is
+    a different word here and the kind of wrongness a user notices in every automatic fix."""
+    if not word: return word
+    first = 'İ' if word[0] == 'i' else ('I' if word[0] == 'ı' else word[0].upper())
+    return first + word[1:]
+
+
 def substitutions(previous, replacement):
     """Word-level replacements between a segment's text before and after a human edit."""
     a, b = _tokens(previous), _tokens(replacement)
@@ -66,8 +74,9 @@ def _pattern(original):
 
 
 def apply_rules(store, mid, rules=None):
-    """Apply learned rules to every segment of a meeting. The original text stays in the payload, the
-    segment is flagged `auto_corrected`, and the list of fixes is kept so the UI can undo each one."""
+    """Apply learned rules to every segment of a meeting. What the segment said before this pass is kept in
+    `pre_auto_text` — its own key, never the user's `original_text`, so reverting an automatic fix cannot
+    throw away a manual edit — the segment is flagged `auto_corrected`, and every fix is listed for undo."""
     rules = learned_rules(store) if rules is None else rules
     if not rules: return {'segments': 0, 'fixes': 0, 'rules': 0}
     compiled = [(_pattern(r['original']), r) for r in rules]
@@ -79,11 +88,11 @@ def apply_rules(store, mid, rules=None):
         for pattern, rule in compiled:
             def swap(m):
                 s = m.group(0); rep = rule['replacement']
-                return rep[:1].upper() + rep[1:] if s[:1].isupper() and not rep[:1].isupper() else rep
+                return _upper_first(rep) if s[:1].isupper() and not rep[:1].isupper() else rep
             new, n = pattern.subn(swap, text)
             if n: applied.append({'original': rule['original'], 'replacement': rule['replacement'], 'count': n}); text = new
         if not applied: continue
-        payload.setdefault('original_text', payload.get('text')); payload['text'] = text
+        payload['pre_auto_text'] = payload.get('text'); payload['text'] = text
         payload['flags'] = sorted(set(payload.get('flags') or []) | {'auto_corrected'})
         payload.setdefault('metrics', {})['auto_corrections'] = applied
         with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), row['id']))
@@ -98,7 +107,9 @@ def revert(store, mid, segment_id):
     payload = json.loads(row['payload']); applied = (payload.get('metrics') or {}).get('auto_corrections') or []
     if not applied: return {'reverted': 0}
     for a in applied: reject_rule(store, a['original'])
-    payload['text'] = payload.get('original_text') or payload['text']
+    # pre_auto_text is what this segment said before the automatic pass — the user's manual edit, when there
+    # was one. original_text is the fallback for segments corrected by a version that shared the two keys.
+    payload['text'] = payload.pop('pre_auto_text', None) or payload.get('original_text') or payload['text']
     payload['flags'] = [f for f in payload.get('flags') or [] if f != 'auto_corrected']
     payload['metrics'].pop('auto_corrections', None)
     with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), segment_id))

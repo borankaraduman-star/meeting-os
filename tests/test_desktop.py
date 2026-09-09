@@ -445,6 +445,38 @@ class CloudRetryQueueTests(unittest.TestCase):
             self.assertEqual({e['kind'] for e in result['blocked']},{'auth','credit'})
             store.close()
 
+    def test_a_job_the_user_stopped_is_not_restarted_ten_minutes_later(self):
+        """A cancel (⌘. or quit) raises KeyboardInterrupt: status `incomplete`, no `cloud_error`. That read as
+        "never reported anything", so the idle queue restarted the upload the user had just refused."""
+        from meeting_os.cloud_finalize import note_cloud_cancel
+        from meeting_os.desktop import retry_candidates
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);store=Store(data/'meeting-os.sqlite')
+            stopped,_=self._rec(store,data,'durduruldu',{})
+            other,_=self._rec(store,data,'devam',{})
+            self.assertEqual({e['meeting'] for e in retry_candidates(store)['candidates']},{stopped,other})
+            note_cloud_cancel(store,stopped)
+            self.assertEqual({e['meeting'] for e in retry_candidates(store)['candidates']},{other})
+            self.assertIsNone(json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(stopped,)).fetchone()[0]).get('cloud_error'))
+            # Starting a finalize by hand is the user asking again: the mark goes and the queue may help once more.
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(stopped,)).fetchone()[0]);meta.pop('cloud_canceled')
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),stopped))
+            self.assertEqual({e['meeting'] for e in retry_candidates(store)['candidates']},{stopped,other})
+            store.close()
+
+    def test_a_cloud_recording_quit_before_finalize_is_still_found(self):
+        """Quitting mid-job leaves a provisional recording that never reached finalize, so it has no
+        `cloud_mode` yet. The `--cloud` marker written at record time is what the queue recognises."""
+        from meeting_os.desktop import retry_candidates
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);store=Store(data/'meeting-os.sqlite')
+            never,_=self._rec(store,data,'hic-baslamadi',{'cloud_mode':None,'engine':None,'cloud_intent':'capture'},status='provisional')
+            local,_=self._rec(store,data,'yerel',{'cloud_mode':None,'engine':'sherpa'},status='provisional')
+            found={e['meeting'] for e in retry_candidates(store)['candidates']}
+            self.assertIn(never,found)
+            self.assertNotIn(local,found)   # a local-mode recording is never sent to the cloud behind the user's back
+            store.close()
+
     def test_snapshot_shows_one_honest_line_per_meeting(self):
         from datetime import datetime,timedelta,timezone
         from meeting_os.desktop import cloud_error_line

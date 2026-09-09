@@ -2,9 +2,18 @@
 import json
 import math
 import sqlite3
+import unicodedata
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
+
+def fold_name(value):
+    """Comparison key for a person's name, Turkish-aware. 'Ayse', 'ayşe' and 'AYŞE' are one person: typing the
+    suggestion back without its diacritics is a confirmation, not "this voice is not Ayşe". Diacritics are
+    dropped for comparison only — what is stored and shown is always exactly what the user typed."""
+    s = (value or '').replace('İ', 'i').replace('I', 'ı').casefold()
+    s = ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+    return s.replace('ı', 'i').strip()
 
 def unit(vector):
     values = [float(v) for v in vector]
@@ -37,6 +46,9 @@ class Store:
         CREATE TABLE IF NOT EXISTS profile_stats(name TEXT PRIMARY KEY, confirmed INTEGER DEFAULT 0, wrong INTEGER DEFAULT 0);
         CREATE INDEX IF NOT EXISTS segment_meeting ON segments(meeting,start);
         ''')
+        # Samples a naming rejected are hidden, not destroyed: undo has to be able to give them back.
+        if 'deleted_by' not in {r[1] for r in self.db.execute('PRAGMA table_info(samples)')}:
+            self.db.execute('ALTER TABLE samples ADD COLUMN deleted_by TEXT')
         columns={r[1] for r in self.db.execute('PRAGMA table_info(corrections)')}
         if 'previous_name' not in columns:
             self.db.execute('ALTER TABLE corrections ADD COLUMN previous_name TEXT')
@@ -99,14 +111,17 @@ class Store:
         except ValueError: return None, None
     def _reject_previous(self, mid, speaker, rows, name):
         """Negative feedback (must run inside the caller's transaction): renaming a cluster away from a person
-        drops the samples that cluster fed into that person and remembers the voice as rejected for them."""
-        wrong=[n for n in self._previous_names(rows) if n!=name]
+        hides the samples that cluster fed into that person and remembers the voice as rejected for them.
+        Names are compared folded, so writing "Ayse" over the suggestion "Ayşe" confirms the person rather
+        than convicting them; the samples are soft-deleted so undo can hand them back intact."""
+        wrong=[n for n in self._previous_names(rows) if fold_name(n)!=fold_name(name)]
         if not wrong: return None
         clusters={(r.get('metrics') or {}).get('cluster') for r in rows} - {None}
         provenances=[f'auto:{mid}:{c}' for c in clusters]+[f'{mid}:speaker:{speaker}']
         vector,model=self._cluster_vector(rows)
+        mark=f'{mid}:speaker:{speaker}'
         for prev in wrong:
-            self.db.executemany('DELETE FROM samples WHERE name=? AND provenance=?',[(prev,p) for p in provenances])
+            self.db.executemany('UPDATE samples SET deleted_by=? WHERE name=? AND provenance=? AND deleted_by IS NULL',[(mark,prev,p) for p in provenances])
             if vector is not None and not self.db.execute('SELECT 1 FROM rejections WHERE name=? AND provenance=?',(prev,f'{mid}:speaker:{speaker}')).fetchone():
                 self.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',(prev,model,json.dumps(vector),f'{mid}:speaker:{speaker}',datetime.now(timezone.utc).isoformat()))
         return wrong[0]
@@ -116,8 +131,9 @@ class Store:
     PERSON_THRESHOLD_CAP=0.93
     def _feedback(self, identities, name):
         """(confirmed, wrong) for one naming: the suggestion the user accepted, and the automatic name he overruled."""
-        confirmed=name if any((i or {}).get('suggested')==name for i in identities) else None
-        wrong=sorted({(i or {}).get('name') for i in identities if (i or {}).get('name')}-{name})
+        key=fold_name(name)   # same folding as _reject_previous: a diacritic-free retype is a confirmation
+        confirmed=next((i['suggested'] for i in identities if i and fold_name(i.get('suggested'))==key and i.get('suggested')),None)
+        wrong=sorted({(i or {}).get('name') for i in identities if (i or {}).get('name') and fold_name(i['name'])!=key})
         return confirmed,(wrong[0] if wrong else None)
     def _bump(self, name, column, delta):
         """Move one evidence counter (must run inside the caller's transaction). Counters never go negative."""
@@ -155,7 +171,10 @@ class Store:
                 if f.get('wrong')==name: wrong-=1
         confirmed=max(0,min(confirmed,3));wrong=max(0,min(wrong,3))
         if not confirmed and not wrong: return base
-        return min(self.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, self.PERSON_THRESHOLD_FLOOR)+0.02*wrong)
+        # The floor may never push the bar up: on the local paths base is 0.80, and clamping to 0.84 made a
+        # person the user had *confirmed* harder to match than one he had never judged. Only `wrong` raises.
+        floor=min(base,self.PERSON_THRESHOLD_FLOOR)
+        return min(self.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, floor)+0.02*wrong)
     def correct_segment(self, mid, sid, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
@@ -185,7 +204,7 @@ class Store:
         vector already stored, and not already enrolled. Vectors stay in SQLite; only the row summary comes back."""
         name=(name or '').strip()
         if not name: return []
-        used={r[0] for r in self.db.execute('SELECT provenance FROM samples WHERE name=?',(name,))}
+        used={r[0] for r in self.db.execute('SELECT provenance FROM samples WHERE name=? AND deleted_by IS NULL',(name,))}
         out=[]
         for r in self.db.execute("""SELECT s.id,s.meeting,s.start,s.end,s.source,m.title,
                 json_extract(s.payload,'$.text') text,json_extract(s.payload,'$.flags') flags,json_type(s.payload,'$.embedding') vector
@@ -209,7 +228,7 @@ class Store:
         if not name or duration < 3: raise ValueError('Enrollment needs a name and at least 3 seconds')
         vector=unit(r['embedding'])
         provenance=f'{mid}:{sid}'
-        if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,r['embedding_model'],provenance)).fetchone():
+        if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,r['embedding_model'],provenance)).fetchone():
             self.correct_segment(mid,sid,name); return
         # One transaction: label and voice sample either both persist or neither.
         with self.db:
@@ -232,14 +251,16 @@ class Store:
             feedback=self._record_feedback(rows, name)
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,speaker,name,datetime.now(timezone.utc).isoformat(),previous,feedback))
-            if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone():
+            if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
                 self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance))
                 return {'labeled':len(rows),'profile_saved':True,'seconds':duration}
         return {'labeled':len(rows),'profile_saved':False,'seconds':duration}
     def undo_correction(self, mid):
         """Take back the newest cluster naming of a meeting: labels return to what they were, the sample and the
-        rejection that naming created disappear, and the correction row is removed so quality stats do not count it."""
+        rejection that naming created disappear, the samples it hid come back, and the correction row is removed
+        so quality stats do not count it. Restoring skips a sample whose slot has since been refilled, so undo
+        can never leave the same voice stored twice."""
         row=self.db.execute("SELECT * FROM corrections WHERE meeting=? AND speaker NOT LIKE 'segment:%' ORDER BY id DESC LIMIT 1",(mid,)).fetchone()
         if not row: raise ValueError('Geri alınacak adlandırma yok')
         speaker,name,previous=row['speaker'],row['name'],row['previous_name']
@@ -247,8 +268,12 @@ class Store:
         except ValueError: feedback={}
         with self.db:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(previous,mid,speaker))
-            self.db.execute('DELETE FROM samples WHERE name=? AND provenance=?',(name,f'{mid}:speaker:{speaker}'))
-            if previous: self.db.execute('DELETE FROM rejections WHERE name=? AND provenance=?',(previous,f'{mid}:speaker:{speaker}'))
+            mark=f'{mid}:speaker:{speaker}'
+            self.db.execute('DELETE FROM samples WHERE name=? AND provenance=?',(name,mark))
+            self.db.execute("""UPDATE samples SET deleted_by=NULL WHERE deleted_by=? AND NOT EXISTS(
+                SELECT 1 FROM samples live WHERE live.name=samples.name AND live.model IS samples.model
+                  AND live.provenance=samples.provenance AND live.deleted_by IS NULL)""",(mark,))
+            self.db.execute('DELETE FROM rejections WHERE provenance=?',(mark,))   # this naming's rejections, every name it convicted
             if feedback.get('confirmed'): self._bump(feedback['confirmed'],'confirmed',-1)   # the evidence goes back too
             if feedback.get('wrong'): self._bump(feedback['wrong'],'wrong',-1)
             self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
@@ -278,14 +303,14 @@ class Store:
         try: return json.loads(row['metadata']) or {}
         except (TypeError,ValueError): return {}
     def profiles(self):
-        return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples GROUP BY name,model')]
+        return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples WHERE deleted_by IS NULL GROUP BY name,model')]
     def delete_profile(self, name):
         with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,)); self.db.execute('DELETE FROM rejections WHERE name=?', (name,)); self.db.execute('DELETE FROM profile_stats WHERE name=?', (name,))
     def profile_samples(self, name):
         """Every stored voice sample of a person with where it came from, for the maintenance screen."""
         titles = {r['id']: r['title'] for r in self.db.execute('SELECT id,title FROM meetings')}
         out = []
-        for r in self.db.execute('SELECT id,model,duration,provenance FROM samples WHERE name=? ORDER BY id', (name,)):
+        for r in self.db.execute('SELECT id,model,duration,provenance FROM samples WHERE name=? AND deleted_by IS NULL ORDER BY id', (name,)):
             prov = r['provenance'] or ''
             parts = prov.split(':')
             mid = parts[1] if parts[0] == 'auto' and len(parts) > 1 else (parts[0] if parts and parts[0] in titles else None)
@@ -297,7 +322,7 @@ class Store:
         """Per person: how many samples, how much speech, and the weakest sample's fit to the centroid — the
         weekly-maintenance view; nothing is pruned automatically."""
         groups = {}
-        for r in self.db.execute('SELECT id,name,model,vector,duration,provenance FROM samples ORDER BY id'):
+        for r in self.db.execute('SELECT id,name,model,vector,duration,provenance FROM samples WHERE deleted_by IS NULL ORDER BY id'):
             try: x = unit(json.loads(r['vector']))
             except (ValueError, TypeError): continue
             groups.setdefault((r['name'], r['model']), []).append((r['id'], x, float(r['duration'] or 0), r['provenance'] or ''))
@@ -334,7 +359,7 @@ class Store:
         new_name = (new_name or '').strip()
         if not new_name: raise ValueError('Yeni isim boş olamaz')
         if new_name == name: return {'renamed': 0, 'merged': False}
-        merged = bool(self.db.execute('SELECT 1 FROM samples WHERE name=?', (new_name,)).fetchone())
+        merged = bool(self.db.execute('SELECT 1 FROM samples WHERE name=? AND deleted_by IS NULL', (new_name,)).fetchone())
         with self.db:
             n = self.db.execute('UPDATE samples SET name=? WHERE name=?', (new_name, name)).rowcount
             self.db.execute('UPDATE rejections SET name=? WHERE name=?', (new_name, name))
@@ -351,7 +376,7 @@ class Store:
         """Every person's blended score for one voice: mean of centroid similarity and best single-sample similarity.
         `exclude` drops the samples that came from one meeting (replay: a meeting must not vouch for itself)."""
         v = unit(vector); groups = {}
-        sql = 'SELECT name,vector FROM samples WHERE model=?'; args = [model]
+        sql = 'SELECT name,vector FROM samples WHERE model=? AND deleted_by IS NULL'; args = [model]   # a naming's rejected samples are hidden, not gone; they must not identify anyone
         if exclude: sql += ' AND provenance NOT LIKE ? AND provenance NOT LIKE ?'; args += [f'{exclude}:%', f'auto:{exclude}:%']
         for row in self.db.execute(sql, args):
             x = json.loads(row['vector'])
@@ -401,8 +426,8 @@ class Store:
         return {'name': name if score >= bar and gap >= margin else None, 'candidate': name, 'similarity': score, 'margin': gap, 'threshold_used': bar}
     def add_sample_if_new(self, name, vector, model, duration, provenance, cap=8):
         """Self-feeding profiles: one more sample per meeting for a confident match, bounded per person."""
-        if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone(): return False
-        if self.db.execute('SELECT count(*) FROM samples WHERE name=? AND model=?',(name,model)).fetchone()[0] >= cap: return False
+        if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone(): return False
+        if self.db.execute('SELECT count(*) FROM samples WHERE name=? AND model=? AND deleted_by IS NULL',(name,model)).fetchone()[0] >= cap: return False
         self.enroll(name, vector, model, duration, provenance); return True
     def resuggest(self, mid):
         """Q9 in-session adaptation. The moment the user names one cluster, the meeting's other still-unnamed

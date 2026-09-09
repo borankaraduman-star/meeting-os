@@ -107,6 +107,13 @@ final class CloudTranscriptionTests:XCTestCase {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))
         XCTAssertTrue(CloudTranscription.recordArguments(mode:"local",directory:"/d",title:"T",receipt:"/r").contains("--live"))
     }
+    /// A cloud-mode recording quit before finalize ever ran must still be findable by the idle queue.
+    func testOpenRouterModeMarksTheRecordingsCloudIntent() {
+        XCTAssertTrue(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--cloud"))
+        XCTAssertFalse(CloudTranscription.recordArguments(mode:"local",directory:"/d",title:"T",receipt:"/r").contains("--cloud"))
+        XCTAssertTrue(JobPriority.isRealtime(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r")))
+        XCTAssertFalse(ResourceGuard.stopsOnPressure(jobArguments:CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r")))
+    }
     func testFinalizeAndImportNeverCarryKeysAndResumeKeepsStoredModel() {
         let f=CloudTranscription.finalizeArguments(meeting:"m1",model:"deepgram/nova-3",output:"/o")
         XCTAssertEqual(f,["openrouter-finalize","m1","--allow-upload","--output","/o","--model","deepgram/nova-3"])

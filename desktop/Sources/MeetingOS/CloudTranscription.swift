@@ -8,7 +8,9 @@ enum CloudTranscription {
     static let defaultModel="microsoft/mai-transcribe-2"
     static func recordArguments(mode:String,directory:String,title:String,receipt:String)->[String] {
         var args=["record",directory,"--seconds","14400","--title",title,"--output",receipt]
-        if mode != "openrouter" { args.insert("--live",at:2) }   // live local preview only in local mode
+        // `--cloud` only marks intent on the meeting: if the app is quit before finalize ever runs, the idle
+        // queue can still tell this recording was meant for OpenRouter. It loads and uploads nothing itself.
+        if mode != "openrouter" { args.insert("--live",at:2) } else { args.insert("--cloud",at:2) }   // live local preview only in local mode
         return args
     }
     static func finalizeArguments(meeting:String,model:String?,output:String)->[String] {

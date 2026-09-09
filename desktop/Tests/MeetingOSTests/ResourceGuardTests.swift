@@ -13,6 +13,15 @@ final class ResourceGuardTests:XCTestCase {
         XCTAssertFalse(ResourceGuard.stopsOnPressure(jobArguments:["openrouter-import","--no-local","--allow-upload","/a.m4a"]))
         XCTAssertFalse(ResourceGuard.stopsOnPressure(jobArguments:[]))
     }
+    /// The regression: memory pressure during an analyze/retry job used to stop the LIVE RECORDING and leave
+    /// the job running, because the job slot predates the recorder's own slot.
+    func testMemoryPressureStopsTheJobEvenWhileRecording() {
+        XCTAssertEqual(ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:true,recording:true,alreadyStopped:false),.terminateJob)
+        XCTAssertEqual(ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:true,recording:false,alreadyStopped:false),.terminateJob)
+        XCTAssertEqual(ResourceGuard.pressureAction(hasJob:false,stopsOnPressure:true,recording:true,alreadyStopped:false),.none)   // nothing to stop; the recording is not ours to kill
+        XCTAssertEqual(ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:false,recording:false,alreadyStopped:false),.none)
+        XCTAssertEqual(ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:true,recording:false,alreadyStopped:true),.none)   // one message per job
+    }
     func testDisplaySleepGuardIsHeldOnlyWhileActive() {
         XCTAssertFalse(DisplaySleepGuard.active)
         DisplaySleepGuard.begin();XCTAssertTrue(DisplaySleepGuard.active)

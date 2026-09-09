@@ -65,6 +65,46 @@ class NegativeFeedbackTests(unittest.TestCase):
             db.close()
 
 
+    def test_a_diacritic_free_retype_is_not_a_rejection(self):
+        """Typing the suggestion back as "Ayse" is the same person. It used to be read as "this voice is not
+        Ayşe": her samples were deleted and her profile vetoed for that voice for good."""
+        from meeting_os.store import fold_name
+        self.assertEqual(fold_name('Ayse'),fold_name('Ayşe'))
+        self.assertEqual(fold_name('İSTANBUL'),fold_name('istanbul'))
+        self.assertNotEqual(fold_name('Ayşe'),fold_name('Ayla'))
+        for typed in ('Ayse','ayşe','AYŞE'):
+            with self.subTest(typed=typed),tempfile.TemporaryDirectory() as tmp:
+                db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+                voice=self._voice(7); db.enroll('Ayşe',voice,'m',10,'manual')
+                db.add_sample_if_new('Ayşe',voice,'m',12,f'auto:{mid}:0:S1')
+                self._cluster(db,mid,voice,suggested='Ayşe')
+                db.correct(mid,'system:S1',typed)
+                self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)
+                self.assertEqual({p['name']:p['samples'] for p in db.profiles()},{'Ayşe':2})
+                self.assertEqual(db.identify(voice,'m',threshold=0.5,margin=0.0)['name'],'Ayşe')
+                self.assertEqual(db.db.execute('SELECT confirmed FROM profile_stats WHERE name=?',('Ayşe',)).fetchone()[0],1)
+                db.close()
+    def test_rejected_samples_are_hidden_not_destroyed(self):
+        """A naming that rejects a person hides their samples; the rows stay so undo can hand them back, and
+        nothing that reads profiles or scores a voice may see them in the meantime."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            ali=self._voice(11); db.enroll('Ali',ali,'m',10,'manual')
+            db.add_sample_if_new('Ali',ali,'m',12,f'auto:{mid}:0:S1')
+            self._cluster(db,mid,ali,name='Ali')
+            db.enroll_speaker(mid,'system:S1','Veli')
+            self.assertEqual({p['name']:p['samples'] for p in db.profiles()},{'Ali':1,'Veli':1})
+            self.assertEqual(len(db.profile_samples('Ali')),1)
+            self.assertEqual([p['samples'] for p in db.profile_health() if p['name']=='Ali'],[1])
+            self.assertEqual(db.db.execute('SELECT count(*) FROM samples WHERE deleted_by IS NOT NULL').fetchone()[0],1)   # kept, not deleted
+            db.undo_correction(mid)
+            self.assertEqual({p['name']:p['samples'] for p in db.profiles()},{'Ali':2})   # the hidden sample is back
+            self.assertEqual(len(db.profile_samples('Ali')),2)
+            self.assertEqual(db.db.execute('SELECT count(*) FROM samples WHERE deleted_by IS NOT NULL').fetchone()[0],0)
+            self.assertEqual(db.identify(ali,'m',threshold=0.5,margin=0.0)['name'],'Ali')
+            db.close()
+
+
 class UndoTests(unittest.TestCase):
     def test_undo_restores_labels_and_unlearns(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -190,6 +230,22 @@ class PersonThresholdTests(unittest.TestCase):
             db.undo_correction(mid)
             self.assertEqual(db.db.execute('SELECT wrong FROM profile_stats WHERE name=?',('Veli',)).fetchone()[0],0)
             self.assertEqual(db.identify(probe,'m',0.87,0.05)['name'],'Veli')
+            db.close()
+    def test_the_personal_bar_never_ends_up_above_the_global_one(self):
+        """The 0.84 floor is a floor, not a target: on the local paths base is 0.80, and clamping to it made a
+        person the user had *confirmed* harder to match than one he had never judged."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); self._profile(db)
+            for i in range(3):
+                mid=db.create_meeting(f't{i}')
+                cluster(db,mid,[1.0,0.0],'system:S1','0:S1',identity={'name':None,'suggested':'Ali'})
+                db.correct(mid,'system:S1','Ali')
+            for base in (0.80,0.82,0.84,0.87):
+                with self.subTest(base=base):
+                    self.assertLessEqual(db.person_threshold('Ali',base),base)
+            self.assertAlmostEqual(db.person_threshold('Ali',0.80),0.80)   # floor may not push it up
+            self.assertAlmostEqual(db.person_threshold('Ali',0.87),0.84)   # three confirmations, stopped by the floor
+            self.assertAlmostEqual(db.person_threshold('Kimse',0.80),0.80)  # no evidence: the global bar stands
             db.close()
     def test_existing_corrections_are_backfilled_once(self):
         import sqlite3

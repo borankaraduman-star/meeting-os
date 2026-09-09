@@ -58,18 +58,24 @@ class PreviewFailureTests(unittest.TestCase):
    finally:store.close()
    self.assertEqual(raw.read_bytes(),b'raw fixture')
    self.assertEqual(summarize(root)['failed_chunks_at_least'],1)
- def test_missing_failure_journal_prevents_clean_completion(self):
+ # Reviewed behaviour changed: captured audio is never withheld. A live-preview diagnostic that could not be
+ # written is still not a reason to hide a finished recording — the complaint rides the receipt instead, the
+ # meeting stays provisional (never "complete"), and the full final pass regenerates the text anyway.
+ def test_missing_failure_journal_is_carried_on_the_receipt_not_raised(self):
   import io
   from unittest.mock import Mock,patch
   from meeting_os.live import record
   from meeting_os.store import Store
   with tempfile.TemporaryDirectory() as tmp:
-   root=Path(tmp)/'capture';root.mkdir()
+   root=Path(tmp)/'capture';root.mkdir();receipt=Path(tmp)/'receipt.json'
    event={'event':'chunk','path':str(root/'mic.wav'),'source':'mic','start':0,'duration':12}
    helper=Mock();helper.stdout=io.StringIO(json.dumps(event)+'\n');helper.poll.return_value=0;helper.wait.return_value=0
    pipeline=Mock();pipeline.process.side_effect=RuntimeError('fake failure');store=Store(Path(tmp)/'db')
    try:
     with patch('meeting_os.recovery.current_job_metadata',return_value={}),patch('meeting_os.live.subprocess.Popen',return_value=helper),patch('meeting_os.live.open_lifeline',return_value=(None,None)),patch('meeting_os.live.close_lifeline'),patch('meeting_os.live.signal.signal'),patch('meeting_os.preview_failures.record_failure',return_value=False):
-     with self.assertRaisesRegex(RuntimeError,'hata günlüğü'):record('/fake',root,60,12,pipeline=pipeline,store=store)
-    self.assertEqual(store.meetings()[0]['status'],'incomplete')
+     record('/fake',root,60,12,pipeline=pipeline,store=store,result_path=receipt)
+    result=json.loads(receipt.read_text())
+    self.assertEqual(result['status'],'provisional');self.assertEqual(result['preview_failed_chunks'],1)
+    self.assertTrue(any('hata günlüğü' in e for e in result['errors']))
+    self.assertEqual(store.meetings()[0]['status'],'provisional')
    finally:store.close()

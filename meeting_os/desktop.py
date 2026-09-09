@@ -115,9 +115,11 @@ def retry_candidates(store, now=None):
     for row in store.meetings():
         if row['status'] not in RETRY_STATES: continue
         meta=read_metadata(row)
-        # Only meetings that were already being transcribed in the cloud; a local-mode recording is never
-        # sent to OpenRouter behind the user's back.
-        if not meta.get('cloud_mode') and meta.get('engine')!='openrouter': continue
+        # Only meetings that were already being transcribed in the cloud, or recorded in cloud mode and never
+        # finalized (quit mid-job); a local-mode recording is never sent to OpenRouter behind the user's back.
+        if not meta.get('cloud_mode') and meta.get('engine')!='openrouter' and not meta.get('cloud_intent'): continue
+        # A job the user stopped themselves is not a failure to retry: it stays theirs until they ask again.
+        if meta.get('cloud_canceled'): continue
         if classify(meta.get('worker_identity'))=='active': continue
         if not has_audio(meta): continue
         error=meta.get('cloud_error') if isinstance(meta.get('cloud_error'),dict) else None
