@@ -587,3 +587,7 @@ UI denetimi (ajan, 12 madde) uygulandı: meetings/profiles/mic ipucu yalnız de�
 ## 2026-09-09 21:45 — 1.2.24: Python sadeleştirme/optimizasyon (ajan)
 
 `continuity.similarity` ön eleme + tek SequenceMatcher + yarım matris (sentetik 30 toplantı: 3,76 s → 1,25 s; eşik kararları ve rapor sayıları bayt bayt aynı, referans kopyayla test), `insights.py` ortak yardımcılar (decisions/questions/waiting/scorecard/digest/agenda/continuity/review), `Memory` memo (total_changes ile geçersizleme), `capture_metrics.journal_events` (son 64 KB; rapor `capture.full_bytes` FLAC sonrası artık dolu: mic 40 MB / system 45 MB), tembel import (argparse/shutil/ctypes/subprocess/hashlib), `tasks_meeting`/`drafts_task` indeksleri, `folder_bytes` tek kopya, `glossary.load(with_counts=True)`, `archive_all` N+1 yok. Gerçek veride köprü eylemleri 4–13 ms, snapshot 8 ms, köprü süreci 20 ms. Swift: büyük dosyalar bölündü (App 757 → 626, Layout 568 → 330). Boşta CPU %0.
+
+## 2026-09-09 22:05 — Tur 2 kapanışı
+
+Tam Python paketi bellek baskısı 1’e inince yeşil (tüm modüller, `discover`). Swift 88 test yeşil. Ekran kilitli olduğu için 1.2.23/1.2.24 sonrası canlı kayıt akışı (yüzen panel, kenar çubuğu durumu, parmak izli yoklama) ekranda yeniden doğrulanamadı; kilit açılınca ilk iş: ⌃⌥R ile 20 sn kayıt, panel + kenar çubuğu + Kontrol ekran görüntüsü. Kalan fikirler: stil sabitleri (kart dolgusu/aralık tek yerden), `memory.search` için FTS5, kayıt yardımcısı uyku senaryosunun canlı denenmesi (kapak kapatma), Zoom açıkken öncelik yolunun canlı denenmesi (Zoom kurulu Mac’te).
