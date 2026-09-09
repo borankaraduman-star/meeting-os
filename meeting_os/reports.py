@@ -78,18 +78,6 @@ def _errors(log_path, limit=8):
     return out[-limit:]
 
 
-def _folder_bytes(path):
-    """Total size of regular files under a directory; symlinks skipped, nothing modified."""
-    root = Path(path)
-    if not root.is_dir(): return 0
-    total = 0
-    for p in root.rglob('*'):
-        try:
-            if p.is_file() and not p.is_symlink(): total += p.stat().st_size
-        except OSError: continue
-    return total
-
-
 def capture_block(directory, duration_seconds=0.0):
     """Numbers only from a meeting's capture folder: chunk files per source against the count the duration
     implies, the capture journal's gap/error events, and the assembled *-full.* sizes. The journal records
@@ -205,6 +193,7 @@ def _memory_pressure():
 
 def build_heartbeat(store, data_dir, *, app=None):
     """This Mac's current state, independent of any single meeting: counts, sizes, disk, thermal, errors."""
+    from .desktop import folder_bytes   # the bridge owns the one copy; importing it here keeps this module light
     data = Path(data_dir)
     version = commit = None
     if isinstance(app, dict): version, commit = app.get('version'), app.get('commit')
@@ -220,7 +209,7 @@ def build_heartbeat(store, data_dir, *, app=None):
     return {
         'heartbeat_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
         'written': datetime.now(timezone.utc).isoformat(), 'meetings': sum(statuses.values()), 'statuses': statuses, 'last_complete': last,
-        'sizes': {'recordings': _folder_bytes(data/'recordings'), 'imports': _folder_bytes(data/'imports'), 'database': database, 'free_disk': free},
+        'sizes': {'recordings': folder_bytes(data/'recordings'), 'imports': folder_bytes(data/'imports'), 'database': database, 'free_disk': free},
         'memory_pressure': _memory_pressure(), 'thermal': _thermal(), 'load_average': load,
         'errors': _errors(data/'last-job.log', limit=5),
     }

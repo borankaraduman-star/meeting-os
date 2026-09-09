@@ -56,20 +56,24 @@ def sources(data_dir):
     return out
 
 
-def load(data_dir, repo_root=None):
-    """Entries from the local and iCloud-shared glossary.jsonl, then vocabulary.txt terms not already present. Deduplicated, capped."""
+def load(data_dir, repo_root=None, with_counts=False):
+    """Entries from the local and iCloud-shared glossary.jsonl, then vocabulary.txt terms not already present.
+    Deduplicated, capped. with_counts also returns how many of the kept entries came from a glossary file, so
+    the summary does not have to read the same files a second time to find out."""
     entries = []; seen = set()
     for path in sources(data_dir):
         if not path.is_file(): continue
         for line in path.read_text(encoding='utf-8').splitlines():
             e = parse_line(line)
             if e and e['term'].casefold() not in seen: seen.add(e['term'].casefold()); entries.append(e)
+    from_file = len(entries)
     vocab = Path(repo_root) / 'vocabulary.txt' if repo_root else None
     if vocab and vocab.is_file():
         for line in vocab.read_text(encoding='utf-8').splitlines():
             term = _clean(line.split('#')[0])
             if term and term.casefold() not in seen: seen.add(term.casefold()); entries.append({'term': term, 'expansion': None, 'category': 'diğer', 'aliases': [], 'mishearings': [], 'context': None, 'confidence': None, 'source_count': None})
-    return entries[:MAX_TERMS]
+    entries = entries[:MAX_TERMS]
+    return (entries, min(from_file, len(entries))) if with_counts else entries
 
 
 def import_file(source, data_dir, shared=False):

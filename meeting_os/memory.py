@@ -43,6 +43,8 @@ class Memory:
         CREATE TABLE IF NOT EXISTS draft_edits(id INTEGER PRIMARY KEY,draft TEXT,previous TEXT,replacement TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS drafts(id TEXT PRIMARY KEY,task TEXT,input_hash TEXT,task_hash TEXT,kind TEXT,text TEXT,created TEXT);
         CREATE INDEX IF NOT EXISTS analyses_meeting ON analyses(meeting,id);
+        CREATE INDEX IF NOT EXISTS tasks_meeting ON tasks(meeting,updated);
+        CREATE INDEX IF NOT EXISTS drafts_task ON drafts(task);
         ''')
         self._hashes={};self._analyses={};self._writes=self.db.total_changes
     def _memo(self):
