@@ -25,7 +25,7 @@ struct RecorderPanelView:View {
         HStack(spacing:10) {
             Circle().fill(.red).frame(width:10,height:10)
             Text(model.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
-            Text(model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).frame(maxWidth:120,alignment:.leading).help(model.recordingTitle)
+            Text(model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).frame(maxWidth:150,alignment:.leading).help(model.recordingTitle)
             Spacer()
             Button("An") { model.markMoment("important") }.help("Önemli an (⌃⌥M)")
             Button("Karar") { model.markMoment("decision") }.help("Karar anı (⌘⇧M)")

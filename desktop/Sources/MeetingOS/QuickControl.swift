@@ -16,11 +16,13 @@ enum ZoomWatch {
             return owner.contains("zoom") && layer==0 && (meeting || (!strict && name.localizedCaseInsensitiveContains("Zoom Workplace")))
         }
     }
-    static func current(strict:Bool=false)->Bool {
+    static func current(strict:Bool=false)->Bool { state().strict || (!strict && state().open) }
+    /// One window-list read per poll: `open` for reminders and the menu bar, `strict` for hands-free recording.
+    static func state()->(open:Bool,strict:Bool) {
         let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        guard running.contains(bundle) else { return false }
+        guard running.contains(bundle) else { return (false,false) }
         let list=(CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []
-        return meetingOpen(windows:list,runningBundles:running,strict:strict)
+        return (meetingOpen(windows:list,runningBundles:running),meetingOpen(windows:list,runningBundles:running,strict:true))
     }
 }
 

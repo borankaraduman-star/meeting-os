@@ -196,11 +196,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            let zoomNow=ZoomWatch.current()
+            let zoomState=ZoomWatch.state(); let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
             zoomMeetingOpen=zoomNow
-            switch zoomAuto.evaluate(zoomOpen:zoomNow && ZoomWatch.current(strict:true),recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
+            switch zoomAuto.evaluate(zoomOpen:zoomState.strict,recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
             case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"; notifyDone("Kayıt başladı","Zoom toplantısı açık; bitirmek için ⌃⌥R veya menü çubuğu.")
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
