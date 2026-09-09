@@ -24,7 +24,7 @@ def analyze(store,mid,llm=None,force=False):
     if not rows:raise ValueError('Toplantıda metin yok')
     from .llm import LocalLLM
     llm=llm or LocalLLM()
-    digest=fingerprint(rows)
+    digest=mem.current_hash(mid)   # staleness is judged on the whole transcript, not on the filtered analysis input
     result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True))
     return mem.save_analysis(mid,digest,llm.model_id,result)
 

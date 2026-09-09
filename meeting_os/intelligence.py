@@ -22,6 +22,40 @@ def parse_json(text):
     if not isinstance(value,dict):raise ValueError('Analiz bir JSON nesnesi olmalı')
     return value
 
+def _fold(text):
+    import unicodedata
+    out=[];index=[]
+    for i,ch in enumerate(text):
+        if ch.isalnum(): out.append(ch.casefold());index.append(i)
+        elif out and out[-1]!=' ': out.append(' ');index.append(i)
+    return ''.join(out).strip(),index
+
+
+def locate_quote(quote,text,min_ratio=0.8):
+    """Return the exact source substring a model quote refers to. Cloud models trim punctuation, fix
+    case or drop a filler word; the stored quote must still be real transcript text, so we map the
+    quote back onto the source (exact → punctuation/case-insensitive → fuzzy on words) or give up."""
+    if quote in text: return quote
+    fq,_=_fold(quote);ft,index=_fold(text)
+    if not fq: return None
+    pos=ft.find(fq)
+    if pos>=0:
+        start=index[pos];end=index[min(pos+len(fq)-1,len(index)-1)]+1
+        return text[start:end]
+    import difflib
+    words=[(m.start(),m.end()) for m in __import__('re').finditer(r'\S+',text)]
+    q=fq.split();n=len(q)
+    if not n or not words: return None
+    best=(0.0,None)
+    for i in range(0,max(1,len(words)-n+1)):
+        for span in (n,n+1,max(1,n-1)):
+            j=min(len(words),i+span)
+            candidate=text[words[i][0]:words[j-1][1]]
+            ratio=difflib.SequenceMatcher(None,_fold(candidate)[0],fq).ratio()
+            if ratio>best[0]: best=(ratio,candidate)
+    return best[1] if best[0]>=min_ratio else None
+
+
 def validate_record(record,rows):
     by_id={r['id']:r for r in rows};result={key:[] for key in CATEGORIES}
     for key in CATEGORIES:
@@ -35,7 +69,9 @@ def validate_record(record,rows):
             if not isinstance(refs,list) or not 1<=len(refs)<=12:raise ValueError('Kaynak alıntısı zorunlu')
             for ref in refs:
                 sid=ref.get('segment_id');quote=ref.get('quote')
-                if type(sid)!=int or sid not in by_id or not isinstance(quote,str) or not quote.strip() or quote not in by_id[sid]['text']:raise ValueError('Analiz gerçek kaynak alıntısıyla eşleşmiyor')
+                if type(sid)!=int or sid not in by_id or not isinstance(quote,str) or not quote.strip():raise ValueError('Analiz gerçek kaynak alıntısıyla eşleşmiyor')
+                quote=locate_quote(quote,by_id[sid]['text'])
+                if quote is None:raise ValueError('Analiz gerçek kaynak alıntısıyla eşleşmiyor')
                 row=by_id[sid];selected.append(row);evidence.append({'segment_id':sid,'quote':quote,'start':row['start'],'source':row['source'],'speaker':row.get('speaker_name') or row['speaker']})
             clean={field:text.strip(),'evidence':evidence,'needs_review':any(r.get('flags') for r in selected)}
             if key=='actions':

@@ -332,3 +332,13 @@ class CloudAnalysisWiringTests(unittest.TestCase):
                 self.assertEqual(ex.exception.code,1)   # meeting not found -> plain error, but…
                 rg.assert_not_called()                  # …no local-model guard and no supervised child were involved
                 oc.return_value.analysis.assert_called_once_with('openai/gpt-4.1-mini',consent=True)
+
+class QuoteLocateTests(unittest.TestCase):
+    def test_model_quotes_map_back_to_exact_source_text(self):
+        from meeting_os.intelligence import locate_quote
+        text='Eee o onunla hiçbir ilgim yok. Sadece bu işte hangi servis hesabında, “Deep Work” diye bir kitap önerisinde bulunmuştum.'
+        self.assertEqual(locate_quote('Sadece bu işte',text),'Sadece bu işte')
+        self.assertEqual(locate_quote('sadece bu işte hangi servis hesabında',text),'Sadece bu işte hangi servis hesabında')
+        self.assertEqual(locate_quote('Deep Work diye bir kitap önerisinde bulunmuştum',text),'Deep Work” diye bir kitap önerisinde bulunmuştum')  # exact source span, opening quote mark not required
+        self.assertEqual(locate_quote('o onunla hiç ilgim yok',text),'o onunla hiçbir ilgim yok.')  # one dropped syllable, fuzzy
+        self.assertIsNone(locate_quote('yarın rapor hazır olacak',text));self.assertIsNone(locate_quote('   ',text))
