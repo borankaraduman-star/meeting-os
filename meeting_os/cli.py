@@ -141,6 +141,8 @@ def parser():
     dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',default='Boran'); dg.add_argument('--output',type=Path)
     wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',default='Boran'); wt.add_argument('--output',type=Path)
     dl=sub.add_parser('decisions',help='Decision log across every meeting, newest first, with earlier similar decisions'); dl.add_argument('--query'); dl.add_argument('--limit',type=int,default=200); dl.add_argument('--mask-names',action='store_true'); dl.add_argument('--output',type=Path)
+    qr=sub.add_parser('questions',help='Soru radarı: tekrar eden açık sorular, en çok toplantıda sorulan üstte'); qr.add_argument('--query'); qr.add_argument('--limit',type=int,default=100); qr.add_argument('--mask-names',action='store_true'); qr.add_argument('--output',type=Path)
+    sc=sub.add_parser('scorecard',help='Toplantı karnesi: süre, konuşma payı, karar/görev sayısı, maliyet ve dönem toplamı'); sc.add_argument('--from',dest='date_from',help='YYYY-MM-DD (dönem başı; öntanımlı son 7 gün)'); sc.add_argument('--to',dest='date_to',help='YYYY-MM-DD (dönem sonu)')
     rd=sub.add_parser('review-debt',help='Review queue of every meeting recorded in the last N days, worst first'); rd.add_argument('--days',type=int,default=7)
     sh=sub.add_parser('share',help='Share preview of one meeting as Markdown; names can be masked, decisions-only mode'); sh.add_argument('--meeting',required=True); sh.add_argument('--mask-names',action='store_true'); sh.add_argument('--only-decisions',action='store_true'); sh.add_argument('--no-transcript',action='store_true'); sh.add_argument('--no-summary',action='store_true'); sh.add_argument('--include-segments',help='Comma-separated segment ids'); sh.add_argument('--exclude-segments',help='Comma-separated segment ids'); sh.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
@@ -323,6 +325,14 @@ def main(supervised=False):
                 from . import glossary as G
                 if args.output: output(export_decision_log(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None))
                 else: output(decision_log(store,args.query,args.limit))
+            elif args.command=='questions':
+                from .questions import question_radar,export_question_radar
+                from . import glossary as G
+                if args.output: output(export_question_radar(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None))
+                else: output(question_radar(store,args.query,args.limit))
+            elif args.command=='scorecard':
+                from .scorecard import build_scorecard
+                output(build_scorecard(store,start=args.date_from,end=args.date_to))
             elif args.command=='review-debt':
                 from .review import review_debt
                 output(review_debt(store,args.days))

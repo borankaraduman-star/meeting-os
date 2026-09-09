@@ -5,7 +5,9 @@ from meeting_os.decisions import decision_log,export_decision_log,render_decisio
 from meeting_os.desktop import dispatch
 from meeting_os.digest import build_digest,parse_range,render_digest
 from meeting_os.memory import Memory
+from meeting_os.questions import export_question_radar,question_radar,render_question_radar
 from meeting_os.review import review_debt
+from meeting_os.scorecard import build_scorecard,label,percent,talk_share
 from meeting_os.store import Store
 from meeting_os.types import Segment
 from meeting_os.waiting import age_days,build_waiting,render_waiting
@@ -146,6 +148,100 @@ class DecisionLogTests(unittest.TestCase):
    self.assertEqual(e['path'],str(out))
    p=subprocess.run([sys.executable,'-m','meeting_os','--db',str(db),'decisions','--query','android'],capture_output=True,text=True)
    self.assertEqual(p.returncode,0,p.stderr);self.assertEqual(json.loads(p.stdout)['matched'],1)
+
+def radar(db):
+ """Aynı soru iki toplantıda; en yeni toplantının kararı diğer soruyu cevaplamış görünüyor."""
+ now=datetime.now(timezone.utc)
+ a,_=seed(db,'Sprint planı',(now-timedelta(days=3)).isoformat(),'Önce iOS çıkacak',questions=('Rapor ne zaman hazır olacak?','Bütçe onayı kimde?'))
+ b,_=seed(db,'Haftalık durum',(now-timedelta(days=2)).isoformat(),'Sunucu maliyeti düşecek',questions=('Rapor ne zaman hazır olacak?',))
+ c,_=seed(db,'Karar toplantısı',now.isoformat(),'Bütçe onayı kimde belli oldu')
+ return a,b,c
+
+def carded(db,title,created,status='complete'):
+ """Bir toplantı: adlı iki konuşmacı, isimsiz bir küme ve sayılmaması gereken bir hoparlör yankısı."""
+ s=Store(db);mid=s.create_meeting(title,{})
+ with s.db:s.db.execute('UPDATE meetings SET created=? WHERE id=?',(created,mid))
+ sid=s.add_segment(mid,Segment(0,60,'Boran raporu çıkaracak.','system','S0',speaker_name='Boran'))
+ s.add_segment(mid,Segment(60,90,'Tamam.','system','S1',speaker_name='İpek'))
+ s.add_segment(mid,Segment(90,120,'isimsiz konuşma','system','S2'))
+ s.add_segment(mid,Segment(120,150,'yankı','mic','S0',flags=['possible_echo']))
+ s.status(mid,status);mem=Memory(s)
+ mem.save_analysis(mid,mem.current_hash(mid),'test-model',analysis(sid,'Önce iOS çıkacak',risks=('Takvim dar',),questions=('Rapor ne zaman?',),actions=(('Raporu çıkarmak','Boran','yarın'),)))
+ s.close()
+ return mid
+
+class QuestionRadarTests(unittest.TestCase):
+ def test_repeated_questions_group_and_a_later_decision_is_only_a_hint(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';a,b,c=radar(db)
+   r=question_radar(Store(db))
+   self.assertEqual((r['total'],r['matched'],r['questions']),(2,2,3))
+   repeated,single=r['groups']
+   self.assertEqual(repeated['text'],'Rapor ne zaman hazır olacak?');self.assertEqual(repeated['count'],2)
+   self.assertEqual([x['meeting'] for x in repeated['meetings']],[b,a])   # newest phrasing first
+   self.assertIsNone(repeated['answered_by'])   # sonraki karar bu soruya benzemiyor
+   self.assertEqual(repeated['evidence']['quote'],'Rapor ne zaman hazır')
+   self.assertEqual((single['text'],single['count']),('Bütçe onayı kimde?',1))
+   self.assertEqual((single['answered_by']['meeting'],single['answered_by']['text']),(c,'Bütçe onayı kimde belli oldu'))
+   self.assertGreaterEqual(single['answered_by']['similarity'],0.45)
+   self.assertEqual(question_radar(Store(db),'bütçe')['matched'],1)
+   self.assertEqual(question_radar(Store(db),'haftalık')['matched'],1)   # toplantı başlığı da eşleşir
+   self.assertEqual(question_radar(Store(db),'blokzincir')['matched'],0)
+   self.assertEqual(len(question_radar(Store(db),limit=1)['groups']),1)
+   text=render_question_radar(r)
+   self.assertIn('# Soru radarı',text);self.assertIn('## Rapor ne zaman hazır olacak?',text);self.assertIn('- 2 toplantıda soruldu',text)
+   self.assertIn('Muhtemelen cevaplandı: Bütçe onayı kimde belli oldu',text)
+ def test_radar_bridge_export_and_cli_agree(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';radar(db)
+   bridge=dispatch({'action':'question_radar','query':'rapor'},db)
+   self.assertEqual((bridge['total'],len(bridge['groups'])),(2,1))
+   out=Path(tmp)/'sorular.md'
+   e=dispatch({'action':'question_radar_export','path':str(out),'mask_names':True},db)
+   self.assertEqual((e['path'],e['groups'],e['answered']),(str(out),2,1))
+   body=out.read_text();self.assertIn('# Soru radarı',body);self.assertNotIn('İpek',body)
+   self.assertEqual(export_question_radar(Store(db),out,mask_names=False)['masked_names'],0);self.assertIn('Sprint planı',out.read_text())
+   p=subprocess.run([sys.executable,'-m','meeting_os','--db',str(db),'questions','--query','bütçe'],capture_output=True,text=True)
+   self.assertEqual(p.returncode,0,p.stderr);self.assertEqual(json.loads(p.stdout)['matched'],1)
+
+class ScorecardTests(unittest.TestCase):
+ def test_talk_share_matches_the_app_and_counts_come_from_the_latest_analysis(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';mid=carded(db,'Sprint planı',datetime.now(timezone.utc).isoformat())
+   s=Store(db);s.db.executescript("CREATE TABLE cloud_chunks(meeting TEXT,position INTEGER,usage TEXT,PRIMARY KEY(meeting,position));INSERT INTO cloud_chunks VALUES('"+mid+"',0,'{\"cost\":0.01,\"seconds\":150}');INSERT INTO cloud_chunks VALUES('"+mid+"',1,'{\"skipped\":\"echo\"}');");s.close()
+   card=build_scorecard(Store(db))['meetings'][0]
+   self.assertEqual((card['meeting'],card['seconds'],card['cost']),(mid,150.0,0.01))   # süre yankı dahil son bitiş
+   self.assertEqual([(x['label'],x['seconds'],x['percent']) for x in card['speakers']],[('Boran',60.0,50),('Konuşmacı 3',30.0,25),('İpek',30.0,25)])
+   self.assertNotIn('Hoparlör yankısı',[x['label'] for x in card['speakers']])   # yankı payı sayılmaz
+   self.assertEqual([x['named'] for x in card['speakers']],[True,False,True])
+   self.assertEqual(card['counts'],{'decisions':1,'actions':1,'questions':1,'risks':1})
+   self.assertTrue(card['analyzed']);self.assertFalse(card['stale'])
+   self.assertEqual(label({'speaker':'S0','flags':['provisional']}),'Geçici konuşmacı')
+   self.assertEqual(label({'speaker':'0:S4','flags':[]}),'Konuşmacı 5')
+   self.assertEqual(label({'speaker':'unknown','flags':[],'suggested':'Ayşe'}),'Ayşe?')
+   self.assertEqual(label({'speaker':'Konuşmacı 2','flags':['cloud_transcript']}),'Konuşmacı 2')
+   self.assertEqual((percent(0.125),percent(0.5)),(13,50))   # Swift .rounded(): half away from zero
+   self.assertEqual(talk_share([{'start':0,'end':0,'speaker':'S0','flags':[]}]),[])
+ def test_period_defaults_to_seven_days_and_bridge_and_cli_agree(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';now=datetime.now(timezone.utc)
+   carded(db,'Bu hafta',now.isoformat())
+   carded(db,'Dün',(now-timedelta(days=1)).isoformat())
+   old=carded(db,'Geçen ay',(now-timedelta(days=40)).isoformat())
+   carded(db,'Yarım',now.isoformat(),status='processing')
+   period=build_scorecard(Store(db))['period']
+   self.assertEqual((period['meetings'],period['seconds'],period['hours']),(2,300.0,0.08))
+   self.assertEqual((period['decisions'],period['tasks'],period['questions'],period['risks'],period['cost']),(2,2,2,2,0.0))
+   self.assertEqual([(p['name'],p['minutes'],p['meetings']) for p in period['speakers']],[('Boran',2.0,2),('İpek',1.0,2)])   # isimsiz küme sayılmaz
+   wide=build_scorecard(Store(db),start=(now-timedelta(days=40)).astimezone().date().isoformat(),end=now.astimezone().date().isoformat())
+   self.assertEqual(wide['period']['meetings'],3);self.assertIn(old,[c['meeting'] for c in wide['meetings']])
+   with self.assertRaises(ValueError):build_scorecard(Store(db),start='dün')
+   r=dispatch({'action':'scorecard'},db)
+   self.assertEqual(r['period']['meetings'],2);self.assertEqual(len(r['meetings']),2)
+   self.assertEqual(dispatch({'action':'scorecard','from':(now-timedelta(days=40)).astimezone().date().isoformat(),'to':now.astimezone().date().isoformat()},db)['period']['meetings'],3)
+   self.assertEqual(dispatch({'action':'scorecard','from':(now-timedelta(days=40)).astimezone().date().isoformat()},db)['period']['meetings'],1)   # tek uç verilince digest gibi tek gün
+   p=subprocess.run([sys.executable,'-m','meeting_os','--db',str(db),'scorecard'],capture_output=True,text=True)
+   self.assertEqual(p.returncode,0,p.stderr);self.assertEqual(json.loads(p.stdout)['period']['meetings'],2)
 
 class ReviewDebtTests(unittest.TestCase):
  def build(self,db,title,created,status='complete'):
