@@ -222,6 +222,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if !zoomNow { ZoomNotifier.reset() }
             zoomMeetingOpen=zoomNow
             applyLivePriority(zoomOpen:zoomState.strict)
+            heartbeatIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
             case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"; notifyDone("Kayıt başladı","Zoom toplantısı açık; bitirmek için ⌃⌥R veya menü çubuğu.")
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
@@ -419,6 +420,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// Hourly heartbeat into the shared iCloud folder so a day without a finished meeting still leaves a trace.
+    var lastHeartbeat:Date?
+    func heartbeatIfDue() {
+        guard !recording, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
+        lastHeartbeat=Date()
+        Task { _=try? await request(["action":"heartbeat","app":["version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "","bridge":BridgeStats.shared.snapshot]]) }
+    }
     // Cross-meeting PM views (loaded on demand, never while recording)
     @Published var decisions:[DecisionEntry]=[]; @Published var waiting:[WaitingPerson]=[]; @Published var debt:[DebtItem]=[]; @Published var debtSummary=""
     func loadDecisions(query:String) async {
