@@ -33,8 +33,11 @@ class Store:
         CREATE TABLE IF NOT EXISTS samples(id INTEGER PRIMARY KEY, name TEXT, model TEXT, vector TEXT, duration REAL, provenance TEXT);
         CREATE TABLE IF NOT EXISTS corrections(id INTEGER PRIMARY KEY, meeting TEXT, speaker TEXT, name TEXT, created TEXT);
         CREATE TABLE IF NOT EXISTS text_edits(id INTEGER PRIMARY KEY, meeting TEXT, segment INTEGER, previous TEXT, replacement TEXT, created TEXT);
+        CREATE TABLE IF NOT EXISTS rejections(id INTEGER PRIMARY KEY, name TEXT, model TEXT, vector TEXT, provenance TEXT, created TEXT);
         CREATE INDEX IF NOT EXISTS segment_meeting ON segments(meeting,start);
         ''')
+        if 'previous_name' not in {r[1] for r in self.db.execute('PRAGMA table_info(corrections)')}:
+            self.db.execute('ALTER TABLE corrections ADD COLUMN previous_name TEXT')
     def close(self): self.db.close()
     def create_meeting(self, title, metadata=None):
         mid = uuid.uuid4().hex[:12]
@@ -64,10 +67,41 @@ class Store:
     def correct(self, mid, speaker, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
+        rows=[r for r in self.segments(mid) if r['speaker']==speaker]
+        if not rows: raise ValueError('Speaker not found in meeting')
         with self.db:
-            cur = self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?', (name, mid, speaker))
-            if not cur.rowcount: raise ValueError('Speaker not found in meeting')
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created) VALUES(?,?,?,?)', (mid, speaker, name, datetime.now(timezone.utc).isoformat()))
+            previous=self._reject_previous(mid, speaker, rows, name)
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?', (name, mid, speaker))
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name) VALUES(?,?,?,?,?)', (mid, speaker, name, datetime.now(timezone.utc).isoformat(), previous))
+    REJECT_SIMILARITY = 0.90   # a voice this close to one the user said is "not X" can never be X again
+    def _previous_names(self, rows):
+        """What the app called this cluster before the user corrected it: a confirmed name, an automatic match or an unconfirmed suggestion."""
+        names=[]
+        for r in rows:
+            identity=(r.get('metrics') or {}).get('identity') or {}
+            for n in (r.get('speaker_name'), identity.get('name'), identity.get('suggested')):
+                if n and n not in names: names.append(n)
+        return names
+    def _cluster_vector(self, rows):
+        voiced=[r for r in rows if r.get('embedding') and 'speaker_ambiguous' not in r['flags']]
+        model=voiced[0]['embedding_model'] if voiced else None
+        vectors=[unit(r['embedding']) for r in voiced if r['embedding_model']==model]
+        if not vectors: return None, None
+        try: return unit([sum(col)/len(vectors) for col in zip(*vectors)]), model
+        except ValueError: return None, None
+    def _reject_previous(self, mid, speaker, rows, name):
+        """Negative feedback (must run inside the caller's transaction): renaming a cluster away from a person
+        drops the samples that cluster fed into that person and remembers the voice as rejected for them."""
+        wrong=[n for n in self._previous_names(rows) if n!=name]
+        if not wrong: return None
+        clusters={(r.get('metrics') or {}).get('cluster') for r in rows} - {None}
+        provenances=[f'auto:{mid}:{c}' for c in clusters]+[f'{mid}:speaker:{speaker}']
+        vector,model=self._cluster_vector(rows)
+        for prev in wrong:
+            self.db.executemany('DELETE FROM samples WHERE name=? AND provenance=?',[(prev,p) for p in provenances])
+            if vector is not None and not self.db.execute('SELECT 1 FROM rejections WHERE name=? AND provenance=?',(prev,f'{mid}:speaker:{speaker}')).fetchone():
+                self.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',(prev,model,json.dumps(vector),f'{mid}:speaker:{speaker}',datetime.now(timezone.utc).isoformat()))
+        return wrong[0]
     def correct_segment(self, mid, sid, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
@@ -119,8 +153,9 @@ class Store:
         duration=sum(r['end']-r['start'] for r in rows if 'speaker_ambiguous' not in r['flags'])  # cluster-level samples pool every short turn
         provenance=f'{mid}:speaker:{speaker}'
         with self.db:
+            previous=self._reject_previous(mid, speaker, rows, name)
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created) VALUES(?,?,?,?)',(mid,speaker,name,datetime.now(timezone.utc).isoformat()))
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name) VALUES(?,?,?,?,?)',(mid,speaker,name,datetime.now(timezone.utc).isoformat(),previous))
             if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=?',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
                 self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance))
@@ -152,7 +187,7 @@ class Store:
     def profiles(self):
         return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples GROUP BY name,model')]
     def delete_profile(self, name):
-        with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,))
+        with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,)); self.db.execute('DELETE FROM rejections WHERE name=?', (name,))
     def profile_samples(self, name):
         """Every stored voice sample of a person with where it came from, for the maintenance screen."""
         titles = {r['id']: r['title'] for r in self.db.execute('SELECT id,title FROM meetings')}
@@ -176,6 +211,7 @@ class Store:
         merged = bool(self.db.execute('SELECT 1 FROM samples WHERE name=?', (new_name,)).fetchone())
         with self.db:
             n = self.db.execute('UPDATE samples SET name=? WHERE name=?', (new_name, name)).rowcount
+            self.db.execute('UPDATE rejections SET name=? WHERE name=?', (new_name, name))
             self.db.execute('UPDATE segments SET speaker_name=? WHERE speaker_name=?', (new_name, name))
         return {'renamed': n, 'merged': merged}
     def _scores(self, vector, model, exclude=None):
@@ -187,8 +223,15 @@ class Store:
         for row in self.db.execute(sql, args):
             x = json.loads(row['vector'])
             if len(x) == len(v): groups.setdefault(row['name'], []).append(x)
+        vetoed = set()
+        rsql = 'SELECT name,vector FROM rejections WHERE model=?'; rargs = [model]
+        if exclude: rsql += ' AND provenance NOT LIKE ?'; rargs.append(f'{exclude}:%')
+        for row in self.db.execute(rsql, rargs):
+            x = json.loads(row['vector'])
+            if row['name'] in groups and len(x) == len(v) and cosine(v, unit(x)) >= self.REJECT_SIMILARITY: vetoed.add(row['name'])
         scores = []
         for name, xs in groups.items():
+            if name in vetoed: continue
             try: centroid = unit([sum(col)/len(xs) for col in zip(*xs)])
             except ValueError: continue  # contradictory samples cannot identify anyone
             best = max(cosine(v, unit(x)) for x in xs)
