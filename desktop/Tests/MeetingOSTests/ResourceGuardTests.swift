@@ -13,6 +13,13 @@ final class ResourceGuardTests:XCTestCase {
         XCTAssertFalse(ResourceGuard.stopsOnPressure(jobArguments:["openrouter-import","--no-local","--allow-upload","/a.m4a"]))
         XCTAssertFalse(ResourceGuard.stopsOnPressure(jobArguments:[]))
     }
+    func testDisplaySleepGuardIsHeldOnlyWhileActive() {
+        XCTAssertFalse(DisplaySleepGuard.active)
+        DisplaySleepGuard.begin();XCTAssertTrue(DisplaySleepGuard.active)
+        DisplaySleepGuard.begin();XCTAssertTrue(DisplaySleepGuard.active)   // idempotent
+        DisplaySleepGuard.end();XCTAssertFalse(DisplaySleepGuard.active)
+        DisplaySleepGuard.end();XCTAssertFalse(DisplaySleepGuard.active)
+    }
     func testFootprintReadsCurrentProcessWithoutAllocatingModels() {
         let bytes=ResourceGuard.footprint(pid:getpid())
         XCTAssertNotNil(bytes);XCTAssertGreaterThan(bytes ?? 0,0)

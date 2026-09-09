@@ -50,6 +50,15 @@ Varsayılan model `openai/gpt-transcribe`. Menüde GPT-4o Transcribe, GPT-4o Min
 - Okuma görünümü: aynı kişinin ardışık bölümleri tek paragraf; başka kişinin 1.5 s altı, ≤2 kelimelik araya girişleri paragrafın altına katlanır (“N kısa onay katlandı · Göster”). Bölümler görünümü ham kayıtları gösterir. Bulut bayrakları toplantı başına tek bilgi satırında; kart altında yalnız olağandışı bayraklar (yankı, belirsiz konuşmacı).
 - Analiz girdisinden yankı bölümleri ve ≤2 kelimelik/1.5 s altı onaylar çıkarılır.
 
+## Özerk oturum eklemeleri (9 Eylül 2026, 05:00–)
+
+- **Yankı atlama:** mikrofon 30 s pencereleri, 50 ms ses-zarfı korelasyonu ile sistem sesine karşı ölçülür; ≥0.5 (yankı 0.72–0.88, ilgisiz konuşma 0.07 ölçüldü) ise yüklenmez, `cloud_chunks.usage = {"skipped":"echo"}` olarak checkpoint’lenir; `metadata.echo_windows_skipped`.
+- **Bulut analiz:** `analyze/prepare/ask --openrouter-model` (`openai/gpt-4.1-mini` varsayılan; `gpt-4o-mini`, `gemini-2.5-flash`). Yerel bellek kapısından geçmez. Model alıntıları `locate_quote` ile kaynak metnin birebir parçasına eşlenir (büyük/küçük harf, noktalama, tek kelime farkı), eşlenemeyen alıntı analizi reddettirir. Uygulama OpenRouter modundayken analiz otomatik başlar ve bu modeli kullanır. İlk gerçek koşu: 69 s toplantı, 6 s, doğru Türkçe özet ve risk maddeleri.
+- **Kontrol sekmesi:** `review_queue` — onay bekleyen isim, isimsiz konuşmacı (toplam süre ve en yakın profil), çakışan konuşma, kısa sesle tanıma, emin olunmayan ASR, sahibi belirsiz görev; her madde neden şüpheli olduğunu ve tek eylemi gösterir.
+- **Kalite seti:** `quality report` (metin düzeltmelerinden WER, kimlik karnesi: otomatik doğru/yanlış, öneri onay/red, kaçırılan) ve `quality compare --model … --allow-upload` (düzeltilen bölümleri seçilen modellerle yeniden çevirip kullanıcı metnine karşı WER ve maliyet). Model eğitilmez; hafızadır.
+- **Kayıt sırasında ekran uykusu engellenir** (IOPM display-sleep beyanı): ekran uyuyunca ScreenCaptureKit akışı ölüyordu (“Failed to find any displays”).
+- Ajan katkısı: aynı dosyayı tekrar işlememe (`check_duplicate`, `register_import_digest`), yeniden açılışta kurtarılabilir toplantının otomatik seçimi, Depolama paneli (`storage_report`).
+
 ## Hata mesajları
 
 HTTP hataları koda göre ayrışır: 401 anahtar reddedildi, 402 bakiye yetersiz, 429 hız sınırı, 5xx hizmet hatası. Her mesaj HTTP kodunu ve “otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor” notunu içerir. Anahtar veya yanıt içeriği mesaja girmez.
