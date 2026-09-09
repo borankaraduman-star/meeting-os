@@ -26,6 +26,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>NSMicrophoneUsageDescription</key><string>Meeting OS toplantı mikrofonunu yalnızca bu Mac üzerinde kaydeder ve yazıya dönüştürür.</string>
 <key>NSScreenCaptureUsageDescription</key><string>Meeting OS toplantı sistem sesini yerel olarak kaydeder. Ekran görüntüsü saklanmaz.</string>
+<key>NSCalendarsFullAccessUsageDescription</key><string>Meeting OS kayıt başlarken o andaki takvim etkinliğinin adını ve katılımcılarını okur; takvime hiçbir şey yazmaz.</string>
+<key>NSCalendarsUsageDescription</key><string>Meeting OS kayıt başlarken o andaki takvim etkinliğinin adını ve katılımcılarını okur; takvime hiçbir şey yazmaz.</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST

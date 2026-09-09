@@ -44,6 +44,14 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM cloud_chunks').fetchone()[0],0)
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],1);s.close()
    with self.assertRaises(ValueError):dispatch({'action':'delete_meeting','meeting':mid},db)
+ def test_meeting_context_stores_calendar_hints(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('9 Eyl 2026 14:05',{'engine':'openrouter'});s.close()
+   r=dispatch({'action':'meeting_context','meeting':mid,'calendar':{'title':'Sprint planlama','attendees':['Ayşe Yılmaz',' ','Ali'],'start':'2026-09-09T11:00:00Z'}},db)
+   self.assertEqual(r,{'attendees':['Ayşe Yılmaz','Ali']})
+   meta=[m for m in dispatch({'action':'snapshot'},db)['meetings'] if m['id']==mid][0]['metadata']
+   self.assertEqual((meta['calendar']['title'],meta['calendar']['attendees'],meta['engine']),('Sprint planlama',['Ayşe Yılmaz','Ali'],'openrouter'))
+   with self.assertRaises(ValueError):dispatch({'action':'meeting_context','meeting':'yok','calendar':{}},db)
  def test_snapshot_carries_per_meeting_stats(self):
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'meeting-os.sqlite';s=Store(db);a=s.create_meeting('A',{});b=s.create_meeting('B',{})

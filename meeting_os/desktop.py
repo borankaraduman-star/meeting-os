@@ -319,6 +319,16 @@ def dispatch(request, db=None):
             return {'meetings':count,'bytes':freed}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
+        if action=='meeting_context':
+            # Calendar event that was live when the recording started: title + attendee names (read-only hints).
+            cal=request.get('calendar') or {}
+            names=[str(n).strip()[:80] for n in (cal.get('attendees') or []) if str(n).strip()][:30]
+            row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(request['meeting'],)).fetchone()
+            if not row: raise ValueError('Toplantı bulunamadı')
+            meta=json.loads(row[0] or '{}')
+            meta['calendar']={'title':str(cal.get('title') or '')[:120],'attendees':names,'start':cal.get('start'),'end':cal.get('end')}
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),request['meeting']))
+            return {'attendees':names}
         if action=='rename_meeting':
             title=(request.get('title') or '').strip()
             if not title or len(title)>200: raise ValueError('Başlık 1–200 karakter olmalı')

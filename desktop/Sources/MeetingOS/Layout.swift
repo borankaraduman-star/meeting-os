@@ -309,6 +309,12 @@ struct EditSegmentSheet:View {
                 TextEditor(text:$model.editText).frame(height:100).border(.quaternary)
                 Button("Metni kaydet") { Task { await model.saveText() } }.disabled(model.editText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
                 TextField("İsim",text:$model.editName).accessibilityIdentifier("editSpeakerNameField")
+                if let attendees=(model.meeting?.metadata["calendar"] as? [String:Any])?["attendees"] as? [String], !attendees.isEmpty {
+                    VStack(alignment:.leading,spacing:6) {
+                        Text("Takvimdeki katılımcılar").font(.caption).foregroundStyle(.secondary)
+                        FlowChips(items:attendees) { model.editName=$0 }
+                    }
+                }
                 if model.meeting?.metadata["text_only"] as? Bool != true {
                 Button("Önce bölümü dinle") { model.play(row) }
                 Toggle("Dinledim: en az 3 saniye, tek kişi, temiz ses",isOn:$model.clean)
@@ -388,6 +394,7 @@ struct SettingsSheet:View {
                 } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
                 Toggle("Zoom toplantısı açılınca bildirim gönder (kayıt yokken, 20 dakikada en fazla bir)",isOn:$model.zoomNotify)
                 Toggle("Kayıt sırasında her pencerenin üstünde küçük kayıt paneli göster (süre, an işaretleri, bitir)",isOn:$model.showRecorderPanel)
+                Toggle("Kayıt başlarken takvimdeki toplantının adını başlık yap, katılımcılarını adlandırmada öner (takvim yalnız okunur)",isOn:$model.useCalendar)
                 if let storage=model.storage { StorageSection(model:model,storage:storage) }
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
@@ -445,5 +452,18 @@ struct StorageSection:View {
                 Toggle("Seçili toplantının sesini koru (“\(meeting.title)”)",isOn:Binding(get:{ meeting.metadata["keep"] as? Bool ?? false },set:{ v in Task { await model.keepMeeting(meeting.id,keep:v) } })).font(.caption)
             }
         }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
+    }
+}
+
+
+/// Wrapping row of small tappable name chips (calendar attendees in the naming sheet).
+struct FlowChips:View {
+    let items:[String]; let pick:(String)->Void
+    var body:some View {
+        LazyVGrid(columns:[GridItem(.adaptive(minimum:110),spacing:6)],alignment:.leading,spacing:6) {
+            ForEach(items,id:\.self) { name in
+                Button(name) { pick(name) }.buttonStyle(.bordered).controlSize(.small).lineLimit(1).accessibilityIdentifier("attendee-\(name)")
+            }
+        }
     }
 }

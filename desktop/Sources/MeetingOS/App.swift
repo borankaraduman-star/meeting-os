@@ -227,7 +227,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
-        let name=title.isEmpty ? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR"))) : title   // "9 Eyl 2026 14:05"
+        pendingCalendar=useCalendar ? CalendarContext.current() : nil
+        let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
+        if title.isEmpty, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end(); RecorderPanel.hide()
@@ -243,6 +245,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; job?.interrupt() }
     func finishRecordedMeeting(_ mid:String) {
+        if let cal=pendingCalendar { pendingCalendar=nil; Task { _=try? await request(["action":"meeting_context","meeting":mid,"calendar":cal.payload]) } }
         if transcriptionMode=="openrouter" { finalizeWithOpenRouter(mid,model:cloudModel); return }
         activity="Aynı toplantının son transkripti hazırlanıyor…"
         launch(["retry",mid]) { [weak self] ok in
@@ -354,6 +357,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
+    /// Read the calendar when a recording starts: the live event names the meeting and its attendees become naming shortcuts.
+    @Published var useCalendar=UserDefaults.standard.object(forKey:"useCalendar") as? Bool ?? false {
+        didSet {
+            UserDefaults.standard.set(useCalendar,forKey:"useCalendar")
+            if useCalendar && !CalendarContext.authorized { CalendarContext.requestAccess { [weak self] ok in if !ok { self?.useCalendar=false; self?.error="Takvim erişimi verilmedi · Sistem Ayarları → Gizlilik ve Güvenlik → Takvimler" } } }
+        }
+    }
+    var pendingCalendar:CalendarEvent?
     @Published var showRecorderPanel=UserDefaults.standard.object(forKey:"showRecorderPanel") as? Bool ?? true { didSet { UserDefaults.standard.set(showRecorderPanel,forKey:"showRecorderPanel"); if !showRecorderPanel { RecorderPanel.hide() } else if recording { RecorderPanel.show(model:self) } } }
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
