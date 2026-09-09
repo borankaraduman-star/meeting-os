@@ -583,9 +583,11 @@ def dispatch(request, db=None):
             path=Path(request['path']); path.write_text(export_text(rows,request['format']))
             return {'path':str(path)}
         if action=='vocabulary':
-            path=ROOT/'vocabulary.txt'
-            if 'text' in request: path.write_text(request['text'])
-            return {'text':path.read_text()}
+            from . import glossary as G
+            path=G.vocabulary_path(DATA_DIR if db is None else Path(db).parent,ROOT)   # data folder, never the checkout: a write here must not make git dirty and block update.sh
+            if 'text' in request:
+                path.parent.mkdir(parents=True,exist_ok=True); path.write_text(request['text'],encoding='utf-8')
+            return {'text':path.read_text(encoding='utf-8') if path.is_file() else ''}
         raise ValueError('Unknown desktop action')
 
 
