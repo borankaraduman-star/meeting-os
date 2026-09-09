@@ -241,7 +241,7 @@ def identify_clusters(store, mid, sources, embedder=None):
     return {'embedded':embedded,'named':named}
 
 
-IDENTITY_THRESHOLD=0.88   # cluster centroids of different people scored 0.84–0.85 against one profile in a real meeting
+IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap
 IDENTITY_MARGIN=0.05
 OVERSPLIT_THRESHOLD=0.93  # a second cluster may share a name only when it is nearly as close as the best one
 

@@ -24,6 +24,9 @@ enum CloudTranscription {
         if meeting.metadata["cloud_mode"] != nil { return finalizeArguments(meeting:meeting.id,model:nil,output:output) }
         return ["openrouter-import","--allow-upload","--model",model,"--output",output,"--resume",meeting.id]
     }
+    /// Microphone bleed rows repeat the system audio; they stay stored (evidence) but are hidden unless asked for.
+    static func visibleRows(_ rows:[Row],showEcho:Bool)->[Row] { showEcho ? rows : rows.filter { !$0.flags.contains("possible_echo") } }
+    static func hiddenEchoCount(_ rows:[Row])->Int { rows.filter { $0.flags.contains("possible_echo") }.count }
     static func canFinalize(meeting:Meeting?,busy:Bool)->Bool {
         guard let m=meeting, !busy, m.status != "complete", m.recoveryState != "active" else { return false }
         return m.metadata["capture_dir"] is String || m.metadata["cloud_mode"] != nil

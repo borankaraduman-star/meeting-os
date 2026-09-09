@@ -463,3 +463,7 @@ Kullanıcı bir konuşmacıyı adlandırınca uygulama yine 100% CPU ile dondu; 
 ## 2026-09-09 — “Son transkriptte eşleşme hatası” incelemesi
 
 4:06 kaydı (a046a2ff1bc6): Konuşmacı 1 (0–52 s) → “Sağ üst” 0.974; Konuşmacı 2 (52–58 s, 5 s) → isimsiz, Gözlük’e 0.878 (eşik 0.88’in hemen altı). Küme-profil matrisi ve 10 s pencere analizi: 4:06 K1 her pencerede Sağ üst 0.92–0.97, diğer profiller ≤0.83; profil kaynakları (3:41 MAI K1=Sol Üst, K2=Sağ üst) pencere bazında saf (0.96–0.98). Farklı kişiler arası benzerlik 0.65–0.85; Gözlük diğerlerine 0.80–0.85 ile en yakın. Sonuç: ses profili boru hattı tutarlı; görünür uyumsuzluk mikrofon yankısı satırının “Boran” diye gösterilmesi (58 s, possible_echo bayraklı, metin sistem sesiyle aynı). Düzeltme: yankı satırı “Hoparlör yankısı” etiketi + açıklama; analiz girişinden dışlanıyor (assistant.analyze). Kullanıcının hangi ismi yanlış gördüğü teyit edilmedi; 5 s’lik K2’nin Gözlük olup olmadığı kulakla doğrulanmalı.
+
+## 2026-09-09 — Kullanıcı teyidi: yankı satırı aynı kişi, kısa küme Gözlük’tü
+
+Kullanıcı: mikrofon “yankı” satırı Sağ üst’ün aynı konuşması; Konuşmacı 2 gerçekte Gözlük. Düzeltmeler: (1) yankı satırları varsayılan gizli, “N mikrofon yankısı bölümü gizlendi · Göster” satırıyla açılabilir (`CloudTranscription.visibleRows`); (2) eşik 0.88→0.87 (gerçek veri: farklı kişiler ≤0.853, teyitli aynı kişi 0.878; marj 0.05 korunuyor); (3) 4:06 K2 kullanıcı adına Gözlük olarak adlandırıldı ve 5.1 s’lik ikinci örnek profile eklendi (Gözlük artık 2 örnek; identify merkez vektörü kullanır). 50 Swift testi geçti.

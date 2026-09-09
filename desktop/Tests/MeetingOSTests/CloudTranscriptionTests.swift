@@ -27,6 +27,13 @@ final class CloudTranscriptionTests:XCTestCase {
         let local=Row(["id":4,"start":0.0,"end":3.0,"text":"x","speaker":"S1","source":"system","flags":[]])
         XCTAssertEqual(local.label,"Konuşmacı 2")
     }
+    func testEchoRowsHiddenByDefault() {
+        let system=Row(["id":1,"start":0.0,"end":50.0,"text":"a","speaker":"Konuşmacı 1","speaker_name":"Sağ üst","source":"system","flags":["cloud_transcript"]])
+        let echo=Row(["id":2,"start":0.0,"end":50.0,"text":"a","speaker":"Boran","source":"mic","flags":["cloud_transcript","possible_echo"]])
+        XCTAssertEqual(CloudTranscription.visibleRows([echo,system],showEcho:false).map(\.id),[1])
+        XCTAssertEqual(CloudTranscription.visibleRows([echo,system],showEcho:true).map(\.id),[2,1])
+        XCTAssertEqual(CloudTranscription.hiddenEchoCount([echo,system]),1)
+    }
     func testFinalizeOnlyForStoppedRecordingsWithAudio() {
         let rec=Meeting(["id":"r","status":"incomplete","recovery_state":"interrupted","metadata":["capture_dir":"/c"]])
         XCTAssertTrue(CloudTranscription.canFinalize(meeting:rec,busy:false))

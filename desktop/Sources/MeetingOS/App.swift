@@ -77,7 +77,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         Task { await refresh() }
     }
     var meeting:Meeting? { meetings.first { $0.id==selected } }
-    var filteredRows:[Row] { if let id=focusedSegment { return rows.filter { $0.id==id } }; return search.isEmpty ? rows : rows.filter { ($0.text+" "+$0.label).localizedCaseInsensitiveContains(search) } }
+    @Published var showEchoRows=false
+    var filteredRows:[Row] {
+        if let id=focusedSegment { return rows.filter { $0.id==id } }
+        let visible=CloudTranscription.visibleRows(rows,showEcho:showEchoRows)
+        return search.isEmpty ? visible : visible.filter { ($0.text+" "+$0.label).localizedCaseInsensitiveContains(search) }
+    }
     func request(_ req:[String:Any]) async throws -> [String:Any] {
         let rt=runtime
         return try await Task.detached { try invoke(rt,req) }.value

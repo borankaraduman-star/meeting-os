@@ -8,6 +8,14 @@ struct TranscriptView:View {
             // pinned the main thread at 100% CPU after scrolling or renaming a speaker. Meetings have
             // at most a few hundred rows, so eager layout is cheap and deterministic.
             VStack(alignment:.leading,spacing:20) {
+                if CloudTranscription.hiddenEchoCount(model.rows)>0 {
+                    HStack(spacing:8) {
+                        Image(systemName:"speaker.wave.2").foregroundStyle(.secondary)
+                        Text(model.showEchoRows ? "Mikrofon yankısı bölümleri gösteriliyor · hoparlörden mikrofona düşen aynı konuşma, ayrı kişi değil" : "\(CloudTranscription.hiddenEchoCount(model.rows)) mikrofon yankısı bölümü gizlendi · hoparlörden mikrofona düşen aynı konuşma").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button(model.showEchoRows ? "Gizle" : "Göster") { model.showEchoRows.toggle() }.font(.caption).accessibilityIdentifier("toggleEchoRows")
+                    }
+                }
                 ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:!model.recording && model.meeting?.metadata["text_only"] as? Bool != true,canEdit:model.meeting?.status == "complete").equatable() }
                 if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
             }.padding(24)
