@@ -77,3 +77,21 @@ class AssistantTests(unittest.TestCase):
 
  def test_bounded_draft_does_not_publish_cut_off_clause(self):
   self.assertEqual(assistant.complete_bounded_text('Tam cümle. Kesilm',16),'Tam cümle.')
+
+
+class TurkishSearchTests(unittest.TestCase):
+    def test_suffixed_forms_match_and_stopwords_are_ignored(self):
+        from meeting_os.memory import query_terms,match_score
+        self.assertEqual(query_terms('Eğitim modülleri kaç günde tamamlanıyor ve kim söyledi?'),['eğitim','modülleri','günde','tamamlanıyor'])
+        self.assertEqual(query_terms('ne kaç mi'),['ne','kaç','mi'])   # nothing but function words: keep them rather than return nothing
+        self.assertGreater(match_score(['modülleri','günde'],'1. modülü ve 3. modülü toplam 3 günde alıyoruz'),1.5)
+        self.assertEqual(match_score(['modülleri'],'Bugün hava güzel'),0.0)
+        self.assertEqual(match_score(['gün'],'bugün toplantı var'),1.0)   # substring behaviour kept for short words
+    def test_search_ranks_suffixed_segment_above_single_word_hits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'m.sqlite';s=Store(db);mid=s.create_meeting('Eğitim',{})
+            for i in range(15):s.add_segment(mid,Segment(i,i+1,'İsviçre güzel bir ülke.','system','K1'))
+            target=s.add_segment(mid,Segment(20,21,'1., 2. ve 3. modülü toplam 3 günde alıyoruz.','system','K2'))
+            s.status(mid,'complete')
+            hits=Memory(s).search('Eğitim modülleri kaç günde tamamlanıyor',limit=12)
+            self.assertEqual(hits[0]['id'],target);s.close()

@@ -240,6 +240,10 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 
 Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
 
+### Hafıza araması ve Türkçe ekler
+
+“Ara” ve “Kayıtlardan yanıtla” yerel sözcük eşlemesiyle en fazla 12 alıntı seçer, yanıtı bulut analiz modeli yazar. Eşleme Türkçe eklere dayanıklıdır (“modülleri” → “modülü”, “eğitim” → “eğitimlerinin”): kısa ortak kök tam eşleşmeden biraz düşük puan alır; “ve, kaç, mi, hakkında” gibi işlev sözcükleri sorudan atılır. 9 Eylül ölçümü: “modüller kaç günde tamamlanıyor” sorusu düzeltmeden önce kanıtı kaçırıyordu, sonra 3 kanıtla tam yanıt verdi.
+
 ### Bulut maliyeti
 
 Ayarlar sayfasındaki **Bulut maliyeti** kartı OpenRouter’ın her parça için bildirdiği gerçek transkript ücretini toplar: bu ay ve toplam (toplantı sayısı, yüklenen dakika). Özet/görev analizi ve yankı olarak atlanan parçalar dahil değildir. CLI karşılığı yok; `cost_report` köprü eylemi.

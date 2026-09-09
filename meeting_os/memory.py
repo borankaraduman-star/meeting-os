@@ -4,6 +4,34 @@ from datetime import datetime,timezone
 from .intelligence import fingerprint
 from .metrics import normalize
 
+STOPWORDS={'ve','bir','bu','şu','o','ne','kaç','mi','mı','mu','mü','ile','için','de','da','ki','ama','veya','ya','gibi','çok','daha','en','var','yok','mi','nasıl','neden','hangi','kim','nerede','zaman','olan','oldu','olduğu','söylendi','söyledi','söylemiş','dedi','diye','ise','hakkında','bana','bize','şey'}
+
+def query_terms(query,limit=12):
+    """Content words of a question, without Turkish function words; short tokens are kept only when nothing else remains."""
+    tokens=normalize(query).split()
+    content=[t for t in tokens if t not in STOPWORDS and len(t)>=3]
+    return (content or tokens)[:limit]
+
+def _stem_match(term,word):
+    """Turkish suffixes stack (modül → modülleri, eğitim → eğitimlerinin): count a hit when the shared prefix covers
+    most of the shorter form. Exact substring stays a full hit; a stem hit is worth a little less to keep ranking stable."""
+    if term in word:return 1.0
+    shorter=min(len(term),len(word))
+    if shorter<4:return 0.0
+    common=0
+    for a,b in zip(term,word):
+        if a!=b:break
+        common+=1
+    return 0.8 if common>=max(4,-(-shorter*6//10)) else 0.0
+
+def match_score(terms,text):
+    words=normalize(text).split()
+    if not words:return 0.0
+    total=0.0
+    for term in terms:
+        total+=max((_stem_match(term,w) for w in words),default=0.0)
+    return total
+
 def now():return datetime.now(timezone.utc).isoformat()
 class Memory:
     def __init__(self,store):
@@ -59,13 +87,13 @@ class Memory:
             self.db.execute('INSERT INTO task_edits(task,previous,replacement,created) VALUES(?,?,?,?)',(tid,json.dumps(old,ensure_ascii=False),json.dumps(changes,ensure_ascii=False),now()))
         return self.task(tid)
     def search(self,query,limit=20,speaker=None):
-        tokens=normalize(query).split()[:12]
+        tokens=query_terms(query)
         if not tokens:return []
         rows=self.db.execute("SELECT segments.id,meeting,meetings.title AS meeting_title,start,end,speaker,speaker_name,json_extract(payload,'$.text') AS text FROM segments JOIN meetings ON meetings.id=segments.meeting WHERE meetings.status='complete' ORDER BY meetings.created DESC,start")
         found=[]
         for r in rows:
             d=dict(r)
             if speaker and normalize(d['speaker_name'] or '')!=normalize(speaker):continue
-            score=sum(t in normalize(d['text']) for t in tokens)
+            score=match_score(tokens,d['text'] or '')
             if score:d['score']=score;found.append(d)
         return sorted(found,key=lambda x:x['score'],reverse=True)[:min(max(1,limit),50)]

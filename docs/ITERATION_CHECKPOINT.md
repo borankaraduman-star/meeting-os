@@ -515,3 +515,7 @@ Her sürüm dala itildi ve GitHub’da yayınlandı (v1.2.3, v1.2.4, v1.2.5, v1.
 ## 2026-09-09 14:35 — 1.2.7
 
 Ayarlar’da gerçek OpenRouter transkript harcaması (bu ay/toplam; ekranda $0.10 · 9 toplantı · 62 dk doğrulandı), Zoom elle dokunmadan kayıt yalnız gerçek toplantı penceresini sayar (“Zoom Workplace” ana penceresi hariç, tek pencere taraması), yüzen panel kayıt başlığını gösterir (ekranda doğrulandı). Zoom bu Mac’te kurulu olmadığı için kendiliğinden kayıt canlı denenmedi.
+
+## 2026-09-09 14:40 — 1.2.8: Hafıza araması Türkçe eklere dayanıklı
+
+`memory.query_terms` (işlev sözcükleri atılır) + `match_score` (ortak kök ≥ max(4, %60·kısa uzunluk) → 0.8, tam alt dize → 1.0). Gerçek soru “İsviçre'de kaç eğitmen… modüller kaç günde?”: önce yalnız eğitmen sayısı bulunuyordu, şimdi “toplam 3 günde” kanıtı (24:11) da geliyor. Bu turda GitHub’a çıkan sürümler: 1.2.3 → 1.2.8. Diğer Mac’ten rapor hâlâ yok.
