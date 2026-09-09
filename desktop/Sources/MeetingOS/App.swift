@@ -431,6 +431,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var pendingCalendar:CalendarEvent?
     var pollTick=0
     @Published var dueSuggestions:[String:String]=[:]
+    @Published var questions:[QuestionGroup]=[]; @Published var scorePeriod:[String:Any]?; @Published var scoreMeetings:[ScoreMeeting]=[]
+    func loadQuestions(query:String) async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"question_radar","query":query,"limit":100]) { questions=(r["groups"] as? [[String:Any]] ?? []).enumerated().map { QuestionGroup($0.element,index:$0.offset) } }
+    }
+    func loadPeriodScorecard() async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"scorecard"]) { scorePeriod=r["period"] as? [String:Any]; scoreMeetings=(r["meetings"] as? [[String:Any]] ?? []).map(ScoreMeeting.init) }
+    }
     /// Sidebar: the transcription mode/model pickers are folded behind one caption line by default.
     @Published var showTranscriptionOptions=UserDefaults.standard.bool(forKey:"showTranscriptionOptions") { didSet { UserDefaults.standard.set(showTranscriptionOptions,forKey:"showTranscriptionOptions") } }
     /// Poll fingerprints: rows and intelligence are re-fetched only when the Python side reports a change.
