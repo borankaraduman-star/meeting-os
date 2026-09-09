@@ -235,7 +235,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         if job != nil, let started=jobStarted {
             let elapsed=Int(Date().timeIntervalSince(started))
             let progress=progressURL.flatMap { try? Data(contentsOf:$0) }.flatMap { try? JSONDecoder().decode(JobProgress.self,from:$0) }
-            let line=(progress?.label ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"; if recorder.jobProgress != line { recorder.jobProgress=line }
+            let line=(progress?.label ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"; if jobs.jobProgress != line { jobs.jobProgress=line }
         }
         guard !refreshing else { return }; refreshing=true
         let wanted=selected ?? ""
@@ -309,7 +309,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let handle=try FileHandle(forWritingTo:log)
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
-            if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();recorder.jobProgress="İşlem başlatılıyor" }
+            if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobs.jobProgress="İşlem başlatılıyor" }
             let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
@@ -317,7 +317,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 Task { @MainActor in
                     guard let self=self else { return }
                     if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; try? FileManager.default.removeItem(at:progress) }
-                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.recorder.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress) }
+                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress) }
                     if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
                     // Quitting is not the moment to start an upload: the queued meetings keep their audio and the
@@ -414,6 +414,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do {
             _=try await request(["action":enroll ? "enroll":"label","meeting":mid,"segment":row.id,"name":editName,"confirmed_clean":clean])
             editRow=nil; await refresh()
+        } catch where enroll {
+            // A short or unclean segment cannot become a voice sample; the name itself must still land.
+            do { _=try await request(["action":"label","meeting":mid,"segment":row.id,"name":editName]); editRow=nil; activity="İsim kaydedildi · bu bölümden ses profili alınamadı (en az 6 sn temiz konuşma gerekir)"; await refresh() }
+            catch { self.error=error.localizedDescription }
         } catch { self.error=error.localizedDescription }
     }
     /// Names a provider-diarized speaker cluster for the whole meeting; with enroll, the cluster centroid becomes a voice profile.
@@ -475,6 +479,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     /// Per-second recording state lives on its own object: the panel and the menu bar observe it, the main
     /// window does not, so a ticking clock never re-lays out a 300-paragraph transcript during a meeting.
     let recorder=RecorderState()
+    let jobs=JobState()   // "… · 3 dk 12 sn" ticks every poll while a job runs; only the status card and the menu watch it
     /// Read the calendar when a recording starts: the live event names the meeting and its attendees become naming shortcuts.
     @Published var useCalendar=UserDefaults.standard.object(forKey:"useCalendar") as? Bool ?? false {
         didSet {
@@ -765,8 +770,9 @@ func statusLabel(_ status:String)->String {
     @Published var elapsedText="00:00"
     @Published var captureDots:[String:String]=[:]
     @Published var recordingNotice=""
-    @Published var jobProgress=""   // "… · 3 dk 12 sn" ticks every poll while a job runs
 }
+
+@MainActor final class JobState:ObservableObject { @Published var jobProgress="" }
 
 struct MenuBarLabel:View {
     @ObservedObject var model:Model

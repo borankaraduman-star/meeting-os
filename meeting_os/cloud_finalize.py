@@ -62,7 +62,7 @@ def note_cloud_failure(store, mid, exc):
 
 
 def note_cloud_cancel(store, mid):
-    """The user stopped this job (⌘. or quit). It leaves no `cloud_error`, so without a mark of its own the
+    """The user stopped this job with ⌘. (quit lets a running job finish). It leaves no `cloud_error`, so without a mark of its own the
     idle queue would read a plain `incomplete` meeting and restart the upload ten minutes later — work the
     user just refused. The mark is cleared the moment they start a finalize by hand."""
     row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()

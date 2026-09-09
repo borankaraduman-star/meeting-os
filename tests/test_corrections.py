@@ -82,8 +82,14 @@ class NegativeFeedbackTests(unittest.TestCase):
                 self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)
                 self.assertEqual({p['name']:p['samples'] for p in db.profiles()},{'Ayşe':2})
                 self.assertEqual(db.identify(voice,'m',threshold=0.5,margin=0.0)['name'],'Ayşe')
-                self.assertEqual(db.db.execute('SELECT confirmed FROM profile_stats WHERE name=?',('Ayşe',)).fetchone()[0],1)
+                row=db.db.execute('SELECT confirmed FROM profile_stats WHERE name=?',('Ayşe',)).fetchone()
+                self.assertFalse(row and row[0])   # a retype is not a rejection, but only the exact suggested spelling counts as a confirmation
                 db.close()
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t'); voice=self._voice(7); db.enroll('Ayşe',voice,'m',10,'manual')
+            self._cluster(db,mid,voice,suggested='Ayşe'); db.correct(mid,'system:S1','Ayşe')
+            self.assertEqual(db.db.execute('SELECT confirmed FROM profile_stats WHERE name=?',('Ayşe',)).fetchone()[0],1)
+            db.close()
     def test_rejected_samples_are_hidden_not_destroyed(self):
         """A naming that rejects a person hides their samples; the rows stay so undo can hand them back, and
         nothing that reads profiles or scores a voice may see them in the meantime."""
@@ -300,3 +306,29 @@ class CleanCandidateTests(unittest.TestCase):
             note=db.explain_identity([1.0,0.0],'m',base=0.87)[0]
             self.assertIn('1 onaylı öneri → eşik 0,86',note['person_note'])
             db.close()
+
+
+class SecondOpinionTests(unittest.TestCase):
+    """Council-4 verification pass: undo unwinds only the newest naming; partial chunks are not audio."""
+    def test_undo_restores_only_the_second_namings_hidden_samples(self):
+        import random
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            rnd=random.Random(11); v=[rnd.uniform(-1,1) for _ in range(8)]
+            db.enroll('A',v,'m',10,'manual'); db.add_sample_if_new('A',v,'m',12,f'auto:{mid}:0:S1')
+            seg=Segment(0,12,'x','system','system:S1',metrics={'cluster':'0:S1','identity':{'name':'A'}},flags=['cloud_diarization']); seg.embedding=v; seg.embedding_model='m'
+            sid=db.add_segment(mid,seg); db.db.execute('UPDATE segments SET speaker_name=? WHERE id=?',('A',sid)); db.db.commit()
+            db.enroll_speaker(mid,'system:S1','B')      # hides A's auto sample, rejects A
+            db.enroll_speaker(mid,'system:S1','C')      # rejects B (its cluster sample hidden)
+            db.undo_correction(mid)                     # back to B
+            by={p['name']:p['samples'] for p in db.profiles()}
+            self.assertEqual(by.get('B'),1); self.assertNotIn('C',by)
+            self.assertEqual(by.get('A'),1)             # A's auto sample stays hidden: the first naming still stands
+            self.assertEqual(db.segments(mid)[0]['speaker_name'],'B')
+            db.close()
+    def test_partial_chunk_is_not_audio(self):
+        from meeting_os.desktop import has_audio
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp); (d/'system-000000.partial.wav').write_bytes(b'x')
+            self.assertFalse(has_audio({'capture_dir':str(d)}))
+            (d/'system-000000.wav').write_bytes(b'x'); self.assertTrue(has_audio({'capture_dir':str(d)}))

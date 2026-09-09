@@ -116,10 +116,9 @@ class LiveTests(unittest.TestCase):
                 signal.getsignal(signal.SIGINT)(signal.SIGINT,None)
             started=time.monotonic()
             with patch('meeting_os.live.CAPTURE_STOP_GRACE_SECONDS',.2,create=True):
-                with self.assertRaisesRegex(RuntimeError,'Capture did not exit'):
-                    record(binary,root/'capture',10,1,store=db,pipeline_factory=factory)
+                record(binary,root/'capture',10,1,store=db,pipeline_factory=factory)   # a deliberate stop with nothing captured is a cancel, even if the helper had to be killed
             self.assertLess(time.monotonic()-started,1.2)
-            self.assertEqual(db.meetings()[0]['status'],'incomplete')
+            self.assertEqual(db.meetings()[0]['status'],'canceled')
             self.assertTrue((root/'capture/events.jsonl').exists());db.close()
     def test_completed_capture_receipt_uses_original_meeting_id(self):
         import json

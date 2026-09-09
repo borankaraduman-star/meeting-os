@@ -218,7 +218,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         try: code=process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             process.kill(); code=process.wait(); errors.append('Capture did not exit')
-        if stopping and not errors and captured[0]==0 and code in (0,-2,-15):
+        if stopping and captured[0]==0 and code in (0,-2,-15,-9):   # a deliberate stop with nothing captured is a cancel even when the helper had to be killed
             if store: store.status(mid,'canceled')
             outcome='canceled'
         else:

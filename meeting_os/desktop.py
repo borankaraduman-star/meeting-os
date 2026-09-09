@@ -98,7 +98,7 @@ def has_audio(metadata):
     directory=metadata.get('capture_dir')
     if not isinstance(directory,str) or not directory: return False
     folder=Path(directory)
-    return folder.is_dir() and any(folder.glob('*.wav'))
+    return folder.is_dir() and any(f for f in folder.glob('*.wav') if not f.name.endswith('.partial.wav'))   # a half-written chunk is not audio the cloud can use
 
 
 RETRY_STATES=('incomplete','failed','processing','provisional')
@@ -588,6 +588,7 @@ def dispatch(request, db=None):
             from . import glossary as G
             path=G.vocabulary_path(DATA_DIR if db is None else Path(db).parent,ROOT)   # data folder, never the checkout: a write here must not make git dirty and block update.sh
             if 'text' in request:
+                if path==Path(ROOT)/G.VOCABULARY: raise ValueError('Veri klasörü yazılamıyor; sözlük kaydedilmedi')   # never edit the git-tracked seed
                 path.parent.mkdir(parents=True,exist_ok=True); path.write_text(request['text'],encoding='utf-8')
             return {'text':path.read_text(encoding='utf-8') if path.is_file() else ''}
         raise ValueError('Unknown desktop action')

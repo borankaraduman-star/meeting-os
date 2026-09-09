@@ -60,9 +60,10 @@ enum GlobalHotkeys {
 struct QuickMenu:View {
     @ObservedObject var model:Model
     @ObservedObject var recorder:RecorderState
-    init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
+    @ObservedObject var jobs:JobState
+    init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder); _jobs=ObservedObject(wrappedValue:model.jobs) }
     var body:some View {
-        Text(model.recording ? "Kayıt sürüyor · \(recorder.elapsedText)" : (model.busy ? "İşlem sürüyor · \(recorder.jobProgress.isEmpty ? "lütfen bekleyin" : recorder.jobProgress)" : "Hazır"))
+        Text(model.recording ? "Kayıt sürüyor · \(recorder.elapsedText)" : (model.busy ? "İşlem sürüyor · \(jobs.jobProgress.isEmpty ? "lütfen bekleyin" : jobs.jobProgress)" : "Hazır"))
         if model.zoomMeetingOpen && !model.recording { Text("Zoom toplantısı açık").foregroundStyle(.secondary) }
         if !model.recording, model.useCalendar, let cal=CalendarContext.currentCached() { Text("Takvim: \(cal.title)").foregroundStyle(.secondary) }
         Divider()
