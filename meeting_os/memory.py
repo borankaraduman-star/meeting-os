@@ -44,8 +44,23 @@ class Memory:
         CREATE TABLE IF NOT EXISTS drafts(id TEXT PRIMARY KEY,task TEXT,input_hash TEXT,task_hash TEXT,kind TEXT,text TEXT,created TEXT);
         CREATE INDEX IF NOT EXISTS analyses_meeting ON analyses(meeting,id);
         ''')
-    def current_hash(self,mid):return fingerprint(self.store.display_segments(mid))
+        self._hashes={};self._analyses={};self._writes=self.db.total_changes
+    def _memo(self):
+        """One report asks for the same meeting again and again, and each ask used to reread the whole transcript.
+        The answers are kept until anything is written through this connection — a correction, a new segment,
+        a saved analysis — which is what would change them."""
+        if self._writes!=self.db.total_changes:
+            self._writes=self.db.total_changes;self._hashes.clear();self._analyses.clear()
+        return self._hashes,self._analyses
+    def current_hash(self,mid):
+        hashes,_=self._memo()
+        if mid not in hashes:hashes[mid]=fingerprint(self.store.display_segments(mid))
+        return hashes[mid]
     def latest(self,mid):
+        _,analyses=self._memo()
+        if mid not in analyses:analyses[mid]=self._read_latest(mid)
+        return analyses[mid]
+    def _read_latest(self,mid):
         row=self.db.execute('SELECT * FROM analyses WHERE meeting=? ORDER BY id DESC LIMIT 1',(mid,)).fetchone()
         if not row:return None
         d=dict(row);d['payload']=json.loads(d['payload']);d['stale']=d['input_hash']!=self.current_hash(mid);return d
@@ -70,14 +85,13 @@ class Memory:
         with self.db:self.db.execute('UPDATE tasks SET payload=?,user_edited=1,updated=? WHERE id=?',(json.dumps(payload,ensure_ascii=False),now(),tid))
         return payload.get('due_date')
     def actions(self,owner=None,meeting=None):
-        result=[];hashes={};latest_ids={r['meeting']:r['id'] for r in self.db.execute('SELECT meeting,MAX(id) AS id FROM analyses GROUP BY meeting')}
+        result=[];latest_ids={r['meeting']:r['id'] for r in self.db.execute('SELECT meeting,MAX(id) AS id FROM analyses GROUP BY meeting')}
         for row in self.db.execute('SELECT tasks.*,meetings.title AS meeting_title FROM tasks JOIN meetings ON meetings.id=tasks.meeting ORDER BY tasks.created DESC'):
             d=dict(row)
             if owner and normalize(d['owner'] or '')!=normalize(owner):continue
             if meeting and d['meeting']!=meeting:continue
-            d['payload']=json.loads(d['payload']);mid=d['meeting']
-            if mid not in hashes:hashes[mid]=self.current_hash(mid)
-            d['stale']=d['input_hash']!=hashes[mid] or d['analysis']!=latest_ids.get(mid);result.append(d)
+            d['payload']=json.loads(d['payload'])
+            d['stale']=d['input_hash']!=self.current_hash(d['meeting']) or d['analysis']!=latest_ids.get(d['meeting']);result.append(d)
         return result
     def task(self,tid):
         rows=[r for r in self.actions() if r['id']==tid]

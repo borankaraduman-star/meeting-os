@@ -299,6 +299,19 @@ class BriefTests(unittest.TestCase):
             self.assertIn('## Yeni Kişi · kayıtlı toplantı yok',r['text']); self.assertIn('- Bütçeyi sor',r['text'])
 
 
+class MemoryMemoTests(unittest.TestCase):
+ def test_one_transcript_read_per_meeting_across_latest_and_actions(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';a,_,b,_,_,_=week(db)
+   s=Store(db);reads=[];inner=s.display_segments
+   s.display_segments=lambda mid:(reads.append(mid),inner(mid))[1]
+   mem=Memory(s)
+   mem.latest(a);mem.latest(b);mem.actions();mem.latest(a);mem.actions()
+   self.assertEqual(reads,[a,b])
+   s.correct(a,'S0','Yeni İsim')   # a write through the connection drops the memo
+   mem.latest(a);mem.latest(b)
+   self.assertEqual(reads,[a,b,a,b])
+
 def _similarity_reference(a,b):
  """The similarity from before the screening, kept verbatim so the fast one can be checked against it."""
  import difflib,re
