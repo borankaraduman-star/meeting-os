@@ -150,7 +150,7 @@ Kaynak: <https://github.com/borankaraduman-star/meeting-os> — en son sürüm Z
 <https://github.com/borankaraduman-star/meeting-os/releases/latest> adresinde. Git ile:
 
 ```sh
-git clone https://github.com/borankaraduman-star/meeting-os.git
+git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git
 cd meeting-os && open "Meeting OS.command"
 ```
 
