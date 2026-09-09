@@ -5,7 +5,7 @@ import Foundation
 enum CloudTranscription {
     static let modeKey="transcriptionMode"
     static let modelKey="cloudTranscriptionModel"
-    static let defaultModel="deepgram/nova-3"
+    static let defaultModel="microsoft/mai-transcribe-2"
     static func recordArguments(mode:String,directory:String,title:String,receipt:String)->[String] {
         var args=["record",directory,"--seconds","14400","--title",title,"--output",receipt]
         if mode != "openrouter" { args.insert("--live",at:2) }   // live local preview only in local mode

@@ -189,3 +189,13 @@ class ReidentifyTests(unittest.TestCase):
             paths=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])['paths']
             self.assertEqual(identify_clusters(store,mid,paths,FakeEmbedder()),{'embedded':0,'named':1})
             self.assertEqual([r['speaker_name'] for r in store.segments(mid)],['Ayşe',None]);store.close()
+
+class WindowTests(unittest.TestCase):
+    def test_long_turns_are_split_into_bounded_windows_and_clamped(self):
+        from meeting_os.cloud_finalize import embedding_windows
+        R=16000
+        self.assertEqual(embedding_windows(0,76.1,R*141),[(0,30*R),(30*R,60*R),(60*R,round(76.1*R))])
+        self.assertEqual(embedding_windows(0,31,R*141),[(0,31*R)])             # short tail folded in
+        self.assertEqual(embedding_windows(139,141.4,R*141),[])                 # < 3 s after clamping → skipped
+        self.assertEqual(embedding_windows(100,141.4,R*141),[(100*R,130*R),(130*R,141*R)])  # clamped to file length
+        self.assertTrue(all(b-a<=60*R for a,b in embedding_windows(0,600,R*700)))

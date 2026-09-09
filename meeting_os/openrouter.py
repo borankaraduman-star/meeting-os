@@ -10,15 +10,15 @@ import urllib.request
 
 STT_MODEL = 'openai/gpt-transcribe'
 STT_MODELS = (
-    {'id':'deepgram/nova-3','name':'Deepgram Nova-3 (konuşmacı ayrımı)','pricing':'$0.0043/dakika (Deepgram liste fiyatı); konuşmacı ayrımı dahil','diarization':{'deepgram':{'diarize':True}}},
-    {'id':'microsoft/mai-transcribe-2','name':'Microsoft MAI-Transcribe 2 (konuşmacı ayrımı)','pricing':'Azure üzerinden; fiyat birimi OpenRouter model sayfasında','diarization':{'azure':{'diarization':{'enabled':True}}}},
-    {'id':'openai/gpt-transcribe','name':'GPT Transcribe','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18','diarization':None},
-    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
-    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
-    {'id':'openai/whisper-large-v3','name':'Whisper Large V3','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
-    {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'microsoft/mai-transcribe-2','name':'Microsoft MAI-Transcribe 2 (konuşmacı ayrımı · Türkçe önerilen)','pricing':'≈ $0.10/saat (9 Eylül 2026 ölçümü: 60 s = $0.0017); konuşmacı ayrımı dahil','diarization':{'azure':{'diarization':{'enabled':True}}}},
+    {'id':'deepgram/nova-3','name':'Deepgram Nova-3 (konuşmacı ayrımı · Türkçe zayıf)','pricing':'$0.0043/dakika; 9 Eylül 2026 testinde Türkçe karakterler eksik çıktı','diarization':{'deepgram':{'diarize':True}}},
+    {'id':'openai/gpt-transcribe','name':'GPT Transcribe (ayrım yok)','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18','diarization':None},
+    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe (ayrım yok)','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe (ayrım yok)','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/whisper-large-v3','name':'Whisper Large V3 (ayrım yok)','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo (ayrım yok)','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
 )
-DIARIZATION_DEFAULT_MODEL = 'deepgram/nova-3'
+DIARIZATION_DEFAULT_MODEL = 'microsoft/mai-transcribe-2'
 
 def diarization_options(model):
     """Provider-specific diarization switch verified on 2026-09-09, or None when the model has none."""

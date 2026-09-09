@@ -178,6 +178,20 @@ def import_file_cloud_only(store, path, title, data_dir, *, consent=False, model
     return finalize_capture(store,mid,data_dir,consent=True,model=model,client=client,ffmpeg=ffmpeg,embedder=embedder)
 
 
+EMBED_WINDOW=30*16000
+
+def embedding_windows(start, end, frames, window=EMBED_WINDOW, minimum=3*16000):
+    """Integer sample spans covering [start,end): ≤30 s each, clamped to the file, none shorter than 3 s."""
+    a=max(0,round(start*16000));b=min(frames,round(end*16000))
+    if b-a<minimum: return []
+    out=[]
+    while a<b:
+        e=min(a+window,b)
+        if b-e<minimum: e=b        # fold a short tail into the previous window (≤ 60 s worker cap)
+        out.append((a,e));a=e
+    return out
+
+
 def identify_clusters(store, mid, sources, embedder=None):
     """Local, light voiceprint step: one vector per diarized segment, cluster centroid matched against saved profiles.
     Never blocks the transcript: caller records failures in metadata."""
@@ -191,11 +205,20 @@ def identify_clusters(store, mid, sources, embedder=None):
     for r in rows: by_source.setdefault(r['source'],[]).append(r)
     embedded=0
     for source,group in by_source.items():
+        frames=sf.info(sources[source]).frames
+        spans=[];owners=[]
+        for r in group:  # long turns are embedded in bounded windows and averaged; the worker caps one span at 60 s
+            for a,b in embedding_windows(r['start'],r['end'],frames):
+                spans.append((a,b));owners.append(r['id'])
         with contextlib.redirect_stdout(__import__('sys').stderr):
-            vectors=embedder.embed_file(sources[source],[(round(r['start']*16000),round(r['end']*16000)) for r in group])
-        for r,vector in zip(group,vectors):
-            if vector is None: continue
-            r['embedding']=vector;r['embedding_model']=embedder.model_id;embedded+=1
+            vectors=embedder.embed_file(sources[source],spans)
+        by_row={}
+        for rid,vector in zip(owners,vectors):
+            if vector is not None: by_row.setdefault(rid,[]).append(vector)
+        for r in group:
+            parts=by_row.get(r['id'])
+            if not parts: continue
+            r['embedding']=[sum(col)/len(parts) for col in zip(*parts)];r['embedding_model']=embedder.model_id;embedded+=1
             with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
     named=0
     clusters={}

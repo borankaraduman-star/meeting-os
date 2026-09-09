@@ -144,8 +144,8 @@ class OpenRouterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             listing=dispatch({'action':'openrouter_models'},Path(tmp)/'db.sqlite')
         self.assertEqual(listing['default'],'openai/gpt-transcribe')
-        self.assertEqual(len(listing['models']),7);self.assertEqual(listing['diarization_default'],'deepgram/nova-3')
-        self.assertEqual([m['id'] for m in listing['models'] if m['diarization']],['deepgram/nova-3','microsoft/mai-transcribe-2'])
+        self.assertEqual(len(listing['models']),7);self.assertEqual(listing['diarization_default'],'microsoft/mai-transcribe-2')
+        self.assertEqual([m['id'] for m in listing['models'] if m['diarization']],['microsoft/mai-transcribe-2','deepgram/nova-3'])
         for option in listing['models']:
             client=self.client({'text':'Test'})
             client.transcribe(b'RIFF','wav',model=option['id'],consent=True)
