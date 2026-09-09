@@ -143,6 +143,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; await refresh(); await loadReview() }
         catch { self.error=error.localizedDescription }
     }
+    /// One pass over every suggested name; a single refresh at the end keeps the transcript from repainting per person.
+    func confirmAll(_ items:[ReviewItem]) async {
+        guard let mid=selected else { return }
+        var named:[String]=[]
+        for item in items where !item.suggested.isEmpty && !item.speakerKey.isEmpty {
+            do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); named.append(item.suggested) }
+            catch { self.error=error.localizedDescription; break }
+        }
+        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi" }
+        await refresh(); await loadReview()
+    }
     var calendarAttendees:[String] { (meeting?.metadata["calendar"] as? [String:Any])?["attendees"] as? [String] ?? [] }
     @Published var readingMode=true
     @Published var showAsides=false

@@ -10,6 +10,7 @@ struct TranscriptView:View {
             VStack(alignment:.leading,spacing:(model.readingMode && model.search.isEmpty) ? 2 : 20) {
                 let hiddenEcho=CloudTranscription.hiddenEchoCount(model.rows)
                 let marks=Markers.parse(model.meeting?.metadata ?? [:])   // once per body, not once per paragraph
+                NamesCard(model:model).padding(.bottom,10)
                 if hiddenEcho>0 {
                     HStack(spacing:8) {
                         Image(systemName:"speaker.wave.2").foregroundStyle(.secondary)
