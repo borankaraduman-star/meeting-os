@@ -45,6 +45,15 @@ filtreler. Markdown, SRT ve JSON dışa aktarımı vardır; JSON export ses vekt
 içermez. **Sözlük ve ses profilleri** bölümünde kişi adlarını ve PM terimlerini
 satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.
 
+## Günlük kullanım kısayolları ve kontrol
+
+- **⌘R** kaydı başlatır/bitirir. Kayıt sırasında **⌘M** önemli an, **⌘⇧M** karar, **⌘⌥M** bana görev, **⌘⌃M** sonra bak işareti koyar; işaretler kayıt bitince Kontrol sekmesinin en üstünde ve ilgili paragrafta görünür.
+- **Kontrol** sekmesi bütün metni okumak yerine şüpheli yerleri sıralar: onay bekleyen isim (“Sol Üst?” → Onayla), isimsiz konuşmacı, çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev. Altında kimlik karnesi (otomatik doğru/yanlış, öneri onay/red, kaçırılan, metin düzeltmesi) vardır.
+- **Okuma görünümü** aynı kişinin ardışık bölümlerini paragraf yapar, “hı hı/tabii” araya girişlerini katlar, dolgu seslerini gizler (kapatılabilir). **Bölümler** ham kayıtları gösterir.
+- **Görevlerim → Sonraki toplantı gündemi…** son 5 toplantının açık görev, soru ve kararlarından kaynaklı bir Markdown taslak kaydeder; hiçbir yere gönderilmez.
+- Kayıt sırasında ekran uykusu engellenir (sistem sesi yakalama ekran uyuyunca düşer). Mikrofon hoparlör yankısı yüklenmeden atlanır.
+- CLI: `quality report` (düzeltmelerinizden WER ve kimlik karnesi), `quality compare --model … --allow-upload` (modelleri kendi düzeltmelerinize karşı ölçer), `agenda --output gundem.md`.
+
 ## Özet, görevler ve hafıza
 
 **Görevlerim**: Boran’a atanmış, bu toplantıya ait veya bütün görevleri görün.

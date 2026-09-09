@@ -59,6 +59,14 @@ Varsayılan model `openai/gpt-transcribe`. Menüde GPT-4o Transcribe, GPT-4o Min
 - **Kayıt sırasında ekran uykusu engellenir** (IOPM display-sleep beyanı): ekran uyuyunca ScreenCaptureKit akışı ölüyordu (“Failed to find any displays”).
 - Ajan katkısı: aynı dosyayı tekrar işlememe (`check_duplicate`, `register_import_digest`), yeniden açılışta kurtarılabilir toplantının otomatik seçimi, Depolama paneli (`storage_report`).
 
+## 05:20 sonrası eklemeler
+
+- Parçalar 3 paralel yüklenir (`UPLOAD_WORKERS`), her başarılı parça kardeşi hata verse de checkpoint’lenir; parça planı yalnız ücretsiz (sessiz/yankı) checkpoint’ler varken değişebilir.
+- Aynı toplantı içinde parçalar arası kümeler ses vektörüyle bağlanır (≥0.90; ölçüm 0.991 aynı, ≤0.85 farklı) ve tek “Konuşmacı N” etiketi alır.
+- ⌘M işaretleri `capture_dir/markers.jsonl` → `metadata.markers` → Kontrol kuyruğunda `marker` maddeleri.
+- Okuma görünümünde dolgu sesleri gizlenir (`Fillers.clean`); kayıt, arama ve kanıt alıntıları ham metni korur. Modeller arası fark ölçümü (MAI vs GPT Transcribe, 3×60 s): WER 0.04–0.20, farkın çoğu dolgu sesleri.
+- Gündem taslağı: `agenda` eylemi/CLI, son 5 tamamlanmış toplantı.
+
 ## Hata mesajları
 
 HTTP hataları koda göre ayrışır: 401 anahtar reddedildi, 402 bakiye yetersiz, 429 hız sınırı, 5xx hizmet hatası. Her mesaj HTTP kodunu ve “otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor” notunu içerir. Anahtar veya yanıt içeriği mesaja girmez.
