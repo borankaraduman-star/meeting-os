@@ -12,3 +12,8 @@
 3. Kullanım Mac’i bir sonraki açılışta günceller (veya kartta tek tık).
 
 Sürüm etiketi/GitHub Release yalnız kilometre taşlarında (`scripts/package-source.py` + `gh release create`); günlük akış dal üzerinden yürür.
+
+
+## Kurulum durumu kartı (1.2.11+)
+
+Kullanım Mac’inde bir şey çalışmıyorsa önce Ayarlar (⌘,) → **Kurulum durumu**: izinler, OpenRouter anahtarı, sözlük, sürüm ve teşhis raporu klasörünün yazılabilirliği tek listede; kırmızı maddede “İzin iste” ya da “Ayarları aç” doğrudan ilgili yere götürür. Geliştirme Mac’inde rapor görünmüyorsa kullanım Mac’inde bu karttaki “Teşhis raporları” satırına bakın (kapalı / klasör yok / kaç rapor yazıldı).

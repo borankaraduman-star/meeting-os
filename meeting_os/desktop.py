@@ -334,7 +334,14 @@ def dispatch(request, db=None):
                     from .updater import check
                     behind=int((check(ROOT) or {}).get('behind') or 0)
                 except Exception: behind=0
-            return {'api_key':has_key,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind}
+            from .reports import load_settings,host_dir
+            rs=load_settings(data); folder=host_dir(rs); written=len(list(folder.glob('*.json'))) if folder.is_dir() else 0
+            import os
+            anchor=folder
+            while not anchor.exists() and anchor.parent!=anchor: anchor=anchor.parent   # mkdir(parents=True) creates the rest on first write
+            writable=bool(rs.get('share_reports')) and os.access(anchor,os.W_OK)
+            return {'api_key':has_key,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
+                    'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder)}
         if action=='cost_report':
             # Real OpenRouter transcription charges per piece (analysis calls are not metered by the provider response).
             from datetime import datetime,timezone

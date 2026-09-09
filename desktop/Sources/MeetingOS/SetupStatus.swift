@@ -61,6 +61,13 @@ enum SetupStatus {
         let ok=settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
         return SetupCheck(id:"notify",title:"Bildirimler",state:ok ? .ok : (settings.authorizationStatus == .notDetermined ? .unknown : .optional),hint:ok ? "izin verildi" : "Transkript bitince ve Zoom açılınca bildirim için Sistem Ayarları → Bildirimler")
     }
+    /// Shared diagnostics folder: the other Mac's reports are how problems reach the development Mac.
+    static func reportsCheck(_ r:[String:Any])->SetupCheck {
+        let on=r["reports_on"] as? Bool ?? false, writable=r["reports_writable"] as? Bool ?? false, written=r["reports_written"] as? Int ?? 0
+        if !on { return SetupCheck(id:"reports",title:"Teşhis raporları",state:.optional,hint:"Kapalı · açılırsa her toplantıdan sonra iCloud Drive’a özet yazılır") }
+        if !writable { return SetupCheck(id:"reports",title:"Teşhis raporları",state:.missing,hint:"iCloud Drive klasörü yok ya da yazılamıyor: \(r["reports_dir"] as? String ?? "")") }
+        return SetupCheck(id:"reports",title:"Teşhis raporları",state:.ok,hint:written==0 ? "Açık · henüz rapor yazılmadı (ilk tamamlanan toplantıdan sonra)" : "Açık · \(written) rapor iCloud Drive’da")
+    }
     /// Bridge answer → checks for the pieces the Python side owns.
     static func serviceChecks(_ r:[String:Any])->[SetupCheck] {
         let key=r["api_key"] as? Bool ?? false
@@ -71,6 +78,7 @@ enum SetupStatus {
             SetupCheck(id:"key",title:"OpenRouter anahtarı",state:key ? .ok : .missing,hint:key ? "Keychain’de kayıtlı" : "OpenRouter ile yazıya çevirmede istenir; Keychain’e bir kez kaydedilir"),
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
             SetupCheck(id:"update",title:"Sürüm",state:behind==0 ? .ok : .missing,hint:behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"),
+            reportsCheck(r),
         ]
     }
 }

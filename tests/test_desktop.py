@@ -48,10 +48,11 @@ class DesktopTests(unittest.TestCase):
   from unittest.mock import patch
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'meeting-os.sqlite';Store(db).close();(Path(tmp)/'vocabulary.txt').write_text('PMD\n')
-   class R:returncode=0
+   class R:returncode=0;stdout='Test-Mac\n';stderr=''
    with patch('subprocess.run',return_value=R()):r=dispatch({'action':'setup_status'},db)
    self.assertEqual((r['api_key'],r['glossary_terms']>=1,r['glossary_shared'],r['update_behind']),(True,True,False,0))
-   class F:returncode=44
+   self.assertEqual((r['reports_on'],r['reports_writable'],r['reports_written']),(True,True,0))
+   class F:returncode=44;stdout='';stderr=''
    with patch('subprocess.run',return_value=F()):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])
  def test_cost_report_sums_real_charges_by_month(self):
   from datetime import datetime,timezone
