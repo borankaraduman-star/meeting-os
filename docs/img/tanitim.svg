@@ -73,12 +73,12 @@
     <text x="100" y="655" font-size="21">• ⌃⌥M: önemli an, karar, görev işareti</text>
     <text x="100" y="690" font-size="21">• Yüzen panel: süre, mikrofon/sistem sinyali</text>
     <text x="100" y="725" font-size="21">• Takvimden başlık ve katılımcı adları</text>
-    <text x="100" y="760" font-size="21">• Uyku/uyanmada kayıt kopmaz, yük vermez</text>
+    <text x="100" y="760" font-size="21">• Yardımcı ölse, Mac uyusa da kayıt devam eder</text>
 
     <text x="650" y="560" font-size="16" fill="#7fd6b6" font-weight="700" letter-spacing="2">TOPLANTIDAN SONRA</text>
     <rect x="650" y="575" width="60" height="3" fill="url(#acc)"/>
     <text x="650" y="620" font-size="21">• Belge gibi okunan transkript, dolgular gizli</text>
-    <text x="650" y="655" font-size="21">• Kontrol: yalnız şüpheli yerler, tek tık onay</text>
+    <text x="650" y="655" font-size="21">• İsimler kartı: her ses için tek satır, tek tık</text>
     <text x="650" y="690" font-size="21">• Görevler: vade önerisi, Hatırlatıcılar’a tek tık</text>
     <text x="650" y="725" font-size="21">• Sözlük düzeltmeleri modelce doğrulanır</text>
     <text x="650" y="760" font-size="21">• PRD, hata raporu, müşteri talebi, paylaşım maskesi</text>
@@ -89,7 +89,7 @@
     <text x="1200" y="655" font-size="21">• Beklediklerim: kim ne söz verdi, kaç gündür</text>
     <text x="1200" y="690" font-size="21">• Toplantı öncesi brifing, hafta özeti</text>
     <text x="1200" y="725" font-size="21">• Karne: saat, karar, görev, konuşma payı</text>
-    <text x="1200" y="760" font-size="21">• Hafıza: bütün toplantılarda ara, kaynaklı yanıt</text>
+    <text x="1200" y="760" font-size="21">• Düzeltmelerden öğrenir: isim, kelime, kural</text>
   </g>
 
   <!-- bottom facts -->
@@ -106,5 +106,5 @@
     <text x="1400" y="905" font-size="40" font-weight="800" fill="#f2f7f4">%0</text>
     <text x="1400" y="935">boşta CPU; toplantıyı yavaşlatmaz</text>
   </g>
-  <text x="100" y="1040" font-size="18" fill="#6f9587">macOS · SwiftUI + Python · OpenRouter (MAI-Transcribe 2, gpt-4.1-mini) · Resemblyzer ses profili · iCloud ile sözlük ve teşhis raporları · v1.2.24</text>
+  <text x="100" y="1040" font-size="18" fill="#6f9587">macOS · SwiftUI + Python · OpenRouter (MAI-Transcribe 2, gpt-4.1-mini) · Resemblyzer ses profili · iCloud ya da ekip klasörüyle sözlük ve teşhis raporları · v1.2.27</text>
 </svg>
