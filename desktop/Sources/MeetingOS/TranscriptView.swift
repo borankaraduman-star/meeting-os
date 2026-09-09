@@ -18,8 +18,9 @@ struct TranscriptView:View {
                 }
                 if let notice=TranscriptBlocks.meetingNotice(model.rows) {
                     HStack(spacing:8) {
-                        Image(systemName:"info.circle").foregroundStyle(.secondary)
-                        Text(notice).font(.caption).foregroundStyle(.secondary)
+                        Image(systemName:"info.circle").foregroundStyle(.secondary).help(notice)
+                        Text("Bulut transkript · OpenRouter").font(.caption).foregroundStyle(.secondary).help(notice)
+                        if model.readingMode { Toggle("Dolgu seslerini gizle",isOn:$model.hideFillers).toggleStyle(.checkbox).font(.caption).foregroundStyle(.secondary).help("eee, ııı, yarım kelimeler yalnız okuma görünümünde gizlenir; kayıt ve arama ham metni kullanır").accessibilityIdentifier("toggleFillers") }
                         Spacer()
                         Picker("Görünüm",selection:$model.readingMode) { Text("Okuma").tag(true);Text("Bölümler").tag(false) }.pickerStyle(.segmented).labelsHidden().frame(width:170).accessibilityIdentifier("transcriptViewMode")
                     }
@@ -36,7 +37,7 @@ struct TranscriptView:View {
                             Button(model.showAsides ? "Gizle" : "Göster") { model.showAsides.toggle() }.font(.caption).accessibilityIdentifier("toggleAsides")
                         }
                     }
-                    Toggle("Dolgu seslerini gizle (eee, ııı, yarım kelimeler) · yalnız okuma görünümü",isOn:$model.hideFillers).toggleStyle(.checkbox).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("toggleFillers")
+
                     ForEach(blocks) { block in TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides) }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
