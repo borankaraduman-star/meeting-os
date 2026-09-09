@@ -230,7 +230,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             outcome='provisional' if captured[0] else 'incomplete'
             if errors and not captured[0]: raise RuntimeError('; '.join(errors))
     except BaseException:
-        if store and outcome is None: store.status(mid,'incomplete')
+        # Even a supervisor dying mid-loop leaves a meeting that holds audio: provisional, so retry_candidates
+        # and the app's finalize path can still reach it. Only an empty capture is incomplete.
+        if store and outcome is None: store.status(mid,'provisional' if captured[0] else 'incomplete')
         raise
     finally:
         signal.signal(signal.SIGINT,old_handler)

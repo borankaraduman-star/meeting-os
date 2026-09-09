@@ -130,6 +130,7 @@ class LiveTests(unittest.TestCase):
             result=json.loads(receipt.read_text())
             self.assertEqual(result['meeting'],mid);self.assertEqual(result['finalized_chunks'],1)
             self.assertEqual(result['status'],'provisional');self.assertEqual(len(db.meetings()),1)
+            self.assertEqual(result['errors'],[])   # a clean recording never shows the "aksama" line
             self.assertEqual(receipt.stat().st_mode&0o777,0o600);db.close()
     def test_capture_failure_does_not_publish_completion_receipt(self):
         with tempfile.TemporaryDirectory() as t:
