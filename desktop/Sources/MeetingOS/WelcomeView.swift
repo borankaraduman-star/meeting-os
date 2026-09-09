@@ -18,12 +18,12 @@ struct WelcomeView:View {
             }
             VStack(alignment:.leading,spacing:12) {
                 step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya yüzen paneldeki “Bitir”.")
-                step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses buluta gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol kuyruğu hazır olur.")
+                step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses buluta gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol sekmesi hazır olur.")
                 step("3","Bir kez adlandır, sonra tanınır","Kontrol sekmesinde konuşanlara adını ver; ses profili kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır.")
             }.padding(18).meetingCard().frame(maxWidth:640)
             HStack(spacing:10) {
                 Button { model.start() } label: { Label("Yeni kayıt",systemImage:"record.circle") }.buttonStyle(.borderedProminent).disabled(model.busy)
-                Button("Ayarlar → Kurulum durumu") { Task { await model.settings() } }
+                Button("Ayarlar → Sistem → Kurulum durumu") { Task { await model.settings() } }
             }
             Text("İzinler eksikse Kurulum durumu kartı gösterir ve tek tıkla ister.").font(.caption).foregroundStyle(.secondary)
         }.padding(32).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).accessibilityIdentifier("welcome")

@@ -13,6 +13,18 @@ struct UpdateInfo:Equatable {
         if dirty { return "Yerel değişiklikler var; otomatik güncelleme kapalı" }
         return "Güncel (\(local))"
     }
+    /// The sidebar keeps one line, not a card: "Sürüm 1.2.27 · güncel". `version` is
+    /// CFBundleShortVersionString (empty in a plain `swift build`), so the git hash stands in for it.
+    static func sidebarLine(version:String,info:UpdateInfo?)->String {
+        let name=version.isEmpty ? (info?.local ?? "") : version
+        let prefix=name.isEmpty ? "Sürüm" : "Sürüm \(name)"
+        guard let info else { return prefix+" · kontrol edilmedi" }
+        if !info.error.isEmpty { return prefix+" · "+info.error }
+        if info.available { return prefix+" · yeni sürüm hazır" }
+        if info.dirty { return prefix+" · yerel değişiklik var" }
+        return prefix+" · güncel"
+    }
+    static var appVersion:String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
 }
 
 struct ReportSettings:Equatable {

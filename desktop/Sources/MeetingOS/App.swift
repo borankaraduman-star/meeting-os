@@ -65,7 +65,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -483,8 +483,6 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
     @Published var questions:[QuestionGroup]=[]; @Published var scorePeriod:[String:Any]?; @Published var scoreMeetings:[ScoreMeeting]=[]
-    /// Sidebar: the transcription mode/model pickers are folded behind one caption line by default.
-    @Published var showTranscriptionOptions=UserDefaults.standard.bool(forKey:"showTranscriptionOptions") { didSet { UserDefaults.standard.set(showTranscriptionOptions,forKey:"showTranscriptionOptions") } }
     /// Poll fingerprints: rows and intelligence are re-fetched only when the Python side reports a change.
     var segmentsHash=""; var lastSegmentsMeeting=""; var intelHash=""
     /// Görünüm: "system" | "light" | "dark", and the accent preset key.
@@ -550,7 +548,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func keepMeeting(_ id:String,keep:Bool) async { do { _=try await request(["action":"keep_meeting","meeting":id,"keep":keep]); await refresh() } catch { self.error=error.localizedDescription } }
     /// Meeting → PRD / bug report / customer request / Claude Code prompt, saved where the user chooses. Cloud mode only.
     func exportDocument(kind:String) async {
-        guard let mid=selected, transcriptionMode=="openrouter" else { self.error="Belge hazırlama OpenRouter modunda çalışır (Yazıya çevirme: OpenRouter)"; return }
+        guard let mid=selected, transcriptionMode=="openrouter" else { self.error="Belge hazırlama bulut modunda çalışır (Ayarlar → Sistem → Yazıya çevirme)"; return }
         let names=["prd":"prd","bug":"hata-raporu","customer":"musteri-talebi","claude":"claude-code-istemi"]
         let panel=NSSavePanel();panel.nameFieldStringValue="\(names[kind] ?? kind)-\(mid.prefix(6)).md";panel.allowedContentTypes=[UTType.plainText]
         guard panel.runModal() == .OK, let url=panel.url else { return }

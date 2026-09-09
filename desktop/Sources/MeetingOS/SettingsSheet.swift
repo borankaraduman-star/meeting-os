@@ -8,31 +8,50 @@ struct SettingsSheet:View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
                 HStack { Text("Ayarlar").font(.title2.bold()); Spacer(); Text("⌘,").font(.caption.monospaced()).foregroundStyle(.secondary) }
-                Picker("Ayar grubu",selection:$section) { Text("Genel").tag("genel"); Text("Sözlük ve sesler").tag("sozluk"); Text("Depolama").tag("depolama"); Text("Güncelleme ve raporlar").tag("guncelleme"); Text("Kurulum durumu").tag("durum") }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("settingsSection")
-                if section=="durum" {
-                if !model.setupChecks.isEmpty {
+                Picker("Ayar grubu",selection:Binding(get:{ SettingsSections.normalize(section) },set:{ section=$0 })) { Text("Genel").tag("genel"); Text("Sesler ve sözlük").tag("sesler"); Text("Sistem").tag("sistem") }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("settingsSection")
+                if group=="sistem" {
+                Text("Yazıya çevirme").font(.headline)
+                Picker("Yazıya çevirme",selection:$model.transcriptionMode) { Text("OpenRouter (bulut)").tag("openrouter");Text("Yerel model").tag("local") }
+                    .pickerStyle(.segmented).labelsHidden().frame(width:320).disabled(model.recording || model.busy).accessibilityIdentifier("transcriptionModePicker")
+                if model.transcriptionMode=="openrouter" {
+                    if model.cloudModels.isEmpty { Text("Model listesi yükleniyor…").font(.caption).foregroundStyle(.secondary) }
+                    else {
+                        Picker("Model",selection:$model.cloudModel) { ForEach(model.cloudModels) { Text($0.name).tag($0.id) } }
+                            .labelsHidden().frame(width:320).disabled(model.recording || model.busy).accessibilityIdentifier("cloudModelPicker")
+                    }
+                    Text("Kayıt bitince ses OpenRouter’a gider; bu Mac’te model yüklenmez, canlı metin olmaz. Her yerden ⌃⌥R başlat/bitir, ⌃⌥M an işaretle.").font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
+                }
+                Divider()
+                }
+                if group=="sistem" {
+                if let storage=model.storage { StorageSection(model:model,storage:storage); Divider() }
+                }
+                if group=="sesler" {
+                Text("Kaydedilmiş sesler").font(.headline)
+                Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary)
+                if model.profiles.isEmpty {
                     VStack(alignment:.leading,spacing:6) {
-                        HStack { Text("Kurulum durumu").font(.headline);Spacer();Button("Yenile") { Task { await model.loadSetupStatus() } }.controlSize(.small) }
-                        ForEach(model.setupChecks) { c in
-                            HStack(alignment:.top,spacing:8) {
-                                Circle().fill(c.state == .ok ? MeetingStyle.accent : (c.state == .missing ? Color.red : (c.state == .unknown ? Color.orange : Color.secondary))).frame(width:8,height:8).padding(.top,5)
-                                VStack(alignment:.leading,spacing:1) { Text(c.title).font(.callout); Text(c.hint).font(.caption2).foregroundStyle(.secondary) }
-                                Spacer()
-                                if SetupStatus.fixable(c) { Button(SetupStatus.fixLabel(c)) { SetupStatus.fix(c.id,calendarWanted:model.useCalendar) { Task { await model.loadSetupStatus() } } }.controlSize(.small).accessibilityIdentifier("fixSetup-\(c.id)") }
-                            }
-                        }
-                        Text("Kırmızı: kayıt ya da güncelleme bu izin/ayar olmadan çalışmaz. Gri: isteğe bağlı.").font(.caption2).foregroundStyle(.secondary)
-                        HStack { Button("Öz-test") { Task { await model.runProbe() } }.controlSize(.small).disabled(model.recording || model.busy).help("Kayıt yardımcısı, ffmpeg, ses modeli, veritabanı, disk, anahtar, sözlük ve rapor klasörünü birkaç saniyede sınar; toplantıdan önce çalıştırın").accessibilityIdentifier("probeButton"); Text("toplantıdan önce her şeyin yerinde olduğunu doğrular").font(.caption2).foregroundStyle(.secondary) }
-                        if !model.probeLines.isEmpty { VStack(alignment:.leading,spacing:2) { ForEach(Array(model.probeLines.enumerated()),id:\.offset) { i,l in Text(l).font(i==0 ? .caption.weight(.semibold) : .caption2.monospacedDigit()).foregroundStyle(i==0 ? .primary : .secondary) } }.accessibilityIdentifier("probeResult") }
-                        Text("Uygulama yoklaması · \(BridgeStats.shared.summary)").font(.caption2).foregroundStyle(.secondary).help("Python köprüsüne yapılan çağrıların süresi; p95 birkaç yüz ms üzerindeyse Mac yavaşlamış demektir")
-                    }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
+                        Label("Henüz ses profili yok",systemImage:"person.wave.2")
+                        Text("Bir transkript bölümünde Düzelt düğmesine basarak temiz bir konuşma örneğinden profil kaydedebilirsiniz.").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
+                } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
+                Divider()
                 }
-                }
-                if section=="sozluk" {
+                if group=="sesler" {
+                Text("Sözlük").font(.headline)
                 Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın.")
                 TextEditor(text:$model.vocabulary).font(.body.monospaced()).frame(height:160).border(.quaternary)
                 Text("Proje sözlüğü (glossary.jsonl)").font(.headline)
                 Text(model.glossaryFromFile>0 ? "\(model.glossaryFromFile) terim dosyadan, toplam \(model.glossaryCount) · örnek: \(model.glossarySample.prefix(6).joined(separator:", ")) · iCloud Drive ile bütün Mac’lerde aynı" : "Henüz sözlük dosyası yok. Slack agent’ın ürettiği JSON Lines dosyasını içe aktarın; iCloud Drive üzerinden bütün Mac’lere yayılır.").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("glossary.jsonl içe aktar…") { Task { await model.importGlossary() } }.accessibilityIdentifier("importGlossaryButton")
+                    Text("Sözlük üç yerde kullanılır: bulut yazıya çevirmeye yazım ipucu (etkisi sağlayıcıya bağlı), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham metin hiçbir zaman kendiliğinden değiştirilmez.").font(.caption2).foregroundStyle(.secondary)
+                }
+                Divider()
+                }
+                if group=="sesler" {
                 Text("Ekip klasörü").font(.headline)
                 HStack(spacing:8) {
                     Text(model.reportSettings.teamDir.isEmpty ? "Seçilmedi" : model.reportSettings.teamDir.replacingOccurrences(of:NSHomeDirectory(),with:"~"))
@@ -47,12 +66,8 @@ struct SettingsSheet:View {
                     .onChange(of:model.reportSettings.shareGlossary) { _ in Task { await model.saveReportSettings() } }
                     .disabled(model.reportSettings.teamDir.isEmpty)
                 Text("Ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçin: sözlük ekipçe birleşir ve teşhis raporları kişisel klasör yerine oraya yazılır. Ses, transkript ve ses profilleri bu klasöre girmez.").font(.caption2).foregroundStyle(.secondary)
-                HStack {
-                    Button("glossary.jsonl içe aktar…") { Task { await model.importGlossary() } }.accessibilityIdentifier("importGlossaryButton")
-                    Text("Sözlük üç yerde kullanılır: bulut STT’ye yazım ipucu (etkisi sağlayıcıya bağlı), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham metin hiçbir zaman kendiliğinden değiştirilmez.").font(.caption2).foregroundStyle(.secondary)
                 }
-                }
-                if section=="guncelleme" {
+                if group=="sistem" {
                 if let cost=model.cost, let month=cost["month"] as? [String:Any], let all=cost["all"] as? [String:Any] {
                     VStack(alignment:.leading,spacing:6) {
                         Text("Bulut maliyeti").font(.headline)
@@ -80,18 +95,26 @@ struct SettingsSheet:View {
                     Button("Rapor klasörünü aç") { NSWorkspace.shared.open(URL(fileURLWithPath:model.reportSettings.reportDir)) }
                 }
                 Text("Raporlar yalnız sayı, puan, maliyet, model adı ve hata satırı içerir; iCloud Drive üzerinden diğer Mac’e geçer. Geliştirme oradaki raporlara bakılarak sürer.").font(.caption2).foregroundStyle(.secondary)
+                Divider()
                 }
-                if section=="sozluk" {
-                Text("Kaydedilmiş sesler").font(.headline)
-                Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary)
-                if model.profiles.isEmpty {
+                if group=="sistem", !model.setupChecks.isEmpty {
                     VStack(alignment:.leading,spacing:6) {
-                        Label("Henüz ses profili yok",systemImage:"person.wave.2")
-                        Text("Bir transkript bölümünde Düzelt düğmesine basarak temiz bir konuşma örneğinden profil kaydedebilirsiniz.").font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
-                } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
+                        HStack { Text("Kurulum durumu").font(.headline);Spacer();Button("Yenile") { Task { await model.loadSetupStatus() } }.controlSize(.small) }
+                        ForEach(model.setupChecks) { c in
+                            HStack(alignment:.top,spacing:8) {
+                                Circle().fill(c.state == .ok ? MeetingStyle.accent : (c.state == .missing ? Color.red : (c.state == .unknown ? Color.orange : Color.secondary))).frame(width:8,height:8).padding(.top,5)
+                                VStack(alignment:.leading,spacing:1) { Text(c.title).font(.callout); Text(c.hint).font(.caption2).foregroundStyle(.secondary) }
+                                Spacer()
+                                if SetupStatus.fixable(c) { Button(SetupStatus.fixLabel(c)) { SetupStatus.fix(c.id,calendarWanted:model.useCalendar) { Task { await model.loadSetupStatus() } } }.controlSize(.small).accessibilityIdentifier("fixSetup-\(c.id)") }
+                            }
+                        }
+                        Text("Kırmızı: kayıt ya da güncelleme bu izin/ayar olmadan çalışmaz. Gri: isteğe bağlı.").font(.caption2).foregroundStyle(.secondary)
+                        HStack { Button("Öz-test") { Task { await model.runProbe() } }.controlSize(.small).disabled(model.recording || model.busy).help("Kayıt yardımcısı, ffmpeg, ses modeli, veritabanı, disk, anahtar, sözlük ve rapor klasörünü birkaç saniyede sınar; toplantıdan önce çalıştırın").accessibilityIdentifier("probeButton"); Text("toplantıdan önce her şeyin yerinde olduğunu doğrular").font(.caption2).foregroundStyle(.secondary) }
+                        if !model.probeLines.isEmpty { VStack(alignment:.leading,spacing:2) { ForEach(Array(model.probeLines.enumerated()),id:\.offset) { i,l in Text(l).font(i==0 ? .caption.weight(.semibold) : .caption2.monospacedDigit()).foregroundStyle(i==0 ? .primary : .secondary) } }.accessibilityIdentifier("probeResult") }
+                        Text("Uygulama yoklaması · \(BridgeStats.shared.summary)").font(.caption2).foregroundStyle(.secondary).help("Python köprüsüne yapılan çağrıların süresi; p95 birkaç yüz ms üzerindeyse Mac yavaşlamış demektir")
+                    }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
                 }
-                if section=="genel" {
+                if group=="genel" {
                 Text("Sizin adınız").font(.headline)
                 HStack(spacing:10) {
                     TextField("Adınız",text:$model.reportSettings.userName)
@@ -116,18 +139,18 @@ struct SettingsSheet:View {
                 Toggle("Kayıt sırasında her pencerenin üstünde küçük kayıt paneli göster (süre, an işaretleri, bitir)",isOn:$model.showRecorderPanel)
                 Toggle("Kayıt başlarken takvimdeki toplantının adını başlık yap, katılımcılarını adlandırmada öner (takvim yalnız okunur)",isOn:$model.useCalendar)
                 }
-                if section=="depolama" {
-                if let storage=model.storage { StorageSection(model:model,storage:storage) }
-                }
                 HStack {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
                     Spacer()
-                    if section=="sozluk" { Button("Sözlüğü kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton") }
+                    if group=="sesler" { Button("Sözlüğü kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton") }
                     Button("Kapat") { model.showSettings=false }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelSettingsButton")
                 }
             }.padding(28)
-        }.scrollIndicators(.visible).frame(width:640,height:min(["genel":540,"sozluk":940,"depolama":700,"guncelleme":620,"durum":660][section] ?? 700,(NSScreen.main?.visibleFrame.height ?? 900)-80))
+        }.scrollIndicators(.visible).frame(width:640,height:min(CGFloat(SettingsSections.height(section)),(NSScreen.main?.visibleFrame.height ?? 900)-80))
+        .task { await model.loadCloudModels() }
     }
+    /// Folded from the five sections that shipped earlier; a value stored back then must still open a section.
+    var group:String { SettingsSections.normalize(section) }
     /// Read-write folder picker; the backend refuses a path it cannot see, so the field reverts on failure.
     func pickTeamDir() {
         let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.canChooseFiles=false;panel.allowsMultipleSelection=false;panel.prompt="Seç"

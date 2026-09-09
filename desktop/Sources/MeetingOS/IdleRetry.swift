@@ -21,7 +21,7 @@ enum IdleRetry {
         guard !blocked.isEmpty else { return nil }
         let kinds=Set(blocked.compactMap { $0["kind"] as? String })
         let what=kinds==["credit"] ? "OpenRouter kredisi bitti" : (kinds==["auth"] ? "OpenRouter anahtarı geçersiz" : "OpenRouter anahtarı veya kredisi engelliyor")
-        return "\(what) · \(blocked.count) toplantı bekliyor · Ayarlar → OpenRouter"
+        return "\(what) · \(blocked.count) toplantı bekliyor · Ayarlar → Sistem"
     }
 
     static func shouldNotifyBlocked(count:Int,last:Date?,now:Date=Date())->Bool {

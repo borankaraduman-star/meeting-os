@@ -5,14 +5,15 @@ import UniformTypeIdentifiers
 struct ActionsView:View {
     @ObservedObject var m:Model
     @State var draftEdit:DraftItem?;@State var draftText=""
-    @State var filter="mine";@State var edit:ActionItem?;@State var title="";@State var owner="";@State var due=""
+    /// The choice sticks: changing meetings — or relaunching — must not move the filter under the user.
+    @AppStorage(ActionsFilter.key) var stored="mine"
+    @State var edit:ActionItem?;@State var title="";@State var owner="";@State var due=""
+    var filter:String { ActionsFilter.normalize(stored) }
     /// "Bana ait" compares against the name in Ayarlar → Genel → Adınız, folded with Turkish rules (İ/ı).
     func matches(_ item:ActionItem,_ f:String)->Bool { f=="all" || (f=="mine" ? item.owner.lowercased(with:Locale(identifier:"tr_TR"))==m.userName.lowercased(with:Locale(identifier:"tr_TR")) : item.meeting==m.selected) }
     var visible:[ActionItem] { m.actions.filter { matches($0,filter) } }
     /// Open tasks behind each segment, so an empty "Bana ait" never hides the meeting's tasks.
     func count(_ f:String)->Int { m.actions.filter { matches($0,f) && !["done","dismissed"].contains($0.state) }.count }
-    /// First look at a meeting: if nothing is assigned to the user yet, show the meeting's own tasks instead of an empty list.
-    func pickInitialFilter() { if filter=="mine" && count("mine")==0 && count("meeting")>0 { filter="meeting" } }
     func statePicker(_ item:ActionItem)->some View {
         Picker("Durum",selection:Binding(get:{item.state},set:{value in Task { await m.updateAction(item,changes:["state":value]) }})) { Text("Açık").tag("open");Text("Devam ediyor").tag("in_progress");Text("Tamamlandı").tag("done");Text("Kaldırıldı").tag("dismissed") }
             .frame(width:220).accessibilityIdentifier("actionState-\(item.id)")
@@ -47,9 +48,18 @@ struct ActionsView:View {
     }
     var body:some View { VStack(alignment:.leading) {
         HStack { Text("Görevlerim").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)
-        HStack { Picker("Görevler",selection:$filter) { Text("Bana ait (\(count("mine")))").tag("mine");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Spacer(minLength:8); Menu("Dışa aktar") { Button("Brifing…") { Task { await m.exportBrief() } }; Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }; Divider(); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }; Button("Hafta özeti…") { Task { await m.exportWeeklyDigest() } } }.fixedSize().help("Markdown olarak kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("actionsExportMenu") }.padding().task(id:m.selected) { await m.loadContinuity(); pickInitialFilter() }.onChange(of:m.actions.count) { _,_ in pickInitialFilter() }.accessibilityIdentifier("actionsFilterPicker")
+        // Pinned above the list: the filter never scrolls away with the tasks it filters.
+        HStack { Picker("Görevler",selection:Binding(get:{ filter },set:{ stored=$0 })) { Text("Bana ait (\(count("mine")))").tag("mine");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Spacer(minLength:8); Menu("Dışa aktar") { Button("Brifing…") { Task { await m.exportBrief() } }; Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }; Divider(); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }; Button("Hafta özeti…") { Task { await m.exportWeeklyDigest() } } }.fixedSize().help("Markdown olarak kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("actionsExportMenu") }.padding().task(id:m.selected) { await m.loadContinuity() }.accessibilityIdentifier("actionsFilterPicker")
         ScrollView { LazyVStack(alignment:.leading,spacing:18) {
-            if visible.isEmpty { ContentUnavailableView("Görev bulunamadı",systemImage:"checklist",description:Text("İsimsiz görevler Tüm görevler altında görünür. Sahipliği kaynakla doğrulayarak düzeltebilirsiniz.")) }
+            if visible.isEmpty {
+                ContentUnavailableView { Label("Görev bulunamadı",systemImage:"checklist") } description: {
+                    Text(ActionsFilter.emptyMessage(filter:filter,meetingOpen:count("meeting")))
+                } actions: {
+                    if ActionsFilter.offersMeetingSwitch(filter:filter,meetingOpen:count("meeting")) {
+                        Button("Bu toplantı") { stored="meeting" }.buttonStyle(.link).accessibilityIdentifier("showMeetingTasksButton")
+                    }
+                }
+            }
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
                 HStack(alignment:.top) { Text(item.title).font(.headline).strikethrough(["done","dismissed"].contains(item.state)).textSelection(.enabled);Spacer();TaskStatusBadge(state:item.state) }
                 Text("\(item.owner.isEmpty ? "Sahibi belirsiz" : item.owner) · \(item.due.isEmpty ? "Tarih belirtilmedi" : item.due) · \(item.meetingTitle)").font(.caption).foregroundStyle(.secondary)

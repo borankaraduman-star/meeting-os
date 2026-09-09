@@ -29,8 +29,8 @@ struct MaintenanceView:View {
                         Button("Kapat") { Task { await m.rejectRule(r["original"] as? String ?? "") } }.controlSize(.mini).help("Bu kural bir daha uygulanmaz")
                     }.padding(.leading,24)
                 }
-                if let s=storage { Label("Disk · \(StorageReport.format(bytes:s.total)) (ses \(StorageReport.format(bytes:s.recordings))) · Ayarlar → Depolama",systemImage:"internaldrive").font(.callout) }
-                if !blocked.isEmpty { Label("\(blocked.count) toplantı bulutta bekliyor · anahtar ya da kredi sorunu · Ayarlar → OpenRouter",systemImage:"exclamationmark.icloud").font(.callout).foregroundStyle(.orange) }
+                if let s=storage { Label("Disk · \(StorageReport.format(bytes:s.total)) (ses \(StorageReport.format(bytes:s.recordings))) · Ayarlar → Sistem",systemImage:"internaldrive").font(.callout) }
+                if !blocked.isEmpty { Label("\(blocked.count) toplantı bulutta bekliyor · anahtar ya da kredi sorunu · Ayarlar → Sistem",systemImage:"exclamationmark.icloud").font(.callout).foregroundStyle(.orange) }
             } else { Text("Yükleniyor…").font(.caption).foregroundStyle(.secondary) }
         }.task { if m.maintenance==nil { await m.loadMaintenance() } }
     }
