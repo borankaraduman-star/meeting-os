@@ -175,7 +175,7 @@ OpenRouter yalnız yükleme başına ücretlendirir: MAI-Transcribe 2 ≈ $0,10/
 Her yerden: ⌃⌥R kayıt, ⌃⌥M an. Uygulamada: ⌘1–⌘5 sekmeler, ⌘F konuşmada ara, ⌘⇧F hafızada ara, ⌘Z son adlandırmayı geri al, ⌘, Ayarlar, Esc aramayı temizle; kayıt sırasında ⌘M / ⌘⇧M / ⌘⌥M / ⌘⌃M işaretler.
 
 ## 13. CLI (`.venv/bin/python -m meeting_os …`)
-`openrouter-import dosya --no-local`, `openrouter-finalize <toplantı>`, `analyze <toplantı> --openrouter-model openai/gpt-4.1-mini`, `prepare`, `quality report|compare`, `agenda --output gundem.md`, `digest [--from --to --mask-names] --output`, `waiting`, `decisions [--query]`, `questions [--query]`, `scorecard [--from --to]`, `review-debt --days 7`, `share`, `glossary import|summary`, `reports summarize|heartbeat`, `update check|start|status`, `document`.
+`openrouter-import dosya --no-local`, `openrouter-finalize <toplantı>`, `analyze <toplantı> --openrouter-model openai/gpt-4.1-mini`, `prepare`, `quality report|compare`, `agenda --output gundem.md`, `digest [--from --to --mask-names] --output`, `waiting`, `decisions [--query]`, `questions [--query]`, `scorecard [--from --to]`, `review-debt --days 7`, `share`, `glossary import|summary`, `reports summarize|heartbeat`, `probe [--network]` (öz-test: kayıt yardımcısı, ffmpeg, ses modeli, veritabanı, disk, anahtar, sözlük, rapor klasörü), `quality replay` (kimlik/metin regresyonu), `update check|start|status`, `document`.
 
 ## 14. Sınırlar ve dürüst notlar
 - Canlı (kayıt sırasında) metin yoktur; her şey kayıt bitince gelir.
