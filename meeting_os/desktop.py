@@ -81,6 +81,49 @@ def meeting_files(metadata, data_dir):
     return sorted(folders)
 
 
+def folder_bytes(path):
+    """Total size of regular files under a directory (symlinks skipped, nothing modified)."""
+    path=Path(path)
+    if not path.is_dir(): return 0
+    total=0
+    for p in path.rglob('*'):
+        try:
+            if p.is_file() and not p.is_symlink(): total+=p.stat().st_size
+        except OSError: continue
+    return total
+
+
+def storage_report(store, data_dir, db_path):
+    """Disk usage of recordings/, imports/ and the database, plus audio owned by each meeting (largest first)."""
+    from .recovery import classify, metadata as read_metadata
+    data_dir=Path(data_dir); db_path=Path(db_path)
+    database=sum(p.stat().st_size for p in (db_path,Path(str(db_path)+'-wal'),Path(str(db_path)+'-shm')) if p.is_file())
+    totals={'recordings':folder_bytes(data_dir/'recordings'),'imports':folder_bytes(data_dir/'imports'),'database':database}
+    meetings=[]
+    for row in store.meetings():
+        meta=read_metadata(row)
+        folders=meeting_files(meta,data_dir)
+        if not folders: continue
+        size=sum(folder_bytes(f) for f in folders)
+        active=row['status'] in ('processing','provisional') and classify(meta.get('worker_identity'))=='active'
+        meetings.append({'meeting':row['id'],'title':row['title'],'bytes':size,'active':active})
+    meetings.sort(key=lambda m:m['bytes'],reverse=True)
+    return {'totals':totals,'total':sum(totals.values()),'meetings':meetings}
+
+
+def register_import_digest(store, mid, digest, size=None):
+    """Merge original_digest (and original_size) into a meeting's metadata so later imports of the same file are recognized."""
+    import re
+    from .recovery import metadata as read_metadata
+    if not isinstance(digest,str) or not re.fullmatch(r'[0-9a-f]{64}',digest): raise ValueError('Geçersiz dosya özeti')
+    row=store.db.execute('SELECT * FROM meetings WHERE id=?',(mid,)).fetchone()
+    if not row: raise ValueError('Toplantı bulunamadı')
+    meta=read_metadata(row); meta['original_digest']=digest
+    if isinstance(size,int) and not isinstance(size,bool) and size>=0: meta['original_size']=size
+    with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),mid))
+    return {'registered':True}
+
+
 def delete_meeting(store, mid, data_dir):
     import shutil
     from .recovery import classify, metadata as read_metadata
@@ -152,6 +195,16 @@ def dispatch(request, db=None):
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
         if action=='delete_meeting':
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
+        if action=='storage_report':
+            return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
+        if action=='check_duplicate':
+            from .import_registry import digest_path,find_duplicate
+            source=Path(request['path'])
+            if not source.is_file(): raise ValueError('Ses dosyası bulunamadı')
+            digest=digest_path(source); size=source.stat().st_size
+            return {'duplicate':find_duplicate(store,digest,source.name,size),'digest':digest,'size':size}
+        if action=='register_import_digest':
+            return register_import_digest(store,request['meeting'],request.get('digest'),request.get('size'))
         if action=='export_analysis':
             current=memory.latest(request['meeting'])
             if not current:raise ValueError('Önce toplantıyı analiz edin')
