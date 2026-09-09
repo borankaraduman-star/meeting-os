@@ -288,9 +288,28 @@ def dispatch(request, db=None):
             return {'path':request.get('path'),'open_tasks':len(agenda['open_tasks']),'questions':len(agenda['questions']),'decisions':len(agenda['decisions']),'meetings':len(agenda['meetings'])}
         if action=='digest':
             from .digest import build_digest,render_digest
-            digest=build_digest(store,request.get('day'),request.get('owner') or 'Boran');text=render_digest(digest)
+            from . import glossary as G
+            digest=build_digest(store,request.get('day'),request.get('owner') or 'Boran',start=request.get('from'),end=request.get('to'),
+                mask_names=request.get('mask_names') is True,glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT) if request.get('mask_names') is True else None)
+            text=render_digest(digest)
             if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
-            return {'path':request.get('path'),'day':digest['day'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'meetings':len(digest['meetings'])}
+            return {'path':request.get('path'),'day':digest['day'],'from':digest['from'],'to':digest['to'],'range':digest['range'],'masked_names':digest['masked_names'],
+                    'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'risks':len(digest['risks']),'meetings':len(digest['meetings']),'groups':digest['groups']}
+        if action=='waiting_board':
+            from .waiting import build_waiting,render_waiting
+            board=build_waiting(store,request.get('owner') or 'Boran')
+            if request.get('path'): Path(request['path']).write_text(render_waiting(board),encoding='utf-8')
+            return {**board,'path':request.get('path')}
+        if action in ('decision_log','decision_log_export'):
+            from .decisions import decision_log,export_decision_log
+            from . import glossary as G
+            if action=='decision_log_export':
+                return export_decision_log(store,request['path'],query=request.get('query'),limit=request.get('limit',200),mask_names=request.get('mask_names') is True,
+                    glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT) if request.get('mask_names') is True else None)
+            return decision_log(store,request.get('query'),request.get('limit',200))
+        if action=='review_debt':
+            from .review import review_debt
+            return review_debt(store,request.get('days',7))
         if action in ('share_preview','share_export'):
             from .share import prepare_share
             from . import glossary as G
