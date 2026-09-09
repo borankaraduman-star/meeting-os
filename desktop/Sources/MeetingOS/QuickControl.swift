@@ -65,10 +65,10 @@ struct QuickMenu:View {
         Divider()
         Button(model.recording ? "Kaydı bitir  ⌃⌥R" : "Yeni kayıt  ⌃⌥R") { model.recording ? model.stop() : model.start() }.disabled(model.busy && !model.recording)
         if model.recording {
-            Button("Önemli an  ⌃⌥M") { model.markMoment("important") }
-            Button("Karar anı") { model.markMoment("decision") }
-            Button("Bana görev") { model.markMoment("task") }
-            Button("Sonra bak") { model.markMoment("later") }
+            Button("An  ⌃⌥M") { model.markMoment("important") }
+            Button("Karar") { model.markMoment("decision") }
+            Button("Görev") { model.markMoment("task") }
+            Button("Sonra") { model.markMoment("later") }
         }
         if let u=model.update, u.available { Divider(); Button((model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")+" · \(u.behind) değişiklik") { model.startUpdate() }.disabled(model.busy || model.recording || model.updating || model.zoomMeetingOpen) }
         Divider()

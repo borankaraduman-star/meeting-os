@@ -112,7 +112,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         if let handle=try? FileHandle(forWritingTo:url) { handle.seekToEndOfFile();handle.write(Data(line.utf8));try? handle.close() }
         else { try? line.write(to:url,atomically:true,encoding:.utf8) }
         markerCount+=1
-        activity="İşaretlendi · \(Marker.labels[kind] ?? "Önemli an") · \(String(format:"%02d:%02d",Int(seconds)/60,Int(seconds)%60))"
+        activity="İşaretlendi · \(Marker.labels[kind] ?? "An") · \(String(format:"%02d:%02d",Int(seconds)/60,Int(seconds)%60))"
     }
     @Published var showShare=false
     func loadScorecard() async {
@@ -292,17 +292,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard job==nil else { return }
         let result=dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
         let stored=meetings.first(where:{ $0.id==mid })?.metadata["cloud_mode"] != nil
-        activity="Ses OpenRouter’a gönderiliyor · Bu Mac’te model yüklenmiyor"
+        activity="Yazıya çevriliyor…"
         launch(CloudTranscription.finalizeArguments(meeting:mid,model:stored ? nil : model,output:result.path)) { [weak self] ok in
             guard let self else { return }
             defer { try? FileManager.default.removeItem(at:result) }
             if ok {
-                self.selected=mid;self.tab="transcript"
+                if self.selected==nil || self.selected==mid || (self.meeting?.status=="complete" && !NSApp.isActive) { self.selected=mid } else { self.pendingReady=mid }   // never yank the user away from what they are reading
                 let count=(try? Data(contentsOf:result)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] }?["segments"] as? Int ?? 0
                 if count==0 { self.activity="Kayıtta konuşma bulunmadı · analiz başlatılmadı" }
-                else { self.activity="Transkript OpenRouter’dan alındı · Konuşmacı adlarını kontrol edin"; if !NSApp.isActive { self.notifyDone("Transkript hazır","Konuşmacı adlarını Kontrol sekmesinden onaylayın.") }; if !self.requestedQuit { self.analyzeAutomatically(mid) } }
+                else { self.activity="Yazıya çevrildi · özet hazırlanıyor"; if !self.requestedQuit { self.analyzeAutomatically(mid) } }   // one notification, when the summary is ready too
             }
-            else { self.activity=self.jobCanceled ? "İşlem durduruldu · Ses ve tamamlanan parçalar korunuyor" : "OpenRouter işlemi tamamlanamadı · Tamamlanan parçalar korunuyor, ‘OpenRouter ile yazıya çevir’ ile sürdürün" }
+            else { self.activity=self.jobCanceled ? "İşlem durduruldu · Ses ve biten bölümler duruyor" : "Yazıya çevirme yarım kaldı · Ses ve biten bölümler duruyor; ‘Yazıya çevir’ ile sürdürün" }
         }
     }
     func loadCloudModels() async {
@@ -399,6 +399,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// A meeting that finished while the user was reading another one; the status line offers to open it.
+    @Published var pendingReady:String?
     var lastZoomState:(open:Bool,strict:Bool)=(false,false)
     /// Talk shares depend on rows only; computed once per row change instead of in the Özet body every poll.
     @Published private(set) var shares:[TalkShare]=[]

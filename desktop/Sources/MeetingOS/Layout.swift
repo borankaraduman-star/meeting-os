@@ -66,7 +66,7 @@ struct SidebarView:View {
                     VStack(alignment:.leading,spacing:6) {
                         Text("ÖNEMLİ AN İŞARETLE").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
                         HStack(spacing:6) {
-                            Button("⌘M An") { model.markMoment("important") }.keyboardShortcut("m",modifiers:.command)
+                            Button("An") { model.markMoment("important") }.keyboardShortcut("m",modifiers:.command)
                             Button("Karar") { model.markMoment("decision") }.keyboardShortcut("m",modifiers:[.command,.shift])
                             Button("Görev") { model.markMoment("task") }.keyboardShortcut("m",modifiers:[.command,.option])
                             Button("Sonra") { model.markMoment("later") }.keyboardShortcut("m",modifiers:[.command,.control])
@@ -177,6 +177,10 @@ struct DetailView:View {
             }
             Divider()
             if !model.error.isEmpty { ErrorBanner(model:model) }
+            if let ready=model.pendingReady, let m=model.meetings.first(where:{ $0.id==ready }) {
+                HStack(spacing:10) { Image(systemName:"checkmark.circle.fill").foregroundStyle(MeetingStyle.accent); Text("Toplantı hazır · \(m.title)").font(.callout); Spacer(); Button("Aç") { model.selected=ready; model.pendingReady=nil }.controlSize(.small).accessibilityIdentifier("openReady"); Button { model.pendingReady=nil } label: { Image(systemName:"xmark") }.buttonStyle(.plain).foregroundStyle(.secondary) }
+                    .padding(.horizontal,24).padding(.vertical,8).background(MeetingStyle.accent.opacity(0.08))
+            }
             Group {
                 if model.meetings.isEmpty && !model.recording { WelcomeView(model:model) } else {
                 switch model.tab {

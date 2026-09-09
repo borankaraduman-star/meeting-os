@@ -6,10 +6,10 @@ struct WelcomeView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
             Text("Hoş geldin").font(.system(size:27,weight:.bold,design:.rounded))
-            Text("Meeting OS Zoom toplantılarını kaydeder, OpenRouter’da Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
+            Text("Meeting OS Zoom toplantılarını kaydeder, bulutta Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
             VStack(alignment:.leading,spacing:12) {
                 step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya yüzen paneldeki “Bitir”.")
-                step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses OpenRouter’a gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol kuyruğu hazır olur.")
+                step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses buluta gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol kuyruğu hazır olur.")
                 step("3","Bir kez adlandır, sonra tanınır","Kontrol sekmesinde konuşanlara adını ver; ses profili kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır.")
             }.padding(18).meetingCard().frame(maxWidth:640)
             HStack(spacing:10) {

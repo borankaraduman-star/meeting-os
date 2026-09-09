@@ -51,7 +51,7 @@ final class FillerTests:XCTestCase {
 final class MarkerTests:XCTestCase {
     func testMarkersParseMatchBlocksAndSerialize() {
         let ms=Markers.parse(["markers":[["seconds":61.4,"kind":"decision"],["seconds":"x","kind":"task"],["seconds":200.0,"kind":"later"]]])
-        XCTAssertEqual(ms.map(\.kind),["decision","later"]);XCTAssertEqual(ms[0].label,"Karar anı");XCTAssertEqual(ms[0].time,"01:01")
+        XCTAssertEqual(ms.map(\.kind),["decision","later"]);XCTAssertEqual(ms[0].label,"Karar");XCTAssertEqual(ms[0].time,"01:01")
         XCTAssertEqual(Markers.inBlock(ms,start:30,end:60.8).map(\.kind),["decision"])   // one-second grace
         XCTAssertTrue(Markers.inBlock(ms,start:70,end:100).isEmpty)
         let line=Markers.line(seconds:12.345,kind:"task",now:Date(timeIntervalSince1970:0))

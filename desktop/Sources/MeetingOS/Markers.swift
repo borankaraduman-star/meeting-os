@@ -5,9 +5,9 @@ import Foundation
 struct Marker:Identifiable, Equatable {
     let seconds:Double; let kind:String
     var id:String { "\(kind)@\(seconds)" }
-    var label:String { Marker.labels[kind] ?? "Önemli an" }
+    var label:String { Marker.labels[kind] ?? "An" }
     var time:String { String(format:"%02d:%02d",Int(seconds)/60,Int(seconds)%60) }
-    static let labels=["important":"Önemli an","decision":"Karar anı","task":"Bana görev","later":"Sonra bak"]
+    static let labels=["important":"An","decision":"Karar","task":"Görev","later":"Sonra"]
 }
 
 enum Markers {

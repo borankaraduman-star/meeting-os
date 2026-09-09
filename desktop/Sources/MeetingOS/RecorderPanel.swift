@@ -30,8 +30,8 @@ struct RecorderPanelView:View {
             SignalDot(label:"Sis",state:model.captureDots["system"] ?? "unknown")
             if model.markerCount>0 { Text("⌘M \(model.markerCount)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary).help("İşaretlenen an sayısı") }
             Spacer()
-            Button("An") { model.markMoment("important") }.help("Önemli an (⌃⌥M)")
-            Button("Karar") { model.markMoment("decision") }.help("Karar anı (⌘⇧M)")
+            Button("An") { model.markMoment("important") }.help("An (⌃⌥M)")
+            Button("Karar") { model.markMoment("decision") }.help("Karar (⌘⇧M)")
             Button("Bitir") { model.stop() }.buttonStyle(.borderedProminent).tint(.red).help("Kaydı bitir (⌃⌥R)")
         }.controlSize(.small).padding(.horizontal,12).padding(.vertical,8).frame(width:400,height:56).preferredColorScheme(model.colorScheme)
     }
