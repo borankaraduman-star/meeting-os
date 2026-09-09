@@ -130,8 +130,8 @@ extension Model {
         guard zoomOpen != jobBackgrounded else { return }
         jobBackgrounded=zoomOpen
         setpriority(PRIO_DARWIN_PROCESS,id_t(p.processIdentifier),zoomOpen ? PRIO_DARWIN_BG : 0)   // 0 = PRIO_DARWIN_NORMAL (not exported to Swift)
-        if zoomOpen { try? Data().write(to:lowPriorityFlag); activity="Zoom toplantısı açıldı · arka plan işi yavaşlatıldı, tek yükleyici" }
-        else { try? FileManager.default.removeItem(at:lowPriorityFlag); activity="Zoom toplantısı bitti · arka plan işi normal hızda" }
+        if zoomOpen { try? Data().write(to:lowPriorityFlag); activity=recording ? "Kayıt sürüyor · arka plan işi yavaşlatıldı, tek yükleyici" : "Zoom toplantısı açıldı · arka plan işi yavaşlatıldı, tek yükleyici" }
+        else { try? FileManager.default.removeItem(at:lowPriorityFlag); activity="Toplantı bitti · arka plan işi normal hızda" }
     }
 
     /// One-shot self-test through the bridge (helper --self-test, ffmpeg, sqlite quick_check, disk, key…). Never while recording.

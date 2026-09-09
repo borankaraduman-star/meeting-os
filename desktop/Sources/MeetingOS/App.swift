@@ -273,7 +273,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
             if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
-            applyLivePriority(zoomOpen:zoomState.strict)
+            applyLivePriority(zoomOpen:zoomState.strict || recordProcess != nil)   // any live recording (Zoom, Meet, in person) gets the same protection
             heartbeatIfDue()
             updateBlockedHint()
             idleRetryIfDue()
@@ -310,7 +310,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();recorder.jobProgress="İşlem başlatılıyor" }
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
