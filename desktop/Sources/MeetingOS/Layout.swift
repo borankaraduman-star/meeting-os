@@ -46,7 +46,7 @@ struct SidebarView:View {
                 .help(model.recording ? "Kaydı bitir (⌘R)" : "Yeni kayıt (⌘R)")
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
-                Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
+                Button { model.showOpenRouter=true } label: { Label("Ses dosyası aç…",systemImage:"waveform.badge.plus").frame(maxWidth:.infinity) }.controlSize(.small).disabled(model.busy).help("Bir ses dosyasını OpenRouter ile yazıya çevirip toplantı olarak ekler")
                 if model.zoomMeetingOpen && !model.recording { Label("Zoom toplantısı açık · ⌃⌥R ile kaydı başlat",systemImage:"video.fill").font(.caption).foregroundStyle(MeetingStyle.accent) }
                 if model.update?.available != true {
                     HStack(spacing:6) {
@@ -131,7 +131,7 @@ struct SidebarView:View {
                     .accessibilityIdentifier("diagnosticsButton")
                     .accessibilityLabel("Tanılama raporu kaydet")
                 Divider()
-                Button { Task { await model.settings() } } label:{ Label("Sözlük ve ses profilleri",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.keyboardShortcut(",",modifiers:.command).help("Ayarlar (⌘,)")
+                Button { Task { await model.settings() } } label:{ Label("Ayarlar",systemImage:"slider.horizontal.3").frame(maxWidth:.infinity,alignment:.leading) }.keyboardShortcut(",",modifiers:.command).help("Ayarlar (⌘,)")
                     .buttonStyle(.plain).font(.callout).frame(minHeight:28)
                     .accessibilityIdentifier("settingsButton")
                     .accessibilityLabel("Ayarlar: sözlük ve ses profilleri")
@@ -178,13 +178,14 @@ struct DetailView:View {
             Divider()
             if !model.error.isEmpty { ErrorBanner(model:model) }
             Group {
+                if model.meetings.isEmpty && !model.recording { WelcomeView(model:model) } else {
                 switch model.tab {
                 case "analysis": AnalysisView(m:model)
                 case "actions": ActionsView(m:model)
                 case "review": ReviewView(model:model)
                 case "memory": MemoryView(m:model)
                 default: TranscriptView(model:model)
-                }
+                } }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
             Divider()
             HStack {
@@ -534,6 +535,34 @@ struct FlowChips:View {
             ForEach(items,id:\.self) { name in
                 Button(name) { pick(name) }.buttonStyle(.bordered).controlSize(.small).lineLimit(1).accessibilityIdentifier("attendee-\(name)")
             }
+        }
+    }
+}
+
+
+/// First launch on a fresh Mac: three steps and nothing else.
+struct WelcomeView:View {
+    @ObservedObject var model:Model
+    var body:some View {
+        VStack(alignment:.leading,spacing:18) {
+            Text("Hoş geldin").font(.system(size:27,weight:.bold,design:.rounded))
+            Text("Meeting OS Zoom toplantılarını kaydeder, OpenRouter’da Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
+            VStack(alignment:.leading,spacing:12) {
+                step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya yüzen paneldeki “Bitir”.")
+                step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses OpenRouter’a gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol kuyruğu hazır olur.")
+                step("3","Bir kez adlandır, sonra tanınır","Kontrol sekmesinde konuşanlara adını ver; ses profili kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır.")
+            }.padding(18).meetingCard().frame(maxWidth:640)
+            HStack(spacing:10) {
+                Button { model.start() } label: { Label("Yeni kayıt",systemImage:"record.circle") }.buttonStyle(.borderedProminent).disabled(model.busy)
+                Button("Ayarlar → Kurulum durumu") { Task { await model.settings() } }
+            }
+            Text("İzinler eksikse Kurulum durumu kartı gösterir ve tek tıkla ister.").font(.caption).foregroundStyle(.secondary)
+        }.padding(32).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).accessibilityIdentifier("welcome")
+    }
+    func step(_ n:String,_ title:String,_ text:String)->some View {
+        HStack(alignment:.top,spacing:12) {
+            Text(n).font(.caption.weight(.bold)).frame(width:22,height:22).background(MeetingStyle.accent.opacity(0.15),in:Circle()).foregroundStyle(MeetingStyle.accent)
+            VStack(alignment:.leading,spacing:2) { Text(title).font(.headline); Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true) }
         }
     }
 }
