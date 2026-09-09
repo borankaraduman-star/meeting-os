@@ -138,6 +138,8 @@ def parser():
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
+    dg=sub.add_parser('digest',help='End-of-day personal digest: your tasks, open questions and decisions from one day, with sources'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--owner',default='Boran'); dg.add_argument('--output',type=Path)
+    sh=sub.add_parser('share',help='Share preview of one meeting as Markdown; names can be masked, decisions-only mode'); sh.add_argument('--meeting',required=True); sh.add_argument('--mask-names',action='store_true'); sh.add_argument('--only-decisions',action='store_true'); sh.add_argument('--no-transcript',action='store_true'); sh.add_argument('--no-summary',action='store_true'); sh.add_argument('--include-segments',help='Comma-separated segment ids'); sh.add_argument('--exclude-segments',help='Comma-separated segment ids'); sh.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
     rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
@@ -149,7 +151,7 @@ def main(supervised=False):
     args=parser().parse_args()
     os.umask(0o077)
     try:
-        cloud_llm=getattr(args,'openrouter_model',None) or args.command in ('glossary','reports','update','document')
+        cloud_llm=getattr(args,'openrouter_model',None) or args.command in ('glossary','reports','update','document','digest','share')
         if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask','openrouter-import') and not cloud_llm:
             from .supervisor import run_guarded
             def interrupted(pid):
@@ -296,6 +298,19 @@ def main(supervised=False):
                 text=render_agenda(build_agenda(store,args.limit))
                 if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output)})
                 else: print(text)
+            elif args.command=='digest':
+                from .digest import build_digest,render_digest
+                digest=build_digest(store,args.day,args.owner);text=render_digest(digest)
+                if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output),'day':digest['day'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'meetings':len(digest['meetings'])})
+                else: print(text)
+            elif args.command=='share':
+                from .share import prepare_share
+                from . import glossary as G
+                ids=lambda s:[int(x) for x in s.split(',') if x.strip()] if s else None
+                kinds=[k for k,off in (('transcript',args.no_transcript),('summary',args.no_summary)) if not off]
+                result=prepare_share(store,args.meeting,include_segments=ids(args.include_segments),exclude_segments=ids(args.exclude_segments),mask_names=args.mask_names,only_decisions=args.only_decisions,kinds=kinds,glossary=G.load(DATA_DIR,ROOT))
+                if args.output: args.output.write_text(result['text'],encoding='utf-8');output({'path':str(args.output),'masked_names':result['masked_names'],'segments':result['segments']})
+                else: print(result['text'])
             elif args.command=='quality':
                 from . import quality
                 if args.action=='report': output(quality.report(store))

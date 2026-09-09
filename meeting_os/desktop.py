@@ -250,6 +250,21 @@ def dispatch(request, db=None):
             agenda=build_agenda(store,int(request.get('limit',5)));text=render_agenda(agenda)
             if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
             return {'path':request.get('path'),'open_tasks':len(agenda['open_tasks']),'questions':len(agenda['questions']),'decisions':len(agenda['decisions']),'meetings':len(agenda['meetings'])}
+        if action=='digest':
+            from .digest import build_digest,render_digest
+            digest=build_digest(store,request.get('day'),request.get('owner') or 'Boran');text=render_digest(digest)
+            if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
+            return {'path':request.get('path'),'day':digest['day'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'meetings':len(digest['meetings'])}
+        if action in ('share_preview','share_export'):
+            from .share import prepare_share
+            from . import glossary as G
+            kinds=request.get('kinds') if isinstance(request.get('kinds'),list) else ['transcript','summary']
+            result=prepare_share(store,request['meeting'],include_segments=request.get('include_segments'),exclude_segments=request.get('exclude_segments'),
+                mask_names=request.get('mask_names') is True,only_decisions=request.get('only_decisions') is True,kinds=kinds,glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT))
+            if action=='share_export':
+                Path(request['path']).write_text(result['text'],encoding='utf-8')
+                return {'path':request['path'],'masked_names':result['masked_names'],'segments':result['segments']}
+            return {'text':result['text'],'masked_names':result['masked_names'],'segments':result['segments']}
         if action=='quality_report':
             from .quality import report
             return report(store)

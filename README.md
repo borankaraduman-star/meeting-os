@@ -56,6 +56,8 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 - **Kontrol** sekmesi bütün metni okumak yerine şüpheli yerleri sıralar: onay bekleyen isim (“Sol Üst?” → Onayla), isimsiz konuşmacı, çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev. Altında kimlik karnesi (otomatik doğru/yanlış, öneri onay/red, kaçırılan, metin düzeltmesi) vardır.
 - **Okuma görünümü** aynı kişinin ardışık bölümlerini paragraf yapar, “hı hı/tabii” araya girişlerini katlar, dolgu seslerini gizler (kapatılabilir). **Bölümler** ham kayıtları gösterir.
 - **Görevlerim → Sonraki toplantı gündemi…** son 5 toplantının açık görev, soru ve kararlarından kaynaklı bir Markdown taslak kaydeder; hiçbir yere gönderilmez.
+- **Görevlerim → Gün sonu özeti…** o gün kaydedilen toplantılardan yalnız sana düşenleri kaydeder: verdiğin sözler (sahibi Boran olan görevler), senden beklenen cevaplar (açık sorular), alınan kararlar ve toplantı listesi; her madde `Kaynak #` alıntısıyla gelir. CLI: `digest --day 2026-09-09 --output ozet.md`.
+- **Dışa aktar → Paylaş…** paylaşmadan önce önizleme gösterir: **İsimleri maskele** konuşmacı adlarını ve sözlükteki `kişi` girdilerini dışa verilen metinde “Kişi A, Kişi B…” yapar (kayıtlı veri değişmez), **Yalnız kararlar** sadece karar bölümünü bırakır, **Transkripti dahil et** kapatılabilir. CLI: `share --meeting ID --mask-names --only-decisions --output paylasim.md`.
 - Kayıt sırasında ekran uykusu engellenir (sistem sesi yakalama ekran uyuyunca düşer). Mikrofon hoparlör yankısı yüklenmeden atlanır.
 - CLI: `quality report` (düzeltmelerinizden WER ve kimlik karnesi), `quality compare --model … --allow-upload` (modelleri kendi düzeltmelerinize karşı ölçer), `agenda --output gundem.md`.
 

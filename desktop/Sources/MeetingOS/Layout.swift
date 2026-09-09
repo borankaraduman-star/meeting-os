@@ -20,6 +20,7 @@ struct MeetingContent:View {
         .sheet(isPresented:$m.showOpenRouter) { OpenRouterImportView(model:m) }
         .sheet(item:$m.editRow) { row in EditSegmentSheet(model:m,row:row) }
         .sheet(isPresented:$m.showSettings) { SettingsSheet(model:m) }
+        .sheet(isPresented:$m.showShare) { ShareSheet(model:m) }
     }
 }
 
@@ -206,6 +207,7 @@ struct DetailHeader:View {
                     Button("Müşteri talebi…") { Task { await model.exportDocument(kind:"customer") } }
                     Button("Claude Code istemi…") { Task { await model.exportDocument(kind:"claude") } }
                 }.disabled(model.meeting?.status != "complete" || model.busy)
+                Button("Paylaş…") { model.showShare=true }.accessibilityIdentifier("shareMenuItem")
             }
             .disabled(model.selected==nil)
             .accessibilityIdentifier("exportMenu")
