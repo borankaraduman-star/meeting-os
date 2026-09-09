@@ -8,10 +8,12 @@ struct TranscriptView:View {
             // pinned the main thread at 100% CPU after scrolling or renaming a speaker. Meetings have
             // at most a few hundred rows, so eager layout is cheap and deterministic.
             VStack(alignment:.leading,spacing:(model.readingMode && model.search.isEmpty) ? 2 : 20) {
-                if CloudTranscription.hiddenEchoCount(model.rows)>0 {
+                let hiddenEcho=CloudTranscription.hiddenEchoCount(model.rows)
+                let marks=Markers.parse(model.meeting?.metadata ?? [:])   // once per body, not once per paragraph
+                if hiddenEcho>0 {
                     HStack(spacing:8) {
                         Image(systemName:"speaker.wave.2").foregroundStyle(.secondary)
-                        Text(model.showEchoRows ? "Mikrofon yankısı bölümleri gösteriliyor · hoparlörden mikrofona düşen aynı konuşma, ayrı kişi değil" : "\(CloudTranscription.hiddenEchoCount(model.rows)) mikrofon yankısı bölümü gizlendi · hoparlörden mikrofona düşen aynı konuşma").font(.caption).foregroundStyle(.secondary)
+                        Text(model.showEchoRows ? "Mikrofon yankısı bölümleri gösteriliyor · hoparlörden mikrofona düşen aynı konuşma, ayrı kişi değil" : "\(hiddenEcho) mikrofon yankısı bölümü gizlendi · hoparlörden mikrofona düşen aynı konuşma").font(.caption).foregroundStyle(.secondary)
                         Spacer()
                         Button(model.showEchoRows ? "Gizle" : "Göster") { model.showEchoRows.toggle() }.font(.caption).accessibilityIdentifier("toggleEchoRows")
                     }
@@ -34,12 +36,13 @@ struct TranscriptView:View {
 
                     ForEach(Array(blocks.enumerated()),id:\.element.id) { i,block in
                         if i>0, blocks[i-1].label != block.label { Divider().padding(.leading,62).padding(.vertical,4) }
-                        TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label).id(block.id)
+                        TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label,marks:Markers.inBlock(marks,start:block.start,end:block.end),hideFillers:model.hideFillers,profiles:model.profiles.map(\.name),attendees:model.calendarAttendees).equatable().id(block.id)
                     }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
-                    ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable().id(row.id) }
-                    if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
+                    let rows=model.filteredRows
+                    ForEach(rows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable().id(row.id) }
+                    if rows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 }
             }.padding(24)
         }
@@ -94,7 +97,7 @@ struct TranscriptRow:View, Equatable {
 }
 
 
-struct TranscriptBlockView:View {
+struct TranscriptBlockView:View, Equatable {
     let model:Model
     let block:TranscriptBlock
     let canPlay:Bool
@@ -102,12 +105,20 @@ struct TranscriptBlockView:View {
     let showAsides:Bool
     var highlighted:Bool=false
     var continued:Bool=false   // same speaker as the previous paragraph: no repeated name header
+    var marks:[Marker]=[]
+    var hideFillers:Bool=true
+    var profiles:[String]=[]
+    var attendees:[String]=[]
+    /// Everything the body reads is a parameter, so an unrelated publish on Model leaves the paragraph untouched.
+    static func ==(a:TranscriptBlockView,b:TranscriptBlockView)->Bool {
+        a.model===b.model && a.block==b.block && a.canPlay==b.canPlay && a.canEdit==b.canEdit && a.showAsides==b.showAsides && a.highlighted==b.highlighted && a.continued==b.continued && a.marks==b.marks && a.hideFillers==b.hideFillers && a.profiles==b.profiles && a.attendees==b.attendees
+    }
     /// Rename this speaker's whole cluster from the paragraph header: saved profiles, calendar attendees, or the full editor.
     var speakerMenu:some View {
         Menu {
-            let known=Array(Set(model.profiles.map(\.name))).sorted()
+            let known=Array(Set(profiles)).sorted()
             if !known.isEmpty { Section("Ses profilleri") { ForEach(known,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
-            if !model.calendarAttendees.isEmpty { Section("Takvim katılımcıları") { ForEach(model.calendarAttendees,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
+            if !attendees.isEmpty { Section("Takvim katılımcıları") { ForEach(attendees,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
             Button("Yeni isim…") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }
         } label: { HStack(spacing:4) { Text(block.label).font(.headline).lineLimit(1); Image(systemName:"chevron.down").font(.caption2).foregroundStyle(.secondary) } }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Bu konuşmacının bütün paragraflarını adlandır").accessibilityIdentifier("speakerMenu-\(block.id)")
@@ -133,12 +144,11 @@ struct TranscriptBlockView:View {
                     Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.small).accessibilityIdentifier("editBlock-\(block.id)")
                 } }
                 HStack(alignment:.top,spacing:8) {
-                    Text(model.hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
+                    Text(hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
                     if continued { Spacer(minLength:0); Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.mini).buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("editBlock-\(block.id)") }
                 }
                 let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")
                 if !notices.isEmpty { Label(notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
-                let marks=Markers.inBlock(Markers.parse(model.meeting?.metadata ?? [:]),start:block.start,end:block.end)
                 if !marks.isEmpty {
                     HStack(spacing:6) { ForEach(marks) { m in Label("\(m.label) · \(m.time)",systemImage:"bookmark.fill").font(.caption).foregroundStyle(MeetingStyle.accent).padding(.horizontal,8).padding(.vertical,4).background(MeetingStyle.accent.opacity(0.12),in:Capsule()) } }
                 }

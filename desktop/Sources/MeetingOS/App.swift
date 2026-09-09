@@ -11,6 +11,8 @@ struct Meeting: Identifiable {
         let st=d["stats"] as? [String:Any] ?? [:]; segments=st["segments"] as? Int ?? 0; seconds=st["seconds"] as? Double ?? 0; speakers=st["speakers"] as? Int ?? 0; names=st["names"] as? [String] ?? [] }
 }
 extension Meeting {
+    /// Cheap change detector for the sidebar: publishing an identical list every poll re-rendered the whole window.
+    var fingerprint:String { "\(id)|\(title)|\(status)|\(displayStatus)|\(recoveryState)|\(segments)|\(Int(seconds))|\(speakers)|\(metadata.count)|\((metadata["keep"] as? Bool) ?? false)|\((metadata["markers"] as? [Any])?.count ?? 0)|\((capture["state"] as? String) ?? "")|\(Int((capture["seconds"] as? Double) ?? 0))" }
     var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
     /// Sidebar line under the title: what the finished recording holds, or a plain "no speech" for an empty one.
     var sidebarDetail:String {
@@ -39,7 +41,7 @@ struct Row: Identifiable, Equatable {
     }
     var time:String { flags.contains("untimed") ? "" : String(format:"%02d:%02d",Int(start)/60,Int(start)%60) }
 }
-struct Profile:Identifiable { let name:String; let model:String; let samples:Int; var id:String { name+model } }
+struct Profile:Identifiable, Equatable { let name:String; let model:String; let samples:Int; var id:String { name+model } }
 struct Runtime:Decodable { let python:String; let repo:String }
 
 func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
@@ -57,7 +59,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 }
 
 @MainActor final class Model:ObservableObject {
-    @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks() } }; @Published var profiles:[Profile]=[]
+    @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
     @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
@@ -200,7 +202,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     @Published var microphoneHint=""
     func refresh() async {
-        microphoneHint=MicrophoneHint.current()
+        if recording || pollTick%3==0 { let hint=MicrophoneHint.current(); if hint != microphoneHint { microphoneHint=hint } }   // IOKit query: every poll while recording, every third otherwise
         if let process=job, let bytes=ResourceGuard.footprint(pid:process.processIdentifier), bytes>ResourceGuard.budget(physical:ProcessInfo.processInfo.physicalMemory) { stopForResources() }
         if job != nil, let started=jobStarted {
             let elapsed=Int(Date().timeIntervalSince(started))
@@ -216,8 +218,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
         do {
             let result=try await request(["action":"snapshot","meeting":wanted,"segments_hash":wanted==lastSegmentsMeeting ? segmentsHash : "","signals":pollTick%3==0])   // chunk-level signal analysis every 6 s, not every 2 s
-            meetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
-            profiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
+            let nextMeetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
+            if nextMeetings.map(\.fingerprint) != meetings.map(\.fingerprint) { meetings=nextMeetings }   // publish only on change
+            let nextProfiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
+            if nextProfiles != profiles { profiles=nextProfiles }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
                 if active.capture["signals"] != nil {   // polls without signal analysis keep the last reading
@@ -230,7 +234,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            let zoomState=ZoomWatch.state(); let zoomNow=zoomState.open
+            if recording || job != nil || pollTick%3==0 { lastZoomState=ZoomWatch.state() }   // window-list scan: every poll only while something runs
+            let zoomState=lastZoomState; let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
             zoomMeetingOpen=zoomNow
@@ -441,6 +446,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    var lastZoomState:(open:Bool,strict:Bool)=(false,false)
+    /// Talk shares depend on rows only; computed once per row change instead of in the Özet body every poll.
+    @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
     @Published var questions:[QuestionGroup]=[]; @Published var scorePeriod:[String:Any]?; @Published var scoreMeetings:[ScoreMeeting]=[]
     func loadQuestions(query:String) async {
