@@ -2,19 +2,11 @@
 decisions, risks and the tasks opened/closed in the period, with sources. Draft only — nothing is sent anywhere and
 nothing stored is changed; masking happens in the rendered text only."""
 from datetime import date, datetime, timezone
+from .insights import build_masker, local_day, prepared_header, source_line
 from .memory import Memory
 from .metrics import normalize
 
 STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı'}
-
-
-def local_day(created):
-    """Calendar day of an ISO UTC timestamp in the Mac's local time zone; None when unparsable."""
-    if not isinstance(created, str): return None
-    try: dt = datetime.fromisoformat(created)
-    except ValueError: return None
-    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone().date()
 
 
 def parse_day(day):
@@ -81,9 +73,7 @@ def build_digest(store, day=None, owner='Boran', start=None, end=None, mask_name
 
 def mask_digest(store, digest, meetings, glossary=None):
     """Replace speaker and glossary person names in the rendered digest only; stored rows are untouched."""
-    from .share import NameMasker, name_groups
-    rows = [r for m in meetings for r in store.display_segments(m['id'])]
-    masker = NameMasker(name_groups(rows, glossary)); mask = masker.mask
+    masker = build_masker(store, meetings, glossary); mask = masker.mask
     def item(i):
         i['text'] = mask(i.get('text') or ''); i['title'] = mask(i.get('title') or '')
         i['evidence'] = [{**e, 'quote': mask(e.get('quote') or '')} for e in i.get('evidence') or []]
@@ -105,10 +95,6 @@ def mask_digest(store, digest, meetings, glossary=None):
     return digest
 
 
-def _source(evidence):
-    return f"  - Kaynak #{evidence.get('segment_id')}: “{evidence.get('quote', '')}”"
-
-
 def _task_line(t):
     return f"- {t['title']} · {t.get('owner') or 'sahibi belirsiz'} · {t.get('due_text') or 'tarih yok'} · {STATE_LABELS.get(t.get('state'), t.get('state'))}" + (' · GÜNCEL DEĞİL' if t.get('stale') else '')
 
@@ -124,7 +110,7 @@ def render_groups(digest):
             if not g[key]: lines.append(f'- {empty}')
             for i in g[key]:
                 lines.append(f"- {i['text']}")
-                for e in (i.get('evidence') or [])[:1]: lines.append(_source(e))
+                for e in (i.get('evidence') or [])[:1]: lines.append(source_line(e))
         lines.append('**Bu dönemde kapanan görevler**')
         if not g['closed']: lines.append('- Bu dönemde kapanan görev yok.')
         for t in g['closed']: lines.append(_task_line(t))
@@ -136,27 +122,27 @@ def render_groups(digest):
 
 def render_digest(digest):
     day = digest['day']; first = digest.get('from', day); last = digest.get('to', day); ranged = bool(digest.get('range'))
-    lines = [f'# Dönem özeti · {first} → {last}' if ranged else f'# Gün sonu özeti · {day}', '',
-             f"Hazırlanma: {datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M')} · {digest['owner']} için · {len(digest['meetings'])} toplantı"
-             + (f" · isimler maskelendi ({digest['masked_names']})" if digest.get('masked_names') else ''), '',
-             ('Bu özet yalnız o dönemde kaydedilen toplantılardan' if ranged else 'Bu özet yalnız o gün kaydedilen toplantılardan')
-             + ' çıkarılmıştır; dışarı otomatik gönderilmez. Her maddeyi kaynağıyla doğrulayın.', '']
+    lines = prepared_header(f'Dönem özeti · {first} → {last}' if ranged else f'Gün sonu özeti · {day}',
+                            f"{digest['owner']} için · {len(digest['meetings'])} toplantı"
+                            + (f" · isimler maskelendi ({digest['masked_names']})" if digest.get('masked_names') else ''),
+                            ('Bu özet yalnız o dönemde kaydedilen toplantılardan' if ranged else 'Bu özet yalnız o gün kaydedilen toplantılardan')
+                            + ' çıkarılmıştır; dışarı otomatik gönderilmez. Her maddeyi kaynağıyla doğrulayın.')
     lines += ['## Verdiğin sözler']
     if not digest['tasks']: lines.append('- Bu dönemde sana düşen kayıtlı görev yok.' if ranged else '- Bugün sana düşen kayıtlı görev yok.')
     for t in digest['tasks']:
         title = t.get('meeting_title') or ''
         lines.append(f"- {t['title']} · {t.get('due_text') or 'tarih yok'} · {STATE_LABELS.get(t.get('state'), t.get('state'))}" + (' · GÜNCEL DEĞİL' if t.get('stale') else '') + f'  ({title})')
-        for e in (t.get('payload') or {}).get('evidence', [])[:1]: lines.append(_source(e))
+        for e in (t.get('payload') or {}).get('evidence', [])[:1]: lines.append(source_line(e))
     lines += ['', '## Senden beklenen cevaplar']
     if not digest['questions']: lines.append('- Kayıtlı açık soru yok.')
     for q in digest['questions']:
         lines.append(f"- {q['text']}  ({q['title']})")
-        for e in q['evidence'][:1]: lines.append(_source(e))
+        for e in q['evidence'][:1]: lines.append(source_line(e))
     lines += ['', '## Değişen/alınan kararlar']
     if not digest['decisions']: lines.append('- Kayıtlı karar yok.')
     for d in digest['decisions']:
         lines.append(f"- {d['text']}  ({d['title']})")
-        for e in d['evidence'][:1]: lines.append(_source(e))
+        for e in d['evidence'][:1]: lines.append(source_line(e))
     if ranged: lines += render_groups(digest)
     lines += ['', '## Dönemdeki toplantılar' if ranged else '## Bugünkü toplantılar']
     if not digest['meetings']: lines.append('- Bu dönemde kayıtlı toplantı yok.' if ranged else '- Bu gün kayıtlı toplantı yok.')

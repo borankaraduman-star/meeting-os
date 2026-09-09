@@ -1,7 +1,7 @@
 """Next-meeting preparation: open tasks, unanswered questions and decisions from recent meetings, with sources.
 Draft only — nothing is sent anywhere."""
 import json
-from datetime import datetime, timezone
+from .insights import prepared_header, source_line
 from .memory import Memory
 
 
@@ -21,8 +21,8 @@ def build_agenda(store, limit=5):
 
 
 def render_agenda(agenda):
-    lines=['# Sonraki toplantı gündemi (taslak)','',f"Hazırlanma: {datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M')} · Kaynak toplantılar: "+', '.join(m['title'] for m in agenda['meetings']),'',
-           'Bu taslak yalnız kayıtlı toplantılardan çıkarılmıştır; dışarı otomatik gönderilmez. Her maddeyi kaynağıyla doğrulayın.','']
+    lines=prepared_header('Sonraki toplantı gündemi (taslak)','Kaynak toplantılar: '+', '.join(m['title'] for m in agenda['meetings']),
+                          'Bu taslak yalnız kayıtlı toplantılardan çıkarılmıştır; dışarı otomatik gönderilmez. Her maddeyi kaynağıyla doğrulayın.')
     lines+=['## Açık görevler']
     if not agenda['open_tasks']: lines.append('- Açık görev yok.')
     for t in agenda['open_tasks']:
@@ -31,11 +31,11 @@ def render_agenda(agenda):
     if not agenda['questions']: lines.append('- Kayıtlı açık soru yok.')
     for q in agenda['questions']:
         lines.append(f"- {q['text']}  ({q['title']})")
-        for e in q['evidence'][:1]: lines.append(f"  - Kaynak #{e.get('segment_id')}: “{e.get('quote','')}”")
+        for e in q['evidence'][:1]: lines.append(source_line(e))
     lines+=['','## Alınan kararlar (hatırlatma)']
     if not agenda['decisions']: lines.append('- Kayıtlı karar yok.')
     for d in agenda['decisions']:
         lines.append(f"- {d['text']}  ({d['title']})")
-        for e in d['evidence'][:1]: lines.append(f"  - Kaynak #{e.get('segment_id')}: “{e.get('quote','')}”")
+        for e in d['evidence'][:1]: lines.append(source_line(e))
     lines+=['','## Bu toplantıda konuşulacaklar','- (buraya yaz)','']
     return '\n'.join(lines)

@@ -6,6 +6,7 @@ import difflib
 import json
 import re
 from collections import Counter
+from .insights import latest_analyses
 from .memory import Memory, normalize
 
 STOP = {'ve', 'ile', 'için', 'bir', 'bu', 'şu', 'o', 'da', 'de', 'mi', 'mı', 'mu', 'mü', 'the', 'a', 'to', 'of', 'in', 'on', 'yapmak', 'etmek', 'olmak', 'hazırlamak', 'kontrol'}
@@ -91,13 +92,8 @@ def decision_history(store, mid, threshold=0.45):
     if not latest: return []
     current = latest['payload'].get('decisions', [])
     if not current: return []
-    previous = []
-    for m in store.meetings():
-        if m['id'] == mid: continue
-        other = memory.latest(m['id'])
-        if not other: continue
-        for d in other['payload'].get('decisions', []):
-            previous.append({'meeting': m['id'], 'meeting_title': m['title'], 'created': m['created'], 'text': d.get('text'), 'evidence': d.get('evidence', [])[:1]})
+    previous = [{'meeting': m['id'], 'meeting_title': m['title'], 'created': m['created'], 'text': d.get('text'), 'evidence': d.get('evidence', [])[:1]}
+                for m, other in latest_analyses(store, memory) if m['id'] != mid for d in other['payload'].get('decisions', [])]
     prepared = [prepare(p['text']) for p in previous]
     sm = difflib.SequenceMatcher(None)
     out = []
