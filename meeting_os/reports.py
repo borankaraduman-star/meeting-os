@@ -15,6 +15,16 @@ ICLOUD = Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs'
 DEFAULT_SUBDIR = 'MeetingOS-Reports'
 
 
+REAL_DATA_DIR = Path.home() / 'Library/Application Support/MeetingOS'
+
+
+def default_report_dir(data_dir):
+    """iCloud Drive only for the real data folder; any other folder (tests, private copies) stays local."""
+    try: is_real = Path(data_dir).resolve() == REAL_DATA_DIR.resolve()
+    except OSError: is_real = False
+    return str(ICLOUD / DEFAULT_SUBDIR) if is_real and ICLOUD.is_dir() else str(Path(data_dir) / DEFAULT_SUBDIR)
+
+
 def settings_path(data_dir): return Path(data_dir) / SETTINGS_FILE
 
 
@@ -23,7 +33,7 @@ def load_settings(data_dir):
     try: data = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
     except ValueError: data = {}
     if not isinstance(data, dict): data = {}
-    defaults = {'share_reports': True, 'share_text': False, 'report_dir': str(ICLOUD / DEFAULT_SUBDIR) if ICLOUD.is_dir() else str(Path(data_dir) / DEFAULT_SUBDIR), 'auto_update': False}
+    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False}
     return {**defaults, **{k: v for k, v in data.items() if k in defaults}}
 
 
@@ -37,8 +47,18 @@ def save_settings(data_dir, changes):
     return current
 
 
+def host_name():
+    """Stable, file-safe Mac name (System Settings → local hostname); falls back to the network hostname."""
+    import subprocess
+    try:
+        name = subprocess.run(['scutil', '--get', 'LocalHostName'], capture_output=True, text=True, timeout=3).stdout.strip()
+        if name: return name
+    except (OSError, subprocess.TimeoutExpired): pass
+    return socket.gethostname().split('.')[0]
+
+
 def host_dir(settings):
-    return Path(settings['report_dir']) / socket.gethostname().split('.')[0]
+    return Path(settings['report_dir']) / host_name()
 
 
 def _errors(log_path, limit=8):
@@ -76,7 +96,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         payload = json.loads(analysis['payload'])
         analysis_summary = {'model': analysis['model'], 'counts': {k: len(payload.get(k, [])) for k in ('summary', 'decisions', 'risks', 'questions', 'actions')}, 'coverage': payload.get('coverage'), 'dropped_quotes': payload.get('dropped_quotes'), 'created': analysis['created']}
     report = {
-        'report_version': 1, 'host': socket.gethostname().split('.')[0], 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
+        'report_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
         'written': datetime.now(timezone.utc).isoformat(), 'meeting': row['id'], 'title': row['title'], 'created': row['created'], 'status': row['status'],
         'engine': meta.get('engine'), 'model': meta.get('model'), 'cloud_mode': meta.get('cloud_mode'),
         'duration_seconds': round(max((r['end'] for r in rows), default=0.0), 1), 'segments': len(rows), 'words': sum(len((r.get('text') or '').split()) for r in rows),

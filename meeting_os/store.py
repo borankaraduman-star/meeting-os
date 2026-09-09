@@ -21,6 +21,7 @@ class Store:
     def __init__(self, path):
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.path = path
         self.db = sqlite3.connect(path)
         path.chmod(0o600)
         self.db.row_factory = sqlite3.Row

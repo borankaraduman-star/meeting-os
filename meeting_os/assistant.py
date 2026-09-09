@@ -32,7 +32,7 @@ def analyze(store,mid,llm=None,force=False):
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
     from .reports import write_meeting_report
     from . import __version__
-    write_meeting_report(store,mid,DATA_DIR,version=__version__)
+    write_meeting_report(store,mid,Path(store.path).parent if getattr(store,'path',None) else DATA_DIR,version=__version__)   # the store's own folder: tests never touch the real data dir
     return saved
 
 
