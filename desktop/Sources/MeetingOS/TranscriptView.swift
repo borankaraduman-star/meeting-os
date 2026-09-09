@@ -7,7 +7,7 @@ struct TranscriptView:View {
             // Plain VStack: LazyVStack's height estimation oscillated with long wrapped paragraphs and
             // pinned the main thread at 100% CPU after scrolling or renaming a speaker. Meetings have
             // at most a few hundred rows, so eager layout is cheap and deterministic.
-            VStack(alignment:.leading,spacing:20) {
+            VStack(alignment:.leading,spacing:(model.readingMode && model.search.isEmpty) ? 2 : 20) {
                 if CloudTranscription.hiddenEchoCount(model.rows)>0 {
                     HStack(spacing:8) {
                         Image(systemName:"speaker.wave.2").foregroundStyle(.secondary)
@@ -38,7 +38,10 @@ struct TranscriptView:View {
                         }
                     }
 
-                    ForEach(blocks) { block in TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false).id(block.id) }
+                    ForEach(Array(blocks.enumerated()),id:\.element.id) { i,block in
+                        if i>0, blocks[i-1].label != block.label { Divider().padding(.leading,62).padding(.vertical,4) }
+                        TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label).id(block.id)
+                    }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
                     ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable().id(row.id) }
@@ -104,6 +107,7 @@ struct TranscriptBlockView:View {
     let canEdit:Bool
     let showAsides:Bool
     var highlighted:Bool=false
+    var continued:Bool=false   // same speaker as the previous paragraph: no repeated name header
     /// Rename this speaker's whole cluster from the paragraph header: saved profiles, calendar attendees, or the full editor.
     var speakerMenu:some View {
         Menu {
@@ -118,23 +122,26 @@ struct TranscriptBlockView:View {
         HStack(alignment:.top,spacing:14) {
             if canPlay {
                 Button { model.play(block.lead) } label:{
-                    VStack(spacing:8) {
-                        Image(systemName:"play.circle.fill").font(.title2).foregroundStyle(MeetingStyle.accent)
+                    HStack(spacing:4) {
+                        Image(systemName:"play.fill").font(.caption2).foregroundStyle(MeetingStyle.accent)
                         Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    }.frame(width:48)
-                }.buttonStyle(.plain).help("Bu paragrafı dinle").accessibilityIdentifier("playBlock-\(block.id)")
-            } else { Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width:48) }
-            VStack(alignment:.leading,spacing:7) {
-                HStack {
+                    }.frame(width:48,alignment:.leading)
+                }.buttonStyle(.plain).help("Bu paragrafı dinle").accessibilityIdentifier("playBlock-\(block.id)").padding(.top,continued ? 2 : 3)
+            } else { Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width:48,alignment:.leading) }
+            VStack(alignment:.leading,spacing:5) {
+                if !continued { HStack {
                     if canEdit && block.lead.source != "mic" && block.lead.flags.contains("cloud_diarization") { speakerMenu } else { Text(block.label).font(.headline).lineLimit(1) }
                     if !block.lead.suggested.isEmpty && block.lead.name.isEmpty {
                         Button("Onayla") { Task { await model.confirmSuggestion(block.lead) } }.controlSize(.small).disabled(!canEdit).help("Ses profiline benziyor; tek tıkla adı onaylayın").accessibilityIdentifier("confirmSuggestion-\(block.id)")
                     }
                     Spacer(minLength:12)
                     if block.rows.count>1 { Text("\(block.rows.count) bölüm").font(.caption2).foregroundStyle(.secondary) }
-                    Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).accessibilityIdentifier("editBlock-\(block.id)")
+                    Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.small).accessibilityIdentifier("editBlock-\(block.id)")
+                } }
+                HStack(alignment:.top,spacing:8) {
+                    Text(model.hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
+                    if continued { Spacer(minLength:0); Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.mini).buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("editBlock-\(block.id)") }
                 }
-                Text(model.hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
                 let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")
                 if !notices.isEmpty { Label(notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
                 let marks=Markers.inBlock(Markers.parse(model.meeting?.metadata ?? [:]),start:block.start,end:block.end)
@@ -149,6 +156,6 @@ struct TranscriptBlockView:View {
                     }.fixedSize(horizontal:false,vertical:true)
                 }
             }.frame(maxWidth:.infinity,alignment:.leading)
-        }.padding(20).meetingCard().overlay(RoundedRectangle(cornerRadius:14).stroke(MeetingStyle.accent.opacity(highlighted ? 0.9 : 0),lineWidth:2)).background(MeetingStyle.accent.opacity(highlighted ? 0.08 : 0),in:RoundedRectangle(cornerRadius:14)).animation(.easeOut(duration:0.4),value:highlighted)
+        }.padding(.vertical,continued ? 4 : 10).padding(.horizontal,12).background(MeetingStyle.accent.opacity(highlighted ? 0.10 : 0),in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(MeetingStyle.accent.opacity(highlighted ? 0.9 : 0),lineWidth:2)).animation(.easeOut(duration:0.4),value:highlighted)
     }
 }
