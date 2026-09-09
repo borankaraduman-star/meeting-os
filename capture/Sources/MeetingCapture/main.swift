@@ -69,13 +69,19 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
     let writers: [SCStreamOutputType: ChunkWriter]
     let origin: Double
     var failure: Error?
+    /// Stream-level stop (sleep, display change, ScreenCaptureKit hiccup): the run loop rebuilds the stream instead of ending the meeting.
+    var streamError: Error?
+    var lastSample = Date()
     init(directory: URL, seconds: Double) {
         origin = CMClockGetTime(CMClockGetHostTimeClock()).seconds
         writers = [.audio: ChunkWriter(directory, "system", seconds), .microphone: ChunkWriter(directory, "mic", seconds)]
     }
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        queue.async { self.failure = error; emit(["event":"error", "message":error.localizedDescription]) }
+        queue.async { self.streamError = error; emit(["event":"stream_stopped", "message":error.localizedDescription]) }
     }
+    func takeStreamError() -> Error? { queue.sync { let e = streamError; streamError = nil; return e } }
+    func secondsSinceLastSample() -> Double { queue.sync { Date().timeIntervalSince(lastSample) } }
+    func markSample() { lastSample = Date() }
     func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
         guard let writer = writers[type], sample.isValid, CMSampleBufferDataIsReady(sample),
               let description = sample.formatDescription,
@@ -88,6 +94,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
         guard status == noErr else { emit(["event":"error", "message":"PCM copy failed: \(status)"]); return }
         let time = sample.presentationTimeStamp.seconds - origin
         guard time.isFinite, time > -1 else { emit(["event":"error", "message":"Invalid capture clock"]); return }
+        lastSample = Date()
         do { try writer.append(pcm, time: time) }
         catch { failure = error; emit(["event":"error", "message":error.localizedDescription]) }
     }
@@ -108,7 +115,10 @@ func remainingBytes(_ directory:URL) -> Int64? {
     let values=try? FileManager.default.attributesOfFileSystem(forPath:directory.path)
     return (values?[.systemFreeSize] as? NSNumber)?.int64Value
 }
-func diskError() -> NSError { NSError(domain:"MeetingCapture",code:6,userInfo:[NSLocalizedDescriptionKey:"Disk alanı azaldı. Ses dosyaları korundu; devam etmek için yer açın."]) }
+func diskError() -> NSError { NSError(domain:"MeetingCapture",code:6,userInfo:[NSLocalizedDescriptionKey:"Disk doldu. Ses dosyaları korundu; devam etmek için yer açın."]) }
+let diskWarnBytes: Int64 = 3_000_000_000   // journal a warning the app can show; recording continues
+let diskStopBytes: Int64 = 400_000_000     // stop only when the disk is genuinely about to fill
+let diskStartBytes: Int64 = 600_000_000
 func run() async throws {
     if CommandLine.arguments.contains("--help") {
         print("MeetingCapture --output DIR [--seconds 60] [--chunk-seconds 12] [--self-test]")
@@ -137,7 +147,7 @@ func run() async throws {
         }
         return
     }
-    if let available=remainingBytes(directory), available < 1_200_000_000 { throw diskError() }
+    if let available=remainingBytes(directory), available < diskStartBytes { throw diskError() }
     guard await AVCaptureDevice.requestAccess(for: .audio) else {
         throw NSError(domain:"MeetingCapture", code:2, userInfo:[NSLocalizedDescriptionKey:"Microphone access denied. Enable MeetingCapture in System Settings > Privacy & Security > Microphone."])
     }
@@ -154,11 +164,40 @@ func run() async throws {
     config.minimumFrameInterval = CMTime(value:1, timescale:1)
     config.showsCursor = false
     let capture = Capture(directory: directory, seconds: chunk)
-    let stream = SCStream(filter: filter, configuration: config, delegate: capture)
-    try stream.addStreamOutput(capture, type: .audio, sampleHandlerQueue: capture.queue)
-    try stream.addStreamOutput(capture, type: .microphone, sampleHandlerQueue: capture.queue)
+    func makeStream() throws -> SCStream {
+        let stream = SCStream(filter: filter, configuration: config, delegate: capture)
+        try stream.addStreamOutput(capture, type: .audio, sampleHandlerQueue: capture.queue)
+        try stream.addStreamOutput(capture, type: .microphone, sampleHandlerQueue: capture.queue)
+        return stream
+    }
+    var stream = try makeStream()
     try await stream.startCapture()
+    capture.markSample()
     emit(["event":"started", "directory":directory.path, "clock":"hostTime", "sources":["mic", "system"]])
+    let restartGate = DispatchQueue(label:"meeting-os.restart")
+    var restarting = false
+    var restarts = 0
+    /// Rebuild the stream after a stop error or a 20 s silence from ScreenCaptureKit (sleep/wake, display changes). Three tries, then give up.
+    func restartStream(reason: String) {
+        restartGate.sync {
+            guard !restarting else { return }
+            restarting = true
+        }
+        Task {
+            defer { restartGate.sync { restarting = false } }
+            if restarts >= 3 { capture.fail(NSError(domain:"MeetingCapture", code:7, userInfo:[NSLocalizedDescriptionKey:"Ses akışı üç kez yeniden kurulamadı: \(reason)"])); return }
+            restarts += 1
+            emit(["event":"restarting", "attempt":restarts, "reason":reason])
+            try? await stream.stopCapture()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            do {
+                let fresh = try makeStream(); try await fresh.startCapture(); stream = fresh; capture.markSample()
+                emit(["event":"restarted", "attempt":restarts])
+            } catch {
+                emit(["event":"stream_stopped", "message":"yeniden kurulamadı: \(error.localizedDescription)"])
+            }
+        }
+    }
     signal(SIGINT, SIG_IGN); signal(SIGTERM, SIG_IGN)
     let duration = Double(option("--seconds") ?? "86400") ?? 86400
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -174,11 +213,18 @@ func run() async throws {
         let deadline = Date().addingTimeInterval(max(1,duration))
         timer.schedule(deadline:.now()+0.25, repeating:0.25)
         var diskCheck=Date.distantPast
+        var warnedDisk=false
         timer.setEventHandler {
             if Date().timeIntervalSince(diskCheck)>5 {
                 diskCheck=Date()
-                if let available=remainingBytes(directory), available < 1_000_000_000 { capture.fail(diskError()) }
+                if let available=remainingBytes(directory) {
+                    if available < diskStopBytes { capture.fail(diskError()) }
+                    else if available < diskWarnBytes && !warnedDisk { warnedDisk=true; emit(["event":"low_disk", "free_bytes":available]) }
+                    else if available >= diskWarnBytes { warnedDisk=false }
+                }
             }
+            if let err = capture.takeStreamError() { restartStream(reason: err.localizedDescription) }
+            else if !restarting && capture.secondsSinceLastSample() > 20 { restartStream(reason: "20 sn ses gelmedi") }
             if Date() >= deadline || capture.getFailure() != nil { stop() }
         }
         sigint.resume(); sigterm.resume(); timer.resume()

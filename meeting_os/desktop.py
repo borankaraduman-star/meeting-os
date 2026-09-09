@@ -37,9 +37,12 @@ def capture_state(metadata, include_signal=False):
         if e.get('event')=='chunk': sources[e['source']]=max(sources.get(e['source'],0),e['start']+e['duration'])
     state='waiting'
     for e in events:
-        if e.get('event') in ('started','chunk'): state='capturing'
+        if e.get('event') in ('started','chunk','restarted'): state='capturing'
         elif e.get('event') in ('error','stopped'):state=e['event']
     result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
+    restarts=sum(1 for e in events if e.get('event')=='restarted'); low=[e for e in events if e.get('event')=='low_disk']
+    if restarts: result['restarts']=restarts
+    if low: result['low_disk_bytes']=low[-1].get('free_bytes')
     if include_signal:
         from .source_signal import inspect_signal
         latest={e.get('source'):e for e in events if e.get('event')=='chunk'}
