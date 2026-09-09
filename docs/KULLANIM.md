@@ -1,4 +1,4 @@
-# Meeting OS — Kullanım kılavuzu (1.2.24)
+# Meeting OS — Kullanım kılavuzu (1.2.26)
 
 Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Hiçbir şey kendiliğinden dışarı gönderilmez: bütün dışa aktarımlar dosya olarak kaydedilir.
 
@@ -69,8 +69,13 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 
 *Özet ya da Kontrol’den “Bölüme git” / bir alıntıya tıklayınca transkript o paragrafa kaydırılır ve 2,5 saniye yeşil çerçeveyle vurgulanır; çevresi görünür kalır.*
 - **Okuma** görünümü belge gibidir: zaman solda, aynı kişinin ardışık paragrafları başlıksız sürer, konuşmacı değişiminde ayraç, dolgu sesleri (“eee”) gizli (kapatılabilir), kısa onaylar (“hı hı”) katlı. **Bölümler** ham kayıtları gösterir.
+![İsimler kartı: transkriptin üstünde “İsimler · 4 kişi bekliyor”; her satırda ▶ dinle, isim alanı (yaz ve ⏎) ve takvim/profil menüsü. Öneri varsa “Ad” onayla düğmesi; birden çok öneri varsa “Hepsini onayla”.](img/names.jpg)
+
+*İsimler kartı: transkriptin üstünde “İsimler · 4 kişi bekliyor”; her satırda ▶ dinle, isim alanı (yaz ve ⏎) ve takvim/profil menüsü. Öneri varsa “Ad” onayla düğmesi; birden çok öneri varsa “Hepsini onayla”.*
+- **İsimler kartı** (1.2.26): isimsiz ya da öneri bekleyen her ses için tek satır. ▶ ile dinleyin, ismi yazıp ⏎’ye basın ya da menüden seçin; öneri varsa tek tıkla onaylayın. Adlandırma bütün kümeye uygulanır ve ses profili kaydedilir. Bütün isimler bitince bayat özet kendiliğinden yenilenir.
+- **Geri al (⌘Z):** son adlandırmayı etiketleriyle ve öğrenilen ses örneğiyle birlikte geri alır (Son durum kartında “Geri al” düğmesi).
 - Konuşmacı adına tıklayın → menü: ses profilleri, takvim katılımcıları, “Yeni isim…”. Seçim o kişinin bütün paragraflarını adlandırır ve profili kaydeder.
-- **Düzenle** metin ve isim düzeltir; “Ses profilini kaydet” için önce bölümü dinleyip temiz olduğunu onaylayın. **Neden bu isim?** benzerlik puanlarını gösterir.
+- **Düzelt** tek alan, tek eylem: ismi yazın, “Adlandır ve öğren”. Metin düzeltme, temiz örnekten profil kaydetme ve **Neden bu isim?** (benzerlik puanları) **Gelişmiş** altındadır.
 - ▶ paragrafı dinletir. **⌘F** bu konuşmada arar; Esc temizler.
 - Mikrofon yankısı bölümleri gizlidir; üstteki satırdan gösterilebilir.
 
@@ -150,7 +155,12 @@ Tek arama alanı; bölüme göre çalışır:
 - **Kurulum durumu:** izinler, anahtar, sözlük, sürüm, rapor klasörü; uygulama yoklama gecikmesi (p50/p95).
 
 ## 8. Ses profilleri (kişi tanıma)
-Bir kişiyi bir kez adlandırın (Kontrol’de, konuşmacı menüsünden ya da Düzenle ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur; yanlış adlandırmayı düzeltmek profili düzeltir. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı doğrudan “Boran”dır.
+Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden ya da Düzelt ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur.
+
+**Öğrenme döngüsü (1.2.26):**
+- Yanlış otomatik ismi düzelttiğinizde o kümenin yanlış kişiye beslediği ses örneği silinir ve bu ses o kişi için “reddedildi” olarak hatırlanır; bir daha ona eşleşmez.
+- Aynı kelimeyi iki farklı toplantıda aynı şekilde düzelttiyseniz bu bir kural olur: sonraki transkriptlerde kendiliğinden uygulanır, paragraf işaretlenir ve geri alınabilir (geri alma kuralı kapatır). Sözlükteki bir terime denk gelen kurallar yanlış-duyma önerisi olarak sunulur.
+- Kontrol → Karne altındaki “Öğrenme” satırı bu haftanın kendiliğinden tanıma oranını ve 1000 kelimede düzeltme sayısını geçen haftayla karşılaştırır. Birkaç hafta düzenli düzeltmeyle oran yükselmelidir; yükselmiyorsa `quality replay` çıktısını inceleyin. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı doğrudan “Boran”dır.
 
 ## 9. Sözlük
 `iCloud Drive/MeetingOS-Shared/glossary.jsonl` (her satır `{"term": …, "expansion": …, "category": …}`); `~/Library/Application Support/MeetingOS/glossary.jsonl` Mac’e özel ek. Üç yerde kullanılır: bulut STT’ye yazım ipucu (prompt kabul eden modellerde), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham transkript kendiliğinden değişmez. Slack agent istemi: `docs/GLOSSARY.md`.
@@ -162,7 +172,7 @@ Geliştirme bu Mac’te, kullanım diğer Mac’te. Diğer Mac toplantı yokken 
 OpenRouter yalnız yükleme başına ücretlendirir: MAI-Transcribe 2 ≈ $0,10/saat; analiz gpt-4.1-mini birkaç cent. Ayarlar → Güncelleme ve raporlar → **Bulut maliyeti** gerçek faturayı gösterir.
 
 ## 12. Klavye kısayolları
-Her yerden: ⌃⌥R kayıt, ⌃⌥M an. Uygulamada: ⌘1–⌘5 sekmeler, ⌘F konuşmada ara, ⌘⇧F hafızada ara, ⌘, Ayarlar, Esc aramayı temizle; kayıt sırasında ⌘M / ⌘⇧M / ⌘⌥M / ⌘⌃M işaretler.
+Her yerden: ⌃⌥R kayıt, ⌃⌥M an. Uygulamada: ⌘1–⌘5 sekmeler, ⌘F konuşmada ara, ⌘⇧F hafızada ara, ⌘Z son adlandırmayı geri al, ⌘, Ayarlar, Esc aramayı temizle; kayıt sırasında ⌘M / ⌘⇧M / ⌘⌥M / ⌘⌃M işaretler.
 
 ## 13. CLI (`.venv/bin/python -m meeting_os …`)
 `openrouter-import dosya --no-local`, `openrouter-finalize <toplantı>`, `analyze <toplantı> --openrouter-model openai/gpt-4.1-mini`, `prepare`, `quality report|compare`, `agenda --output gundem.md`, `digest [--from --to --mask-names] --output`, `waiting`, `decisions [--query]`, `questions [--query]`, `scorecard [--from --to]`, `review-debt --days 7`, `share`, `glossary import|summary`, `reports summarize|heartbeat`, `update check|start|status`, `document`.
