@@ -193,6 +193,11 @@ def dispatch(request, db=None):
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action=='agenda':
+            from .agenda import build_agenda,render_agenda
+            agenda=build_agenda(store,int(request.get('limit',5)));text=render_agenda(agenda)
+            if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
+            return {'path':request.get('path'),'open_tasks':len(agenda['open_tasks']),'questions':len(agenda['questions']),'decisions':len(agenda['decisions']),'meetings':len(agenda['meetings'])}
         if action=='quality_report':
             from .quality import report
             return report(store)

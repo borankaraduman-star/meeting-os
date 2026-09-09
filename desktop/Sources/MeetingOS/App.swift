@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import AppKit
 import AVFoundation
 
@@ -84,6 +85,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var meeting:Meeting? { meetings.first { $0.id==selected } }
     @Published var showEchoRows=false
     @Published var review:[ReviewItem]=[]
+    @Published var scorecard=""
+    /// Draft agenda for the next meeting from recent open tasks, questions and decisions; saved where the user chooses.
+    func exportAgenda() async {
+        let panel=NSSavePanel();panel.nameFieldStringValue="sonraki-toplanti-gundemi.md";panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"agenda","path":url.path,"limit":5]); activity="Gündem taslağı kaydedildi · \(r["open_tasks"] as? Int ?? 0) açık görev, \(r["questions"] as? Int ?? 0) soru, \(r["decisions"] as? Int ?? 0) karar" }
+        catch { self.error=error.localizedDescription }
+    }
+    func loadScorecard() async {
+        guard let r=try? await request(["action":"quality_report"]), let i=r["identity"] as? [String:Any] else { scorecard=""; return }
+        let ok=i["auto_correct"] as? Int ?? 0, wrong=i["auto_wrong"] as? Int ?? 0, conf=i["suggestion_confirmed"] as? Int ?? 0, rej=i["suggestion_rejected"] as? Int ?? 0, missed=i["missed_known"] as? Int ?? 0, edits=r["text_edits"] as? Int ?? 0
+        scorecard="Kimlik karnesi · otomatik \(ok) doğru / \(wrong) yanlış · öneri \(conf) onay / \(rej) red · \(missed) kaçırılan · \(edits) metin düzeltmesi"
+    }
     @Published var analysisModel=UserDefaults.standard.string(forKey:"cloudAnalysisModel") ?? "openai/gpt-4.1-mini" { didSet { UserDefaults.standard.set(analysisModel,forKey:"cloudAnalysisModel") } }
     /// analyze/prepare/ask run through OpenRouter whenever transcription does; the local Qwen path stays for local mode.
     var cloudAnalysisArguments:[String] { transcriptionMode=="openrouter" ? ["--openrouter-model",analysisModel] : [] }

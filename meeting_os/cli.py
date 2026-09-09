@@ -137,6 +137,7 @@ def parser():
     a=sub.add_parser('search'); a.add_argument('query'); a.add_argument('--speaker')
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
+    g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
     sub.add_parser('mcp')
     return p
 
@@ -243,6 +244,11 @@ def main(supervised=False):
                 from .retry_workspaces import cleanup_workspaces
                 output(cleanup_workspaces(RetryStore(store)))
             elif args.command=='retry': output(run_retry(args,store))
+            elif args.command=='agenda':
+                from .agenda import build_agenda,render_agenda
+                text=render_agenda(build_agenda(store,args.limit))
+                if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output)})
+                else: print(text)
             elif args.command=='quality':
                 from . import quality
                 if args.action=='report': output(quality.report(store))

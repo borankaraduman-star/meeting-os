@@ -105,6 +105,18 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(report['meetings'][0]['bytes'],500);self.assertEqual(report['meetings'][2]['bytes'],50)
    self.assertFalse(report['meetings'][0]['active']);self.assertTrue(report['meetings'][1]['active'])
    self.assertTrue((rec/'mic.wav').exists());self.assertTrue((data/'imports'/'orphan'/'a.wav').exists())
+ def test_agenda_collects_open_tasks_questions_and_decisions_with_sources(self):
+  from meeting_os.memory import Memory
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Sprint planı',{})
+   sid=s.add_segment(mid,Segment(0,5,'Yarın raporu ben çıkaracağım. iOS önce mi gidecek?','system','S0'));s.status(mid,'complete')
+   mem=Memory(s);payload={'summary':[],'decisions':[{'text':'Önce iOS','evidence':[{'segment_id':sid,'quote':'iOS önce'}]}],'risks':[],
+     'questions':[{'text':'Rapor ne zaman?','evidence':[{'segment_id':sid,'quote':'Yarın raporu'}]}],
+     'actions':[{'title':'Raporu çıkarmak','owner':'Boran','due_text':'yarın','evidence':[{'segment_id':sid,'quote':'Yarın raporu ben çıkaracağım'}]}]}
+   mem.save_analysis(mid,mem.current_hash(mid),'test-model',payload);s.close()
+   out=Path(tmp)/'gundem.md';r=dispatch({'action':'agenda','path':str(out)},db)
+   self.assertEqual((r['open_tasks'],r['questions'],r['decisions'],r['meetings']),(1,1,1,1))
+   text=out.read_text();self.assertIn('Raporu çıkarmak',text);self.assertIn('Rapor ne zaman?',text);self.assertIn('Önce iOS',text);self.assertIn('Kaynak #',text)
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

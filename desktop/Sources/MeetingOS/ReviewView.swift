@@ -27,6 +27,7 @@ struct ReviewView:View {
         ScrollView { VStack(alignment:.leading,spacing:14) {
             HStack { Text("Kontrol kuyruğu").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary) }
             Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
+            if !model.scorecard.isEmpty { Label(model.scorecard,systemImage:"chart.bar").font(.caption).foregroundStyle(.secondary).help("Düzeltmelerinizden biriken yerel kalite seti; model eğitilmez, iyileşme ölçülür") }
             if model.review.isEmpty { ContentUnavailableView("Kontrol gerektiren bir şey yok",systemImage:"checkmark.seal",description:Text("Konuşmacı adları, çakışan konuşmalar ve görev sahipleri için şüpheli bir bölüm bulunmadı.")) }
             ForEach(model.review) { item in
                 VStack(alignment:.leading,spacing:8) {
@@ -55,6 +56,6 @@ struct ReviewView:View {
                 }.padding(18).meetingCard()
             }
         }.padding(24) }
-        .task(id:model.selected) { await model.loadReview() }
+        .task(id:model.selected) { await model.loadReview(); await model.loadScorecard() }
     }
 }
