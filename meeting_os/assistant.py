@@ -1,5 +1,6 @@
 """Local analysis, grounded memory and reviewed draft preparation. No outbound tools."""
-import json,hashlib,sys,uuid
+import json
+import re,hashlib,sys,uuid
 from pathlib import Path
 from .memory import Memory,now
 from .intelligence import analyze_rows,fingerprint,parse_json,validate_record
@@ -30,10 +31,31 @@ def analyze(store,mid,llm=None,force=False):
     glossary=analysis_context(load_glossary(DATA_DIR,ROOT))
     result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None)
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
+    auto_title(store,mid,result)
     from .reports import write_meeting_report
     from . import __version__
     write_meeting_report(store,mid,Path(store.path).parent if getattr(store,'path',None) else DATA_DIR,version=__version__)   # the store's own folder: tests never touch the real data dir
     return saved
+
+
+DEFAULT_TITLE=re.compile(r'^(\w{3} \d{1,2}, \d{4} at \d{1,2}:\d{2}\s?[AP]M|\d{1,2} \w{3} \d{4} \d{2}:\d{2}|OpenRouter toplantısı|Live meeting)$')
+
+def auto_title(store,mid,result):
+    """A meeting still carrying its timestamp title gets a short title from the first summary bullet.
+    User-chosen titles are never touched; the timestamp stays in the created column."""
+    row=store.db.execute('SELECT title FROM meetings WHERE id=?',(mid,)).fetchone()
+    if not row or not DEFAULT_TITLE.match((row['title'] or '').replace('\u202f',' ').strip()): return None
+    bullets=[i.get('text') for i in result.get('summary',[]) if i.get('text')]
+    if not bullets: return None
+    text=re.sub(r'\s+',' ',bullets[0]).strip().rstrip('.')
+    words=text.split()
+    title=''
+    for w in words:
+        if len(title)+len(w)+1>64: break
+        title=(title+' '+w).strip()
+    if len(title)<12: return None
+    with store.db: store.db.execute('UPDATE meetings SET title=? WHERE id=?',(title,mid))
+    return title
 
 
 def route(title):

@@ -227,6 +227,15 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(dispatch({'action':'snapshot'},db)['meetings'][0]['title'],'Sprint planlama')
    with self.assertRaises(ValueError):dispatch({'action':'rename_meeting','meeting':mid,'title':'   '},db)
    with self.assertRaises(ValueError):dispatch({'action':'rename_meeting','meeting':'yok','title':'x'},db)
+ def test_auto_title_replaces_only_timestamp_titles(self):
+  from meeting_os.assistant import auto_title
+  with tempfile.TemporaryDirectory() as tmp:
+   s=Store(Path(tmp)/'db')
+   a=s.create_meeting('Sep 9, 2026 at 5:14\u202fAM',{});b=s.create_meeting('9 Eyl 2026 14:05',{});c_=s.create_meeting('Sprint planı',{})
+   res={'summary':[{'text':'Ödeme adımındaki hata nedeniyle dönüşümün düştüğü ve yarın düzeltme çıkılacağı konuşuldu.'}]}
+   self.assertEqual(auto_title(s,a,res),'Ödeme adımındaki hata nedeniyle dönüşümün düştüğü ve yarın')
+   self.assertTrue(auto_title(s,b,res));self.assertIsNone(auto_title(s,c_,res));self.assertIsNone(auto_title(s,a,{'summary':[]}))
+   titles={r['id']:r['title'] for r in s.meetings()};self.assertEqual(titles[c_],'Sprint planı');s.close()
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):
