@@ -482,6 +482,9 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
                 metadata['identity_error']='Bellek baskısı; ses profili eşleştirmesi atlandı' if isinstance(exc,(MemoryPressureError,ResourceProbeError)) else 'Ses profili eşleştirmesi yapılamadı'
             with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(metadata),mid))
             store.status(mid,'complete');emit('complete')
+            from .reports import write_meeting_report
+            from . import __version__
+            write_meeting_report(store,mid,data_dir,version=__version__)
             return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources)}
         except BaseException:
             store.status(mid,'incomplete');raise

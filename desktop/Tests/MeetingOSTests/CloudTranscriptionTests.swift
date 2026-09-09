@@ -58,6 +58,17 @@ final class MarkerTests:XCTestCase {
         XCTAssertTrue(line.contains("\"kind\":\"task\""));XCTAssertTrue(line.contains("12.3"));XCTAssertTrue(line.contains("1970-01-01"))
     }
 }
+final class UpdaterTests:XCTestCase {
+    func testHeadlinesAndSettingsRoundTrip() {
+        let u=UpdateInfo.parse(["available":true,"behind":3,"subjects":["Fix a","Fix b"],"local":"aaa","remote":"bbb"])
+        XCTAssertEqual(u.headline,"Yeni sürüm hazır · 3 değişiklik · Fix a")
+        XCTAssertEqual(UpdateInfo.parse(["available":false,"local":"aaa"]).headline,"Güncel (aaa)")
+        XCTAssertEqual(UpdateInfo.parse(["available":false,"dirty":true]).headline,"Yerel değişiklikler var; otomatik güncelleme kapalı")
+        XCTAssertEqual(UpdateInfo.parse(["error":"GitHub’a ulaşılamadı"]).headline,"GitHub’a ulaşılamadı")
+        var s=ReportSettings.parse(["share_reports":false,"share_text":true,"auto_update":true,"report_dir":"/x"]); s.shareText=false
+        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x"] as NSDictionary)
+    }
+}
 final class CloudTranscriptionTests:XCTestCase {
     func testOpenRouterModeRecordsWithoutLivePreview() {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))

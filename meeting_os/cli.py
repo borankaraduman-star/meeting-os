@@ -139,6 +139,8 @@ def parser():
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
+    rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir')
+    up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
     sub.add_parser('mcp')
     return p
 
@@ -146,7 +148,7 @@ def main(supervised=False):
     args=parser().parse_args()
     os.umask(0o077)
     try:
-        cloud_llm=getattr(args,'openrouter_model',None) or args.command=='glossary'
+        cloud_llm=getattr(args,'openrouter_model',None) or args.command in ('glossary','reports','update')
         if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask','openrouter-import') and not cloud_llm:
             from .supervisor import run_guarded
             def interrupted(pid):
@@ -245,6 +247,21 @@ def main(supervised=False):
                 from .retry_workspaces import cleanup_workspaces
                 output(cleanup_workspaces(RetryStore(store)))
             elif args.command=='retry': output(run_retry(args,store))
+            elif args.command=='reports':
+                from . import reports
+                if args.action=='summarize': output(reports.summarize(reports.load_settings(DATA_DIR)['report_dir']))
+                elif args.action=='settings':
+                    changes={}
+                    for kv in args.set:
+                        k,_,v=kv.partition('=');changes[k]=(v.lower() in ('1','true','evet','on')) if k!='report_dir' else v
+                    output(reports.save_settings(DATA_DIR,changes) if changes else reports.load_settings(DATA_DIR))
+                else:
+                    if not args.meeting: raise ValueError('--meeting gerekli')
+                    from . import __version__
+                    output({'path':reports.write_meeting_report(store,args.meeting,DATA_DIR,version=__version__)})
+            elif args.command=='update':
+                from . import updater
+                output(updater.check(ROOT) if args.action=='check' else (updater.start(ROOT,DATA_DIR) if args.action=='start' else updater.status(DATA_DIR)))
             elif args.command=='glossary':
                 from . import glossary as G
                 if args.action=='import':

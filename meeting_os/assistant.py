@@ -29,7 +29,11 @@ def analyze(store,mid,llm=None,force=False):
     from .cli import DATA_DIR, ROOT
     glossary=analysis_context(load_glossary(DATA_DIR,ROOT))
     result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None)
-    return mem.save_analysis(mid,digest,llm.model_id,result)
+    saved=mem.save_analysis(mid,digest,llm.model_id,result)
+    from .reports import write_meeting_report
+    from . import __version__
+    write_meeting_report(store,mid,DATA_DIR,version=__version__)
+    return saved
 
 
 def route(title):

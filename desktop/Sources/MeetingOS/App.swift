@@ -170,6 +170,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
+            if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
     }
@@ -315,6 +316,28 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(["action":format=="analysis.md" ? "export_analysis":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
     }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
+    @Published var update:UpdateInfo?; @Published var updating=false; @Published var reportSettings=ReportSettings(shareReports:true,shareText:false,autoUpdate:false,reportDir:"")
+    var lastUpdateCheck:Date?
+    /// Called after the first snapshot and every six hours; a fetch, nothing more.
+    func checkForUpdates(force:Bool=false) async {
+        if !force, let last=lastUpdateCheck, Date().timeIntervalSince(last) < 6*3600 { return }
+        lastUpdateCheck=Date()
+        if let status=try? await request(["action":"update_status"]), let state=status["state"] as? String, let msg=status["message"] as? String, state != "running", UserDefaults.standard.string(forKey:"lastShownUpdate") != (status["time"] as? String ?? "") {
+            UserDefaults.standard.set(status["time"] as? String ?? "",forKey:"lastShownUpdate"); activity=(state=="done" ? "Güncelleme tamam · " : "Güncelleme başarısız · ")+msg
+        }
+        if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
+        if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r) }
+        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording { startUpdate() }
+    }
+    /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
+    func startUpdate() {
+        guard job==nil, !recording, !updating else { return }
+        updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
+        Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
+    }
+    func saveReportSettings() async {
+        do { let r=try await request(["action":"report_settings_set","changes":reportSettings.changes]); reportSettings=ReportSettings.parse(r) } catch { self.error=error.localizedDescription }
+    }
     func loadGlossarySummary() async {
         guard let r=try? await request(["action":"glossary_summary"]) else { return }
         glossaryCount=r["count"] as? Int ?? 0; glossaryFromFile=r["from_file"] as? Int ?? 0; glossarySample=r["sample"] as? [String] ?? []

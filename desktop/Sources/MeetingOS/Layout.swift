@@ -46,6 +46,12 @@ struct SidebarView:View {
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
+                if let u=model.update, u.available {
+                    VStack(alignment:.leading,spacing:6) {
+                        Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)
+                        Button(model.updating ? "Güncelleniyor…" : "Güncelle ve yeniden başlat") { model.startUpdate() }.controlSize(.small).disabled(model.busy || model.recording || model.updating).accessibilityIdentifier("updateButton")
+                    }.padding(10).meetingCard()
+                }
                 if model.recording {
                     VStack(alignment:.leading,spacing:6) {
                         Text("ÖNEMLİ AN İŞARETLE").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
@@ -322,6 +328,21 @@ struct SettingsSheet:View {
                     Button("glossary.jsonl içe aktar…") { Task { await model.importGlossary() } }.accessibilityIdentifier("importGlossaryButton")
                     Text("Sözlük üç yerde kullanılır: bulut STT’ye yazım ipucu (etkisi sağlayıcıya bağlı), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham metin hiçbir zaman kendiliğinden değiştirilmez.").font(.caption2).foregroundStyle(.secondary)
                 }
+                Text("Güncelleme ve raporlar").font(.headline)
+                Text(model.update?.headline ?? "Sürüm kontrolü yapılmadı").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Şimdi kontrol et") { Task { await model.checkForUpdates(force:true) } }
+                    if model.update?.available==true { Button("Güncelle ve yeniden başlat") { model.startUpdate() }.disabled(model.busy || model.recording) }
+                }
+                Toggle("Yeni sürüm bulununca açılışta kendiliğinden güncelle (kayıt yokken)",isOn:$model.reportSettings.autoUpdate).onChange(of:model.reportSettings.autoUpdate) { _ in Task { await model.saveReportSettings() } }
+                Toggle("Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz",isOn:$model.reportSettings.shareReports).onChange(of:model.reportSettings.shareReports) { _ in Task { await model.saveReportSettings() } }
+                Toggle("Raporlara transkript metnini de ekle (varsayılan kapalı)",isOn:$model.reportSettings.shareText).onChange(of:model.reportSettings.shareText) { _ in Task { await model.saveReportSettings() } }
+                HStack {
+                    Text(model.reportSettings.reportDir.replacingOccurrences(of:NSHomeDirectory(),with:"~")).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("Rapor klasörünü aç") { NSWorkspace.shared.open(URL(fileURLWithPath:model.reportSettings.reportDir)) }
+                }
+                Text("Raporlar yalnız sayı, puan, maliyet, model adı ve hata satırı içerir; iCloud Drive üzerinden diğer Mac’e geçer. Geliştirme oradaki raporlara bakılarak sürer.").font(.caption2).foregroundStyle(.secondary)
                 Text("Kaydedilmiş sesler").font(.headline)
                 Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary)
                 if model.profiles.isEmpty {

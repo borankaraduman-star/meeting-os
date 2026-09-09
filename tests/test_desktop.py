@@ -117,6 +117,39 @@ class DesktopTests(unittest.TestCase):
    out=Path(tmp)/'gundem.md';r=dispatch({'action':'agenda','path':str(out)},db)
    self.assertEqual((r['open_tasks'],r['questions'],r['decisions'],r['meetings']),(1,1,1,1))
    text=out.read_text();self.assertIn('Raporu çıkarmak',text);self.assertIn('Rapor ne zaman?',text);self.assertIn('Önce iOS',text);self.assertIn('Kaynak #',text)
+ def test_reports_settings_write_and_summarize(self):
+  from meeting_os import reports
+  from meeting_os.memory import Memory
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db)
+   st=reports.save_settings(data,{'report_dir':str(data/'shared'),'share_text':False,'share_reports':True,'auto_update':True,'ignored':1})
+   self.assertEqual((st['share_text'],st['auto_update'],st['report_dir']),(False,True,str(data/'shared')))
+   mid=s.create_meeting('Sprint',{'engine':'openrouter','model':'microsoft/mai-transcribe-2','cloud_mode':'capture','echo_windows_skipped':3,'identity':{'named':1}})
+   s.add_segment(mid,Segment(0,30,'Yarın rapor hazır olur.','system','Konuşmacı 1',speaker_name='Ayşe',metrics={'cluster':'0:0','identity':{'name':'Ayşe','similarity':0.95}},flags=['cloud_transcript','cloud_diarization']))
+   s.add_segment(mid,Segment(30,40,'Tamam.','system','Konuşmacı 2',metrics={'cluster':'0:1','identity':{'name':None,'similarity':0.7}},flags=['cloud_transcript','cloud_diarization']))
+   s.db.executescript("CREATE TABLE cloud_chunks(meeting TEXT,position INTEGER,usage TEXT,PRIMARY KEY(meeting,position));INSERT INTO cloud_chunks VALUES('"+mid+"',0,'{\"cost\":0.002,\"seconds\":40}');INSERT INTO cloud_chunks VALUES('"+mid+"',1,'{\"skipped\":\"echo\"}');")
+   s.status(mid,'complete');(data/'last-job.log').write_text('ok\nMeeting OS: OpenRouter HTTP 500. deneme /Users/boran/x\n');s.close()
+   path=dispatch({'action':'report_write','meeting':mid},db)['path'];self.assertTrue(path.endswith(f'_{mid}.json'))
+   r=json.loads(Path(path).read_text())
+   self.assertEqual((r['cost_usd'],r['pieces_skipped'],r['segments'],r['speakers']['Konuşmacı 1']['name']),(0.002,1,2,'Ayşe'))
+   self.assertNotIn('transcript',r);self.assertIn('/Users/…',r['errors'][0]);self.assertEqual(r['review_queue'].get('unnamed_speaker'),1)
+   reports.save_settings(data,{'share_text':True});dispatch({'action':'report_write','meeting':mid},db)
+   self.assertEqual(json.loads(Path(path).read_text())['transcript'][0]['speaker'],'Ayşe')
+   summary=dispatch({'action':'reports_summary'},db);self.assertEqual(summary['reports'][0]['named'],1);self.assertEqual(list(summary['hosts'].values())[0]['reports'],1)
+   reports.save_settings(data,{'share_reports':False});self.assertIsNone(reports.write_meeting_report(Store(db),mid,data))
+ def test_update_check_parses_git_state(self):
+  from unittest.mock import patch
+  from meeting_os import updater
+  answers={('fetch',):'',('rev-parse','--short','HEAD'):'aaa1111\n',('rev-parse','--short','origin/v0.1'):'bbb2222\n',('rev-list','--count','HEAD..origin/v0.1'):'3\n',('rev-list','--count','origin/v0.1..HEAD'):'0\n',('log',):'Fix a\nFix b\n',('status','--porcelain'):''}
+  def fake(root,*args,timeout=25):
+   key=next((k for k in answers if args[:len(k)]==k),None)
+   class R: returncode=0; stdout=answers.get(key,'')
+   return R()
+  with patch.object(updater,'_git',fake):
+   r=updater.check('/tmp');self.assertTrue(r['available']);self.assertEqual((r['behind'],r['ahead'],r['local'],r['remote'],r['subjects']),(3,0,'aaa1111','bbb2222',['Fix a','Fix b']))
+  answers[('status','--porcelain')]=' M x.py\n'
+  with patch.object(updater,'_git',fake):
+   self.assertFalse(updater.check('/tmp')['available'])
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

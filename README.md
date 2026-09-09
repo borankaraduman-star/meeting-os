@@ -45,6 +45,10 @@ filtreler. Markdown, SRT ve JSON dışa aktarımı vardır; JSON export ses vekt
 içermez. **Sözlük ve ses profilleri** bölümünde kişi adlarını ve PM terimlerini
 satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.
 
+## Güncelleme ve iki Mac arası akış
+
+Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni sürümde kenar çubuğunda **Güncelle ve yeniden başlat** kartı çıkar (Ayarlar’dan otomatik güncelleme açılabilir). Güncelleme uygulama kapalıyken `scripts/update.sh` ile çekilir, aynı imzayla derlenir ve yeniden açılır; macOS izinleri korunur. Her toplantıdan sonra teşhis raporu iCloud Drive `MeetingOS-Reports/<mac>` klasörüne yazılır; geliştirme Mac’inde `reports summarize` bunları özetler. Ayrıntı: `docs/TWO_MAC_WORKFLOW.md`.
+
 ## Günlük kullanım kısayolları ve kontrol
 
 - **⌘R** kaydı başlatır/bitirir. Kayıt sırasında **⌘M** önemli an, **⌘⇧M** karar, **⌘⌥M** bana görev, **⌘⌃M** sonra bak işareti koyar; işaretler kayıt bitince Kontrol sekmesinin en üstünde ve ilgili paragrafta görünür.

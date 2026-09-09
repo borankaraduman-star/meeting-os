@@ -193,6 +193,19 @@ def dispatch(request, db=None):
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action in ('update_check','update_start','update_status'):
+            from . import updater
+            if action=='update_check': return updater.check(ROOT)
+            if action=='update_start': return updater.start(ROOT,DATA_DIR)
+            return updater.status(DATA_DIR)
+        if action in ('report_settings','report_settings_set','report_write','reports_summary'):
+            from . import reports
+            base=DATA_DIR if db is None else Path(db).parent
+            if action=='report_settings': return reports.load_settings(base)
+            if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
+            if action=='reports_summary': return reports.summarize(reports.load_settings(base)['report_dir'])
+            from . import __version__
+            return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply'):
             from . import glossary as G
             if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent)
