@@ -59,8 +59,10 @@ enum GlobalHotkeys {
 /// Menu-bar control: visible above every app, one click to start or end, marks while recording.
 struct QuickMenu:View {
     @ObservedObject var model:Model
+    @ObservedObject var recorder:RecorderState
+    init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
     var body:some View {
-        Text(model.recording ? "Kayıt sürüyor · \(model.elapsedText)" : (model.busy ? "İşlem sürüyor · \(model.jobProgress.isEmpty ? "lütfen bekleyin" : model.jobProgress)" : "Hazır"))
+        Text(model.recording ? "Kayıt sürüyor · \(recorder.elapsedText)" : (model.busy ? "İşlem sürüyor · \(model.jobProgress.isEmpty ? "lütfen bekleyin" : model.jobProgress)" : "Hazır"))
         if model.zoomMeetingOpen && !model.recording { Text("Zoom toplantısı açık").foregroundStyle(.secondary) }
         if !model.recording, model.useCalendar, let cal=CalendarContext.currentCached() { Text("Takvim: \(cal.title)").foregroundStyle(.secondary) }
         Divider()

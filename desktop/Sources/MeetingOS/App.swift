@@ -254,13 +254,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
                 if active.capture["signals"] != nil {   // polls without signal analysis keep the last reading
-                    activity=CaptureSignalPresentation.label(active.capture)
-                    captureDots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
+                    let label=CaptureSignalPresentation.label(active.capture); if activity != label { activity=label }
+                    let dots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
+                    if recorder.captureDots != dots { recorder.captureDots=dots }
                 }
                 // One line, once, when the recording had to survive something. The first reading of a meeting
                 // only seeds the comparison, so a restored session never announces old history.
                 let seen=RecordingContinuity.read(active.capture)
-                if let was=continuitySeen, let line=RecordingContinuity.notice(from:was,to:seen) { recordingNotice=line; activity=line }
+                if let was=continuitySeen, let line=RecordingContinuity.notice(from:was,to:seen) { recorder.recordingNotice=line; activity=line }
                 continuitySeen=seen
             }
             if !restoredOnLaunch {
@@ -282,7 +283,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
-            if recording, let started=recordStartedAt { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
+            if recording, let started=recordStartedAt { let s=Int(Date().timeIntervalSince(started)); let t=String(format:"%02d:%02d",s/60,s%60); if recorder.elapsedText != t { recorder.elapsedText=t } }
             if !recording && !zoomMeetingOpen && !queuedNotifications.isEmpty { for (t,b) in queuedNotifications { deliver(t,b) }; queuedNotifications.removeAll() }   // meeting-safe mode: notifications wait
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
@@ -334,14 +335,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard recordProcess==nil else { return }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; markerCount=0; recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
+        recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
         if title.isEmpty, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
         recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
-            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
+            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recorder.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
             // The receipt comes first, before the exit status: a supervisor that died still leaves one when audio
@@ -471,7 +472,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var cost:[String:Any]?
     @Published var setupChecks:[SetupCheck]=[]
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
-    @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
+    @Published var zoomMeetingOpen=false
+    /// Per-second recording state lives on its own object: the panel and the menu bar observe it, the main
+    /// window does not, so a ticking clock never re-lays out a 300-paragraph transcript during a meeting.
+    let recorder=RecorderState()
     /// Read the calendar when a recording starts: the live event names the meeting and its attendees become naming shortcuts.
     @Published var useCalendar=UserDefaults.standard.object(forKey:"useCalendar") as? Bool ?? false {
         didSet {
@@ -485,7 +489,6 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var recordProcess:Process?; var recordStartedAt:Date?; var stopArmedAt:Date?
     var sleptAt:Date?; var continuitySeen:RecordingContinuity.State?
     /// One passive line in the recorder panel when a recording survived a stream rebuild, a helper relaunch or a sleep.
-    @Published var recordingNotice=""
     var finalizeQueue:[String]=[]
     /// A meeting that finished while the user was reading another one; the status line offers to open it.
     @Published var pendingReady:String?
@@ -523,7 +526,6 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     /// Paragraph that contains a segment (evidence may point at a non-lead row of a block).
     func blockId(containing id:Int)->Int? { blocks.first { $0.rows.contains { $0.id==id } || $0.asides.contains { $0.id==id } }?.id }
     /// Live capture health for the floating panel (mic / system audio), refreshed with every poll while recording.
-    @Published var captureDots:[String:String]=[:]
     /// A job that started before the next Zoom meeting opened is pushed to Darwin background (CPU, I/O and
     /// network throttled) and told to upload one piece at a time; both are undone when the meeting ends.
     var jobBackgrounded=false
@@ -753,7 +755,23 @@ func statusLabel(_ status:String)->String {
             }
         }
         MenuBarExtra { QuickMenu(model:model) } label: {
-            if model.recording { Label(model.elapsedText,systemImage:"record.circle.fill") } else { Image(systemName:model.zoomMeetingOpen ? "video.badge.waveform" : "waveform") }
+            MenuBarLabel(model:model,recorder:model.recorder)
         }.menuBarExtraStyle(.menu)
+    }
+}
+
+
+/// Recording-time state that changes every second. Observed only where it is shown.
+@MainActor final class RecorderState:ObservableObject {
+    @Published var elapsedText="00:00"
+    @Published var captureDots:[String:String]=[:]
+    @Published var recordingNotice=""
+}
+
+struct MenuBarLabel:View {
+    @ObservedObject var model:Model
+    @ObservedObject var recorder:RecorderState
+    var body:some View {
+        if model.recording { Label(recorder.elapsedText,systemImage:"record.circle.fill") } else { Image(systemName:model.zoomMeetingOpen ? "video.badge.waveform" : "waveform") }
     }
 }

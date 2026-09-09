@@ -22,18 +22,20 @@ enum RecorderPanel {
 
 struct RecorderPanelView:View {
     @ObservedObject var model:Model
+    @ObservedObject var recorder:RecorderState
+    init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
     var body:some View {
         HStack(spacing:10) {
             Circle().fill(.red).frame(width:10,height:10)
-            Text(model.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
+            Text(recorder.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
             // The meeting is in progress: a line about a survived interruption replaces the title in place —
             // no notification, no sound, nothing that moves or asks for attention.
-            Text(model.recordingNotice.isEmpty ? (model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle) : model.recordingNotice)
-                .font(.caption).foregroundStyle(model.recordingNotice.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+            Text(recorder.recordingNotice.isEmpty ? (model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle) : recorder.recordingNotice)
+                .font(.caption).foregroundStyle(recorder.recordingNotice.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                 .lineLimit(1).truncationMode(.tail).frame(maxWidth:110,alignment:.leading)
-                .help(model.recordingNotice.isEmpty ? model.recordingTitle : model.recordingNotice)
-            SignalDot(label:"Mik",state:model.captureDots["mic"] ?? "unknown")
-            SignalDot(label:"Sis",state:model.captureDots["system"] ?? "unknown")
+                .help(recorder.recordingNotice.isEmpty ? model.recordingTitle : recorder.recordingNotice)
+            SignalDot(label:"Mik",state:recorder.captureDots["mic"] ?? "unknown")
+            SignalDot(label:"Sis",state:recorder.captureDots["system"] ?? "unknown")
             if model.markerCount>0 { Text("⌘M \(model.markerCount)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary).help("İşaretlenen an sayısı") }
             Spacer()
             Button("An") { model.markMoment("important") }.help("An (⌃⌥M)")
