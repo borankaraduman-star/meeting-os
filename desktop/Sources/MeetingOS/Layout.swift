@@ -408,7 +408,24 @@ struct StorageSection:View {
                             .accessibilityIdentifier("storageDelete-\(entry.meeting)")
                     }.font(.callout)
                 }
-                Text("Silme, arşivdeki onay penceresinden yapılır; otomatik temizlik yoktur.").font(.caption2).foregroundStyle(.secondary)
+                Text("Silme, arşivdeki onay penceresinden yapılır.").font(.caption2).foregroundStyle(.secondary)
+            }
+            Divider()
+            Text("Eski sesleri temizle").font(.caption.weight(.semibold))
+            Text("Transkript, özet, görevler ve ses profilleri kalır; yalnız tamamlanmış eski toplantıların ses dosyaları silinir. “Sesi koru” işaretli toplantılara dokunulmaz. Önce liste gösterilir.").font(.caption2).foregroundStyle(.secondary)
+            HStack {
+                Picker("Şundan eski",selection:$model.cleanupDays) { Text("30 gün").tag(30);Text("60 gün").tag(60);Text("90 gün").tag(90);Text("180 gün").tag(180) }.frame(width:200)
+                Button("Silineceklere bak") { Task { await model.previewCleanup() } }.disabled(model.busy)
+            }
+            if let p=model.cleanupPreview {
+                if p.count==0 { Text("\(p.days) günden eski, sesi silinebilecek toplantı yok.").font(.caption) }
+                else {
+                    Text("\(p.count) toplantının sesi silinecek · \(StorageReport.format(bytes:p.bytes)) boşalır · \(p.titles.joined(separator:", "))\(p.count>p.titles.count ? " …" : "")").font(.caption)
+                    Button("Sesleri sil (\(StorageReport.format(bytes:p.bytes)))",role:.destructive) { Task { await model.runCleanup() } }.disabled(model.busy).accessibilityIdentifier("runCleanupButton")
+                }
+            }
+            if let meeting=model.meeting {
+                Toggle("Seçili toplantının sesini koru (“\(meeting.title)”)",isOn:Binding(get:{ meeting.metadata["keep"] as? Bool ?? false },set:{ v in Task { await model.keepMeeting(meeting.id,keep:v) } })).font(.caption)
             }
         }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
     }

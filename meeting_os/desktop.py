@@ -111,6 +111,35 @@ def storage_report(store, data_dir, db_path):
     return {'totals':totals,'total':sum(totals.values()),'meetings':meetings}
 
 
+def storage_cleanup(store, data_dir, days=30, dry_run=True):
+    """Free disk by removing the audio of completed meetings older than `days` while keeping their transcript,
+    analysis and profiles. Meetings marked metadata.keep=true, incomplete ones and active jobs are never touched.
+    dry_run lists what would go; only an explicit dry_run=False deletes."""
+    import shutil
+    from datetime import datetime, timedelta, timezone
+    from .recovery import classify, metadata as read_metadata
+    data_dir=Path(data_dir); cutoff=datetime.now(timezone.utc)-timedelta(days=int(days))
+    candidates=[]; freed=0
+    for row in store.meetings():
+        meta=read_metadata(row)
+        if row['status']!='complete' or meta.get('keep') is True: continue
+        if classify(meta.get('worker_identity'))=='active': continue
+        try: created=datetime.fromisoformat(row['created'])
+        except ValueError: continue
+        if created.tzinfo is None: created=created.replace(tzinfo=timezone.utc)
+        if created>cutoff: continue
+        folders=[f for f in meeting_files(meta,data_dir) if f.is_dir()]
+        if not folders: continue
+        size=sum(folder_bytes(f) for f in folders)
+        candidates.append({'meeting':row['id'],'title':row['title'],'created':row['created'],'bytes':size,'folders':[str(f) for f in folders]})
+        freed+=size
+        if not dry_run:
+            for f in folders: shutil.rmtree(f,ignore_errors=True)
+            meta['audio_removed']=datetime.now(timezone.utc).isoformat(); meta.pop('paths',None)
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),row['id']))
+    return {'dry_run':dry_run,'days':int(days),'meetings':candidates,'bytes':freed}
+
+
 def register_import_digest(store, mid, digest, size=None):
     """Merge original_digest (and original_size) into a meeting's metadata so later imports of the same file are recognized."""
     import re
@@ -275,6 +304,15 @@ def dispatch(request, db=None):
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='storage_report':
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
+        if action=='storage_cleanup':
+            return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
+        if action=='keep_meeting':
+            from .recovery import metadata as read_metadata
+            row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(request['meeting'],)).fetchone()
+            if not row: raise ValueError('Toplantı bulunamadı')
+            meta=json.loads(row[0] or '{}'); meta['keep']=bool(request.get('keep',True))
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),request['meeting']))
+            return {'keep':meta['keep']}
         if action=='check_duplicate':
             from .import_registry import digest_path,find_duplicate
             source=Path(request['path'])

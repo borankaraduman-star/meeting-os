@@ -202,6 +202,24 @@ class DesktopTests(unittest.TestCase):
    self.assertTrue(doc['text'].startswith('# Hata raporu: Ödeme hatası'));self.assertIn('## Yeniden üretme adımları',doc['text']);self.assertIn('Kaynak bölümler',doc['text'])
    with self.assertRaises(ValueError):build_document(s,mid,'poem',LLM())
    s.close()
+ def test_storage_cleanup_removes_old_audio_only_when_asked_and_respects_keep(self):
+  from datetime import datetime,timedelta,timezone
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db)
+   def rec(name,days,status='complete',keep=None):
+    d=data/'recordings'/name;d.mkdir(parents=True);(d/'system-full.wav').write_bytes(b'x'*1000)
+    mid=s.create_meeting(name,{'capture_dir':str(d),'paths':{'system':str(d/'system-full.wav')},**({'keep':keep} if keep is not None else {})})
+    with s.db:s.db.execute('UPDATE meetings SET created=?,status=? WHERE id=?',((datetime.now(timezone.utc)-timedelta(days=days)).isoformat(),status,mid))
+    return mid,d
+   old,dold=rec('eski',45);kept,dkept=rec('tutulan',45,keep=True);fresh,dfresh=rec('yeni',3);inc,dinc=rec('yarım',60,status='incomplete');s.close()
+   dry=dispatch({'action':'storage_cleanup','days':30},db)
+   self.assertTrue(dry['dry_run']);self.assertEqual([m['meeting'] for m in dry['meetings']],[old]);self.assertEqual(dry['bytes'],1000);self.assertTrue((dold/'system-full.wav').exists())
+   dispatch({'action':'keep_meeting','meeting':old,'keep':True},db);self.assertEqual(dispatch({'action':'storage_cleanup','days':30},db)['meetings'],[])
+   dispatch({'action':'keep_meeting','meeting':old,'keep':False},db)
+   real=dispatch({'action':'storage_cleanup','days':30,'dry_run':False},db)
+   self.assertFalse(dold.exists());self.assertTrue(dkept.exists());self.assertTrue(dfresh.exists());self.assertTrue(dinc.exists());self.assertEqual(real['bytes'],1000)
+   s=Store(db);meta=json.loads(s.db.execute('SELECT metadata FROM meetings WHERE id=?',(old,)).fetchone()[0]);self.assertIn('audio_removed',meta);self.assertNotIn('paths',meta)
+   self.assertEqual(s.db.execute('SELECT status FROM meetings WHERE id=?',(old,)).fetchone()[0],'complete');s.close()
  def test_timestamp_rounding(self):
   self.assertEqual(timestamp(59.9996),'00:01:00,000')
  def test_enrollment_rejects_short_context(self):

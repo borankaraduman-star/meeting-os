@@ -341,6 +341,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
     @Published var continuity=Continuity()
+    struct CleanupPreview:Equatable { let days:Int; let count:Int; let bytes:Int; let titles:[String] }
+    @Published var cleanupPreview:CleanupPreview?
+    @Published var cleanupDays=30
+    /// Dry run first; nothing is removed until the confirmation button calls with dryRun=false.
+    func previewCleanup() async {
+        do { let r=try await request(["action":"storage_cleanup","days":cleanupDays,"dry_run":true]); let list=r["meetings"] as? [[String:Any]] ?? []
+            cleanupPreview=CleanupPreview(days:cleanupDays,count:list.count,bytes:r["bytes"] as? Int ?? 0,titles:list.prefix(6).compactMap { $0["title"] as? String }) }
+        catch { self.error=error.localizedDescription }
+    }
+    func runCleanup() async {
+        do { let r=try await request(["action":"storage_cleanup","days":cleanupDays,"dry_run":false]); activity="Eski sesler temizlendi · \((r["meetings"] as? [[String:Any]])?.count ?? 0) toplantı, \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)) boşaldı · transkriptler duruyor"; cleanupPreview=nil; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
+        catch { self.error=error.localizedDescription }
+    }
+    func keepMeeting(_ id:String,keep:Bool) async { do { _=try await request(["action":"keep_meeting","meeting":id,"keep":keep]); await refresh() } catch { self.error=error.localizedDescription } }
     /// Meeting → PRD / bug report / customer request / Claude Code prompt, saved where the user chooses. Cloud mode only.
     func exportDocument(kind:String) async {
         guard let mid=selected, transcriptionMode=="openrouter" else { self.error="Belge hazırlama OpenRouter modunda çalışır (Yazıya çevirme: OpenRouter)"; return }
