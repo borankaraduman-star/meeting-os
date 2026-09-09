@@ -250,6 +250,7 @@ def dispatch(request, db=None):
         if action=='label_speaker':
             if request.get('enroll'): return store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
             store.correct(request['meeting'],request['speaker'],request['name']); return {'labeled':True,'profile_saved':False}
+        if action=='undo_correction': return store.undo_correction(request['meeting'])
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}
         if action=='edit_text':

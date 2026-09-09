@@ -61,7 +61,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -140,7 +140,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func confirmReview(_ item:ReviewItem) async {
         guard let mid=selected, !item.suggested.isEmpty, !item.speakerKey.isEmpty else { return }
-        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
+        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; canUndoNaming=true; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
         catch { self.error=error.localizedDescription }
     }
     /// One pass over every suggested name; a single refresh at the end keeps the transcript from repainting per person.
@@ -151,8 +151,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); named.append(item.suggested) }
             catch { self.error=error.localizedDescription; break }
         }
-        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi" }
+        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"; canUndoNaming=true }
         await refresh(); await loadReview(); refreshSummaryIfNamesDone()
+    }
+    /// ⌘Z after a naming: labels, the learned sample and the rejection all go back. Only the newest naming of the open meeting.
+    @Published var canUndoNaming=false
+    func undoNaming() async {
+        guard let mid=selected, canUndoNaming, !busy else { return }
+        do { let r=try await request(["action":"undo_correction","meeting":mid]); canUndoNaming=false
+            let name=r["name"] as? String ?? ""; let prev=r["previous"] as? String
+            activity="Geri alındı · “\(name)”"+(prev.map { " yeniden “\($0)”" } ?? " isimsiz")+" · öğrenilen örnek silindi"
+            await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
     }
     /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
     func refreshSummaryIfNamesDone() {
@@ -367,7 +377,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do {
             let result=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":editName,"enroll":enroll])
             editRow=nil
-            if enroll { activity=(result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi" }
+            if enroll { activity=(result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi" } else { activity="Konuşmacı yalnız bu toplantıda adlandırıldı" }
+            canUndoNaming=true
             await refresh(); await loadReview(); refreshSummaryIfNamesDone()
         } catch { self.error=error.localizedDescription }
     }
@@ -652,6 +663,7 @@ func statusLabel(_ status:String)->String {
     @StateObject var model=Model()
     var body:some Scene {
         Window("Meeting OS",id:"main") { MeetingContent(m:model).preferredColorScheme(model.colorScheme).tint(MeetingStyle.accent).id(model.accentKey).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780).commands {
+            CommandGroup(replacing:.undoRedo) { Button("Adlandırmayı geri al") { Task { await model.undoNaming() } }.keyboardShortcut("z",modifiers:.command).disabled(!model.canUndoNaming || model.busy) }
             CommandMenu("Git") {
                 Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)
                 Button("Hafızada ara") { model.focusMemorySearch() }.keyboardShortcut("f",modifiers:[.command,.shift])

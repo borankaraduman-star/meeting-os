@@ -62,3 +62,23 @@ class NegativeFeedbackTests(unittest.TestCase):
             self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)
             self.assertEqual(db.profiles()[0]['samples'],2)
             db.close()
+
+
+class UndoTests(unittest.TestCase):
+    def test_undo_restores_labels_and_unlearns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            import random; rnd=random.Random(9); v=[rnd.uniform(-1,1) for _ in range(8)]
+            db.enroll('Ali',v,'m',10,'manual')
+            seg=Segment(0,12,'x','system','system:S1',metrics={'cluster':'0:S1','identity':{'name':'Ali'}},flags=['cloud_diarization']); seg.embedding=v; seg.embedding_model='m'
+            sid=db.add_segment(mid,seg); db.db.execute('UPDATE segments SET speaker_name=? WHERE id=?',('Ali',sid)); db.db.commit()
+            db.enroll_speaker(mid,'system:S1','Veli')
+            self.assertEqual({p['name'] for p in db.profiles()},{'Ali','Veli'})
+            undone=db.undo_correction(mid)
+            self.assertEqual((undone['name'],undone['previous']),('Veli','Ali'))
+            self.assertEqual(db.segments(mid)[0]['speaker_name'],'Ali')
+            self.assertEqual({p['name'] for p in db.profiles()},{'Ali'})
+            self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)
+            self.assertEqual(db.identify(v,'m',threshold=0.5,margin=0.0)['name'],'Ali')
+            with self.assertRaises(ValueError): db.undo_correction(mid)
+            db.close()

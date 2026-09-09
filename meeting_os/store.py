@@ -161,6 +161,18 @@ class Store:
                 self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance))
                 return {'labeled':len(rows),'profile_saved':True,'seconds':duration}
         return {'labeled':len(rows),'profile_saved':False,'seconds':duration}
+    def undo_correction(self, mid):
+        """Take back the newest cluster naming of a meeting: labels return to what they were, the sample and the
+        rejection that naming created disappear, and the correction row is removed so quality stats do not count it."""
+        row=self.db.execute("SELECT * FROM corrections WHERE meeting=? AND speaker NOT LIKE 'segment:%' ORDER BY id DESC LIMIT 1",(mid,)).fetchone()
+        if not row: raise ValueError('Geri alınacak adlandırma yok')
+        speaker,name,previous=row['speaker'],row['name'],row['previous_name']
+        with self.db:
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(previous,mid,speaker))
+            self.db.execute('DELETE FROM samples WHERE name=? AND provenance=?',(name,f'{mid}:speaker:{speaker}'))
+            if previous: self.db.execute('DELETE FROM rejections WHERE name=? AND provenance=?',(previous,f'{mid}:speaker:{speaker}'))
+            self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
+        return {'speaker':speaker,'name':name,'previous':previous}
     def delete_meeting(self, mid):
         """Remove one meeting and every row derived from it. Voice profiles are kept. Returns metadata for file cleanup."""
         row=self.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()

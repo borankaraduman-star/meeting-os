@@ -112,6 +112,7 @@ struct ApplicationActivityView:View {
             if !model.microphoneHint.isEmpty { Label(model.microphoneHint,systemImage:"mic.slash").font(.caption).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
             Text(model.activity).font(.caption).foregroundStyle(.secondary).lineLimit(4).fixedSize(horizontal:false,vertical:true)
                 .help("Sistem kanalı bu Mac’in ses çıkışını kaydeder. Başka bir cihazdan çalınan ses mikrofondan alınır. Sinyal ölçümü, konuşma algılandığı anlamına gelmez. Eksik canlı metin, kayıt sonunda tam ses üzerinden yeniden işlenmelidir.")
+            if model.canUndoNaming { Button("Geri al (⌘Z)") { Task { await model.undoNaming() } }.controlSize(.mini).disabled(model.busy).help("Son adlandırmayı geri alır; öğrenilen ses örneği de silinir").accessibilityIdentifier("undoNamingButton") }
         }.padding(12).frame(maxWidth:.infinity,alignment:.leading).meetingCard()
     }
 }
