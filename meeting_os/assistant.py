@@ -53,6 +53,10 @@ def auto_title(store,mid,result):
     for w in words:
         if len(title)+len(w)+1>64: break
         title=(title+' '+w).strip()
+    trailing={'ve','ile','veya','da','de','bir','bu','şu','o','için','ama','yani','ki','gibi','iş'}
+    parts=title.split()
+    while parts and (parts[-1].lower().strip(',;:') in trailing or parts[-1].endswith(',')): parts.pop()
+    title=' '.join(parts).rstrip(',;:')
     if len(title)<12: return None
     with store.db: store.db.execute('UPDATE meetings SET title=? WHERE id=?',(title,mid))
     return title

@@ -233,7 +233,7 @@ class DesktopTests(unittest.TestCase):
    s=Store(Path(tmp)/'db')
    a=s.create_meeting('Sep 9, 2026 at 5:14\u202fAM',{});b=s.create_meeting('9 Eyl 2026 14:05',{});c_=s.create_meeting('Sprint planı',{})
    res={'summary':[{'text':'Ödeme adımındaki hata nedeniyle dönüşümün düştüğü ve yarın düzeltme çıkılacağı konuşuldu.'}]}
-   self.assertEqual(auto_title(s,a,res),'Ödeme adımındaki hata nedeniyle dönüşümün düştüğü ve yarın')
+   self.assertEqual(auto_title(s,a,res),'Ödeme adımındaki hata nedeniyle dönüşümün düştüğü ve yarın')  # ends on a content word
    self.assertTrue(auto_title(s,b,res));self.assertIsNone(auto_title(s,c_,res));self.assertIsNone(auto_title(s,a,{'summary':[]}))
    titles={r['id']:r['title'] for r in s.meetings()};self.assertEqual(titles[c_],'Sprint planı');s.close()
  def test_timestamp_rounding(self):
