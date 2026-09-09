@@ -144,13 +144,13 @@ Tek arama alanı; bölüme göre çalışır:
 
 ## 7. Ayarlar (⌘,)
 
-![Ayarlar (⌘,): üstte bölüm seçici (Genel · Sözlük ve sesler · Depolama · Güncelleme ve raporlar · Kurulum durumu). Genel: tema ve vurgu rengi, Zoom bildirimi, elle dokunmadan kayıt, yüzen panel, takvim bağlamı.](img/settings.jpg)
+![Ayarlar (⌘,): üstte üç bölüm (Genel · Sesler ve sözlük · Sistem). Sesler ve sözlük: kişi kartları, sözlük, proje sözlüğü, ekip klasörü.](img/settings.jpg)
 
-*Ayarlar (⌘,): üstte bölüm seçici (Genel · Sözlük ve sesler · Depolama · Güncelleme ve raporlar · Kurulum durumu). Genel: tema ve vurgu rengi, Zoom bildirimi, elle dokunmadan kayıt, yüzen panel, takvim bağlamı.*
+*Ayarlar (⌘,): üstte üç bölüm (Genel · Sesler ve sözlük · Sistem). Sesler ve sözlük: kişi kartları, sözlük, proje sözlüğü, ekip klasörü.*
 
-![Kurulum durumu kartı: her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta teşhis raporu satırı ve uygulama yoklama gecikmesi.](img/setup.jpg)
+![Kurulum durumu kartı (Ayarlar → Sistem): her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta Öz-test düğmesi ve sonucu, uygulama yoklama gecikmesi.](img/setup.jpg)
 
-*Kurulum durumu kartı: her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta teşhis raporu satırı ve uygulama yoklama gecikmesi.*
+*Kurulum durumu kartı (Ayarlar → Sistem): her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta Öz-test düğmesi ve sonucu, uygulama yoklama gecikmesi.*
 
 ![Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.](img/theme.jpg)
 
