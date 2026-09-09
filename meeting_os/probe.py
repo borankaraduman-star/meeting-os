@@ -53,13 +53,13 @@ def run(root, data_dir, *, network=False, timeout=8):
     except Exception as exc: items.append(_item('data_writable', False, str(exc)[:160], 'Klasör izinlerini kontrol edin'))
     try:
         free = shutil.disk_usage(data if data.is_dir() else data.parent).free
-        items.append(_item('disk', free >= MIN_FREE_BYTES, f'{free/1024**3:.1f} GB boş', 'Eski sesleri temizleyin (Ayarlar → Depolama)', level='warning'))
+        items.append(_item('disk', free >= MIN_FREE_BYTES, f'{free/1024**3:.1f} GB boş', 'Eski sesleri temizleyin (Ayarlar → Sistem → Depolama)', level='warning'))
     except OSError as exc: items.append(_item('disk', False, str(exc)[:120], None, level='warning'))
     try:
         from .openrouter import KEYCHAIN_SERVICE
         has_key = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE], capture_output=True, timeout=5).returncode == 0
     except Exception: has_key = False
-    items.append(_item('api_key', has_key, 'OpenRouter anahtarı Keychain’de' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → OpenRouter → anahtarı yapıştırın'))
+    items.append(_item('api_key', has_key, 'OpenRouter anahtarı Keychain’de' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
     try:
         from . import glossary as G
         entries = G.load(data, root); items.append(_item('glossary', True, f'{len(entries)} terim'))
@@ -70,7 +70,7 @@ def run(root, data_dir, *, network=False, timeout=8):
         if rs.get('share_reports'):
             anchor = folder
             while not anchor.exists() and anchor.parent != anchor: anchor = anchor.parent
-            items.append(_item('reports', os.access(anchor, os.W_OK), str(folder), 'Ayarlar → Güncelleme ve raporlar → klasörü seçin', level='warning'))
+            items.append(_item('reports', os.access(anchor, os.W_OK), str(folder), 'Ayarlar → Sistem → Güncelleme ve raporlar → klasörü seçin', level='warning'))
         else: items.append(_item('reports', True, 'rapor paylaşımı kapalı'))
     except Exception as exc: items.append(_item('reports', False, str(exc)[:160], None, level='warning'))
     if network:
