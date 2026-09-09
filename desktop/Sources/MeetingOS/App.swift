@@ -446,6 +446,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(["action":"glossary_apply","meeting":mid,"segment":seg,"original":item.original,"replacement":item.replacement]); activity="Uygulandı · “\(item.original)” → “\(item.replacement)”"; await refresh(); await loadReview() }
         catch { self.error=error.localizedDescription }
     }
+    /// Apply every model-verified glossary proposal of the selected meeting in one pass; local-only guesses stay for manual review.
+    func applyAllGlossary() async {
+        guard let mid=selected, !busy else { return }
+        do { let r=try await request(["action":"glossary_apply_all","meeting":mid,"verified_only":true]); activity="Sözlük · \(r["applied"] as? Int ?? 0) düzeltme uygulandı, \(r["remaining"] as? Int ?? 0) öneri elle kontrol bekliyor"; await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// Drop one glossary proposal without changing the text.
+    func dismissGlossary(_ item:ReviewItem) async {
+        guard let mid=selected, let seg=item.segment else { return }
+        do { _=try await request(["action":"glossary_dismiss","meeting":mid,"segment":seg,"original":item.original]); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
     func settings() async {
         do {
             vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""

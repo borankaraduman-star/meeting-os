@@ -2,11 +2,11 @@ import SwiftUI
 
 /// One row of the critical review queue: why this spot deserves a listen, and the one action that fixes it.
 struct ReviewItem:Identifiable, Equatable {
-    let id:String; let segment:Int?; let start:Double?; let speaker:String; let text:String; let kind:String; let severity:Int; let reason:String; let suggested:String; let speakerKey:String; let task:String; let original:String; let replacement:String
+    let id:String; let segment:Int?; let start:Double?; let speaker:String; let text:String; let kind:String; let severity:Int; let reason:String; let suggested:String; let speakerKey:String; let task:String; let original:String; let replacement:String; let verified:Bool
     init(_ d:[String:Any]) {
         segment=d["segment_id"] as? Int; start=d["start"] as? Double; speaker=d["speaker"] as? String ?? ""; text=d["text"] as? String ?? ""; kind=d["kind"] as? String ?? ""
         severity=d["severity"] as? Int ?? 3; reason=d["reason"] as? String ?? ""; suggested=d["suggested"] as? String ?? ""; speakerKey=d["speaker_key"] as? String ?? ""; task=d["task"] as? String ?? ""
-        original=d["original"] as? String ?? ""; replacement=d["replacement"] as? String ?? ""
+        original=d["original"] as? String ?? ""; replacement=d["replacement"] as? String ?? ""; verified=d["verified"] as? Bool ?? false
         id=kind+":"+(segment.map(String.init) ?? task)+(original.isEmpty ? "" : ":"+original)
     }
     var title:String {
@@ -26,10 +26,19 @@ struct ReviewItem:Identifiable, Equatable {
 
 struct ReviewView:View {
     @ObservedObject var model:Model
+    /// Glossary items the analysis model accepted (their reason carries the model's note, not the local-only hint).
+    private var verifiedGlossary:Int { model.review.filter { $0.kind=="glossary" && $0.verified }.count }
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:14) {
             HStack { Text("Kontrol kuyruğu").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary);Button("Sözlükle tara") { Task { await model.scanGlossary() } }.disabled(model.busy || model.selected==nil).help("Transkripti proje sözlüğüyle karşılaştırır; bulut modunda öneriler analiz modeline doğrulatılır").accessibilityIdentifier("scanGlossaryButton") }
             Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
+            if verifiedGlossary>0 {
+                HStack(spacing:10) {
+                    Label("\(verifiedGlossary) sözlük düzeltmesi analiz modelince doğrulandı",systemImage:"character.book.closed").font(.callout)
+                    Spacer()
+                    Button("Doğrulananları uygula (\(verifiedGlossary))") { Task { await model.applyAllGlossary() } }.buttonStyle(.borderedProminent).disabled(model.busy).help("Yalnız modelin kabul ettiği öneriler uygulanır; yerel eşlemeler tek tek kontrol için kalır").accessibilityIdentifier("applyAllGlossaryButton")
+                }.padding(14).meetingCard()
+            }
             if !model.scorecard.isEmpty { Label(model.scorecard,systemImage:"chart.bar").font(.caption).foregroundStyle(.secondary).help("Düzeltmelerinizden biriken yerel kalite seti; model eğitilmez, iyileşme ölçülür") }
             if model.review.isEmpty { ContentUnavailableView("Kontrol gerektiren bir şey yok",systemImage:"checkmark.seal",description:Text("Konuşmacı adları, çakışan konuşmalar ve görev sahipleri için şüpheli bir bölüm bulunmadı.")) }
             ForEach(model.review) { item in
@@ -55,7 +64,10 @@ struct ReviewView:View {
                             Button("Adlandır…") { model.editRow=row;model.editName=row.name;model.editText=row.text;model.clean=false }
                         }
                         if item.kind=="task_owner" { Button("Görevlerim’de aç") { model.tab="actions" } }
-                        if item.kind=="glossary" { Button("Uygula: “\(item.replacement)”") { Task { await model.applyGlossary(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).accessibilityIdentifier("applyGlossary-\(item.id)") }
+                        if item.kind=="glossary" {
+                            Button("Uygula: “\(item.replacement)”") { Task { await model.applyGlossary(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).accessibilityIdentifier("applyGlossary-\(item.id)")
+                            Button("Yoksay") { Task { await model.dismissGlossary(item) } }.disabled(model.busy).help("Öneriyi listeden kaldırır; metin değişmez").accessibilityIdentifier("dismissGlossary-\(item.id)")
+                        }
                     }.font(.callout)
                 }.padding(18).meetingCard()
             }

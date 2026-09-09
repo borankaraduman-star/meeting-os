@@ -43,7 +43,7 @@ def review_queue(store, mid):
         if not row or sg.get('original') not in (row.get('text') or ''): continue
         items.append({'segment_id':row['id'],'start':row['start'],'speaker':row.get('speaker_name') or row.get('speaker'),'text':row['text'][:120],'kind':'glossary','severity':2,
                       'reason':f"Sözlük: “{sg['original']}” muhtemelen “{sg['replacement']}”"+(f" · {sg['reason']}" if sg.get('reason') else (' · yerel eşleme, model doğrulamadı' if sg.get('source')=='local' else '')),
-                      'original':sg['original'],'replacement':sg['replacement']})
+                      'original':sg['original'],'replacement':sg['replacement'],'verified':sg.get('source')=='llm'})
     memory=Memory(store)
     for task in memory.actions(meeting=mid):
         if task.get('state') in ('done','dismissed'): continue

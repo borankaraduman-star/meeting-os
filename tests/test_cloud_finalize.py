@@ -475,10 +475,27 @@ class GlossaryTests(unittest.TestCase):
                 def complete(self,system,user,max_tokens=0,schema=None):
                     return json.dumps({'decisions':[{'segment_id':a,'original':'pemede','accept':True,'reason':'kısaltma'},{'segment_id':a,'original':'trend yol','accept':False,'reason':'genel ifade'}]})
             refined=G.suggest_for_meeting(s,mid,entries,LLM());self.assertEqual([(r['original'],r['source']) for r in refined],[('pemede','llm')]);s.close()
-            q=dispatch({'action':'review_queue','meeting':mid},db);g=[i for i in q['items'] if i['kind']=='glossary'];self.assertEqual(len(g),1);self.assertIn('PMD',g[0]['reason'])
+            q=dispatch({'action':'review_queue','meeting':mid},db);g=[i for i in q['items'] if i['kind']=='glossary'];self.assertEqual(len(g),1);self.assertIn('PMD',g[0]['reason']);self.assertTrue(g[0]['verified'])
             r=dispatch({'action':'glossary_apply','meeting':mid,'segment':a,'original':'pemede','replacement':'PMD'},db);self.assertEqual(r,{'applied':True,'remaining':0})
             s=Store(db);row=[x for x in s.segments(mid) if x['id']==a][0];self.assertTrue(row['text'].startswith('Bugün PMD toplantısında'));self.assertEqual(row['original_text'],'Bugün pemede toplantısında trend yol için karar aldık.');s.close()
             summary=dispatch({'action':'glossary_summary'},db);self.assertEqual(summary['from_file'],2);self.assertEqual(summary['count'],2+summary['from_vocabulary'])
+    def test_apply_all_and_dismiss(self):
+        from meeting_os import glossary as G
+        from meeting_os.desktop import dispatch
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('G',{})
+            a=s.add_segment(mid,Segment(0,5,'pemede toplantısı ve trend yol.','system','K1'));b=s.add_segment(mid,Segment(5,9,'yine pemede.','system','K1'));s.status(mid,'complete')
+            meta=json.loads(s.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            meta['glossary_suggestions']=[{'segment_id':a,'original':'pemede','replacement':'PMD','source':'llm'},{'segment_id':a,'original':'trend yol','replacement':'Trendyol','source':'local'},
+                                          {'segment_id':b,'original':'pemede','replacement':'PMD','source':'llm'},{'segment_id':b,'original':'yok','replacement':'X','source':'llm'}]
+            with s.db:s.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),mid))
+            s.close()
+            r=dispatch({'action':'glossary_apply_all','meeting':mid},db);self.assertEqual((r['applied'],r['skipped'],r['remaining']),(2,1,1))
+            s=Store(db);texts={x['id']:x['text'] for x in s.segments(mid)};s.close();self.assertEqual((texts[a],texts[b]),('PMD toplantısı ve trend yol.','yine PMD.'))
+            r=dispatch({'action':'glossary_dismiss','meeting':mid,'segment':a,'original':'trend yol'},db);self.assertEqual(r,{'dismissed':1,'remaining':0})
+            self.assertEqual([i for i in dispatch({'action':'review_queue','meeting':mid},db)['items'] if i['kind']=='glossary'],[])
+            self.assertEqual(dispatch({'action':'glossary_apply_all','meeting':mid,'verified_only':False},db)['applied'],0)
     def test_stt_hint_only_for_prompt_models(self):
         from meeting_os.openrouter import OpenRouterClient
         bodies=[]

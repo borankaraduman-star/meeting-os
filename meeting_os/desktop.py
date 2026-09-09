@@ -246,8 +246,10 @@ def dispatch(request, db=None):
             if action=='reports_summary': return reports.summarize(reports.load_settings(base)['report_dir'])
             from . import __version__
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
-        if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply'):
+        if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G
+            if action=='glossary_apply_all': return G.apply_all(store,request['meeting'],verified_only=request.get('verified_only',True) is not False)
+            if action=='glossary_dismiss': return G.dismiss_suggestion(store,request['meeting'],int(request['segment']),request['original'])
             if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent,shared=db is None)   # tests and private copies stay local
             entries=G.load(DATA_DIR if db is None else Path(db).parent,ROOT)
             if action=='glossary_summary':

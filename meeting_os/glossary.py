@@ -184,6 +184,41 @@ def apply_suggestion(store, mid, segment_id, original, replacement):
     return {'applied': True, 'remaining': len(remaining)}
 
 
+def _suggestions(store, mid):
+    meta = json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?', (mid,)).fetchone()[0] or '{}')
+    return meta, list(meta.get('glossary_suggestions') or [])
+
+
+def _save_suggestions(store, mid, meta, remaining):
+    meta['glossary_suggestions'] = remaining
+    with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?', (json.dumps(meta), mid))
+
+
+def dismiss_suggestion(store, mid, segment_id, original):
+    """Drop one proposal without touching the text; it will not come back until the next scan."""
+    meta, current = _suggestions(store, mid)
+    remaining = [s for s in current if not (s.get('segment_id') == segment_id and s.get('original') == original)]
+    _save_suggestions(store, mid, meta, remaining)
+    return {'dismissed': len(current) - len(remaining), 'remaining': len(remaining)}
+
+
+def apply_all(store, mid, verified_only=True):
+    """Apply every stored proposal (by default only the ones the analysis model accepted) in one pass.
+    Proposals whose span no longer exists are dropped; each edit goes through the normal text-edit path."""
+    meta, current = _suggestions(store, mid)
+    by_id = {r['id']: r for r in store.segments(mid)}
+    applied, skipped, remaining = [], 0, []
+    for sg in current:
+        if verified_only and sg.get('source') != 'llm': remaining.append(sg); continue
+        row = by_id.get(sg.get('segment_id')); text = (row or {}).get('text') or ''
+        if not row or sg.get('original') not in text: skipped += 1; continue
+        text = text.replace(sg['original'], sg['replacement'], 1)
+        store.correct_text(mid, row['id'], text); row['text'] = text
+        applied.append({'segment_id': row['id'], 'original': sg['original'], 'replacement': sg['replacement']})
+    _save_suggestions(store, mid, meta, remaining)
+    return {'applied': len(applied), 'skipped': skipped, 'remaining': len(remaining), 'changes': applied}
+
+
 def suggest_for_meeting(store, mid, entries, llm=None):
     rows = store.segments(mid)
     cands = candidates(rows, entries)
