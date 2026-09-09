@@ -176,3 +176,69 @@ class UserNameTests(unittest.TestCase):
             written=json.loads((data/reports.SETTINGS_FILE).read_text(encoding='utf-8'))
             self.assertEqual((written['user_name'],written['share_text'],written['audio_retention_days']),('Ayşe Yılmaz',True,60))
             self.assertEqual(json.loads(run().stdout)['user_name'],'Ayşe Yılmaz')
+
+class TeamFolderTests(unittest.TestCase):
+    def test_an_unreachable_folder_is_refused_and_a_real_one_replaces_the_report_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir();team=Path(tmp)/'ekip';team.mkdir()
+            self.assertEqual(reports.load_settings(data)['team_dir'],'')
+            self.assertEqual(reports.save_settings(data,{'team_dir':str(team/'yok')})['team_dir'],'')      # never mounted: not stored
+            self.assertEqual(reports.save_settings(data,{'team_dir':str(team/'glossary.jsonl')})['team_dir'],'')
+            settings=reports.save_settings(data,{'team_dir':' '+str(team)+' '})
+            self.assertEqual(settings['team_dir'],str(team))
+            self.assertEqual(reports.report_root(settings),team/'reports')
+            self.assertEqual(reports.report_root({'report_dir':'/x','team_dir':''}),Path('/x'))            # off: the personal folder
+            self.assertEqual(reports.save_settings(data,{'team_dir':'  '})['team_dir'],'')                 # cleared
+    def test_reports_are_written_into_the_team_folder_per_host(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir();team=Path(tmp)/'ekip';team.mkdir()
+            s=Store(data/'meeting-os.sqlite');mid=s.create_meeting('Ekip toplantısı',{})
+            s.add_segment(mid,Segment(0,5,'Merhaba','system','Konuşmacı 1'));s.status(mid,'complete')
+            reports.save_settings(data,{'report_dir':str(data/'kisisel'),'team_dir':str(team)})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                path=reports.write_meeting_report(s,mid,data)
+                self.assertTrue(path.startswith(str(team/'reports'/'Test-Mac')),path)
+                self.assertFalse((data/'kisisel').exists())                                                # one destination, not two
+                self.assertEqual(reports.summarize(reports.report_root(reports.load_settings(data)))['hosts']['Test-Mac']['reports'],1)
+                self.assertEqual(len(reports.remove_meeting_report(mid,data)),1)
+            s.close()
+
+class TeamGlossaryTests(unittest.TestCase):
+    def setUp(self):
+        from meeting_os import glossary as G
+        self.G=G
+    def team_terms(self,path):
+        return [e['term'] for e in (self.G.parse_line(l) for l in Path(path).read_text(encoding='utf-8').splitlines()) if e]
+    def test_local_wins_the_team_file_fills_gaps_and_import_merges_instead_of_overwriting(self):
+        G=self.G
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir();team=Path(tmp)/'ekip';team.mkdir()
+            reports.save_settings(data,{'team_dir':str(team)})
+            (data/G.FILENAME).write_text(json.dumps({'term':'PMD','expansion':'yerel'},ensure_ascii=False)+'\n',encoding='utf-8')
+            (team/G.FILENAME).write_text('\n'.join(json.dumps(e,ensure_ascii=False) for e in
+                ({'term':'PMD','expansion':'ekip'},{'term':'ARR','expansion':'yıllık yinelenen gelir'}))+'\n',encoding='utf-8')
+            loaded={e['term']:e for e in G.load(data)}
+            self.assertEqual(loaded['PMD']['expansion'],'yerel')                       # the Mac's own file wins
+            self.assertEqual(loaded['ARR']['expansion'],'yıllık yinelenen gelir')      # the team file only fills gaps
+            source=Path(tmp)/'yeni.jsonl'
+            source.write_text('\n'.join(json.dumps(e,ensure_ascii=False) for e in ({'term':'PMD','expansion':'yerel'},{'term':'NPS'}))+'\n',encoding='utf-8')
+            result=G.import_file(source,data)
+            self.assertEqual((result['team']['added'],result['team']['total']),(1,3))
+            self.assertEqual(self.team_terms(team/G.FILENAME),['PMD','ARR','NPS'])     # ARR survives, PMD is not rewritten
+            self.assertEqual(json.loads(Path(team/G.FILENAME).read_text(encoding='utf-8').splitlines()[0])['expansion'],'ekip')
+    def test_the_merge_re_reads_so_a_teammates_term_is_not_lost_and_sharing_can_be_off(self):
+        G=self.G
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir();team=Path(tmp)/'ekip';team.mkdir()
+            reports.save_settings(data,{'team_dir':str(team)})
+            (team/G.FILENAME).write_text(json.dumps({'term':'PMD'})+'\n',encoding='utf-8')
+            entries=G.load(data)                                                        # loaded before the teammate wrote
+            (team/G.FILENAME).write_text('\n'.join(json.dumps(e) for e in ({'term':'PMD'},{'term':'OKR'}))+'\n',encoding='utf-8')
+            G.merge_into(team/G.FILENAME,entries+[G.parse_line(json.dumps({'term':'CAC'}))])
+            self.assertEqual(self.team_terms(team/G.FILENAME),['PMD','OKR','CAC'])
+            self.assertFalse(list(team.glob('*.tmp')))                                  # temp file renamed, never left behind
+            reports.save_settings(data,{'share_glossary':False})
+            source=Path(tmp)/'yeni.jsonl';source.write_text(json.dumps({'term':'LTV'})+'\n',encoding='utf-8')
+            self.assertNotIn('team',G.import_file(source,data))
+            self.assertEqual(self.team_terms(team/G.FILENAME),['PMD','OKR','CAC'])
+            self.assertIn('LTV',[e['term'] for e in G.load(data)])                       # the local copy is still written

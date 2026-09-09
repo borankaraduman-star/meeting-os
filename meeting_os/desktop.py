@@ -278,7 +278,7 @@ def dispatch(request, db=None):
             base=DATA_DIR if db is None else Path(db).parent
             if action=='report_settings': return reports.load_settings(base)
             if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
-            if action=='reports_summary': return reports.summarize(reports.load_settings(base)['report_dir'])
+            if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
             if action=='heartbeat': return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}

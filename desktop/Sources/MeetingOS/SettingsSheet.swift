@@ -31,6 +31,20 @@ struct SettingsSheet:View {
                 TextEditor(text:$model.vocabulary).font(.body.monospaced()).frame(height:160).border(.quaternary)
                 Text("Proje sözlüğü (glossary.jsonl)").font(.headline)
                 Text(model.glossaryFromFile>0 ? "\(model.glossaryFromFile) terim dosyadan, toplam \(model.glossaryCount) · örnek: \(model.glossarySample.prefix(6).joined(separator:", ")) · iCloud Drive ile bütün Mac’lerde aynı" : "Henüz sözlük dosyası yok. Slack agent’ın ürettiği JSON Lines dosyasını içe aktarın; iCloud Drive üzerinden bütün Mac’lere yayılır.").font(.caption).foregroundStyle(.secondary)
+                Text("Ekip klasörü").font(.headline)
+                HStack(spacing:8) {
+                    Text(model.reportSettings.teamDir.isEmpty ? "Seçilmedi" : model.reportSettings.teamDir.replacingOccurrences(of:NSHomeDirectory(),with:"~"))
+                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("Seç…") { pickTeamDir() }.accessibilityIdentifier("pickTeamDirButton")
+                    if !model.reportSettings.teamDir.isEmpty {
+                        Button("Kaldır") { model.reportSettings.teamDir=""; Task { await model.saveReportSettings() } }.accessibilityIdentifier("clearTeamDirButton")
+                    }
+                }
+                Toggle("Sözlüğü ekip klasörüyle paylaş (yerel sözlük her zaman öncelikli)",isOn:$model.reportSettings.shareGlossary)
+                    .onChange(of:model.reportSettings.shareGlossary) { _ in Task { await model.saveReportSettings() } }
+                    .disabled(model.reportSettings.teamDir.isEmpty)
+                Text("Ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçin: sözlük ekipçe birleşir ve teşhis raporları kişisel klasör yerine oraya yazılır. Ses, transkript ve ses profilleri bu klasöre girmez.").font(.caption2).foregroundStyle(.secondary)
                 HStack {
                     Button("glossary.jsonl içe aktar…") { Task { await model.importGlossary() } }.accessibilityIdentifier("importGlossaryButton")
                     Text("Sözlük üç yerde kullanılır: bulut STT’ye yazım ipucu (etkisi sağlayıcıya bağlı), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham metin hiçbir zaman kendiliğinden değiştirilmez.").font(.caption2).foregroundStyle(.secondary)
@@ -109,7 +123,14 @@ struct SettingsSheet:View {
                     Button("Kapat") { model.showSettings=false }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelSettingsButton")
                 }
             }.padding(28)
-        }.scrollIndicators(.visible).frame(width:640,height:min(["genel":470,"sozluk":820,"depolama":700,"guncelleme":620,"durum":660][section] ?? 700,(NSScreen.main?.visibleFrame.height ?? 900)-80))
+        }.scrollIndicators(.visible).frame(width:640,height:min(["genel":540,"sozluk":940,"depolama":700,"guncelleme":620,"durum":660][section] ?? 700,(NSScreen.main?.visibleFrame.height ?? 900)-80))
+    }
+    /// Read-write folder picker; the backend refuses a path it cannot see, so the field reverts on failure.
+    func pickTeamDir() {
+        let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.canChooseFiles=false;panel.allowsMultipleSelection=false;panel.prompt="Seç"
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        model.reportSettings.teamDir=url.path
+        Task { await model.saveReportSettings() }
     }
 }
 
