@@ -81,8 +81,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let rt=runtime
         return try await Task.detached { try invoke(rt,req) }.value
     }
+    var jobStopsOnPressure=false
     func stopForResources() {
-        guard let process=job, resourceStopMessage.isEmpty else { return }
+        guard let process=job, jobStopsOnPressure, resourceStopMessage.isEmpty else { return }
         resourceStopMessage="Bellek baskısı nedeniyle işlem durduruldu. Kaynak ses korunuyor; ağır uygulamaları kapatıp yeniden deneyin."
         error=resourceStopMessage
         if recording { stop() } else { process.terminate() }
@@ -122,7 +123,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let log=dataDir.appendingPathComponent("last-job.log")
             FileManager.default.createFile(atPath:log.path,contents:nil)
             let handle=try FileHandle(forWritingTo:log)
-            resourceStopMessage="";jobCanceled=false;jobKind=args.first
+            resourceStopMessage="";jobCanceled=false;jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args)
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor"
             let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }; p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
