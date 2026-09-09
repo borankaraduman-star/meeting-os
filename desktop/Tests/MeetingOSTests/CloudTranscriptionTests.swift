@@ -69,6 +69,16 @@ final class UpdaterTests:XCTestCase {
         XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x"] as NSDictionary)
     }
 }
+final class ZoomWatchTests:XCTestCase {
+    func testMeetingWindowDetection() {
+        let win:[[String:Any]]=[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Meeting","kCGWindowLayer":0],["kCGWindowOwnerName":"Safari","kCGWindowName":"Zoom Meeting tips","kCGWindowLayer":0]]
+        XCTAssertTrue(ZoomWatch.meetingOpen(windows:win,runningBundles:["us.zoom.xos"]))
+        XCTAssertFalse(ZoomWatch.meetingOpen(windows:win,runningBundles:["com.apple.Safari"]))
+        XCTAssertFalse(ZoomWatch.meetingOpen(windows:[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Workplace","kCGWindowLayer":25]],runningBundles:["us.zoom.xos"]))
+        XCTAssertFalse(ZoomWatch.meetingOpen(windows:[["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom","kCGWindowLayer":0]],runningBundles:["us.zoom.xos"]))
+        XCTAssertEqual(GlobalHotkeys.keyName(GlobalHotkeys.record),"⌃⌥R")
+    }
+}
 final class CloudTranscriptionTests:XCTestCase {
     func testOpenRouterModeRecordsWithoutLivePreview() {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))

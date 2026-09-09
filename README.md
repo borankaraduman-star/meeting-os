@@ -51,6 +51,7 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 
 ## Günlük kullanım kısayolları ve kontrol
 
+- **Menü çubuğu simgesi** (dalga) her uygulamanın üstünde: tek tıkla kayıt başlat/bitir, süre, an işaretleri, Kontrol’e geç. **⌃⌥R** ve **⌃⌥M** sistem geneli kısayollardır; Zoom öndeyken de çalışır, Erişilebilirlik izni gerektirmez. Zoom toplantı penceresi açıkken simge ve kenar çubuğu bunu belirtir.
 - **⌘R** kaydı başlatır/bitirir. Kayıt sırasında **⌘M** önemli an, **⌘⇧M** karar, **⌘⌥M** bana görev, **⌘⌃M** sonra bak işareti koyar; işaretler kayıt bitince Kontrol sekmesinin en üstünde ve ilgili paragrafta görünür.
 - **Kontrol** sekmesi bütün metni okumak yerine şüpheli yerleri sıralar: onay bekleyen isim (“Sol Üst?” → Onayla), isimsiz konuşmacı, çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev. Altında kimlik karnesi (otomatik doğru/yanlış, öneri onay/red, kaçırılan, metin düzeltmesi) vardır.
 - **Okuma görünümü** aynı kişinin ardışık bölümlerini paragraf yapar, “hı hı/tabii” araya girişlerini katlar, dolgu seslerini gizler (kapatılabilir). **Bölümler** ham kayıtları gösterir.

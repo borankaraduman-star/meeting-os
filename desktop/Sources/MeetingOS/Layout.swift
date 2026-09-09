@@ -7,7 +7,7 @@ import AppKit
 // and keeps every region's height bounded so long content scrolls inside
 // its own region instead of pushing headers/footers off-window.
 struct MeetingContent:View {
-    @StateObject var m=Model()
+    @ObservedObject var m:Model
     var body:some View {
         HStack(spacing:0) {
             SidebarView(model:m).frame(width:MeetingStyle.sidebarWidth)
@@ -46,6 +46,7 @@ struct SidebarView:View {
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
+                Text(model.zoomMeetingOpen && !model.recording ? "Zoom toplantısı açık · ⌃⌥R her yerden kaydı başlatır, menü çubuğu simgesi de var" : "Her yerden: ⌃⌥R kayıt başlat/bitir, ⌃⌥M an işaretle · menü çubuğundaki dalga simgesi").font(.caption2).foregroundStyle(model.zoomMeetingOpen && !model.recording ? MeetingStyle.accent : .secondary)
                 if let u=model.update, u.available {
                     VStack(alignment:.leading,spacing:6) {
                         Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)

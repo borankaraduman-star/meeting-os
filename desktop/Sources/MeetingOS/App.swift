@@ -170,6 +170,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
+            zoomMeetingOpen=ZoomWatch.current()
+            if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
@@ -316,6 +318,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(["action":format=="analysis.md" ? "export_analysis":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
     }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
+    @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
+    func showMainWindow() { NSApp.activate(ignoringOtherApps:true); NSApp.windows.first(where:{ $0.title=="Meeting OS" })?.makeKeyAndOrderFront(nil) }
+    /// Global hot key dispatch (⌃⌥R / ⌃⌥M) — same guards as the buttons.
+    func hotkey(_ id:UInt32) {
+        if id==GlobalHotkeys.record { if recording { stop() } else if !busy { start(); activity="Kayıt başladı · ⌃⌥R ile bitir, ⌃⌥M ile an işaretle" } }
+        else if id==GlobalHotkeys.mark, recording { markMoment("important") }
+    }
     @Published var update:UpdateInfo?; @Published var updating=false; @Published var reportSettings=ReportSettings(shareReports:true,shareText:false,autoUpdate:false,reportDir:"")
     var lastUpdateCheck:Date?
     /// Called after the first snapshot and every six hours; a fetch, nothing more.
@@ -411,5 +420,11 @@ func statusLabel(_ status:String)->String {
 }
 @main struct MeetingOSApp:App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    var body:some Scene { Window("Meeting OS",id:"main") { MeetingContent() }.windowStyle(.titleBar).defaultSize(width:1100,height:780) }
+    @StateObject var model=Model()
+    var body:some Scene {
+        Window("Meeting OS",id:"main") { MeetingContent(m:model).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780)
+        MenuBarExtra { QuickMenu(model:model) } label: {
+            if model.recording { Label(model.elapsedText,systemImage:"record.circle.fill") } else { Image(systemName:model.zoomMeetingOpen ? "video.badge.waveform" : "waveform") }
+        }.menuBarExtraStyle(.menu)
+    }
 }
