@@ -37,12 +37,12 @@ struct SidebarView:View {
                 // that is still called "9 Eyl 2026 14:05". Otherwise the header pencil is the way to rename.
                 switch SidebarTitle.mode(recording:model.recording,busy:model.busy,selectedTitle:model.meeting?.title) {
                 case .seed:
-                    TextField("Toplantıya bir ad ver",text:$model.title)
+                    TextField("Toplantıya bir ad verin",text:$model.title)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("meetingTitleField")
                         .accessibilityLabel("Toplantı adı")
                 case .rename:
-                    TextField("Bu toplantıya bir ad ver",text:$model.renameText)
+                    TextField("Bu toplantıya bir ad verin",text:$model.renameText)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit { guard !model.renameText.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }; Task { await model.renameMeeting() } }
                         .accessibilityIdentifier("meetingTitleField")
@@ -63,7 +63,7 @@ struct SidebarView:View {
                     HStack(spacing:6) {
                         Text(UpdateInfo.sidebarLine(version:UpdateInfo.appVersion,info:model.update)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                         Spacer()
-                        Button("Kontrol et") { Task { await model.checkForUpdates(force:true) } }.controlSize(.mini).disabled(model.busy || model.recording).help("Yeni sürüm var mı diye bakar; varsa burada “Güncelle ve yeniden başlat” çıkar").accessibilityIdentifier("checkUpdateButton")
+                        Button("Güncelleme ara") { Task { await model.checkForUpdates(force:true) } }.controlSize(.mini).disabled(model.busy || model.recording).help("Yeni sürüm var mı diye bakar; varsa burada “Güncelle ve yeniden başlat” çıkar").accessibilityIdentifier("checkUpdateButton")
                     }.padding(.horizontal,4).accessibilityIdentifier("versionRow")
                 }
                 if let u=model.update, u.available {
@@ -76,12 +76,12 @@ struct SidebarView:View {
                     VStack(alignment:.leading,spacing:6) {
                         Text("ÖNEMLİ AN İŞARETLE").font(.system(size:10,weight:.semibold)).tracking(1.5).foregroundStyle(.secondary)
                         HStack(spacing:6) {
-                            Button("An") { model.markMoment("important") }.keyboardShortcut("m",modifiers:.command)
-                            Button("Karar") { model.markMoment("decision") }.keyboardShortcut("m",modifiers:[.command,.shift])
-                            Button("Görev") { model.markMoment("task") }.keyboardShortcut("m",modifiers:[.command,.option])
-                            Button("Sonra") { model.markMoment("later") }.keyboardShortcut("m",modifiers:[.command,.control])
+                            Button("An") { model.markMoment("important") }.keyboardShortcut("m",modifiers:.command).help("Önemli an işaretle (⌘M)")
+                            Button("Karar") { model.markMoment("decision") }.keyboardShortcut("m",modifiers:[.command,.shift]).help("Karar işaretle (⌘⇧M)")
+                            Button("Görev") { model.markMoment("task") }.keyboardShortcut("m",modifiers:[.command,.option]).help("Görev işaretle (⌘⌥M)")
+                            Button("Sonra") { model.markMoment("later") }.keyboardShortcut("m",modifiers:[.command,.control]).help("Sonra bakılacak an işaretle (⌘⌃M)")
                         }.controlSize(.small)
-                        Text(model.markerCount==0 ? "Konuşmayı bölmeden işaretle; kayıt bitince Kontrol sekmesinde sırayla görürsün. ⌘⇧M karar, ⌘⌥M görev, ⌘⌃M sonra bak." : "\(model.markerCount) an işaretlendi · Kontrol sekmesinde görünecek").font(.caption2).foregroundStyle(.secondary)
+                        Text(model.markerCount==0 ? "İşaretler kayıt bitince Kontrol’de sırayla görünür." : "\(model.markerCount) an işaretlendi · Kontrol sekmesinde görünecek").font(.caption2).foregroundStyle(.secondary)
                     }
                 }
             }.padding(18).task { await model.loadCloudModels() }   // the picker now lives in Ayarlar → Sistem; the list still warms up here, as before

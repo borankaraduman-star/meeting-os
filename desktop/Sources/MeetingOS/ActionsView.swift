@@ -35,12 +35,6 @@ struct ActionsView:View {
             }
         }
     }
-    func reminderButton(_ item:ActionItem)->some View {
-        Button("Hatırlatıcılar’a ekle") { m.addReminder(item) }
-            .disabled(["done","dismissed"].contains(item.state))
-            .help("Görevi Apple Hatırlatıcılar’daki varsayılan listeye ekler; kaynak toplantı ve zaman notu ile")
-            .accessibilityIdentifier("addReminder-\(item.id)")
-    }
     func handoffButton(_ item:ActionItem)->some View {
         Button("\(item.route) için paket kaydet") { Task { await m.exportHandoff(item) } }
             .disabled(item.stale || ["done","dismissed"].contains(item.state))
@@ -61,7 +55,7 @@ struct ActionsView:View {
                 }
             }
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
-                HStack(alignment:.top) { Text(item.title).font(.headline).strikethrough(["done","dismissed"].contains(item.state)).textSelection(.enabled);Spacer();TaskStatusBadge(state:item.state) }
+                HStack(alignment:.top) { Text(item.title).font(.headline).strikethrough(["done","dismissed"].contains(item.state)).textSelection(.enabled);Spacer() }   // the state picker below already says the state
                 Text("\(item.owner.isEmpty ? "Sahibi belirsiz" : item.owner) · \(item.due.isEmpty ? "Tarih belirtilmedi" : item.due) · \(item.meetingTitle)").font(.caption).foregroundStyle(.secondary)
                 if item.stale { Label("Kaynak değişti · Görevi yeniden doğrulayın",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
                 if let rel=m.continuity.relatedByTask[item.id], let first=rel.first(where:{ $0.supersededBy.isEmpty && $0.state != "dismissed" }) {
@@ -71,9 +65,10 @@ struct ActionsView:View {
                     }
                 }
                 HStack(spacing:10) {
-                    statePicker(item); dueChip(item); Spacer(minLength:6); reminderButton(item)
+                    statePicker(item); dueChip(item); Spacer(minLength:6)
                     Menu {
                         Button("Düzenle…") { edit=item;title=item.title;owner=item.owner;due=item.due }
+                        Button("Hatırlatıcılar’a ekle") { m.addReminder(item) }.disabled(["done","dismissed"].contains(item.state)).help("Görevi Apple Hatırlatıcılar’daki varsayılan listeye ekler; kaynak toplantı ve zaman notu ile").accessibilityIdentifier("addReminder-\(item.id)")
                         Button(m.drafts.contains { $0.task==item.id && !$0.stale } ? "Taslağı yeniden hazırla" : "Taslak hazırla") { m.prepareAction(item,force:m.drafts.contains { $0.task==item.id && !$0.stale }) }.disabled(m.busy || item.stale || ["done","dismissed"].contains(item.state))
                         Button("\(item.route) için paket kaydet…") { Task { await m.exportHandoff(item) } }.disabled(item.stale || ["done","dismissed"].contains(item.state))
                     } label: { Image(systemName:"ellipsis.circle") }.menuStyle(.borderlessButton).fixedSize().accessibilityIdentifier("taskMenu-\(item.id)")

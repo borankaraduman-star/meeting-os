@@ -450,7 +450,7 @@ class CloudRetryQueueTests(unittest.TestCase):
         from meeting_os.desktop import cloud_error_line
         now=datetime.now(timezone.utc)
         self.assertIsNone(cloud_error_line({}))
-        self.assertEqual(cloud_error_line({'cloud_error':{'kind':'auth'}}),'Anahtar geçersiz · Ayarlar')
+        self.assertEqual(cloud_error_line({'cloud_error':{'kind':'auth'}}),'Anahtar geçersiz · Ayarlar → Sistem → OpenRouter anahtarı')
         self.assertEqual(cloud_error_line({'cloud_error':{'kind':'credit'}}),'Kredi bitti')
         at=now+timedelta(minutes=45)
         line=cloud_error_line({'cloud_error':{'kind':'unavailable'},'cloud_retry_after':at.isoformat()})

@@ -106,7 +106,7 @@ struct ApplicationActivityView:View {
                 else if model.busy { ProgressView().controlSize(.mini) }
                 else if !model.error.isEmpty { Image(systemName:"exclamationmark.triangle").foregroundStyle(.orange) }
                 else { Image(systemName:"info.circle").foregroundStyle(.secondary) }
-                Text(model.recording ? "Kayıt oturumu":model.busy ? "İşlem sürüyor":model.error.isEmpty ? "Son durum":"Kontrol gerekiyor").font(.caption.weight(.semibold))
+                Text(model.recording ? "Kayıt oturumu":model.busy ? "İşlem sürüyor":model.error.isEmpty ? "Son durum":"Sorun var").font(.caption.weight(.semibold))
             }
             if model.busy && !model.jobProgress.isEmpty { Text(model.jobProgress).font(.caption.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
             if !model.microphoneHint.isEmpty { Label(model.microphoneHint,systemImage:"mic.slash").font(.caption).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }

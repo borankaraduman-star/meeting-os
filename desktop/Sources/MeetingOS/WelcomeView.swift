@@ -5,7 +5,7 @@ struct WelcomeView:View {
     @ObservedObject var model:Model
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
-            Text("Hoş geldin").font(.system(size:27,weight:.bold,design:.rounded))
+            Text("Hoş geldiniz").font(.system(size:27,weight:.bold,design:.rounded))
             Text("Meeting OS Zoom toplantılarını kaydeder, bulutta Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
             HStack(spacing:10) {
                 Text("Adınız").font(.callout)
@@ -19,11 +19,11 @@ struct WelcomeView:View {
             VStack(alignment:.leading,spacing:12) {
                 step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya yüzen paneldeki “Bitir”.")
                 step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses buluta gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol sekmesi hazır olur.")
-                step("3","Bir kez adlandır, sonra tanınır","Kontrol sekmesinde konuşanlara adını ver; ses profili kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır.")
+                step("3","Bir kez adlandırın, sonra tanınır","Transkriptin üstündeki İsimler kartında her sese bir kez ad verin; ses profili kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır.")
             }.padding(18).meetingCard().frame(maxWidth:640)
             HStack(spacing:10) {
                 Button { model.start() } label: { Label("Yeni kayıt",systemImage:"record.circle") }.buttonStyle(.borderedProminent).disabled(model.busy)
-                Button("Ayarlar → Sistem → Kurulum durumu") { Task { await model.settings() } }
+                Button("Kurulum durumunu aç") { Task { await model.settings() } }
             }
             Text("İzinler eksikse Kurulum durumu kartı gösterir ve tek tıkla ister.").font(.caption).foregroundStyle(.secondary)
         }.padding(32).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).accessibilityIdentifier("welcome")

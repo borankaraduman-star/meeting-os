@@ -36,7 +36,7 @@ extension Model {
     func analyzeAutomatically(_ mid:String) {
         if transcriptionMode=="openrouter" { analyzeMeeting(mid); return }   // cloud analysis loads no local model; safe on 16 GB
         if ProcessInfo.processInfo.physicalMemory <= 16*1024*1024*1024 {
-            activity="Transkript hazır · Özet ve görevleri Analiz sekmesinden isteğe bağlı hazırlayabilirsiniz."
+            activity="Transkript hazır · Özet sekmesinden özet ve görevleri hazırlayabilirsiniz."
         } else { analyzeMeeting(mid) }
     }
     func analyzeMeeting(_ mid:String?=nil) {

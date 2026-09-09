@@ -21,7 +21,7 @@ final class RelaunchRestoreTests:XCTestCase {
     }
     func testHeadlineUsesDisplayStatusLabel() {
         let pending=meeting("p","provisional",owner:"interrupted",created:"2026-09-09T12:00:00+00:00",display:"pending_finalization")
-        XCTAssertEqual(RelaunchRestore.headline(pending),"Sesin korundu · işlem şurada kaldı: Son işlem bekliyor")
-        XCTAssertEqual(RelaunchRestore.headline(meeting("i","incomplete",owner:"interrupted",created:"")),"Sesin korundu · işlem şurada kaldı: Kurtarılabilir")
+        XCTAssertEqual(RelaunchRestore.headline(pending),"Sesiniz korundu · işlem şurada kaldı: Son işlem bekliyor")
+        XCTAssertEqual(RelaunchRestore.headline(meeting("i","incomplete",owner:"interrupted",created:"")),"Sesiniz korundu · işlem şurada kaldı: Kurtarılabilir")
     }
 }

@@ -84,7 +84,7 @@ def cloud_error_line(metadata):
     error=(metadata or {}).get('cloud_error')
     if not isinstance(error,dict): return None
     kind=error.get('kind')
-    if kind=='auth': return 'Anahtar geçersiz · Ayarlar'
+    if kind=='auth': return 'Anahtar geçersiz · Ayarlar → Sistem → OpenRouter anahtarı'
     if kind=='credit': return 'Kredi bitti'
     from datetime import datetime
     try: return 'Yeniden denenecek · '+datetime.fromisoformat(metadata['cloud_retry_after']).astimezone().strftime('%H:%M')

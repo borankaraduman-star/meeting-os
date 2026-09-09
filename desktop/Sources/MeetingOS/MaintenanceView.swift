@@ -16,7 +16,7 @@ struct MaintenanceView:View {
                 Label("\(profiles.count) ses profili · \(profiles.reduce(0) { $0+($1["samples"] as? Int ?? 0) }) örnek"+(weak.isEmpty ? " · hepsi tutarlı" : " · \(weak.count) kişide zayıf örnek"),systemImage:"person.2").font(.callout)
                 ForEach(weak,id:\.description) { p in
                     HStack(spacing:8) {
-                        Text("\(p["name"] as? String ?? "") · en zayıf örnek benzerliği \(String(format:"%.2f",p["weakest_fit"] as? Double ?? 0))").font(.caption)
+                        Text("\(p["name"] as? String ?? "") · bir örnek diğerlerine benzemiyor").font(.caption).help("En zayıf örnek benzerliği \(String(format:"%.2f",p["weakest_fit"] as? Double ?? 0))")
                         Spacer()
                         if let sid=p["weakest_sample"] as? Int { Button("Zayıf örneği sil") { Task { await m.deleteWeakSample(sid) } }.controlSize(.mini).help("Başka bir ses ya da bozuk kayıt olabilir; silmek profili keskinleştirir") }
                     }.padding(.leading,24)
@@ -30,7 +30,7 @@ struct MaintenanceView:View {
                     }.padding(.leading,24)
                 }
                 if let s=storage { Label("Disk · \(StorageReport.format(bytes:s.total)) (ses \(StorageReport.format(bytes:s.recordings))) · Ayarlar → Sistem",systemImage:"internaldrive").font(.callout) }
-                if !blocked.isEmpty { Label("\(blocked.count) toplantı bulutta bekliyor · anahtar ya da kredi sorunu · Ayarlar → Sistem",systemImage:"exclamationmark.icloud").font(.callout).foregroundStyle(.orange) }
+                if !blocked.isEmpty { Label("\(blocked.count) toplantı bulutta bekliyor · anahtar ya da kredi sorunu · Ayarlar → Sistem → OpenRouter anahtarı",systemImage:"exclamationmark.icloud").font(.callout).foregroundStyle(.orange) }
             } else { Text("Yükleniyor…").font(.caption).foregroundStyle(.secondary) }
         }.task { if m.maintenance==nil { await m.loadMaintenance() } }
     }

@@ -4,6 +4,7 @@ import AppKit
 struct SettingsSheet:View {
     @ObservedObject var model:Model
     @AppStorage("settingsSection") private var section="genel"
+    @State private var advanced=false
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
@@ -23,6 +24,7 @@ struct SettingsSheet:View {
                 } else {
                     Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
                 }
+                OpenRouterKeyRow()
                 Divider()
                 }
                 if group=="sistem" {
@@ -87,16 +89,6 @@ struct SettingsSheet:View {
                     Button("Şimdi kontrol et") { Task { await model.checkForUpdates(force:true) } }
                     if model.update?.available==true { Button(model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat") { model.startUpdate() }.disabled(model.busy || model.recording || model.zoomMeetingOpen) }
                 }
-                Toggle("Yeni sürüm bulununca açılışta kendiliğinden güncelle (kayıt yokken)",isOn:$model.reportSettings.autoUpdate).onChange(of:model.reportSettings.autoUpdate) { _ in Task { await model.saveReportSettings() } }
-                Toggle("Bulut hatasında boşta yeniden dene (kayıt ve Zoom toplantısı yokken, 10 dakikada bir en fazla bir toplantı)",isOn:$model.reportSettings.autoRetry).onChange(of:model.reportSettings.autoRetry) { _ in Task { await model.saveReportSettings() } }.accessibilityIdentifier("autoRetryToggle")
-                Toggle("Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz",isOn:$model.reportSettings.shareReports).onChange(of:model.reportSettings.shareReports) { _ in Task { await model.saveReportSettings() } }
-                Toggle("Raporlara transkript metnini de ekle (varsayılan kapalı)",isOn:$model.reportSettings.shareText).onChange(of:model.reportSettings.shareText) { _ in Task { await model.saveReportSettings() } }
-                HStack {
-                    Text(model.reportSettings.reportDir.replacingOccurrences(of:NSHomeDirectory(),with:"~")).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button("Rapor klasörünü aç") { NSWorkspace.shared.open(URL(fileURLWithPath:model.reportSettings.reportDir)) }
-                }
-                Text("Raporlar yalnız sayı, puan, maliyet, model adı ve hata satırı içerir; iCloud Drive üzerinden diğer Mac’e geçer. Geliştirme oradaki raporlara bakılarak sürer.").font(.caption2).foregroundStyle(.secondary)
                 Divider()
                 }
                 if group=="sistem", !model.setupChecks.isEmpty {
@@ -111,10 +103,29 @@ struct SettingsSheet:View {
                             }
                         }
                         Text("Kırmızı: kayıt ya da güncelleme bu izin/ayar olmadan çalışmaz. Gri: isteğe bağlı.").font(.caption2).foregroundStyle(.secondary)
+                    }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
+                }
+                if group=="sistem" {
+                DisclosureGroup("Gelişmiş",isExpanded:$advanced) {
+                    VStack(alignment:.leading,spacing:10) {
+                        if let storage=model.storage { StorageCleanupSection(model:model,storage:storage) }
+                        Text("Kendiliğinden çalışanlar ve raporlar").font(.callout.weight(.semibold))
+                        Toggle("Yeni sürüm bulununca açılışta kendiliğinden güncelle (kayıt yokken)",isOn:$model.reportSettings.autoUpdate).onChange(of:model.reportSettings.autoUpdate) { _ in Task { await model.saveReportSettings() } }
+                        Toggle("Bulut hatasında boşta yeniden dene (kayıt ve Zoom toplantısı yokken, 10 dakikada bir en fazla bir toplantı)",isOn:$model.reportSettings.autoRetry).onChange(of:model.reportSettings.autoRetry) { _ in Task { await model.saveReportSettings() } }.accessibilityIdentifier("autoRetryToggle")
+                        Toggle("Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz",isOn:$model.reportSettings.shareReports).onChange(of:model.reportSettings.shareReports) { _ in Task { await model.saveReportSettings() } }
+                        Toggle("Raporlara transkript metnini de ekle (varsayılan kapalı)",isOn:$model.reportSettings.shareText).onChange(of:model.reportSettings.shareText) { _ in Task { await model.saveReportSettings() } }
+                        HStack {
+                            Text(model.reportSettings.reportDir.replacingOccurrences(of:NSHomeDirectory(),with:"~")).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            Button("Rapor klasörünü aç") { NSWorkspace.shared.open(URL(fileURLWithPath:model.reportSettings.reportDir)) }
+                        }
+                        Text("Raporlar yalnız sayı, puan, maliyet, model adı ve hata satırı içerir; iCloud Drive üzerinden diğer Mac’e geçer. Geliştirme oradaki raporlara bakılarak sürer.").font(.caption2).foregroundStyle(.secondary)
+                        Divider()
                         HStack { Button("Öz-test") { Task { await model.runProbe() } }.controlSize(.small).disabled(model.recording || model.busy).help("Kayıt yardımcısı, ffmpeg, ses modeli, veritabanı, disk, anahtar, sözlük ve rapor klasörünü birkaç saniyede sınar; toplantıdan önce çalıştırın").accessibilityIdentifier("probeButton"); Text("toplantıdan önce her şeyin yerinde olduğunu doğrular").font(.caption2).foregroundStyle(.secondary) }
                         if !model.probeLines.isEmpty { VStack(alignment:.leading,spacing:2) { ForEach(Array(model.probeLines.enumerated()),id:\.offset) { i,l in Text(l).font(i==0 ? .caption.weight(.semibold) : .caption2.monospacedDigit()).foregroundStyle(i==0 ? .primary : .secondary) } }.accessibilityIdentifier("probeResult") }
                         Text("Uygulama yoklaması · \(BridgeStats.shared.summary)").font(.caption2).foregroundStyle(.secondary).help("Python köprüsüne yapılan çağrıların süresi; p95 birkaç yüz ms üzerindeyse Mac yavaşlamış demektir")
-                    }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
+                    }.padding(.top,8)
+                }.font(.callout).accessibilityIdentifier("systemAdvanced")
                 }
                 if group=="genel" {
                 Text("Sizin adınız").font(.headline)
@@ -162,6 +173,31 @@ struct SettingsSheet:View {
     }
 }
 
+/// The only place the key was reachable used to be the OpenRouter import sheet, which nobody opens when they
+/// merely want to paste a key. Same Keychain item, same save path — one compact row in Ayarlar → Sistem.
+struct OpenRouterKeyRow:View {
+    @State private var key=""
+    @State private var stored=OpenRouterCredential.read() != nil
+    @State private var message=""
+    var body:some View {
+        VStack(alignment:.leading,spacing:4) {
+            HStack(spacing:8) {
+                Text("OpenRouter anahtarı").font(.callout)
+                SecureField(stored ? "Yeni anahtar girin" : "OpenRouter API anahtarı",text:$key)
+                    .textFieldStyle(.roundedBorder).frame(width:240).accessibilityIdentifier("openRouterKeyField")
+                    .onSubmit { save() }
+                Button("Kaydet") { save() }.disabled(key.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty).accessibilityIdentifier("saveOpenRouterKeyButton")
+                if stored { Label("Keychain’de kayıtlı",systemImage:"checkmark.circle").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("openRouterKeyStored") }
+            }
+            Text(message.isEmpty ? "Anahtar yalnızca macOS Anahtar Zinciri’nde durur; kayıtlıysa yeniden girmeniz gerekmez." : message).font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+    private func save() {
+        do { try OpenRouterCredential.save(key); key=""; stored=true; message="Anahtar Anahtar Zinciri’ne kaydedildi." }
+        catch { message=error.localizedDescription }
+    }
+}
+
 /// Read-only disk usage; deletion goes through the sidebar's existing confirmation. No automatic cleanup.
 struct StorageSection:View {
     @ObservedObject var model:Model
@@ -189,12 +225,22 @@ struct StorageSection:View {
             }
             Divider()
             HStack { Button("Sesleri sıkıştır") { Task { await model.compactStorage() } }.disabled(model.busy || model.recording).accessibilityIdentifier("compactStorageButton"); Text("Tamamlanmış kayıtlarda ham 12 saniyelik parçalar silinir ve birleştirilmiş ses kayıpsız FLAC’e çevrilir (≈3–4× küçülür; çalma ve ses profili aynen çalışır). Yeni kayıtlarda kendiliğinden yapılır.").font(.caption2).foregroundStyle(.secondary) }
+        }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
+    }
+}
+
+/// Deleting old audio is a once-a-quarter decision, so it lives under Ayarlar → Sistem → Gelişmiş rather than
+/// next to the disk totals everybody reads. Same controls, same identifiers.
+struct StorageCleanupSection:View {
+    @ObservedObject var model:Model
+    let storage:StorageReport
+    var body:some View {
+        VStack(alignment:.leading,spacing:8) {
             HStack(spacing:8) {
                 Text("Eski toplantıların sesi").font(.callout)
                 Picker("",selection:Binding(get:{ model.reportSettings.audioRetentionDays },set:{ v in model.reportSettings.audioRetentionDays=v; Task { await model.saveReportSettings() } })) { Text("silinmesin").tag(0); Text("14 gün sonra").tag(14); Text("30 gün sonra").tag(30); Text("60 gün sonra").tag(60); Text("90 gün sonra").tag(90) }.labelsHidden().frame(width:150).accessibilityIdentifier("audioRetentionPicker")
                 Text("silinir; yazı, özet ve görevler kalır. “Sesi koru” işaretli toplantılara dokunulmaz. Saatte bir, kayıt yokken çalışır.").font(.caption2).foregroundStyle(.secondary)
             }
-            Divider()
             Text("Eski sesleri temizle").font(.caption.weight(.semibold))
             Text("Transkript, özet, görevler ve ses profilleri kalır; yalnız tamamlanmış eski toplantıların ses dosyaları silinir. “Sesi koru” işaretli toplantılara dokunulmaz. Önce liste gösterilir.").font(.caption2).foregroundStyle(.secondary)
             HStack {
@@ -211,6 +257,7 @@ struct StorageSection:View {
             if let meeting=model.meeting {
                 Toggle("Seçili toplantının sesini koru (“\(meeting.title)”)",isOn:Binding(get:{ meeting.metadata["keep"] as? Bool ?? false },set:{ v in Task { await model.keepMeeting(meeting.id,keep:v) } })).font(.caption)
             }
-        }.frame(maxWidth:.infinity,alignment:.leading).padding(16).meetingCard()
+            Divider()
+        }
     }
 }

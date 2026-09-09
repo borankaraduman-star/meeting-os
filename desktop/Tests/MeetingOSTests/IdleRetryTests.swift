@@ -22,8 +22,8 @@ final class IdleRetryTests: XCTestCase {
 
     func testBlockedHintNamesTheFixAndStaysQuiet() {
         XCTAssertNil(IdleRetry.blockedHint([]))
-        XCTAssertEqual(IdleRetry.blockedHint([["kind":"credit"]]),"OpenRouter kredisi bitti · 1 toplantı bekliyor · Ayarlar → Sistem")
-        XCTAssertEqual(IdleRetry.blockedHint([["kind":"auth"],["kind":"auth"]]),"OpenRouter anahtarı geçersiz · 2 toplantı bekliyor · Ayarlar → Sistem")
+        XCTAssertEqual(IdleRetry.blockedHint([["kind":"credit"]]),"OpenRouter kredisi bitti · 1 toplantı bekliyor · Ayarlar → Sistem → OpenRouter anahtarı")
+        XCTAssertEqual(IdleRetry.blockedHint([["kind":"auth"],["kind":"auth"]]),"OpenRouter anahtarı geçersiz · 2 toplantı bekliyor · Ayarlar → Sistem → OpenRouter anahtarı")
         XCTAssertEqual(IdleRetry.blockedHint([["kind":"auth"],["kind":"credit"]])?.hasPrefix("OpenRouter anahtarı veya kredisi"),true)
         XCTAssertFalse(IdleRetry.shouldNotifyBlocked(count:0,last:nil,now:now))
         XCTAssertTrue(IdleRetry.shouldNotifyBlocked(count:2,last:nil,now:now))
