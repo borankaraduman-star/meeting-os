@@ -579,3 +579,7 @@ Snapshot parmak izleri (`segments_hash`, `intel_hash`): satırlar ve `intelligen
 ## 2026-09-09 20:40 — 1.2.22: soru radarı, karne, vade önerisi, karşılama
 
 Ajan dalı (questions.py, scorecard.py; talk share Swift ile birebir) birleştirildi; Hafıza sekmesi beş bölüm: Ara / Kararlar / Sorular / Beklediklerim / Karne (Sorular: 5 grup kanıtlı, Karne: 0,9 sa · 9 toplantı · %48/36/12/4 ekranda doğrulandı). Vade önerisi çipi gerçek görevde doğrulandı. Kayıt sırasında parça sinyal analizi her 3. yoklamada.
+
+## 2026-09-09 21:15 — 1.2.23: ikinci kurul turu (sadeleştirme + optimizasyon), brifing
+
+UI denetimi (ajan, 12 madde) uygulandı: meetings/profiles/mic ipucu yalnız değişince yayınlanır (`Meeting.fingerprint`), Zoom/IOKit taraması boşta her 3. yoklamada, `TranscriptBlockView` Equatable ve parametreli (marks bir kez ayrıştırılır, profiller/katılımcılar parametre), konuşma payı satır değişiminde önbellekli; görev satırı 3 kontrol + ⋯ menü; Görevlerim’de tek “Dışa aktar” menüsü (brifing/gündem/gün/hafta; çakışan `digestButton` kimliği düzeldi); alt şerit kaldırıldı (yalnız identity_error kalır); Ayarlar’da “Sözlüğü kaydet”/“Kapat”; terimler (Görevlerim/Özet/Bana ait/Adlandırma isabeti/Toplantılar/OpenRouter); ⌘1–⌘5 Git menüsünde gerçek komut, metinlerde yalnız ⌃⌥R; Hafıza’da tek arama alanı, Karne Kontrol’e katlanır grup olarak taşındı. Toplantı öncesi brifing (`brief.py`, takvimden sıradaki etkinlik). Python denetimi ajana verildi (benzerlik O(n²), ortak yardımcılar, Memory memo, rapor FLAC hatası, lazy import, indeksler).
