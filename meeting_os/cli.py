@@ -266,7 +266,7 @@ def main(supervised=False):
                 from . import glossary as G
                 if args.action=='import':
                     if not args.path: raise ValueError('glossary.jsonl yolu gerekli')
-                    output(G.import_file(args.path,DATA_DIR))
+                    output(G.import_file(args.path,DATA_DIR,shared=True))
                 elif args.action=='show': output({'count':len(G.load(DATA_DIR,ROOT)),'entries':G.load(DATA_DIR,ROOT)[:50]})
                 elif args.action=='hint': output({'hint':G.stt_hint(G.load(DATA_DIR,ROOT))})
                 else:

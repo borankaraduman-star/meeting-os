@@ -60,7 +60,7 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 
 ## Proje sözlüğü (terimler, kısaltmalar, isimler)
 
-`~/Library/Application Support/MeetingOS/glossary.jsonl` (Sözlük ve ses profilleri → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`). Her satır bir JSON nesnesi:
+İçe aktarılan sözlük `iCloud Drive/MeetingOS-Shared/glossary.jsonl` dosyasına yazılır ve bütün Mac’lerde okunur (Sözlük ve ses profilleri → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`); `~/Library/Application Support/MeetingOS/glossary.jsonl` varsa Mac’e özel ek/üstüne yazma olarak önce okunur. Git deposuna girmez. Her satır bir JSON nesnesi:
 
 ```
 {"term":"PMD","expansion":"Product Management Daily","category":"kısaltma","aliases":["pi em di"],"mishearings":["pemede","PMB"],"context":"ürün ekibinin günlük toplantısı","confidence":"yüksek","source_count":14}

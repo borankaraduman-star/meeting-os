@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 
 MAX_TERMS = 500
+ICLOUD = Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs'
+SHARED_DIR = ICLOUD / 'MeetingOS-Shared'   # synced by iCloud Drive: one glossary for every Mac, never in the public git repo
 CATEGORIES = {'kısaltma', 'ürün', 'proje', 'ekip', 'kişi', 'teknik terim', 'müşteri', 'jargon', 'diğer'}
 FILENAME = 'glossary.jsonl'
 
@@ -36,11 +38,29 @@ def parse_line(line):
             'confidence': _clean(d.get('confidence'), 20), 'source_count': d.get('source_count') if isinstance(d.get('source_count'), int) else None}
 
 
+def shared_path():
+    return SHARED_DIR / FILENAME if ICLOUD.is_dir() else None
+
+
+REAL_DATA_DIR = Path.home() / 'Library/Application Support/MeetingOS'
+
+
+def sources(data_dir):
+    """Local file first (per-Mac override), then the iCloud-shared file — the shared file only for the
+    real data folder, so tests and private copies never read or count the synced glossary."""
+    out = [Path(data_dir) / FILENAME]
+    sp = shared_path()
+    try: is_real = Path(data_dir).resolve() == REAL_DATA_DIR.resolve()
+    except OSError: is_real = False
+    if sp and is_real: out.append(sp)
+    return out
+
+
 def load(data_dir, repo_root=None):
-    """Entries from glossary.jsonl first, then vocabulary.txt terms not already present. Deduplicated, capped."""
+    """Entries from the local and iCloud-shared glossary.jsonl, then vocabulary.txt terms not already present. Deduplicated, capped."""
     entries = []; seen = set()
-    path = Path(data_dir) / FILENAME
-    if path.is_file():
+    for path in sources(data_dir):
+        if not path.is_file(): continue
         for line in path.read_text(encoding='utf-8').splitlines():
             e = parse_line(line)
             if e and e['term'].casefold() not in seen: seen.add(e['term'].casefold()); entries.append(e)
@@ -52,15 +72,17 @@ def load(data_dir, repo_root=None):
     return entries[:MAX_TERMS]
 
 
-def import_file(source, data_dir):
-    """Copy a glossary.jsonl into the data directory after validating it; returns counts."""
+def import_file(source, data_dir, shared=False):
+    """Validate a glossary.jsonl and store it where every Mac reads it (iCloud-shared when available,
+    else the local data folder). Returns counts and the destination."""
     text = Path(source).read_text(encoding='utf-8')
     lines = [l for l in text.splitlines() if l.strip()]
     parsed = [parse_line(l) for l in lines]; good = [p for p in parsed if p]
     if not good: raise ValueError('Dosyada geçerli sözlük satırı yok (JSON Lines, her satırda "term" alanı gerekir)')
-    Path(data_dir).mkdir(parents=True, exist_ok=True)
-    (Path(data_dir) / FILENAME).write_text('\n'.join(json.dumps(p, ensure_ascii=False) for p in good[:MAX_TERMS]) + '\n', encoding='utf-8')
-    return {'imported': min(len(good), MAX_TERMS), 'skipped': len(lines) - len(good)}
+    target = (shared_path() if shared else None) or (Path(data_dir) / FILENAME)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text('\n'.join(json.dumps(p, ensure_ascii=False) for p in good[:MAX_TERMS]) + '\n', encoding='utf-8')
+    return {'imported': min(len(good), MAX_TERMS), 'skipped': len(lines) - len(good), 'path': str(target), 'shared': target != Path(data_dir) / FILENAME}
 
 
 def stt_hint(entries, limit=900):
@@ -107,7 +129,10 @@ def candidates(rows, entries, min_ratio=0.84):
                 for fv, e in variants:
                     if e['term'].casefold() in present: continue
                     if abs(len(fv) - len(fs)) > max(3, len(fv) // 2): continue
-                    ratio = difflib.SequenceMatcher(None, fs, fv).ratio()
+                    if len(fv) < 5:   # short variants ("cod", "ksa", "sevde") only on an exact hit; fuzzy matching them flags ordinary words
+                        ratio = 1.0 if fs == fv else 0.0
+                    elif fs[:1] != fv[:1]: continue   # a mis-transcription almost never changes the first letter ("evde" is not "Sevde")
+                    else: ratio = difflib.SequenceMatcher(None, fs, fv).ratio()
                     if ratio >= min_ratio and fs != _fold(e['term']):
                         found.append({'segment_id': r['id'], 'original': span, 'replacement': e['term'], 'term': e['term'], 'ratio': round(ratio, 3), 'source': 'local'})
                         break

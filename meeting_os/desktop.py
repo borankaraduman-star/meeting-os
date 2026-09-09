@@ -208,12 +208,12 @@ def dispatch(request, db=None):
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply'):
             from . import glossary as G
-            if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent)
+            if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent,shared=db is None)   # tests and private copies stay local
             entries=G.load(DATA_DIR if db is None else Path(db).parent,ROOT)
             if action=='glossary_summary':
-                path=(DATA_DIR if db is None else Path(db).parent)/G.FILENAME
-                from_file=sum(1 for l in path.read_text(encoding='utf-8').splitlines() if G.parse_line(l)) if path.is_file() else 0
-                return {'count':len(entries),'from_file':from_file,'from_vocabulary':len(entries)-from_file,'sample':[e['term'] for e in entries[:8]],'path':str(path)}
+                paths=[p for p in G.sources(DATA_DIR if db is None else Path(db).parent) if p.is_file()]
+                from_file=sum(1 for p in paths for l in p.read_text(encoding='utf-8').splitlines() if G.parse_line(l))
+                return {'count':len(entries),'from_file':from_file,'from_vocabulary':max(0,len(entries)-from_file),'sample':[e['term'] for e in entries[:8]],'path':str(paths[0]) if paths else str(G.shared_path() or (DATA_DIR/G.FILENAME)),'shared':any(G.shared_path() and p==G.shared_path() for p in paths)}
             if action=='glossary_apply': return G.apply_suggestion(store,request['meeting'],int(request['segment']),request['original'],request['replacement'])
             llm=None
             if request.get('openrouter_model'):

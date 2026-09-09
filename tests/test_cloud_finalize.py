@@ -453,7 +453,7 @@ class GlossaryTests(unittest.TestCase):
     def test_import_load_hint_and_context(self):
         from meeting_os import glossary as G
         with tempfile.TemporaryDirectory() as tmp:
-            r=G.import_file(self.write(tmp),tmp);self.assertEqual(r,{'imported':2,'skipped':3})
+            r=G.import_file(self.write(tmp),tmp);self.assertEqual((r['imported'],r['skipped'],r['shared']),(2,3,False))
             (Path(tmp)/'vocabulary.txt').write_text('Boran\nPMD\n# yorum\n')
             entries=G.load(tmp,tmp);self.assertEqual([e['term'] for e in entries],['PMD','Trendyol','Boran'])
             self.assertEqual(G.stt_hint(entries),'PMD, Trendyol, Boran');self.assertEqual(G.analysis_context(entries)[0]['expansion'],'Product Management Daily')
@@ -463,7 +463,7 @@ class GlossaryTests(unittest.TestCase):
         from meeting_os.desktop import dispatch
         from meeting_os.types import Segment
         with tempfile.TemporaryDirectory() as tmp:
-            G.import_file(self.write(tmp),tmp);entries=G.load(tmp)
+            G.import_file(self.write(tmp),tmp);entries=[e for e in G.load(tmp) if e['term'] in ('PMD','Trendyol')]
             db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('G',{})
             a=s.add_segment(mid,Segment(0,5,'Bugün pemede toplantısında trend yol için karar aldık.','system','K1'))
             b=s.add_segment(mid,Segment(5,9,'PMD notları hazır, trendler iyi.','system','K1'));s.status(mid,'complete')
