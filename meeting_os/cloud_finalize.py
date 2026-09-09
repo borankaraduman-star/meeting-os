@@ -17,7 +17,7 @@ import subprocess
 
 import numpy as np
 import soundfile as sf
-from .openrouter import OpenRouterClient, STT_MODEL, _consent, validate_stt_model, diarization_options
+from .openrouter import OpenRouterClient, STT_MODEL, _consent, validate_stt_model, diarization_options, error_kind, error_message
 from .progress import emit
 from .types import Segment
 
@@ -27,6 +27,32 @@ MAX_PIECE_BYTES = 24*1024*1024
 REQUEST_TIMEOUT = 600
 UPLOAD_WORKERS = 3            # pieces in flight at once; MAI answered a 5-minute piece in ~63 s
 SOURCE_LABELS = {'mic':'Boran','system':'Karşı taraf'}
+RETRY_WAITS = (2,8,20)        # a rate limit or a 5xx usually clears in seconds; 30 s of waiting is cheaper than losing the batch
+RETRY_JITTER = 0.25           # three workers that failed together must not come back in lockstep
+BACKOFF_MINUTES = (10,30,120,360)   # idle-retry spacing after a failed job; every 24 h from then on
+MAX_CLOUD_RETRIES = 30        # the queue stops asking after this; the audio is still never deleted
+
+
+def backoff_minutes(attempt):
+    """How long the idle queue waits before offering this meeting again. 1-based attempt count."""
+    return BACKOFF_MINUTES[attempt-1] if 1<=attempt<=len(BACKOFF_MINUTES) else 24*60
+
+
+def note_cloud_failure(store, mid, exc):
+    """Remember why the cloud refused this meeting, and when it is worth asking again. Nothing about the
+    audio or the finished pieces changes: this is the one line the sidebar shows and the idle queue reads."""
+    from datetime import datetime, timedelta, timezone
+    row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
+    if not row: return None
+    meta=json.loads(row['metadata'] or '{}')
+    previous=meta.get('cloud_retry_attempt')
+    attempt=min((previous if isinstance(previous,int) and not isinstance(previous,bool) and previous>0 else 0)+1,MAX_CLOUD_RETRIES)
+    now=datetime.now(timezone.utc)
+    meta['cloud_error']={'kind':error_kind(exc),'message':error_message(exc),'at':now.isoformat()}
+    meta['cloud_retry_attempt']=attempt
+    meta['cloud_retry_after']=(now+timedelta(minutes=backoff_minutes(attempt))).isoformat()
+    with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),mid))
+    return meta['cloud_error']
 
 
 def pieces(duration, length):
@@ -213,26 +239,44 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
             store.db.execute('INSERT INTO cloud_chunks VALUES(?,?,?)',(mid,position,json.dumps(usage)))
     pending=[i for i in range(len(plan)) if i not in done]
     finished=len(plan)-len(pending)
+    import random, time
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
+        def send(positions,encoded):
+            """Upload these pieces, never more than upload_workers() at a time (re-read so a meeting that opens
+            mid-job slows the next slice down). Every paid success is checkpointed even when a sibling fails."""
+            nonlocal finished
+            failures={};queue=list(positions)
+            while queue:
+                slice_=queue[:max(1,upload_workers())];queue=queue[len(slice_):]
+                futures={i:pool.submit(client.transcribe,encoded[i],'ogg',model=model,consent=True,
+                    diarize=diarize and plan[i][0]!='mic',timeout=REQUEST_TIMEOUT,hint=hint) for i in slice_}
+                for position in sorted(futures):
+                    try: result=futures[position].result()
+                    except Exception as exc: failures[position]=exc;continue
+                    commit(position,result['usage'],result);finished+=1
+            return failures
         start=0
         while start<len(pending):
             workers=upload_workers()   # re-read per batch: a meeting may start mid-job
             batch=pending[start:start+workers]; start+=workers
             emit('transcribing',finished,len(plan),'OpenRouter')
-            futures={}
+            encoded={}
             for position in batch:
                 kind,payload=prepare(position)
                 if kind=='skip': commit(position,payload,None);finished+=1;continue
-                source=plan[position][0]
-                futures[position]=pool.submit(client.transcribe,payload,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT,hint=hint)
-            failure=None
-            for position in sorted(futures):   # every paid success is checkpointed even when a sibling fails
-                try: result=futures[position].result()
-                except Exception as exc:
-                    failure=failure or exc;continue
-                commit(position,result['usage'],result);finished+=1
-            if failure is not None: raise failure
+                encoded[position]=payload
+            attempt=0;waiting=sorted(encoded)
+            while waiting:
+                failures=send(waiting,encoded)
+                if not failures: break
+                # An invalid key or an empty balance cannot be fixed by asking again; a timeout or a 5xx often can.
+                fatal=next((e for e in failures.values() if not getattr(e,'retryable',False)),None)
+                if fatal is not None or attempt>=len(RETRY_WAITS): raise fatal or failures[min(failures)]
+                wait=RETRY_WAITS[attempt]
+                emit('transcribing',finished,len(plan),f'OpenRouter · yeniden deneme {attempt+1}/{len(RETRY_WAITS)}')
+                time.sleep(wait+random.uniform(0,wait*RETRY_JITTER))
+                attempt+=1;waiting=sorted(failures)
     emit('transcribing',len(plan),len(plan),'OpenRouter')
     return plan
 
@@ -520,6 +564,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         if not mode:
             with store.db: store.db.execute('DELETE FROM segments WHERE meeting=?',(mid,))  # provisional live text is replaced by the cloud transcript
         metadata.update({'engine':'openrouter','model':model,'cloud_mode':mode or 'capture','cloud_upload_authorized':True,'paths':sources,'provisional':False})
+        metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None)   # an attempt is under way; the old verdict is stale
         if capture and mode!='file': metadata['markers']=read_markers(capture)
         metadata.update(current_job_metadata())
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
@@ -531,6 +576,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))
             metadata['job_usage']=job_usage(job_started)
+            metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_retry_attempt',None)   # it worked: nothing left to retry
             try:
                 identity=identify_clusters(store,mid,sources,embedder)
                 metadata['identity']=identity;metadata.pop('identity_error',None)
@@ -546,5 +592,8 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             from . import __version__
             write_meeting_report(store,mid,data_dir,version=__version__)
             return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources)}
-        except BaseException:
-            store.status(mid,'incomplete');raise
+        except BaseException as exc:
+            store.status(mid,'incomplete')
+            # A deliberate stop (⌘. / quit) is not a cloud failure and must not schedule an unwanted retry.
+            if isinstance(exc,Exception): note_cloud_failure(store,mid,exc)
+            raise

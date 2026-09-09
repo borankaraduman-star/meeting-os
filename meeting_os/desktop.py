@@ -69,6 +69,65 @@ def capture_presentation(status, owner, capture, metadata=None):
     return status
 
 
+def cloud_error_line(metadata):
+    """One honest line per meeting for the sidebar: what the cloud said and what happens next.
+    Auth and credit failures name the fix; a transient one names the time the idle queue will try again."""
+    error=(metadata or {}).get('cloud_error')
+    if not isinstance(error,dict): return None
+    kind=error.get('kind')
+    if kind=='auth': return 'Anahtar geçersiz · Ayarlar'
+    if kind=='credit': return 'Kredi bitti'
+    from datetime import datetime
+    try: return 'Yeniden denenecek · '+datetime.fromisoformat(metadata['cloud_retry_after']).astimezone().strftime('%H:%M')
+    except (KeyError,TypeError,ValueError): return 'Yeniden denenecek'
+
+
+def has_audio(metadata):
+    """True when this meeting's source audio is still on disk, so a retry has something to send."""
+    paths=[v for v in (metadata.get('paths') or {}).values() if isinstance(v,str)]
+    if paths and all(Path(v).is_file() for v in paths): return True
+    directory=metadata.get('capture_dir')
+    if not isinstance(directory,str) or not directory: return False
+    folder=Path(directory)
+    return folder.is_dir() and any(folder.glob('*.wav'))
+
+
+RETRY_STATES=('incomplete','failed','processing','provisional')
+
+def retry_candidates(store, now=None):
+    """Meetings an idle retry may pick up, and the ones only the user can unblock. A candidate still has its
+    audio, is not owned by a running job, and either never reported a cloud error or reported a transient one
+    whose backoff has passed. Auth/credit meetings are returned separately: retrying them would change nothing."""
+    from datetime import datetime, timezone
+    from .cloud_finalize import MAX_CLOUD_RETRIES
+    from .recovery import classify, metadata as read_metadata
+    now=now or datetime.now(timezone.utc)
+    candidates=[];blocked=[]
+    for row in store.meetings():
+        if row['status'] not in RETRY_STATES: continue
+        meta=read_metadata(row)
+        # Only meetings that were already being transcribed in the cloud; a local-mode recording is never
+        # sent to OpenRouter behind the user's back.
+        if not meta.get('cloud_mode') and meta.get('engine')!='openrouter': continue
+        if classify(meta.get('worker_identity'))=='active': continue
+        if not has_audio(meta): continue
+        error=meta.get('cloud_error') if isinstance(meta.get('cloud_error'),dict) else None
+        entry={'meeting':row['id'],'title':row['title'],'status':row['status'],
+               'attempt':meta.get('cloud_retry_attempt') or 0,'retry_after':meta.get('cloud_retry_after'),
+               'kind':(error or {}).get('kind'),'message':(error or {}).get('message')}
+        if entry['kind'] in ('auth','credit'): blocked.append(entry);continue
+        if (entry['attempt'] or 0)>=MAX_CLOUD_RETRIES: continue
+        when=meta.get('cloud_retry_after')
+        if isinstance(when,str):
+            try: due=datetime.fromisoformat(when)
+            except ValueError: due=None
+            if due is not None:
+                if due.tzinfo is None: due=due.replace(tzinfo=timezone.utc)
+                if due>now: continue
+        candidates.append(entry)
+    return {'candidates':candidates,'blocked':blocked}
+
+
 def meeting_files(metadata, data_dir):
     """Audio/capture folders owned by this meeting, only when they live inside the app data directory."""
     data_dir=Path(data_dir).resolve()
@@ -127,7 +186,9 @@ def storage_cleanup(store, data_dir, days=30, dry_run=True):
     candidates=[]; freed=0
     for row in store.meetings():
         meta=read_metadata(row)
-        if row['status']!='complete' or meta.get('keep') is True: continue
+        # T7: the audio is the only thing here that cannot be made again. A meeting whose cloud transcript
+        # never finished — or one still waiting on an OpenRouter retry — keeps its audio whatever the setting says.
+        if row['status']!='complete' or meta.get('keep') is True or meta.get('cloud_error'): continue
         if classify(meta.get('worker_identity'))=='active': continue
         try: created=datetime.fromisoformat(row['created'])
         except ValueError: continue
@@ -235,6 +296,7 @@ def dispatch(request, db=None):
                 if m['id']!=selected:
                     for key in SNAPSHOT_HEAVY_KEYS: m['metadata'].pop(key,None)
                 m['display_status']=capture_presentation(m['status'],m['recovery_state'],m['capture'],m['metadata'])
+                m['cloud_line']=cloud_error_line(m['metadata'])   # survives the heavy-key trim: every row can show its own verdict
             # Two cheap fingerprints let the app skip the heavy parts of the poll when nothing changed:
             # segments (full rows) and intelligence (a second bridge call for analysis/tasks/drafts).
             tables={r[0] for r in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -376,6 +438,11 @@ def dispatch(request, db=None):
             return review_queue(store,request['meeting'])
         if action=='delete_meeting':
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
+        if action=='retry_candidates':
+            import os
+            # Guardrail: while a Zoom meeting has pushed the app into low priority, the idle queue offers nothing.
+            if os.environ.get('MEETING_OS_LOW_PRIORITY'): return {'candidates':[],'blocked':[],'low_priority':True}
+            return retry_candidates(store)
         if action=='storage_report':
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
         if action=='storage_compact':

@@ -122,8 +122,15 @@ class OpenRouterTests(unittest.TestCase):
         from meeting_os.openrouter import http_error_message
         self.assertIn('reddedildi',http_error_message(401));self.assertIn('bakiye',http_error_message(402))
         self.assertIn('hız sınırı',http_error_message(429));self.assertIn('hizmet',http_error_message(503))
-        for code in (401,402,429,500,418):
+        for code in (401,402,418):
             text=http_error_message(code);self.assertIn(str(code),text);self.assertIn('Otomatik tekrar yapılmadı',text)
+        for code in (408,429,500,503):   # transient: cloud_finalize retries these in place before giving up
+            text=http_error_message(code);self.assertIn(str(code),text);self.assertIn('Birkaç kez yeniden denendi',text)
+        from meeting_os.openrouter import CloudAuthError,CloudCreditError,CloudUnavailable,cloud_error_class,error_kind
+        self.assertEqual([cloud_error_class(c) for c in (401,403,402,429,500,404)],
+                         [CloudAuthError,CloudAuthError,CloudCreditError,CloudUnavailable,CloudUnavailable,OpenRouterError])
+        self.assertEqual([error_kind(c('x')) for c in (CloudAuthError,CloudCreditError,CloudUnavailable)],['auth','credit','unavailable'])
+        self.assertTrue(CloudUnavailable('x').retryable);self.assertFalse(CloudAuthError('x').retryable)
 
     def test_analysis_adapter_uses_requested_model_and_json_schema(self):
         client=self.client({'choices':[{'finish_reason':'stop','message':{'content':'{"summary":[]}'}}]})
