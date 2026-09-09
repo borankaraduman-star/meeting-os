@@ -3,6 +3,7 @@ import contextlib
 import json
 import sys
 from pathlib import Path
+from .capture_metrics import journal_events
 from .cli import DATA_DIR, ROOT, parser, run_transcribe
 from .store import Store
 
@@ -26,12 +27,7 @@ def capture_state(metadata, include_signal=False):
     if not directory: return None
     path=Path(directory)/'capture-native.jsonl'
     if not path.exists(): return {'state':'waiting','seconds':0,'sources':{}}
-    with path.open('rb') as f:
-        f.seek(max(0,path.stat().st_size-65536)); data=f.read().decode('utf-8',errors='replace')
-    events=[]
-    for line in data.splitlines():
-        try: events.append(json.loads(line))
-        except json.JSONDecodeError: pass
+    events=journal_events(path)
     sources={}
     for e in events:
         if e.get('event')=='chunk': sources[e['source']]=max(sources.get(e['source'],0),e['start']+e['duration'])

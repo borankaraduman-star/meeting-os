@@ -13,11 +13,11 @@ import socket
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from .capture_metrics import journal_events
 
 SETTINGS_FILE = 'settings.json'
 HEARTBEAT_FILE = 'heartbeat.json'
 CHUNK_SECONDS = 12.0            # MeetingCapture --chunk-seconds default; the expected chunk count comes from it
-MAX_JOURNAL_BYTES = 8*1024*1024
 ICLOUD = Path.home() / 'Library/Mobile Documents/com~apple~CloudDocs'
 DEFAULT_SUBDIR = 'MeetingOS-Reports'
 
@@ -92,40 +92,31 @@ def _folder_bytes(path):
 
 def capture_block(directory, duration_seconds=0.0):
     """Numbers only from a meeting's capture folder: chunk files per source against the count the duration
-    implies, the capture journal's gap/error events, and the assembled *-full.wav sizes. The journal records
+    implies, the capture journal's gap/error events, and the assembled *-full.* sizes. The journal records
     'gap' (a discontinuity between two chunks) and 'error'; there is no dropped-frame event. Never raises."""
     try:
         if not isinstance(directory, str) or not directory: return None
         root = Path(directory)
         if not root.is_dir(): return None
         chunks = {}; full = {}
+        for p in root.glob('*-full.*'):   # audio_archive writes FLAC, the capture tool WAV
+            try: full[p.name.split('-full.')[0]] = p.stat().st_size
+            except OSError: pass
         for p in root.glob('*.wav'):
-            if p.name.endswith(('-full.wav','-full.flac')):
-                try: full[p.name.split('-full.')[0]] = p.stat().st_size
-                except OSError: pass
-                continue
             found = re.fullmatch(r'([A-Za-z]+)-\d{6}\.wav', p.name)
             if found: chunks[found.group(1)] = chunks.get(found.group(1), 0) + 1
         journal = root/'capture-native.jsonl'
         if not journal.is_file(): journal = root/'events.jsonl'
         gaps = 0; gap_seconds = 0.0; errors = 0; announced = {}
-        if journal.is_file():
-            read = 0
-            with journal.open('r', encoding='utf-8', errors='replace') as f:
-                for line in f:
-                    read += len(line)
-                    if read > MAX_JOURNAL_BYTES: break
-                    try: event = json.loads(line)
-                    except ValueError: continue
-                    if not isinstance(event, dict): continue
-                    kind = event.get('event')
-                    if kind == 'gap':
-                        gaps += 1
-                        a, b = event.get('start'), event.get('end')
-                        if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b > a: gap_seconds += b-a
-                    elif kind == 'error': errors += 1
-                    elif kind == 'chunk' and isinstance(event.get('source'), str):
-                        announced[event['source']] = announced.get(event['source'], 0) + 1
+        for event in journal_events(journal):
+            kind = event.get('event')
+            if kind == 'gap':
+                gaps += 1
+                a, b = event.get('start'), event.get('end')
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b > a: gap_seconds += b-a
+            elif kind == 'error': errors += 1
+            elif kind == 'chunk' and isinstance(event.get('source'), str):
+                announced[event['source']] = announced.get(event['source'], 0) + 1
         expected = math.ceil(float(duration_seconds or 0)/CHUNK_SECONDS)
         return {'chunk_files': chunks, 'announced_chunks': announced, 'expected_chunks': expected, 'chunk_seconds': CHUNK_SECONDS,
                 'gaps': gaps, 'gap_seconds': round(gap_seconds, 2), 'capture_errors': errors,

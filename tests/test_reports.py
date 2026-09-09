@@ -36,6 +36,21 @@ class CaptureBlockTests(unittest.TestCase):
             self.assertEqual((block['gaps'],block['gap_seconds'],block['capture_errors']),(2,1.75,1))
             self.assertEqual(block['full_bytes'],{'mic':4096,'system':2048})
             self.assertEqual(block['journal'],'capture-native.jsonl')
+    def test_the_flac_archive_audio_archive_writes_is_measured(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp)/'arsiv';d.mkdir()
+            (d/'system-full.flac').write_bytes(b'0'*9000);(d/'mic-full.wav').write_bytes(b'0'*3000)
+            (d/'mic-000000.wav').write_bytes(b'0'*100)
+            block=reports.capture_block(str(d))
+            self.assertEqual(block['full_bytes'],{'system':9000,'mic':3000})
+            self.assertEqual(block['chunk_files'],{'mic':1})
+    def test_the_journal_is_read_from_its_end(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp)/'uzun';d.mkdir()
+            old=[json.dumps({'event':'chunk','source':'mic','start':0,'duration':12,'pad':'x'*400}) for _ in range(400)]
+            (d/'capture-native.jsonl').write_text('\n'.join(old+[json.dumps({'event':'error','message':'son'})])+'\n')
+            self.assertEqual(reports.capture_block(str(d))['capture_errors'],1)   # the tail is what is read
+            self.assertLess(reports.capture_block(str(d))['announced_chunks']['mic'],400)
     def test_legacy_journal_and_missing_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             d=Path(tmp)/'eski';d.mkdir()
