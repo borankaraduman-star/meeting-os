@@ -272,7 +272,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let zoomState=lastZoomState; let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
-            zoomMeetingOpen=zoomNow
+            if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
             applyLivePriority(zoomOpen:zoomState.strict)
             heartbeatIfDue()
             updateBlockedHint()
