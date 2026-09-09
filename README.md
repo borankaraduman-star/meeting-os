@@ -10,6 +10,8 @@ yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktu
 
 Tam kullanım kılavuzu: [docs/KULLANIM.md](docs/KULLANIM.md) (bütün özellikler, sekmeler, ayarlar, kısayollar, sınırlar).
 
+Ekibe yeni katılan biri için tek sayfalık başlangıç: [docs/EKIP.md](docs/EKIP.md) — `git clone -b v0.1 … && sh scripts/install.sh` ile kurulum, gizlilik, ilk gün ve ilk hafta.
+
 ## Bu Mac’te aç
 
 **`Meeting OS.command` dosyasını çift tıklayın.** Uygulama henüz yoksa ilk kurulumu
@@ -181,9 +183,11 @@ Kaynak: <https://github.com/borankaraduman-star/meeting-os> — en son sürüm Z
 <https://github.com/borankaraduman-star/meeting-os/releases/latest> adresinde. Git ile:
 
 ```sh
-git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git
-cd meeting-os && open "Meeting OS.command"
+git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git ~/meeting-os
+sh ~/meeting-os/scripts/install.sh
 ```
+
+`scripts/install.sh` eksik araçları kurar, `scripts/setup.sh` ile ortamı hazırlar, adınızı ve OpenRouter anahtarınızı sorar, `doctor` ile bitirir; tekrar çalıştırılabilir. `Meeting OS.command` çift tıklanınca uygulama kuruluysa açar, değilse aynı betiği çağırır.
 
 macOS 15+, Apple Silicon, Xcode Command Line Tools, Python 3.12 ve ffmpeg gerekir.
 ZIP kullanıyorsanız açıp kaynak klasörünü iCloud dışında yerel bir dizine yerleştirin.

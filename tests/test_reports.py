@@ -1,4 +1,4 @@
-import json,tempfile,unittest
+import json,os,subprocess,sys,tempfile,unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -166,3 +166,13 @@ class UserNameTests(unittest.TestCase):
         self.assertEqual(speaker_label('mic','2',0,False,'Deniz'),'Deniz')
         self.assertEqual(speaker_label('system',None,0,False,'Deniz'),'Karşı taraf')
         self.assertEqual(speaker_label('system','1',2,True,'Deniz'),'Konuşmacı 3-2')   # the setting never touches diarized labels
+    def test_the_cli_writes_text_settings_as_text(self):
+        """scripts/install.sh sets the name through this command; a string must not be coerced to a bool."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'Library/Application Support/MeetingOS'
+            run=lambda *a: subprocess.run([sys.executable,'-m','meeting_os','reports','settings',*a],capture_output=True,text=True,env={**os.environ,'HOME':tmp})
+            p=run('--set','user_name=Ayşe Yılmaz','--set','share_text=true','--set','audio_retention_days=60')
+            self.assertEqual(p.returncode,0,p.stderr)
+            written=json.loads((data/reports.SETTINGS_FILE).read_text(encoding='utf-8'))
+            self.assertEqual((written['user_name'],written['share_text'],written['audio_retention_days']),('Ayşe Yılmaz',True,60))
+            self.assertEqual(json.loads(run().stdout)['user_name'],'Ayşe Yılmaz')
