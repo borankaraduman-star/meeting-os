@@ -260,6 +260,10 @@ Görevlerim’de her görevin yanında **Hatırlatıcılar’a ekle**: görev va
 
 “Ara” ve “Kayıtlardan yanıtla” yerel sözcük eşlemesiyle en fazla 12 alıntı seçer, yanıtı bulut analiz modeli yazar. Eşleme Türkçe eklere dayanıklıdır (“modülleri” → “modülü”, “eğitim” → “eğitimlerinin”): kısa ortak kök tam eşleşmeden biraz düşük puan alır; “ve, kaç, mi, hakkında” gibi işlev sözcükleri sorudan atılır. 9 Eylül ölçümü: “modüller kaç günde tamamlanıyor” sorusu düzeltmeden önce kanıtı kaçırıyordu, sonra 3 kanıtla tam yanıt verdi.
 
+### Ses dosyaları ve disk (1.2.17+)
+
+Kayıt sırasında 12 saniyelik parçalar 48 kHz stereo **16-bit** yazılır (eskiden float32, iki kat büyüktü) ve bulut transkript tamamlanınca silinir. Kalıcı kalan birleştirilmiş ses (16 kHz mono) transkript ve kişi tanıma bittikten sonra kayıpsız **16-bit FLAC**’e çevrilir: 41 dakikalık kayıt 313 MB’tan ≈82 MB’a iner; çalma (AVAudioPlayer) ve ses profili kaydı FLAC’i doğrudan okur. Ayarlar → Depolama → **Sesleri sıkıştır** eski kayıtları da tek seferde çevirir. **Eski toplantıların sesi** seçicisi (silinmesin / 14 / 30 / 60 / 90 gün, varsayılan 30) saatte bir, kayıt yokken çalışır: süresi dolan toplantının ses klasörü silinir, transkript/özet/görevler kalır, “Sesi koru” işaretli toplantılara dokunulmaz.
+
 ### Bulut maliyeti
 
 Ayarlar sayfasındaki **Bulut maliyeti** kartı OpenRouter’ın her parça için bildirdiği gerçek transkript ücretini toplar: bu ay ve toplam (toplantı sayısı, yüklenen dakika). Özet/görev analizi ve yankı olarak atlanan parçalar dahil değildir. CLI karşılığı yok; `cost_report` köprü eylemi.
