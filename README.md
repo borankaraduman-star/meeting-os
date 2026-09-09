@@ -54,6 +54,18 @@ satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.
 - Kayıt sırasında ekran uykusu engellenir (sistem sesi yakalama ekran uyuyunca düşer). Mikrofon hoparlör yankısı yüklenmeden atlanır.
 - CLI: `quality report` (düzeltmelerinizden WER ve kimlik karnesi), `quality compare --model … --allow-upload` (modelleri kendi düzeltmelerinize karşı ölçer), `agenda --output gundem.md`.
 
+## Proje sözlüğü (terimler, kısaltmalar, isimler)
+
+`~/Library/Application Support/MeetingOS/glossary.jsonl` (Sözlük ve ses profilleri → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`). Her satır bir JSON nesnesi:
+
+```
+{"term":"PMD","expansion":"Product Management Daily","category":"kısaltma","aliases":["pi em di"],"mishearings":["pemede","PMB"],"context":"ürün ekibinin günlük toplantısı","confidence":"yüksek","source_count":14}
+```
+
+Zorunlu alan yalnız `term`; `category` kısaltma | ürün | proje | ekip | kişi | teknik terim | müşteri | jargon. `vocabulary.txt` satırları da sözlüğe dahil edilir. Kullanım: (1) prompt kabul eden bulut STT modellerine yazım ipucu (GPT Transcribe ailesi; 9 Eylül A/B ölçümünde OpenRouter üzerinden ölçülebilir etki görülmedi, MAI ipucu almıyor); (2) transkript bitince yerel benzerlik taramasıyla “pemede → PMD” gibi öneriler Kontrol sekmesine düşer, **Sözlükle tara** bulut modunda önerileri gpt-4.1-mini’ye doğrulatır, **Uygula** metni düzeltir (özgün metin ve düzeltme geçmişi korunur); (3) özet/görev analizine sözlük bağlamı gider, kısaltmalar açık yazılır. Ham transkript kendiliğinden değiştirilmez.
+
+Slack agent için istem `docs/GLOSSARY.md` içindedir.
+
 ## Özet, görevler ve hafıza
 
 **Görevlerim**: Boran’a atanmış, bu toplantıya ait veya bütün görevleri görün.

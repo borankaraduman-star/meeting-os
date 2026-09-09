@@ -12,9 +12,9 @@ STT_MODEL = 'openai/gpt-transcribe'
 STT_MODELS = (
     {'id':'microsoft/mai-transcribe-2','name':'Microsoft MAI-Transcribe 2 (konuşmacı ayrımı · Türkçe önerilen)','pricing':'≈ $0.10/saat (9 Eylül 2026 ölçümü: 60 s = $0.0017); konuşmacı ayrımı dahil','diarization':{'azure':{'diarization':{'enabled':True}}}},
     {'id':'deepgram/nova-3','name':'Deepgram Nova-3 (konuşmacı ayrımı · Türkçe zayıf)','pricing':'$0.0043/dakika; 9 Eylül 2026 testinde Türkçe karakterler eksik çıktı','diarization':{'deepgram':{'diarize':True}}},
-    {'id':'openai/gpt-transcribe','name':'GPT Transcribe (ayrım yok)','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18','diarization':None},
-    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe (ayrım yok)','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
-    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe (ayrım yok)','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
+    {'id':'openai/gpt-transcribe','name':'GPT Transcribe (ayrım yok)','pricing':'$0.0045/dakika; 30–40 dk yaklaşık $0.135–$0.18','diarization':None,'prompt':True},
+    {'id':'openai/gpt-4o-transcribe','name':'GPT-4o Transcribe (ayrım yok)','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None,'prompt':True},
+    {'id':'openai/gpt-4o-mini-transcribe','name':'GPT-4o Mini Transcribe (ayrım yok)','pricing':'Token bazlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None,'prompt':True},
     {'id':'openai/whisper-large-v3','name':'Whisper Large V3 (ayrım yok)','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
     {'id':'openai/whisper-large-v3-turbo','name':'Whisper Large V3 Turbo (ayrım yok)','pricing':'Sağlayıcıya bağlı ücret; güncel fiyat OpenRouter model sayfasında','diarization':None},
 )
@@ -30,6 +30,11 @@ def validate_analysis_model(model):
     if model not in {m['id'] for m in ANALYSIS_MODELS}:
         raise OpenRouterError('Desteklenmeyen analiz modeli; model otomatik değiştirilmedi.')
     return model
+
+def supports_prompt(model):
+    """Models whose upstream API accepts a spelling-hint prompt; OpenRouter pass-through is measured, not assumed."""
+    return any(m['id']==model and m.get('prompt') for m in STT_MODELS)
+
 
 def diarization_options(model):
     """Provider-specific diarization switch verified on 2026-09-09, or None when the model has none."""
@@ -142,7 +147,7 @@ class OpenRouterClient:
         if not isinstance(result,dict) or 'error' in result: raise OpenRouterError('OpenRouter geçersiz/hatalı yanıt döndürdü.')
         return result
 
-    def transcribe(self, audio, format, *, model=STT_MODEL, consent=False, language='tr', diarize=False, timeout=90):
+    def transcribe(self, audio, format, *, model=STT_MODEL, consent=False, language='tr', diarize=False, timeout=90, hint=None):
         _consent(consent);validate_stt_model(model)
         if not isinstance(audio,bytes) or not 0<len(audio)<=self.MAX_AUDIO_BYTES:
             raise OpenRouterError(f'Ses parçası boş veya {self.MAX_AUDIO_BYTES//(1024*1024)} MiB sınırını aşıyor.')
@@ -152,6 +157,7 @@ class OpenRouterClient:
             raise OpenRouterError('Dil iki harfli ISO kodu olmalı.')
         payload={'model':model,'input_audio':{'data':base64.b64encode(audio).decode(),'format':format},'response_format':'json'}
         if language:payload['language']=language
+        if hint and supports_prompt(model): payload['prompt']=str(hint)[:1000]   # glossary spelling hint; ignored by providers that do not read it
         options=diarization_options(model) if diarize else None
         if diarize and options is None:raise OpenRouterError('Seçilen model konuşmacı ayrımı sunmuyor; model otomatik değiştirilmedi.')
         if options:

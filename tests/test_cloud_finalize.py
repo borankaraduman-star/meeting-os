@@ -18,7 +18,7 @@ def capture_dir(root,seconds=4):
 
 class FakeClient:
     def __init__(self,fail_at=None):self.calls=[];self.fail_at=fail_at
-    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
         self.calls.append({'bytes':len(audio),'format':fmt,'model':model,'diarize':diarize,'timeout':timeout})
         if self.fail_at==len(self.calls):raise OpenRouterError('network')
         if diarize:return {'text':'Merhaba. Selam.','usage':{'seconds':4,'cost':.0003},'segments':[{'start':0.0,'end':1.5,'text':'Merhaba.','speaker':'0'},{'start':1.6,'end':3.0,'text':'Selam.','speaker':'1'}]}
@@ -87,7 +87,7 @@ class FakeEmbedder:
         return [[1.0,0.0] if a<16000*2 else [0.0,1.0] for a,b in spans]
 
 class LongFakeClient(FakeClient):
-    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
         self.calls.append({'diarize':diarize})
         return {'text':'x','usage':{'seconds':8},'segments':[{'start':0.0,'end':3.5,'text':'Ayşe konuşuyor.','speaker':'0'},{'start':4.0,'end':7.5,'text':'Mehmet cevap veriyor.','speaker':'1'}]}
 
@@ -219,7 +219,7 @@ class EchoAnalysisTests(unittest.TestCase):
             self.assertEqual([r['source'] for r in rows],['system']);store.close()
 
 class BackchannelClient(FakeClient):
-    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
         self.calls.append({'diarize':diarize})
         return {'text':'x','usage':{'seconds':8},'segments':[{'start':0.0,'end':4.0,'text':'Uzun konuşma.','speaker':'0'},{'start':4.0,'end':5.5,'text':'Hı hı.','speaker':'1'},
                 {'start':5.5,'end':6.0,'text':'Devam.','speaker':'0'},{'start':6.0,'end':8.0,'text':'Aynen öyle.','speaker':'1'}]}
@@ -268,7 +268,7 @@ class SuggestionAndFeedingTests(unittest.TestCase):
             store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',10,'earlier')
             mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
             class C(FakeClient):
-                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
                     return {'text':'x','usage':{},'segments':[{'start':0.0,'end':1.5,'text':'a b c','speaker':'0'},{'start':1.5,'end':3.6,'text':'d e f','speaker':'0'},{'start':4.0,'end':20.0,'text':'uzun','speaker':'1'}]}
             finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=C(),embedder=Emb())
             rows=store.segments(mid);by={r['speaker']:r for r in rows}
@@ -409,7 +409,7 @@ class ParallelUploadTests(unittest.TestCase):
             d=capture_dir(tmp,seconds=95);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('P',{'capture_dir':str(d)});store.status(mid,'incomplete')
             calls=[]
             class C:
-                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90):
+                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
                     calls.append(len(audio))
                     if len(calls)==3: raise OpenRouterError('network')   # first upload of the last batch fails; its sibling must still be checkpointed
                     return {'text':'metin','usage':{'seconds':30,'cost':0.001}}
@@ -444,3 +444,51 @@ class EvidenceDropTests(unittest.TestCase):
         self.assertEqual(len(out['summary']),1);self.assertEqual(out['summary'][0]['evidence'][0]['quote'],'Yarın raporu ben çıkaracağım')
         self.assertEqual((out['dropped_quotes'],out['dropped_items']),(2,1))
         with self.assertRaises(ValueError):validate_record({'summary':[{'text':'x','evidence':[{'segment_id':2,'quote':'yok'}]}],'decisions':[],'risks':[],'questions':[],'actions':[]},rows)
+
+class GlossaryTests(unittest.TestCase):
+    LINES=[{'term':'PMD','expansion':'Product Management Daily','category':'kısaltma','aliases':['pi em di'],'mishearings':['pemede','PMB'],'context':'günlük ürün toplantısı'},
+           {'term':'Trendyol','category':'müşteri','mishearings':['trend yol','trendiyol']},{'term':'','category':'x'},{'nope':1}]
+    def write(self,tmp):
+        (Path(tmp)/'g.jsonl').write_text('\n'.join(json.dumps(l,ensure_ascii=False) for l in self.LINES)+'\nbozuk satır\n',encoding='utf-8');return Path(tmp)/'g.jsonl'
+    def test_import_load_hint_and_context(self):
+        from meeting_os import glossary as G
+        with tempfile.TemporaryDirectory() as tmp:
+            r=G.import_file(self.write(tmp),tmp);self.assertEqual(r,{'imported':2,'skipped':3})
+            (Path(tmp)/'vocabulary.txt').write_text('Boran\nPMD\n# yorum\n')
+            entries=G.load(tmp,tmp);self.assertEqual([e['term'] for e in entries],['PMD','Trendyol','Boran'])
+            self.assertEqual(G.stt_hint(entries),'PMD, Trendyol, Boran');self.assertEqual(G.analysis_context(entries)[0]['expansion'],'Product Management Daily')
+            with self.assertRaises(ValueError):G.import_file(Path(tmp)/'vocabulary.txt',tmp)
+    def test_candidates_apply_and_review(self):
+        from meeting_os import glossary as G
+        from meeting_os.desktop import dispatch
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            G.import_file(self.write(tmp),tmp);entries=G.load(tmp)
+            db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('G',{})
+            a=s.add_segment(mid,Segment(0,5,'Bugün pemede toplantısında trend yol için karar aldık.','system','K1'))
+            b=s.add_segment(mid,Segment(5,9,'PMD notları hazır, trendler iyi.','system','K1'));s.status(mid,'complete')
+            cands=G.candidates(s.segments(mid),entries)
+            self.assertEqual({(c['segment_id'],c['original'],c['replacement']) for c in cands},{(a,'pemede','PMD'),(a,'trend yol','Trendyol')})
+            class LLM:
+                model_id='m'
+                def count(self,t):return 1
+                def complete(self,system,user,max_tokens=0,schema=None):
+                    return json.dumps({'decisions':[{'segment_id':a,'original':'pemede','accept':True,'reason':'kısaltma'},{'segment_id':a,'original':'trend yol','accept':False,'reason':'genel ifade'}]})
+            refined=G.suggest_for_meeting(s,mid,entries,LLM());self.assertEqual([(r['original'],r['source']) for r in refined],[('pemede','llm')]);s.close()
+            q=dispatch({'action':'review_queue','meeting':mid},db);g=[i for i in q['items'] if i['kind']=='glossary'];self.assertEqual(len(g),1);self.assertIn('PMD',g[0]['reason'])
+            r=dispatch({'action':'glossary_apply','meeting':mid,'segment':a,'original':'pemede','replacement':'PMD'},db);self.assertEqual(r,{'applied':True,'remaining':0})
+            s=Store(db);row=[x for x in s.segments(mid) if x['id']==a][0];self.assertTrue(row['text'].startswith('Bugün PMD toplantısında'));self.assertEqual(row['original_text'],'Bugün pemede toplantısında trend yol için karar aldık.');s.close()
+            summary=dispatch({'action':'glossary_summary'},db);self.assertEqual(summary['from_file'],2);self.assertEqual(summary['count'],2+summary['from_vocabulary'])
+    def test_stt_hint_only_for_prompt_models(self):
+        from meeting_os.openrouter import OpenRouterClient
+        bodies=[]
+        def transport(req,timeout):
+            bodies.append(json.loads(req.data))
+            class R:
+                def __enter__(self):return self
+                def __exit__(self,*a):pass
+                def read(self,n):return json.dumps({'text':'x','usage':{}}).encode()
+            return R()
+        c=OpenRouterClient(api_key='k',transport=transport)
+        c.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True,hint='PMD, Trendyol');c.transcribe(b'OggS','ogg',model='microsoft/mai-transcribe-2',consent=True,hint='PMD')
+        self.assertEqual(bodies[0]['prompt'],'PMD, Trendyol');self.assertNotIn('prompt',bodies[1])

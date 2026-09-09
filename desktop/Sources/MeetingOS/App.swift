@@ -314,9 +314,35 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard panel.runModal() == .OK, let url=panel.url else { return }
         do { _=try await request(["action":format=="analysis.md" ? "export_analysis":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
     }
+    @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
+    func loadGlossarySummary() async {
+        guard let r=try? await request(["action":"glossary_summary"]) else { return }
+        glossaryCount=r["count"] as? Int ?? 0; glossaryFromFile=r["from_file"] as? Int ?? 0; glossarySample=r["sample"] as? [String] ?? []
+    }
+    /// Import a Slack-agent glossary (JSON Lines with a "term" field) into the data folder.
+    func importGlossary() async {
+        let panel=NSOpenPanel();panel.canChooseDirectories=false;panel.allowsMultipleSelection=false
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"glossary_import","path":url.path]); activity="Sözlük içe aktarıldı · \(r["imported"] as? Int ?? 0) terim, \(r["skipped"] as? Int ?? 0) satır atlandı"; await loadGlossarySummary() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// Re-scan the selected meeting against the glossary; in cloud mode the analysis model reviews each proposal.
+    func scanGlossary() async {
+        guard let mid=selected, !busy else { return }
+        var req:[String:Any]=["action":"glossary_suggest","meeting":mid]
+        if transcriptionMode=="openrouter" { req["openrouter_model"]=analysisModel }
+        do { let r=try await request(req); let n=(r["suggestions"] as? [[String:Any]])?.count ?? 0; activity="Sözlük taraması bitti · \(n) öneri"; await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    func applyGlossary(_ item:ReviewItem) async {
+        guard let mid=selected, let seg=item.segment else { return }
+        do { _=try await request(["action":"glossary_apply","meeting":mid,"segment":seg,"original":item.original,"replacement":item.replacement]); activity="Uygulandı · “\(item.original)” → “\(item.replacement)”"; await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
     func settings() async {
         do {
             vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""
+            await loadGlossarySummary()
             storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse)   // read-only walk; a failure hides the section only
             showSettings=true
         } catch { self.error=error.localizedDescription }

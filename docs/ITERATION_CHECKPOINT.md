@@ -491,3 +491,7 @@ Kayıt a60639c13d83 (05:14–05:55, YouTube Zoom söyleşisi, ⌘R ile başlatı
 ## 2026-09-09 — İkinci Mac kurulumu
 
 GitHub `borankaraduman-star/meeting-os` (varsayılan dal v0.1, sürüm v1.1.0 + kaynak ZIP + SHA256) üzerinden ikinci Mac’e kuruldu. İlk açılışta izinler yeniden istendi: eski ad-hoc imzaya ait TCC kaydı yeni imzayla eşleşmedi (docs/MACOS_PERMISSIONS.md senaryosu). Kullanıcı bir kerelik izin göçünü (eski kaydı kaldır → yeniden onayla) yaptı, kayıt çalıştı; OpenRouter anahtarı o Mac’in Anahtar Zinciri’ne kaydedildi. Ses profilleri ve toplantılar Mac’e özel; ikinci Mac’te kişiler bir kez yeniden adlandırılacak.
+
+## 2026-09-09 — Proje sözlüğü (glossary.jsonl)
+
+Yeni `meeting_os/glossary.py`: JSON Lines içe aktarma (doğrulama, 500 terim), `vocabulary.txt` ile birleşim, STT ipucu (`prompt` yalnız GPT Transcribe ailesine; MAI’ye gönderilmez), yerel aday tarama (1–3 kelimelik pencereler vs term/alias/mishearing, benzerlik ≥0.84, kanonik yazım varsa atla), gpt-4.1-mini doğrulaması (kabul/ret, yeni öneri üretemez, alıntı ve terim yeniden doğrulanır), `apply_suggestion` → `correct_text` (özgün metin korunur). Bulut finalize sonunda ücretsiz yerel tarama `metadata.glossary_suggestions`; Kontrol’de “Sözlük düzeltmesi” maddeleri ve **Uygula**; “Sözlükle tara” düğmesi; ayarlarda içe aktarma. Analiz istemine sözlük bağlamı eklendi. A/B (GPT Transcribe, 60 s, ipucu var/yok): çıktı birebir aynı → OpenRouter JSON `prompt` alanı etkisiz görünüyor; güvenilir yol öneri+uygula. Testler: 82 Python (ilgili setler), 65 Swift.

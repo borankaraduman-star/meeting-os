@@ -32,6 +32,8 @@ final class ReviewItemTests:XCTestCase {
     func testItemsParseTitlesAndIds() {
         let a=ReviewItem(["segment_id":7,"start":65.0,"speaker":"Konuşmacı 2","text":"x","kind":"suggested_name","severity":1,"reason":"r","suggested":"Ayşe","speaker_key":"Konuşmacı 2"])
         XCTAssertEqual(a.title,"İsim onayı bekliyor");XCTAssertEqual(a.time,"01:05");XCTAssertEqual(a.id,"suggested_name:7")
+        let g=ReviewItem(["segment_id":3,"kind":"glossary","severity":2,"reason":"r","original":"pemede","replacement":"PMD"])
+        XCTAssertEqual(g.title,"Sözlük düzeltmesi");XCTAssertEqual(g.id,"glossary:3:pemede");XCTAssertEqual(g.replacement,"PMD")
         let t=ReviewItem(["kind":"task_owner","severity":2,"reason":"r","task":"t9","text":"Rapor"])
         XCTAssertEqual(t.title,"Görev sahibi belirsiz");XCTAssertEqual(t.id,"task_owner:t9");XCTAssertNil(t.segment);XCTAssertEqual(t.time,"")
     }

@@ -193,6 +193,20 @@ def dispatch(request, db=None):
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             return {'saved':True}
         if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply'):
+            from . import glossary as G
+            if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent)
+            entries=G.load(DATA_DIR if db is None else Path(db).parent,ROOT)
+            if action=='glossary_summary':
+                path=(DATA_DIR if db is None else Path(db).parent)/G.FILENAME
+                from_file=sum(1 for l in path.read_text(encoding='utf-8').splitlines() if G.parse_line(l)) if path.is_file() else 0
+                return {'count':len(entries),'from_file':from_file,'from_vocabulary':len(entries)-from_file,'sample':[e['term'] for e in entries[:8]],'path':str(path)}
+            if action=='glossary_apply': return G.apply_suggestion(store,request['meeting'],int(request['segment']),request['original'],request['replacement'])
+            llm=None
+            if request.get('openrouter_model'):
+                from .openrouter import OpenRouterClient,validate_analysis_model
+                llm=OpenRouterClient().analysis(validate_analysis_model(request['openrouter_model']),consent=True)
+            return {'suggestions':G.suggest_for_meeting(store,request['meeting'],entries,llm)}
         if action=='agenda':
             from .agenda import build_agenda,render_agenda
             agenda=build_agenda(store,int(request.get('limit',5)));text=render_agenda(agenda)

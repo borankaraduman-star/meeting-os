@@ -316,6 +316,12 @@ struct SettingsSheet:View {
                 Text("Sözlük ve ses profilleri").font(.title2.bold())
                 Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın.")
                 TextEditor(text:$model.vocabulary).font(.body.monospaced()).frame(height:160).border(.quaternary)
+                Text("Proje sözlüğü (glossary.jsonl)").font(.headline)
+                Text(model.glossaryFromFile>0 ? "\(model.glossaryFromFile) terim dosyadan, toplam \(model.glossaryCount) · örnek: \(model.glossarySample.prefix(6).joined(separator:", "))" : "Henüz sözlük dosyası yok. Slack agent’ın ürettiği JSON Lines dosyasını içe aktarın; her satırda term, expansion, category, aliases, mishearings alanları olabilir.").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("glossary.jsonl içe aktar…") { Task { await model.importGlossary() } }.accessibilityIdentifier("importGlossaryButton")
+                    Text("Sözlük üç yerde kullanılır: bulut STT’ye yazım ipucu (etkisi sağlayıcıya bağlı), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham metin hiçbir zaman kendiliğinden değiştirilmez.").font(.caption2).foregroundStyle(.secondary)
+                }
                 Text("Kaydedilmiş sesler").font(.headline)
                 Text("Aynı isimde farklı kişiler için ayırt edici bir ad kullanın (ör. Ali Tasarım). Yeni bir profil, aynı isimdeki mevcut kişinin ses örneklerine eklenir.").font(.caption).foregroundStyle(.secondary)
                 if model.profiles.isEmpty {

@@ -120,12 +120,12 @@ def chunks(rows,llm,budget=2800):
             current.append(item);used+=n
     if current:yield current
 
-def analyze_rows(rows,llm,progress=None):
+def analyze_rows(rows,llm,progress=None,glossary=None):
     if not rows:return {key:[] for key in CATEGORIES}
     outputs=[];batches=list(chunks(rows,llm))
     for i,batch in enumerate(batches):
         if progress:progress(i,len(batches))
-        prompt=json.dumps({'transcript':batch},ensure_ascii=False)
+        prompt=json.dumps(({'glossary':glossary} if glossary else {})|{'transcript':batch},ensure_ascii=False)   # glossary: expand abbreviations in output text, still untrusted data
         error=None
         for attempt in range(2):
             try:

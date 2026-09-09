@@ -138,7 +138,7 @@ def speaker_label(source, provider_speaker, piece_index, multi_piece):
     return f'Konuşmacı {piece_index+1}-{number}' if multi_piece else f'Konuşmacı {number}'
 
 
-def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None):
+def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None, hint=None):
     """sources: {'mic': path, 'system': path} of 16 kHz mono files. Returns the plan."""
     _consent(consent);validate_stt_model(model)
     diarize=diarization_options(model) is not None
@@ -207,7 +207,7 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
                 kind,payload=prepare(position)
                 if kind=='skip': commit(position,payload,None);finished+=1;continue
                 source=plan[position][0]
-                futures[position]=pool.submit(client.transcribe,payload,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT)
+                futures[position]=pool.submit(client.transcribe,payload,'ogg',model=model,consent=True,diarize=diarize and source!='mic',timeout=REQUEST_TIMEOUT,hint=hint)
             failure=None
             for position in sorted(futures):   # every paid success is checkpointed even when a sibling fails
                 try: result=futures[position].result()
@@ -468,8 +468,11 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         metadata.update(current_job_metadata())
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
         try:
-            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg)
+            from .glossary import load as load_glossary, stt_hint, candidates as glossary_candidates
+            glossary=load_glossary(data_dir,Path(__file__).resolve().parents[1])
+            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None)
             metadata['echo_segments']=flag_echo(store,mid)
+            metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))
             try:
                 identity=identify_clusters(store,mid,sources,embedder)

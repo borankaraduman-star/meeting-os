@@ -138,6 +138,7 @@ def parser():
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
+    gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
     sub.add_parser('mcp')
     return p
 
@@ -145,7 +146,7 @@ def main(supervised=False):
     args=parser().parse_args()
     os.umask(0o077)
     try:
-        cloud_llm=getattr(args,'openrouter_model',None)
+        cloud_llm=getattr(args,'openrouter_model',None) or args.command=='glossary'
         if not supervised and args.command in ('import','transcribe','finalize','retry','analyze','prepare','ask','openrouter-import') and not cloud_llm:
             from .supervisor import run_guarded
             def interrupted(pid):
@@ -244,6 +245,26 @@ def main(supervised=False):
                 from .retry_workspaces import cleanup_workspaces
                 output(cleanup_workspaces(RetryStore(store)))
             elif args.command=='retry': output(run_retry(args,store))
+            elif args.command=='glossary':
+                from . import glossary as G
+                if args.action=='import':
+                    if not args.path: raise ValueError('glossary.jsonl yolu gerekli')
+                    output(G.import_file(args.path,DATA_DIR))
+                elif args.action=='show': output({'count':len(G.load(DATA_DIR,ROOT)),'entries':G.load(DATA_DIR,ROOT)[:50]})
+                elif args.action=='hint': output({'hint':G.stt_hint(G.load(DATA_DIR,ROOT))})
+                else:
+                    if not args.meeting: raise ValueError('--meeting gerekli')
+                    llm=None
+                    if args.openrouter_model:
+                        from .openrouter import OpenRouterClient,validate_analysis_model
+                        llm=OpenRouterClient().analysis(validate_analysis_model(args.openrouter_model),consent=True)
+                    entries=G.load(DATA_DIR,ROOT);suggestions=G.suggest_for_meeting(store,args.meeting,entries,llm)
+                    applied=0
+                    if args.apply and llm is not None:
+                        for sg in list(suggestions):
+                            try: G.apply_suggestion(store,args.meeting,sg['segment_id'],sg['original'],sg['replacement']);applied+=1
+                            except ValueError: pass
+                    output({'suggestions':suggestions,'applied':applied})
             elif args.command=='agenda':
                 from .agenda import build_agenda,render_agenda
                 text=render_agenda(build_agenda(store,args.limit))

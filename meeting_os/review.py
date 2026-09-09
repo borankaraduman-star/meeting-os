@@ -37,6 +37,13 @@ def review_queue(store, mid):
         secs=marker.get('seconds',0);near=min(rows,key=lambda r:abs((r['start'] or 0)-secs)) if rows else None
         items.append({'segment_id':near['id'] if near else None,'start':secs,'speaker':(near or {}).get('speaker_name') or (near or {}).get('speaker'),'text':(near or {}).get('text','')[:120],
                       'kind':'marker','severity':0,'reason':f"Kayıt sırasında ⌘M ile işaretledin: {labels.get(marker.get('kind'),'Önemli an')}",'marker':marker.get('kind')})
+    by_id={r['id']:r for r in rows}
+    for sg in (meta.get('glossary_suggestions') or [])[:40]:
+        row=by_id.get(sg.get('segment_id'))
+        if not row or sg.get('original') not in (row.get('text') or ''): continue
+        items.append({'segment_id':row['id'],'start':row['start'],'speaker':row.get('speaker_name') or row.get('speaker'),'text':row['text'][:120],'kind':'glossary','severity':2,
+                      'reason':f"Sözlük: “{sg['original']}” muhtemelen “{sg['replacement']}”"+(f" · {sg['reason']}" if sg.get('reason') else (' · yerel eşleme, model doğrulamadı' if sg.get('source')=='local' else '')),
+                      'original':sg['original'],'replacement':sg['replacement']})
     memory=Memory(store)
     for task in memory.actions(meeting=mid):
         if task.get('state') in ('done','dismissed'): continue

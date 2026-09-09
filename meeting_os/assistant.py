@@ -25,7 +25,10 @@ def analyze(store,mid,llm=None,force=False):
     from .llm import LocalLLM
     llm=llm or LocalLLM()
     digest=mem.current_hash(mid)   # staleness is judged on the whole transcript, not on the filtered analysis input
-    result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True))
+    from .glossary import load as load_glossary, analysis_context
+    from .cli import DATA_DIR, ROOT
+    glossary=analysis_context(load_glossary(DATA_DIR,ROOT))
+    result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None)
     return mem.save_analysis(mid,digest,llm.model_id,result)
 
 
