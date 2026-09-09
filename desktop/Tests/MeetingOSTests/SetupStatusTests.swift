@@ -2,6 +2,11 @@ import XCTest
 @testable import MeetingOS
 
 final class SetupStatusTests: XCTestCase {
+    func testFixLabelDependsOnWhetherMacOSWasEverAsked() {
+        XCTAssertEqual(SetupStatus.fixLabel(SetupCheck(id:"notify",title:"",state:.unknown,hint:"")),"İzin iste")
+        XCTAssertEqual(SetupStatus.fixLabel(SetupCheck(id:"notify",title:"",state:.optional,hint:"")),"Ayarları aç")
+        XCTAssertEqual(SetupStatus.panes["screen"],"Privacy_ScreenCapture")
+    }
     func testServiceChecksReadBridgeAnswer() {
         let c=SetupStatus.serviceChecks(["api_key":true,"glossary_terms":300,"glossary_shared":true,"update_behind":0])
         XCTAssertEqual(c.map(\.state),[.ok,.ok,.ok]); XCTAssertTrue(c[1].hint.contains("300 terim"))

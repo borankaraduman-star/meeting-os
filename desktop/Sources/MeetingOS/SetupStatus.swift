@@ -13,18 +13,34 @@ struct SetupCheck: Identifiable, Equatable {
 
 enum SetupStatus {
     /// What the "Düzelt" button on a check does: ask macOS, or open the exact System Settings pane when only the user can change it.
+    static let panes=["mic":"Privacy_Microphone","screen":"Privacy_ScreenCapture","calendar":"Privacy_Calendars","reminders":"Privacy_Reminders"]
+    /// macOS asks only once. Undetermined → ask now; already refused → open the exact System Settings pane, the only place it can change.
     static func fix(_ id:String,calendarWanted:Bool,done:@escaping ()->Void) {
+        let finish={ DispatchQueue.main.async(execute:done) }
         switch id {
-        case "mic": AVCaptureDevice.requestAccess(for:.audio) { _ in DispatchQueue.main.async(execute:done) }
+        case "mic":
+            if AVCaptureDevice.authorizationStatus(for:.audio) == .notDetermined { AVCaptureDevice.requestAccess(for:.audio) { _ in finish() } }
+            else { openPane("Privacy_Microphone"); finish() }
         case "screen":
-            if !CGRequestScreenCaptureAccess() { open("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") }
+            if !CGRequestScreenCaptureAccess() { openPane("Privacy_ScreenCapture") }
             DispatchQueue.main.asyncAfter(deadline:.now()+1,execute:done)
-        case "calendar": CalendarContext.requestAccess { _ in done() }
-        case "reminders": RemindersBridge.requestAccess { _ in done() }
-        case "notify": UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound]) { _,_ in DispatchQueue.main.async(execute:done) }
+        case "calendar":
+            if EKEventStore.authorizationStatus(for:.event) == .notDetermined { CalendarContext.requestAccess { _ in done() } }
+            else { openPane("Privacy_Calendars"); finish() }
+        case "reminders":
+            if EKEventStore.authorizationStatus(for:.reminder) == .notDetermined { RemindersBridge.requestAccess { _ in done() } }
+            else { openPane("Privacy_Reminders"); finish() }
+        case "notify":
+            UNUserNotificationCenter.current().getNotificationSettings { s in
+                if s.authorizationStatus == .notDetermined { UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound]) { _,_ in finish() } }
+                else { open("x-apple.systempreferences:com.apple.Notifications-Settings.extension"); finish() }
+            }
         default: done()
         }
     }
+    static func openPane(_ pane:String) { open("x-apple.systempreferences:com.apple.preference.security?\(pane)") }
+    /// Button label: a prompt is still possible only while macOS has never been asked.
+    static func fixLabel(_ c:SetupCheck)->String { c.state == .unknown ? "İzin iste" : "Ayarları aç" }
     static func open(_ url:String) { if let u=URL(string:url) { NSWorkspace.shared.open(u) } }
     static func fixable(_ c:SetupCheck)->Bool { ["mic","screen","calendar","reminders","notify"].contains(c.id) && c.state != .ok }
     static func permissionChecks(calendarWanted:Bool)->[SetupCheck] {
