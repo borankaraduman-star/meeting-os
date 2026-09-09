@@ -252,6 +252,10 @@ Uygulama toplantıyı hiçbir zaman yavaşlatmamalı. Bunun için: kayıt işi n
 
 Ayarlar sayfasının başındaki **Kurulum durumu** kartı mikrofon, ekran kaydı, takvim, hatırlatıcı ve bildirim izinlerini, OpenRouter anahtarının Keychain’de olup olmadığını (değer okunmaz, yalnız varlık), sözlük terim sayısını/paylaşımını ve sürümün güncel olup olmadığını tek listede gösterir. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; gri: isteğe bağlı.
 
+### Vade önerisi (1.2.22+)
+
+Görevlerim’de transkriptte geçen zaman ifadesi (“yarın”, “haftaya salı”, “ay sonu”, “15 Eylül”, “3 gün içinde”…) toplantı tarihine göre bir takvim gününe çevrilir ve **Öneri: 15 Eyl · Onayla** olarak gösterilir. Onaylanmadan hiçbir yere yazılmaz; belirsiz ifadeler (“en kısa zamanda”) için öneri çıkmaz. Onaylanan tarih görevde saklanır, “Hatırlatıcılar’a ekle” o gün 09:00 alarmıyla gönderir; geçmiş tarihli açık görevler turuncu görünür. CLI karşılığı yok; `intelligence` köprü yanıtındaki `due_suggestions` ve `task_set_due` eylemi.
+
 ### Görevleri Apple Hatırlatıcılar’a gönderme
 
 Görevlerim’de her görevin yanında **Hatırlatıcılar’a ekle**: görev varsayılan Hatırlatıcılar listesine başlığıyla eklenir; notunda kaynak toplantı, sahip ve transkriptteki zaman ifadesi bulunur (tarih tahmin edilmez). İlk kullanımda macOS Hatırlatıcılar izni istenir.

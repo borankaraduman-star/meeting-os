@@ -571,3 +571,7 @@ Boran “tema renk değiştirme nerede” sordu; yoktu. Ayarlar → Görünüm: 
 ## 2026-09-09 19:50 — 1.2.21: sadeleştirme + yoklama optimizasyonu
 
 Snapshot parmak izleri (`segments_hash`, `intel_hash`): satırlar ve `intelligence` çağrısı yalnız değişince alınır (2 sn’lik yoklama artık iki Python süreci yerine bir hafif çağrı; 335 satırlık JSON her seferinde taşınmıyor). Ayarlar beş bölüme ayrıldı (Genel / Sözlük ve sesler / Depolama / Güncelleme ve raporlar / Kurulum durumu; yükseklik bölüme göre), kenar çubuğunda yazıya çevirme seçenekleri tek satıra katlandı, başlıktaki teknik satır kalktı, transkript üstündeki iki bilgi satırı bire indi.
+
+## 2026-09-09 20:15 — 1.2.22 hazırlığı: vade önerisi, karşılama ekranı
+
+`due_dates.py` (Türkçe göreli tarih ayrıştırıcı; 18 ifade + belirsizler → None, birim testli), `intelligence` yanıtında `due_suggestions`, `task_set_due`; Görevlerim’de “Öneri: 15 Eyl · Onayla” çipi (gerçek görevde ekranda doğrulandı), onaylı tarih Hatırlatıcılar’a 09:00 alarmıyla. Boş kütüphanede karşılama ekranı (3 adım; derlendi, boş kütüphane bu Mac’te yok), menü çubuğunda “Son toplantıyı aç”, “Ayarlar” etiketi, ikincil “Ses dosyası aç…”. Tam Python paketi bu Mac’te bellek baskısı (seviye 2) yüzünden supervisor/pressure testlerinde düşüyor; tek tek koşulan diğer modüller temiz (soak testi hatası da `memory_pressure`).
