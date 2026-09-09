@@ -419,6 +419,37 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    // Cross-meeting PM views (loaded on demand, never while recording)
+    @Published var decisions:[DecisionEntry]=[]; @Published var waiting:[WaitingPerson]=[]; @Published var debt:[DebtItem]=[]; @Published var debtSummary=""
+    func loadDecisions(query:String) async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"decision_log","query":query,"limit":200]) { decisions=(r["decisions"] as? [[String:Any]] ?? []).enumerated().map { DecisionEntry($0.element,index:$0.offset) } }
+    }
+    func exportDecisions(query:String) async {
+        let panel=NSSavePanel(); panel.nameFieldStringValue="karar-defteri.md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"decision_log_export","path":url.path,"query":query]); activity="Karar defteri kaydedildi · \(r["decisions"] as? Int ?? 0) karar" } catch { self.error=error.localizedDescription }
+    }
+    func loadWaiting() async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"waiting_board"]) { waiting=(r["people"] as? [[String:Any]] ?? []).map(WaitingPerson.init) }
+    }
+    func loadReviewDebt() async {
+        guard !recording else { return }
+        if let r=try? await request(["action":"review_debt","days":7]) {
+            debt=(r["items"] as? [[String:Any]] ?? []).map(DebtItem.init)
+            let counts=r["counts"] as? [String:Int] ?? [:]
+            let names=["unnamed_speaker":"isimsiz konuşmacı","suggested_name":"isim onayı","glossary":"sözlük","task_owner":"sahipsiz görev","short_match":"kısa eşleşme","ambiguous":"çakışma","marker":"işaret"]
+            debtSummary=counts.sorted { $0.value>$1.value }.map { "\($0.value) \(names[$0.key] ?? $0.key)" }.joined(separator:", ")
+        }
+    }
+    func exportWeeklyDigest() async {
+        let f=DateFormatter(); f.dateFormat="yyyy-MM-dd"; let to=Date(); let from=Calendar.current.date(byAdding:.day,value:-6,to:to) ?? to
+        let panel=NSSavePanel(); panel.nameFieldStringValue="hafta-ozeti-\(f.string(from:to)).md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"digest","path":url.path,"from":f.string(from:from),"to":f.string(from:to)]); activity="Hafta özeti kaydedildi · \(r["meetings"] as? Int ?? 0) toplantı, \(r["decisions"] as? Int ?? 0) karar, \(r["tasks"] as? Int ?? 0) söz" }
+        catch { self.error=error.localizedDescription }
+    }
     /// Evidence / review navigation: scroll the reading view to the paragraph and flash it, keeping context around it.
     @Published var revealTarget:Int?; @Published var revealToken=0; @Published var highlighted:Int?
     func reveal(segment id:Int) {

@@ -48,6 +48,14 @@ struct SidebarView:View {
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 Button { model.showOpenRouter=true } label: { Label("OpenRouter ile ses aç",systemImage:"cloud").frame(maxWidth:.infinity) }.controlSize(.large).disabled(model.busy)
                 if model.zoomMeetingOpen && !model.recording { Label("Zoom toplantısı açık · ⌃⌥R ile kaydı başlat",systemImage:"video.fill").font(.caption).foregroundStyle(MeetingStyle.accent) }
+                if model.update?.available != true {
+                    HStack(spacing:6) {
+                        Image(systemName:"checkmark.circle").foregroundStyle(.secondary).font(.caption)
+                        Text(model.update.map { $0.error.isEmpty ? "Sürüm güncel" : $0.error } ?? "Sürüm kontrol edilmedi").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Spacer()
+                        Button("Kontrol et") { Task { await model.checkForUpdates(force:true) } }.controlSize(.mini).disabled(model.busy || model.recording).help("GitHub’daki v0.1 dalıyla karşılaştırır; yeni sürüm varsa burada “Güncelle ve yeniden başlat” çıkar").accessibilityIdentifier("checkUpdateButton")
+                    }.padding(.horizontal,4)
+                }
                 if let u=model.update, u.available {
                     VStack(alignment:.leading,spacing:6) {
                         Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)

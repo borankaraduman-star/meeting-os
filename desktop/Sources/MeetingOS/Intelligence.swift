@@ -145,7 +145,7 @@ struct ActionsView:View {
     }
     var body:some View { VStack(alignment:.leading) {
         HStack { Text("Sonraki adımlar").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)
-        HStack { Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri (\(count("boran")))").tag("boran");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }.help("Son 5 toplantının açık görev, soru ve kararlarından düzenlenebilir bir gündem taslağı kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("agendaButton"); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }.help("Bugün kaydedilen toplantılardan sana düşen görevleri, senden beklenen cevapları ve alınan kararları kaynaklarıyla bir Markdown dosyasına kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("digestButton") }.padding().task(id:m.selected) { await m.loadContinuity(); pickInitialFilter() }.onChange(of:m.actions.count) { _,_ in pickInitialFilter() }.accessibilityIdentifier("actionsFilterPicker")
+        HStack { Picker("Görevler",selection:$filter) { Text("Boran’ın görevleri (\(count("boran")))").tag("boran");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }.help("Son 5 toplantının açık görev, soru ve kararlarından düzenlenebilir bir gündem taslağı kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("agendaButton"); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }.accessibilityIdentifier("digestButton"); Button("Hafta özeti…") { Task { await m.exportWeeklyDigest() } }.help("Son 7 günün kararları, kapanan/açık görevleri, riskleri ve cevapsız soruları toplantı toplantı; paydaşa gönderilebilir Markdown").accessibilityIdentifier("weeklyDigestButton").help("Bugün kaydedilen toplantılardan sana düşen görevleri, senden beklenen cevapları ve alınan kararları kaynaklarıyla bir Markdown dosyasına kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("digestButton") }.padding().task(id:m.selected) { await m.loadContinuity(); pickInitialFilter() }.onChange(of:m.actions.count) { _,_ in pickInitialFilter() }.accessibilityIdentifier("actionsFilterPicker")
         ScrollView { LazyVStack(alignment:.leading,spacing:18) {
             if visible.isEmpty { ContentUnavailableView("Görev bulunamadı",systemImage:"checklist",description:Text("İsimsiz görevler Tüm görevler altında görünür. Sahipliği kaynakla doğrulayarak düzeltebilirsiniz.")) }
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
@@ -174,6 +174,7 @@ struct ActionsView:View {
 }
 struct MemoryView:View {
     @ObservedObject var m:Model
+    @State private var mode="search"
     @FocusState private var queryFocused:Bool
     var memoryQueryField:some View {
         TextField("Örn. onboarding PRD",text:$m.memoryQuery).onSubmit { Task { await m.memorySearch() } }
@@ -181,11 +182,13 @@ struct MemoryView:View {
             .accessibilityIdentifier("memoryQueryField").accessibilityLabel("Hafızada ara")
     }
     var body:some View { VStack(alignment:.leading,spacing:16) {
-        Label("Toplantı hafızası",systemImage:"sparkle.magnifyingglass").font(.system(size:23,weight:.bold,design:.rounded));Text("Anahtar kelimelerle bütün toplantılarda arayın veya kaynaklı bir yanıt hazırlatın.").foregroundStyle(.secondary)
+        HStack { Label("Toplantı hafızası",systemImage:"sparkle.magnifyingglass").font(.system(size:23,weight:.bold,design:.rounded)); Spacer(); Picker("Görünüm",selection:$mode) { Text("Ara").tag("search"); Text("Karar defteri").tag("decisions"); Text("Beklediklerim").tag("waiting") }.pickerStyle(.segmented).frame(width:340).accessibilityIdentifier("memoryMode") }
+        if mode=="decisions" { ScrollView { DecisionLogView(m:m).padding(.bottom,24) } } else if mode=="waiting" { ScrollView { WaitingView(m:m).padding(.bottom,24) } } else {Text("Anahtar kelimelerle bütün toplantılarda arayın veya kaynaklı bir yanıt hazırlatın.").foregroundStyle(.secondary)
         ViewThatFits(in:.horizontal) {
             HStack { memoryQueryField;Button("Ara") { Task { await m.memorySearch() } }.accessibilityIdentifier("memorySearchButton");Button("Kayıtlardan yanıtla",action:m.askMemory).disabled(m.busy || m.memoryQuery.isEmpty).accessibilityIdentifier("memoryAskButton") }
             VStack(alignment:.leading,spacing:8) { memoryQueryField;HStack { Button("Ara") { Task { await m.memorySearch() } }.accessibilityIdentifier("memorySearchButton");Button("Kayıtlardan yanıtla",action:m.askMemory).disabled(m.busy || m.memoryQuery.isEmpty).accessibilityIdentifier("memoryAskButton") } }
         }
         ScrollView { VStack(alignment:.leading,spacing:18) { if !m.answer.isEmpty { Text(m.answer).textSelection(.enabled);EvidenceView(m:m,evidence:m.answerEvidence);Divider() };EvidenceView(m:m,evidence:m.hits) }.frame(maxWidth:.infinity,alignment:.leading) }
+        }
     }.padding(24) }
 }

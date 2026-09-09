@@ -32,6 +32,7 @@ struct ReviewView:View {
         ScrollView { VStack(alignment:.leading,spacing:14) {
             HStack { Text("Kontrol kuyruğu").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary);Button("Sözlükle tara") { Task { await model.scanGlossary() } }.disabled(model.busy || model.selected==nil).help("Transkripti proje sözlüğüyle karşılaştırır; bulut modunda öneriler analiz modeline doğrulatılır").accessibilityIdentifier("scanGlossaryButton") }
             Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
+            ReviewDebtView(m:model)
             if verifiedGlossary>0 {
                 HStack(spacing:10) {
                     Label("\(verifiedGlossary) sözlük düzeltmesi analiz modelince doğrulandı",systemImage:"character.book.closed").font(.callout)
