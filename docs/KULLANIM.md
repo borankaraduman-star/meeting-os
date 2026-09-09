@@ -1,4 +1,4 @@
-# Meeting OS — Kullanım kılavuzu (1.2.26)
+# Meeting OS — Kullanım kılavuzu (1.2.28)
 
 Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Hiçbir şey kendiliğinden dışarı gönderilmez: bütün dışa aktarımlar dosya olarak kaydedilir.
 
@@ -155,7 +155,6 @@ Tek arama alanı; bölüme göre çalışır:
 ![Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.](img/theme.jpg)
 
 *Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.*
-Üç bölüm var (önceki sürümlerde beştiler; eski seçiminiz kendiliğinden yeni bölüme katlanır — yukarıdaki ekran görüntüsü eski beşli seçiciyi gösteriyor):
 
 - **Genel — siz ve kayıt anı:** adınız (“Bana ait” filtresi ve mikrofon etiketi bu adı kullanır); tema (Sistem / Açık / Koyu) ve vurgu rengi; Zoom bildirimi; Zoom’da kendiliğinden kayıt; yüzen kayıt paneli; takvim bağlamı.
 - **Sesler ve sözlük — kim konuşuyor, sözcükler nasıl yazılıyor:** kayıtlı ses profilleri (örnekleri dinleme/silme, yeniden adlandırma, profil silme); sözlük (kişi adları / özel terimler, satır başına bir; **Sözlüğü kaydet**), `glossary.jsonl` içe aktarma; ekip klasörü ve **Sözlüğü ekip klasörüyle paylaş**.
@@ -164,9 +163,14 @@ Tek arama alanı; bölüme göre çalışır:
 ## 8. Ses profilleri (kişi tanıma)
 Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden ya da Düzelt ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur.
 
-**Öğrenme döngüsü (1.2.26):**
+![Kişi kartı (Ayarlar → Sesler ve sözlük): örnek sayısı, süre, en zayıf örnek, son toplantı; “Temiz örnek ekle…”, örnek silme ve yeniden adlandırma.](img/person.jpg)
+
+*Kişi kartı (Ayarlar → Sesler ve sözlük): örnek sayısı, süre, en zayıf örnek, son toplantı; “Temiz örnek ekle…”, örnek silme ve yeniden adlandırma.*
+
+**Öğrenme döngüsü (1.2.26–1.2.28):**
 - Yanlış otomatik ismi düzelttiğinizde o kümenin yanlış kişiye beslediği ses örneği silinir ve bu ses o kişi için “reddedildi” olarak hatırlanır; bir daha ona eşleşmez.
 - Aynı kelimeyi iki farklı toplantıda aynı şekilde düzelttiyseniz bu bir kural olur: sonraki transkriptlerde kendiliğinden uygulanır, paragraf işaretlenir ve geri alınabilir (geri alma kuralı kapatır). Sözlükteki bir terime denk gelen kurallar yanlış-duyma önerisi olarak sunulur.
+- Bir kümeyi adlandırdığınız anda aynı toplantının diğer isimsiz sesleri yeniden puanlanır (“· 2 kişi daha önerildi”). Kişi bazlı eşik: bir kişi için onayladığınız her öneri o kişinin eşiğini 0,01 düşürür (en az 0,84), yanlış otomatik isim 0,02 yükseltir; küresel eşik değişmez.
 - Kontrol → Karne altındaki “Öğrenme” satırı bu haftanın kendiliğinden tanıma oranını ve 1000 kelimede düzeltme sayısını geçen haftayla karşılaştırır. Birkaç hafta düzenli düzeltmeyle oran yükselmelidir; yükselmiyorsa `quality replay` çıktısını inceleyin. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı Ayarlar → Genel → Adınız değeriyle etiketlenir.
 
 ## 9. Sözlük
