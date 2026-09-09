@@ -61,7 +61,7 @@ struct QuickMenu:View {
     var body:some View {
         Text(model.recording ? "Kayıt sürüyor · \(model.elapsedText)" : (model.busy ? "İşlem sürüyor · \(model.jobProgress.isEmpty ? "lütfen bekleyin" : model.jobProgress)" : "Hazır"))
         if model.zoomMeetingOpen && !model.recording { Text("Zoom toplantısı açık").foregroundStyle(.secondary) }
-        if !model.recording, model.useCalendar, let cal=CalendarContext.current() { Text("Takvim: \(cal.title)").foregroundStyle(.secondary) }
+        if !model.recording, model.useCalendar, let cal=CalendarContext.currentCached() { Text("Takvim: \(cal.title)").foregroundStyle(.secondary) }
         Divider()
         Button(model.recording ? "Kaydı bitir  ⌃⌥R" : "Yeni kayıt  ⌃⌥R") { model.recording ? model.stop() : model.start() }.disabled(model.busy && !model.recording)
         if model.recording {

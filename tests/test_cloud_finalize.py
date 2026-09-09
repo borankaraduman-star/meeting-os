@@ -533,6 +533,10 @@ class JobPriorityTests(unittest.TestCase):
             self.assertEqual(CF.upload_workers(),CF.UPLOAD_WORKERS)
             u=CF.job_usage(__import__('time').monotonic()-2.0)
             self.assertFalse(u['low_priority']);self.assertGreaterEqual(u['wall_seconds'],2.0);self.assertGreater(u['peak_rss_mb'],0);self.assertGreaterEqual(u['cpu_seconds'],0)
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY_FLAG':tmp+'/low.flag'}):
+            os.environ.pop('MEETING_OS_LOW_PRIORITY',None)
+            self.assertEqual(CF.upload_workers(),CF.UPLOAD_WORKERS)
+            Path(tmp,'low.flag').write_text('');self.assertEqual(CF.upload_workers(),1)   # flag dropped mid-job
         with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
             self.assertEqual(CF.upload_workers(),1)
             self.assertEqual((CF.job_usage(0)['low_priority'],CF.job_usage(0)['upload_workers']),(True,1))

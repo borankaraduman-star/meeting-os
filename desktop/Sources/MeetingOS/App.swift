@@ -46,7 +46,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os.desktop"]; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo)
     let input=Pipe(), output=Pipe(); p.standardInput=input; p.standardOutput=output; p.standardError=FileHandle.nullDevice
     try p.run()
-    let deadline=DispatchWorkItem { if p.isRunning { p.terminate() } }
+    let deadline=DispatchWorkItem { if p.isRunning { kill(-p.processIdentifier,SIGTERM); p.terminate() } }
     DispatchQueue.global().asyncAfter(deadline:.now()+10, execute:deadline)
     defer { deadline.cancel() }
     try input.fileHandleForWriting.write(contentsOf:JSONSerialization.data(withJSONObject:request)); try input.fileHandleForWriting.close()
@@ -57,8 +57,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 }
 
 @MainActor final class Model:ObservableObject {
-    @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[]; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil } }; @Published var title=""; @Published var error=""
+    @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks() } }; @Published var profiles:[Profile]=[]
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · Ses ve metin bu Mac’te kalır"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -72,7 +72,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var tab="transcript" { didSet { if tab != "transcript" { pendingEvidence=nil } } }; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
     @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
     let runtime:Runtime; let dataDir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS")
-    @Published var focusedSegment:Int?
+    @Published var focusedSegment:Int? { didSet { rebuildBlocks() } }
     @Published var pendingEvidence:Evidence?
     var recordingNavigation=RecordingNavigation()
     @Published var jobProgress=""
@@ -97,7 +97,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         Task { await refresh() }
     }
     var meeting:Meeting? { meetings.first { $0.id==selected } }
-    @Published var showEchoRows=false
+    @Published var showEchoRows=false { didSet { rebuildBlocks() } }
     @Published var review:[ReviewItem]=[]
     @Published var scorecard=""
     @Published var markerCount=0
@@ -160,10 +160,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let visible=CloudTranscription.visibleRows(rows,showEcho:showEchoRows)
         return search.isEmpty ? visible : visible.filter { ($0.text+" "+$0.label).localizedCaseInsensitiveContains(search) }
     }
-    func request(_ req:[String:Any]) async throws -> [String:Any] {
-        let rt=runtime
-        return try await Task.detached { try invoke(rt,req) }.value
+    /// Reading-view paragraphs, rebuilt only when their inputs change. The 2-second status poll must not
+    /// re-run block building for every published field (a 1500-row day would pin the CPU again).
+    @Published private(set) var blocks:[TranscriptBlock]=[]
+    private var blocksKey:Int=0
+    func rebuildBlocks() {
+        var h=Hasher(); h.combine(rows.count); h.combine(rows.last?.id ?? -1); h.combine(showEchoRows); h.combine(search); h.combine(focusedSegment ?? -1); h.combine(rows.map { $0.name+$0.text }.joined().hashValue)
+        let key=h.finalize(); if key==blocksKey && !blocks.isEmpty { return }
+        blocksKey=key; blocks=TranscriptBlocks.build(filteredRows)
     }
+    func request(_ req:[String:Any]) async throws -> [String:Any] { try await Bridge.call(runtime,req) }
     var jobStopsOnPressure=false
     func stopForResources() {
         guard let process=job, jobStopsOnPressure, resourceStopMessage.isEmpty else { return }
@@ -204,6 +210,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
             zoomMeetingOpen=zoomNow
+            applyLivePriority(zoomOpen:zoomState.strict)
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,recording:recording,busy:busy,enabled:zoomAutoRecord && !requestedQuit) {
             case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"; notifyDone("Kayıt başladı","Zoom toplantısı açık; bitirmek için ⌃⌥R veya menü çubuğu.")
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
@@ -211,7 +218,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             }
             if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
-            if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 15*60 { Task { await checkForUpdates() } }
+            if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
             if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
     }
@@ -225,7 +232,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             resourceStopMessage="";jobCanceled=false;jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args)
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             progressURL=progress;jobStarted=Date();jobProgress="İşlem başlatılıyor"
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen)) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
@@ -235,7 +242,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh(); if self.requestedQuit && self.job==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }
-            try p.run(); job=p; busy=true; error=""
+            try p.run(); job=p; busy=true; error=""; jobBackgrounded=false
         } catch { self.error=error.localizedDescription; busy=false; jobKind=nil; recording=false; recordingNavigation.cancel() }
     }
     func start() {
@@ -401,6 +408,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// A job that started before the next Zoom meeting opened is pushed to Darwin background (CPU, I/O and
+    /// network throttled) and told to upload one piece at a time; both are undone when the meeting ends.
+    var jobBackgrounded=false
+    var lowPriorityFlag:URL { dataDir.appendingPathComponent("low-priority.flag") }
+    func applyLivePriority(zoomOpen:Bool) {
+        guard let p=job, jobKind != "record" else { if jobBackgrounded { jobBackgrounded=false; try? FileManager.default.removeItem(at:lowPriorityFlag) }; return }
+        guard zoomOpen != jobBackgrounded else { return }
+        jobBackgrounded=zoomOpen
+        setpriority(PRIO_DARWIN_PROCESS,id_t(p.processIdentifier),zoomOpen ? PRIO_DARWIN_BG : 0)   // 0 = PRIO_DARWIN_NORMAL (not exported to Swift)
+        if zoomOpen { try? Data().write(to:lowPriorityFlag); activity="Zoom toplantısı açıldı · arka plan işi yavaşlatıldı, tek yükleyici" }
+        else { try? FileManager.default.removeItem(at:lowPriorityFlag); activity="Zoom toplantısı bitti · arka plan işi normal hızda" }
+    }
     /// Send one task to Apple Reminders; asks for reminders access on first use.
     func addReminder(_ item:ActionItem) {
         let go={ [weak self] in
@@ -482,7 +501,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var lastUpdateCheck:Date?
     /// Called after the first snapshot and every six hours; a fetch, nothing more.
     func checkForUpdates(force:Bool=false) async {
-        if !force, let last=lastUpdateCheck, Date().timeIntervalSince(last) < 15*60 { return }   // on launch, on activation, at most every 15 minutes
+        if !force, let last=lastUpdateCheck, Date().timeIntervalSince(last) < 60*60 { return }   // on launch, on activation, at most hourly
         lastUpdateCheck=Date()
         if let status=try? await request(["action":"update_status"]), let state=status["state"] as? String, let msg=status["message"] as? String, state != "running", UserDefaults.standard.string(forKey:"lastShownUpdate") != (status["time"] as? String ?? "") {
             UserDefaults.standard.set(status["time"] as? String ?? "",forKey:"lastShownUpdate"); activity=(state=="done" ? "Güncelleme tamam · " : "Güncelleme başarısız · ")+msg

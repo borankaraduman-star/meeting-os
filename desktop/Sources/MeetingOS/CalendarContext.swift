@@ -20,6 +20,12 @@ enum CalendarContext {
         else { store.requestAccess(to:.event) { ok,_ in DispatchQueue.main.async { done(ok) } } }
     }
     /// Synchronous on purpose: recording start must not wait on a permission dialog. Returns nil without access.
+    private static var cache:(at:Date,event:CalendarEvent?)?
+    /// Menu bar and panels ask often; EventKit is queried at most once a minute.
+    static func currentCached(now:Date=Date())->CalendarEvent? {
+        if let c=cache, now.timeIntervalSince(c.at)<60 { return c.event }
+        let e=current(now:now); cache=(now,e); return e
+    }
     static func current(now:Date=Date())->CalendarEvent? {
         guard authorized else { return nil }
         let predicate=store.predicateForEvents(withStart:now.addingTimeInterval(-3*3600),end:now.addingTimeInterval(3600),calendars:nil)

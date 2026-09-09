@@ -407,6 +407,8 @@ def dispatch(request, db=None):
 
 
 def main():
+    import os
+    with contextlib.suppress(OSError): os.setpgrp()   # the app's watchdog kills the whole group, so a stuck child (git fetch) dies with us
     try:
         request=json.loads(sys.stdin.read())
         result=dispatch(request)

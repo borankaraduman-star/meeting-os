@@ -28,7 +28,7 @@ struct TranscriptView:View {
                 let canPlay = !model.recording && model.meeting?.metadata["text_only"] as? Bool != true
                 let canEdit = model.meeting?.status == "complete"
                 if model.readingMode && model.search.isEmpty && model.focusedSegment == nil {
-                    let blocks=TranscriptBlocks.build(model.filteredRows)
+                    let blocks=model.blocks
                     if TranscriptBlocks.asideCount(blocks)>0 {
                         HStack(spacing:8) {
                             Image(systemName:"text.bubble").foregroundStyle(.secondary)

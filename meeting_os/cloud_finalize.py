@@ -81,8 +81,11 @@ def is_silent(path, start, end, threshold=1e-4):
 
 
 def upload_workers():
-    """One piece at a time while a Zoom meeting is on screen (the app sets the flag); three otherwise."""
-    return 1 if os.environ.get('MEETING_OS_LOW_PRIORITY') else UPLOAD_WORKERS
+    """One piece at a time while a Zoom meeting is on screen: the app sets the env flag at launch and, for a job
+    that is already running when the next meeting opens, drops a flag file we re-check before every batch."""
+    if os.environ.get('MEETING_OS_LOW_PRIORITY'): return 1
+    flag=os.environ.get('MEETING_OS_LOW_PRIORITY_FLAG')
+    return 1 if flag and os.path.exists(flag) else UPLOAD_WORKERS
 
 
 def job_usage(started):
@@ -211,10 +214,11 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     pending=[i for i in range(len(plan)) if i not in done]
     finished=len(plan)-len(pending)
     from concurrent.futures import ThreadPoolExecutor
-    workers=upload_workers()
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for start in range(0,len(pending),workers):
-            batch=pending[start:start+workers]
+    with ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
+        start=0
+        while start<len(pending):
+            workers=upload_workers()   # re-read per batch: a meeting may start mid-job
+            batch=pending[start:start+workers]; start+=workers
             emit('transcribing',finished,len(plan),'OpenRouter')
             futures={}
             for position in batch:
