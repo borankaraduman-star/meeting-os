@@ -149,7 +149,7 @@ struct SettingsSheet:View {
         }.scrollIndicators(.visible).frame(width:640,height:min(CGFloat(SettingsSections.height(section)),(NSScreen.main?.visibleFrame.height ?? 900)-80))
         .task { await model.loadCloudModels() }
     }
-    /// Folded from the five sections that shipped before 1.2.28; a value stored back then must still open a section.
+    /// Folded from the five sections that shipped earlier; a value stored back then must still open a section.
     var group:String { SettingsSections.normalize(section) }
     /// Read-write folder picker; the backend refuses a path it cannot see, so the field reverts on failure.
     func pickTeamDir() {

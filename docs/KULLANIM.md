@@ -11,7 +11,7 @@ Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi Op
 ## 1. İlk kurulum
 
 1. GitHub `borankaraduman-star/meeting-os` → v0.1 dalı. Yeni bir Mac ya da ekip arkadaşı: `git clone -b v0.1 … && sh scripts/install.sh`, adım adım [EKIP.md](EKIP.md). İkinci Mac için `docs/TWO_MAC_WORKFLOW.md`.
-2. Uygulamayı açın, **Ayarlar (⌘,) → Kurulum durumu** kartına bakın: mikrofon, ekran kaydı (sistem sesi bununla alınır), bildirim, takvim, hatırlatıcı izinleri; OpenRouter anahtarı; sözlük; sürüm; teşhis rapor klasörü. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; **İzin iste** hiç sorulmamışsa macOS’a sordurur, **Ayarları aç** reddedilmiş izin için ilgili Sistem Ayarları bölmesini açar.
+2. Uygulamayı açın, **Ayarlar (⌘,) → Sistem → Kurulum durumu** kartına bakın: mikrofon, ekran kaydı (sistem sesi bununla alınır), bildirim, takvim, hatırlatıcı izinleri; OpenRouter anahtarı; sözlük; sürüm; teşhis rapor klasörü. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; **İzin iste** hiç sorulmamışsa macOS’a sordurur, **Ayarları aç** reddedilmiş izin için ilgili Sistem Ayarları bölmesini açar.
 3. OpenRouter anahtarı ilk bulut işleminde istenir ve Keychain’e bir kez kaydedilir.
 4. Sözlük: Slack agent çıktısı `glossary.jsonl` iCloud Drive `MeetingOS-Shared/` altında; bütün Mac’ler okur (bkz. bölüm 9).
 
@@ -36,7 +36,7 @@ Kayıt sırasında:
 - Ekran uykusu engellenir; ses akışı koparsa (uyku/uyanma, ekran değişimi) ya da 20 sn ses gelmezse yardımcı akışı kendiliğinden yeniden kurar (3 deneme). Disk 3 GB altına inince uyarır, 400 MB altında durur.
 - Kayıt sürerken yeni sürüm kurulmaz; toplantı sırasında başka iş varsa (önceki toplantının yüklemesi) arka plana alınır ve tek yükleyiciye iner.
 
-Ses dosyası: kenar çubuğu → **Ses dosyası aç…** bir dosyayı OpenRouter ile çevirip toplantı olarak ekler (aynı dosya ikinci kez seçilirse uyarır).
+Ses dosyası: kenar çubuğunda Ayarlar’ın yanındaki **⋯ → Ses dosyası aç…** bir dosyayı bulutta çevirip toplantı olarak ekler (aynı dosya ikinci kez seçilirse uyarır).
 
 ## 3. Kayıt bitince (kendiliğinden)
 
@@ -50,12 +50,13 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 
 ## 4. Kenar çubuğu
 
+- **Yeni kayıt** (⌘R; her yerden ⌃⌥R) en üstte. **Toplantı adı alanı** yalnız işe yaradığı anda görünür: hiçbir toplantı seçili değilken sıradaki kaydı adlandırır, hâlâ “9 Eyl 2026 14:05” gibi bir zaman damgası adı taşıyan bir toplantı seçiliyken o toplantıyı yeniden adlandırır (⏎). Kayıt sürerken ya da bir iş dönerken gizlidir; adı her zaman başlıktaki kalem düğmesinden de değiştirebilirsiniz.
+- **Sürüm satırı:** tek satır — “Sürüm 1.2.27 · güncel” ve mini **Kontrol et**; yeni sürüm varsa “Güncelle ve yeniden başlat” (Zoom açıkken “Güncelleme toplantı bitince”).
 - **Toplantılar** Bugün / Dün / Bu hafta / Daha eski gruplarında; satırda “40 dk · 4 kişi” ya da “Konuşma bulunmadı” ve “Bugün 14:05” gibi saat.
 - **Arama** başlık, tarih ve konuşmacı adında eşleşir.
 - Sağ tık → **Toplantıyı sil…** (ses, transkript, rapor birlikte silinir; ses profilleri kalır).
-- **Sürüm satırı:** “Sürüm güncel · Kontrol et”; yeni sürüm varsa “Güncelle ve yeniden başlat” (Zoom açıkken “Güncelleme toplantı bitince”).
-- Yazıya çevirme modu ve model tek satıra katlıdır (OpenRouter · MAI-Transcribe 2); tıklayınca açılır.
-- Altta **Son durum**, **Tanılama raporu kaydet**, **Ayarlar**.
+- Altta **Son durum** kartı, sonra **Ayarlar** ve yanında **⋯** menüsü: **Ses dosyası aç…** ve **Tanılama raporu kaydet**.
+- Yazıya çevirme modu ve model artık kenar çubuğunda değil: **Ayarlar → Sistem → Yazıya çevirme**.
 
 ## 5. Sekmeler (⌘1–⌘5)
 
@@ -97,7 +98,7 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 ![Vade önerisi çipi: transkriptteki “haftaya salı” toplantı tarihine göre “Öneri: 15 Eyl” olur; Onayla’ya basmadan hiçbir yere yazılmaz.](img/due.jpg)
 
 *Vade önerisi çipi: transkriptteki “haftaya salı” toplantı tarihine göre “Öneri: 15 Eyl” olur; Onayla’ya basmadan hiçbir yere yazılmaz.*
-- Filtre: **Bana ait (n) · Bu toplantı (n) · Tüm görevler (n)**; bana ait görev yoksa “Bu toplantı” ile açılır.
+- Filtre: **Bana ait (n) · Bu toplantı (n) · Tüm görevler (n)**; listenin üstünde sabittir, kaydırmayla kaybolmaz. Seçim kalıcıdır: toplantı değiştirince de, uygulamayı yeniden açınca da yerinde kalır (varsayılan **Bana ait**). Sana atanmış görev yoksa filtre kendiliğinden değişmez; liste tek cümleyle nedenini söyler ve **Bu toplantı** bağlantısını sunar.
 - Satırda: durum (Açık / Devam ediyor / Tamamlandı / Kaldırıldı), **vade çipi**, **Hatırlatıcılar’a ekle**, ⋯ menü (Düzenle, Taslak hazırla, ChatGPT/Codex/Claude Code için paket kaydet).
 - **Vade önerisi:** transkriptteki “yarın / haftaya salı / ay sonu / 15 Eylül / 3 gün içinde” toplantı tarihine göre tarihe çevrilir, “Öneri: 15 Eyl · Onayla” olarak gelir; onaylamadan hiçbir yere yazılmaz. Onaylı tarih Hatırlatıcılar’a o gün 09:00 alarmıyla gider; geçmiş tarihli açık görev turuncu görünür.
 - Önceki toplantıda benzer görev varsa gösterilir; **Aynı görev, eskisini kapat** ile bağlanır.
@@ -133,7 +134,7 @@ Tek arama alanı; bölüme göre çalışır:
 - **Beklediklerim:** başkalarının verdiği açık sözler kişiye göre, yaşı ve tekrar sayısıyla; **Hatırlatma metnini kopyala** kibar bir hatırlatma yazısı verir.
 
 ## 6. Dışa aktar (başlık sağı)
-Özet ve görevler (Markdown), Transkript (Markdown), Altyazı (SRT), JSON; **Belge hazırla (OpenRouter):** PRD, hata raporu, müşteri talebi, Claude Code istemi (bilinen/eksik ayrımı, kaynak bölümler, kaynakta olmayan sayı reddedilir); **Paylaş…** önizleme + **İsimleri maskele** (Kişi A, Kişi B…) + yalnız kararlar seçeneği.
+Özet ve görevler (Markdown), Transkript (Markdown), Altyazı (SRT), JSON; **Belge hazırla:** PRD, hata raporu, müşteri talebi, Claude Code istemi (bilinen/eksik ayrımı, kaynak bölümler, kaynakta olmayan sayı reddedilir); **Paylaş…** önizleme + **İsimleri maskele** (Kişi A, Kişi B…) + yalnız kararlar seçeneği.
 
 ## 7. Ayarlar (⌘,)
 
@@ -148,11 +149,11 @@ Tek arama alanı; bölüme göre çalışır:
 ![Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.](img/theme.jpg)
 
 *Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.*
-- **Genel:** tema (Sistem / Açık / Koyu) ve vurgu rengi; Zoom bildirimi; Zoom’da kendiliğinden kayıt; yüzen panel; takvim bağlamı.
-- **Sözlük ve sesler:** kişi adları / özel terimler (satır başına bir), glossary.jsonl içe aktarma, kayıtlı ses profilleri (örnekleri görme/silme, yeniden adlandırma, profil silme).
-- **Depolama:** toplam kullanım, en büyük toplantılar (sil), **Sesleri sıkıştır** (ham parçaları siler, sesi FLAC yapar), **Eski toplantıların sesi** silinmesin / 14 / 30 / 60 / 90 gün sonra (varsayılan 30; yazı kalır, “Sesi koru” işaretli toplantılara dokunulmaz), **Eski sesleri temizle** önizlemeli manuel silme.
-- **Güncelleme ve raporlar:** bulut maliyeti (bu ay / toplam), Şimdi kontrol et, açılışta kendiliğinden güncelle, her toplantıdan sonra teşhis raporu, raporlara transkript ekleme, rapor klasörü.
-- **Kurulum durumu:** izinler, anahtar, sözlük, sürüm, rapor klasörü; uygulama yoklama gecikmesi (p50/p95).
+Üç bölüm var (önceki sürümlerde beştiler; eski seçiminiz kendiliğinden yeni bölüme katlanır — yukarıdaki ekran görüntüsü eski beşli seçiciyi gösteriyor):
+
+- **Genel — siz ve kayıt anı:** adınız (“Bana ait” filtresi ve mikrofon etiketi bu adı kullanır); tema (Sistem / Açık / Koyu) ve vurgu rengi; Zoom bildirimi; Zoom’da kendiliğinden kayıt; yüzen kayıt paneli; takvim bağlamı.
+- **Sesler ve sözlük — kim konuşuyor, sözcükler nasıl yazılıyor:** kayıtlı ses profilleri (örnekleri dinleme/silme, yeniden adlandırma, profil silme); sözlük (kişi adları / özel terimler, satır başına bir; **Sözlüğü kaydet**), `glossary.jsonl` içe aktarma; ekip klasörü ve **Sözlüğü ekip klasörüyle paylaş**.
+- **Sistem — makinenin kendi kendine yaptıkları:** **Yazıya çevirme** modu ve model (OpenRouter / Yerel; eskiden kenar çubuğundaydı); **Depolama** (toplam kullanım, en büyük toplantılar, **Sesleri sıkıştır**, **Eski toplantıların sesi** silinmesin / 14 / 30 / 60 / 90 gün sonra, önizlemeli **Eski sesleri temizle**); bulut maliyeti (bu ay / toplam); **Güncelleme ve raporlar** (Şimdi kontrol et, açılışta kendiliğinden güncelle, bulut hatasında boşta yeniden dene, her toplantıdan sonra teşhis raporu, raporlara transkript ekleme, rapor klasörü); **Kurulum durumu** (izinler, anahtar, sözlük, sürüm, rapor klasörü, **Öz-test**, uygulama yoklama gecikmesi p50/p95).
 
 ## 8. Ses profilleri (kişi tanıma)
 Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden ya da Düzelt ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur.
@@ -165,7 +166,7 @@ Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden y
 ## 9. Sözlük
 `iCloud Drive/MeetingOS-Shared/glossary.jsonl` (her satır `{"term": …, "expansion": …, "category": …}`); `~/Library/Application Support/MeetingOS/glossary.jsonl` Mac’e özel ek. Üç yerde kullanılır: bulut STT’ye yazım ipucu (prompt kabul eden modellerde), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham transkript kendiliğinden değişmez. Slack agent istemi: `docs/GLOSSARY.md`.
 
-**Ekip klasörü** (Ayarlar → Sözlük ve sesler → Ekip klasörü): iCloud tek Apple Kimliğine bağlı olduğundan ekip için ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçilir. Sözlük okunurken yerel dosya → iCloud → ekip dosyası sırasıyla bakılır, terimi ilk tanımlayan kazanır; içe aktarma ekip dosyasını **birleştirerek** yazar (önce yeniden okur, geçici dosyaya yazıp yerine taşır), böylece aynı anda yazan başka bir Mac’in terimleri silinmez. Ekip klasörü doluyken teşhis raporları da kişisel klasör yerine `<ekip klasörü>/reports/<mac-adı>/` altına yazılır. Ses, transkript ve ses profilleri bu klasöre girmez.
+**Ekip klasörü** (Ayarlar → Sesler ve sözlük → Ekip klasörü): iCloud tek Apple Kimliğine bağlı olduğundan ekip için ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçilir. Sözlük okunurken yerel dosya → iCloud → ekip dosyası sırasıyla bakılır, terimi ilk tanımlayan kazanır; içe aktarma ekip dosyasını **birleştirerek** yazar (önce yeniden okur, geçici dosyaya yazıp yerine taşır), böylece aynı anda yazan başka bir Mac’in terimleri silinmez. Ekip klasörü doluyken teşhis raporları da kişisel klasör yerine `<ekip klasörü>/reports/<mac-adı>/` altına yazılır. Ses, transkript ve ses profilleri bu klasöre girmez.
 
 ## 10. İki Mac ve güncelleme
 Geliştirme bu Mac’te, kullanım diğer Mac’te. Diğer Mac toplantı yokken kenar çubuğundan **Güncelle ve yeniden başlat** ile v0.1 dalının son hâlini kurar (derleme düşük öncelikte; Zoom açıkken yapılmaz). Her tamamlanan toplantıdan sonra iCloud `MeetingOS-Reports/<Mac adı>/` altına sayısal rapor (maliyet, kaç parça, kimlik karnesi, işin CPU/bellek/süresi, yakalama sağlığı) ve saatte bir `heartbeat.json` (disk, bellek baskısı, termal, yük, son hatalar) yazılır. Transkript metni yalnız ayar açıkken rapora girer.

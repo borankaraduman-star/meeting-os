@@ -43,11 +43,11 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 
 ## İlk hafta kontrol listesi
 
-- [ ] En az üç toplantı kaydedin; her birinin Kontrol kuyruğunu boşaltın (isimsiz konuşmacı, isim onayı, sahipsiz görev).
+- [ ] En az üç toplantı kaydedin; her birinin Kontrol sekmesini boşaltın (isimsiz konuşmacı, isim onayı, sahipsiz görev).
 - [ ] Kendi sesinizin ve sık görüştüğünüz 3–5 kişinin adı bir kez verilmiş olsun.
 - [ ] **Görevlerim → Bana ait** listesinin gerçekten sizin sözlerinizi gösterdiğini doğrulayın; sahibi yanlışsa Düzenle ile düzeltin.
 - [ ] Bir kez **Gün sonu özeti…** ve bir kez **Beklediklerim** çıktısı alın; işinize yaramıyorsa söyleyin.
-- [ ] Ayarlar → **Sözlük ve sesler**: sık geçen ürün/proje/kişi adlarını yazın; yazım hataları belirgin biçimde azalır. Ekip klasörü verildiyse sözlük ekipçe ortaklaşır.
+- [ ] Ayarlar → **Sesler ve sözlük**: sık geçen ürün/proje/kişi adlarını yazın; yazım hataları belirgin biçimde azalır. Ekip klasörü verildiyse sözlük ekipçe ortaklaşır.
 - [ ] Ayarlar → **Depolama**: ses ≈2 GB/saat yer kaplar; “Eski toplantıların sesi” seçeneğini (varsayılan 30 gün) kendinize göre ayarlayın.
 - [ ] Bir haftalık **maliyeti** Ayarlar → Güncelleme ve raporlar → Bulut maliyeti kartından görün.
 
@@ -67,4 +67,4 @@ Yazıya çevirme ≈ **$0,10/saat** (MAI-Transcribe 2). Özet/görev analizi 40 
 
 ## Ekip klasörü (isteğe bağlı)
 
-Ayarlar → Sözlük ve sesler → **Ekip klasörü**: ortak bir klasör (Dropbox, Drive, paylaşılan disk) seçerseniz proje sözlüğü ekipçe ortaklaşır ve teşhis raporlarınız oraya da yazılır. Sözlükte yerel kaydınız her zaman önceliklidir; ekip dosyası yalnız sizde olmayan terimleri ekler. Toplantı içeriği, ses ve ses profilleri bu klasöre **girmez**.
+Ayarlar → Sesler ve sözlük → **Ekip klasörü**: ortak bir klasör (Dropbox, Drive, paylaşılan disk) seçerseniz proje sözlüğü ekipçe ortaklaşır ve teşhis raporlarınız oraya da yazılır. Sözlükte yerel kaydınız her zaman önceliklidir; ekip dosyası yalnız sizde olmayan terimleri ekler. Toplantı içeriği, ses ve ses profilleri bu klasöre **girmez**.
