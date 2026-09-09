@@ -140,7 +140,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func confirmReview(_ item:ReviewItem) async {
         guard let mid=selected, !item.suggested.isEmpty, !item.speakerKey.isEmpty else { return }
-        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; await refresh(); await loadReview() }
+        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
         catch { self.error=error.localizedDescription }
     }
     /// One pass over every suggested name; a single refresh at the end keeps the transcript from repainting per person.
@@ -152,7 +152,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             catch { self.error=error.localizedDescription; break }
         }
         if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi" }
-        await refresh(); await loadReview()
+        await refresh(); await loadReview(); refreshSummaryIfNamesDone()
+    }
+    /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
+    func refreshSummaryIfNamesDone() {
+        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !busy, !recording, !zoomMeetingOpen else { return }
+        guard !review.contains(where:{ ($0.kind=="unnamed_speaker" || $0.kind=="suggested_name") && !$0.speakerKey.isEmpty }) else { return }
+        activity="İsimler tamam · özet isimlerle yenileniyor"; analyzeMeeting(mid)
     }
     var calendarAttendees:[String] { (meeting?.metadata["calendar"] as? [String:Any])?["attendees"] as? [String] ?? [] }
     @Published var readingMode=true
@@ -362,7 +368,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let result=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":editName,"enroll":enroll])
             editRow=nil
             if enroll { activity=(result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi" }
-            await refresh()
+            await refresh(); await loadReview(); refreshSummaryIfNamesDone()
         } catch { self.error=error.localizedDescription }
     }
     /// One click turns a “Sol Üst?” suggestion into the cluster name and, when there is enough speech, a profile sample.
