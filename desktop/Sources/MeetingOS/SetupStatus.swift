@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import EventKit
 import Foundation
@@ -11,6 +12,21 @@ struct SetupCheck: Identifiable, Equatable {
 }
 
 enum SetupStatus {
+    /// What the "Düzelt" button on a check does: ask macOS, or open the exact System Settings pane when only the user can change it.
+    static func fix(_ id:String,calendarWanted:Bool,done:@escaping ()->Void) {
+        switch id {
+        case "mic": AVCaptureDevice.requestAccess(for:.audio) { _ in DispatchQueue.main.async(execute:done) }
+        case "screen":
+            if !CGRequestScreenCaptureAccess() { open("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") }
+            DispatchQueue.main.asyncAfter(deadline:.now()+1,execute:done)
+        case "calendar": CalendarContext.requestAccess { _ in done() }
+        case "reminders": RemindersBridge.requestAccess { _ in done() }
+        case "notify": UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound]) { _,_ in DispatchQueue.main.async(execute:done) }
+        default: done()
+        }
+    }
+    static func open(_ url:String) { if let u=URL(string:url) { NSWorkspace.shared.open(u) } }
+    static func fixable(_ c:SetupCheck)->Bool { ["mic","screen","calendar","reminders","notify"].contains(c.id) && c.state != .ok }
     static func permissionChecks(calendarWanted:Bool)->[SetupCheck] {
         var out:[SetupCheck]=[]
         let mic=AVCaptureDevice.authorizationStatus(for:.audio)
