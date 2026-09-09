@@ -159,6 +159,11 @@ plan=json.loads(Path(os.environ['FAKE_PLAN']).read_text())
 runs=out/'runs';runs.write_text(str(int(runs.read_text() if runs.exists() else 0)+1))
 run=int(runs.read_text())
 journal=out/'capture-native.jsonl'
+(out/('argv-%d.json'%run)).write_text(json.dumps(args[1:]))
+# Same rule as the real helper: an existing journal may only be continued when the supervisor hands the
+# folder back with --start-offset. Its value is irrelevant; 0.000 is a helper that died before its first chunk.
+if journal.exists() and '--start-offset' not in args:
+    sys.stderr.write('Choose a new recording folder\\n');sys.exit(1)
 def emit(event):
     line=json.dumps(event)
     print(line,flush=True)
@@ -237,6 +242,13 @@ class SupervisedHelperTests(unittest.TestCase):
             relaunch=[e for e in self.journal(root) if e.get('event')=='relaunch']
             self.assertEqual([e['reason'] for e in relaunch],['stall'])
             self.assertEqual(relaunch[0]['start_offset'],0.0)   # nothing was captured, so nothing is skipped
+            # The regression: `if offset:` is false at 0.0, so no --start-offset was passed and the helper
+            # refused the folder it had already written a journal into — the meeting could never be relaunched.
+            import json as _json
+            self.assertIn('--start-offset',_json.loads((root/'capture/argv-2.json').read_text()))
+            argv=_json.loads((root/'capture/argv-2.json').read_text())
+            self.assertEqual(argv[argv.index('--start-offset')+1],'0.000')
+            self.assertNotIn('--start-offset',_json.loads((root/'capture/argv-1.json').read_text()))   # first launch is not a continuation
             self.assertTrue((root/'capture/relaunched').exists())
             self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
     # Reviewed behaviour changed: an exhausted relaunch budget with audio on disk used to raise, so no receipt

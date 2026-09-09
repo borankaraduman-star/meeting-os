@@ -5,6 +5,17 @@ final class RecordingCompletionTests:XCTestCase {
         let receipt:[String:Any] = ["meeting":"recorded", "capture_dir":"/capture", "status":"provisional", "finalized_chunks":2]
         XCTAssertEqual(RecordingCompletion.retryMeeting(receipt,capture:"/capture"),"recorded")
     }
+    /// A supervisor complaint rides the receipt now. The meeting is still finalized; the user gets one calm
+    /// line instead of "Kayıt tamamlanamadı" over a folder that holds the whole meeting.
+    func testAReceiptWithErrorsStillFinalizesAndSaysSoCalmly() {
+        let receipt:[String:Any] = ["meeting":"recorded","capture_dir":"/capture","status":"provisional","finalized_chunks":3,
+                                    "errors":["Kayıt yardımcısı bir saat içinde 5 kez yeniden başlatıldı; ses korundu"]]
+        XCTAssertEqual(RecordingCompletion.retryMeeting(receipt,capture:"/capture"),"recorded")
+        XCTAssertEqual(RecordingCompletion.notice(receipt),"Kayıt sırasında bir aksama oldu · alınan ses korundu, yazıya çevriliyor")
+        XCTAssertNil(RecordingCompletion.notice(["errors":[]] as [String:Any]))
+        XCTAssertNil(RecordingCompletion.notice(["errors":[""]] as [String:Any]))
+        XCTAssertNil(RecordingCompletion.notice([:]))
+    }
     func testMissingWrongCanceledAndEmptyReceiptsDoNotFinalize() {
         let receipt:[String:Any] = ["meeting":"recorded", "capture_dir":"/capture", "status":"provisional", "finalized_chunks":2]
         XCTAssertNil(RecordingCompletion.retryMeeting([:],capture:"/capture"))

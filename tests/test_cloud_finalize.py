@@ -655,6 +655,19 @@ class CompactTests(unittest.TestCase):
             self.assertEqual(compact_capture(store,mid),0)   # idempotent
             store.close()
 
+    def test_half_written_partial_chunks_are_swept_too(self):
+        """`mic-000003.partial.wav` is what a killed helper leaves behind. Nothing else ever removed it, so
+        it sat in the folder for the life of the meeting even though its audio is in the assembled file."""
+        from meeting_os.cloud_finalize import compact_capture
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('C',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            (d/'mic-000003.partial.wav').write_bytes(b'x'*2048)
+            finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=FakeEmbedder())
+            names=sorted(p.name for p in d.iterdir())
+            self.assertNotIn('mic-000003.partial.wav',names)
+            self.assertEqual(json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])['chunks_removed'],3)
+            store.close()
+
 
 class JobPriorityTests(unittest.TestCase):
     def test_low_priority_flag_means_one_uploader_and_is_reported(self):

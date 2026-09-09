@@ -346,11 +346,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
-            if !ok { self.activity="Kayıt tamamlanamadı · Toplantılar listesindeki kayıt durumunu kontrol edin" }
-            else if let mid=RecordingCompletion.retryMeeting(result,capture:dir.path) {
+            // The receipt comes first, before the exit status: a supervisor that died still leaves one when audio
+            // reached disk, and that meeting must be finalized rather than shown as "Kayıt tamamlanamadı".
+            if let mid=RecordingCompletion.retryMeeting(result,capture:dir.path) {
                 if self.requestedQuit { self.activity="Kayıt saklandı · Son işlemi Toplantılar listesinden başlatabilirsiniz" }
-                else { self.finishRecordedMeeting(mid) }
-            } else if ok && result["status"] as? String == "canceled" { self.activity="Kayıt iptal edildi · Ses alınmadı" }
+                else { self.finishRecordedMeeting(mid); if let calm=RecordingCompletion.notice(result) { self.activity=calm } }
+            } else if !ok { self.activity="Kayıt tamamlanamadı · Toplantılar listesindeki kayıt durumunu kontrol edin" }
+            else if result["status"] as? String == "canceled" { self.activity="Kayıt iptal edildi · Ses alınmadı" }
             else { self.activity="Kayıt saklandı · Son işlem otomatik başlatılamadı" }
         }
     }
