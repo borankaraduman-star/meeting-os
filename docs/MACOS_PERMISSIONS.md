@@ -26,8 +26,14 @@ Build/install serially with the application closed; the process check is a
 snapshot, not a system-wide launch lock. Backups are retained for manual cleanup.
 
 The certificate and private key remain in the macOS keychain. No private key is
-exported, no trust setting is changed, and no custom permissive code requirement
-is installed. Signing authorization may require the user's keychain confirmation.
+exported and no custom permissive code requirement is installed. One trust
+setting *is* changed on a fresh Mac: when no code-signing identity exists,
+`scripts/install.sh` generates a self-signed "Meeting OS Local" certificate and
+runs `security add-trusted-cert -r trustRoot -p codeSign -k login.keychain-db`,
+which the user confirms with their account password. The scope is that one
+certificate, code signing only, in the user's login keychain — no system
+keychain change and no other trust policy. Signing authorization may also
+require the user's keychain confirmation on each build.
 
 For an explicit ad-hoc source bootstrap on a Mac without a certificate, set
 `MEETING_OS_SIGNING_IDENTITY=-` on **each** build. This mode cannot preserve
