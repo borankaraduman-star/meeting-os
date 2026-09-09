@@ -9,6 +9,19 @@ final class SidebarTitleTests:XCTestCase {
         XCTAssertTrue(SidebarTitle.isTimestamp("12 Ara 2025 09:30"))
         XCTAssertTrue(SidebarTitle.isTimestamp("1 Oca. 2026 8:05"))
     }
+    func testOlderEnglishDefaultTitlesAreRecognised() {
+        XCTAssertTrue(SidebarTitle.isTimestamp("Sep 9, 2026 at 4:45 AM"))
+        XCTAssertTrue(SidebarTitle.isTimestamp("December 12, 2025 at 9:30 PM"))
+        XCTAssertTrue(SidebarTitle.isTimestamp("Sep 9, 2026 at 16:45"))
+        XCTAssertTrue(SidebarTitle.isTimestamp("Sep 9, 2026 at 4:45\u{202F}AM"))   // narrow no-break space
+        XCTAssertEqual(SidebarTitle.mode(recording:false,busy:false,selectedTitle:"Sep 9, 2026 at 4:45 AM"),.rename)
+    }
+    func testEnglishSoundingTitlesAreStillTitles() {
+        XCTAssertFalse(SidebarTitle.isTimestamp("Sync with Bob at 3:00 PM"))
+        XCTAssertFalse(SidebarTitle.isTimestamp("Sep 9, 2026"))
+        XCTAssertFalse(SidebarTitle.isTimestamp("Sep 9, 2026 at 4:45:30 AM"))
+        XCTAssertFalse(SidebarTitle.isTimestamp("Standup Sep 9, 2026 at 4:45 AM"))
+    }
     func testRealTitlesAreNotTimestamps() {
         XCTAssertFalse(SidebarTitle.isTimestamp("Sprint planlama"))
         XCTAssertFalse(SidebarTitle.isTimestamp(""))

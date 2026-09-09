@@ -153,9 +153,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard let m=meeting, m.status=="complete" else { return nil }
         var parts=[MeetingDates.label(m.created)]
         if m.segments>0 { parts.append(m.seconds>=60 ? "\(Int(m.seconds/60)) dk" : "\(Int(m.seconds)) sn"); if m.speakers>0 { parts.append("\(m.speakers) kişi") } } else { parts.append("konuşma yok") }
-        let open=openTaskCount; if open>0 { parts.append("\(open) açık görev") }
-        if !review.isEmpty { parts.append("\(review.count) kontrol maddesi") }
-        return parts.joined(separator:" · ")
+        return parts.joined(separator:" · ")   // open tasks and review items are counted on the tabs themselves
     }
     var openTaskCount:Int { actions.filter { $0.meeting==selected && !$0.stale && !["done","dismissed"].contains($0.state) }.count }
     func loadReview() async {

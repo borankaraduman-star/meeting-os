@@ -2,9 +2,9 @@
 
 Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Hiçbir şey kendiliğinden dışarı gönderilmez: bütün dışa aktarımlar dosya olarak kaydedilir.
 
-![Ana pencere. Sol: “Toplantıya bir ad ver” alanı, Yeni kayıt, sürüm satırı (Kontrol et), katlı yazıya çevirme satırı, arama, Bugün/Dün grupları; altta Son durum ve Ayarlar. Sağ: başlık, özet şeridi (tarih · süre · kişi · açık görev · kontrol maddesi), sekmeler ve rozetler, konuşmada ara, okuma görünümü.](img/sidebar.jpg)
+![Ana pencere. Sol: “Toplantıya bir ad verin” alanı, Yeni kayıt, sürüm satırı (Güncelleme ara), katlı yazıya çevirme satırı, arama, Bugün/Dün grupları; altta Son durum ve Ayarlar. Sağ: başlık, özet şeridi (tarih · süre · kişi), sekmeler ve rozetler, konuşmada ara, okuma görünümü.](img/sidebar.jpg)
 
-*Ana pencere. Sol: “Toplantıya bir ad ver” alanı, Yeni kayıt, sürüm satırı (Kontrol et), katlı yazıya çevirme satırı, arama, Bugün/Dün grupları; altta Son durum ve Ayarlar. Sağ: başlık, özet şeridi (tarih · süre · kişi · açık görev · kontrol maddesi), sekmeler ve rozetler, konuşmada ara, okuma görünümü.*
+*Ana pencere. Sol: “Toplantıya bir ad verin” alanı, Yeni kayıt, sürüm satırı (Güncelleme ara), katlı yazıya çevirme satırı, arama, Bugün/Dün grupları; altta Son durum ve Ayarlar. Sağ: başlık, özet şeridi (tarih · süre · kişi), sekmeler ve rozetler, konuşmada ara, okuma görünümü.*
 
 ---
 
@@ -12,7 +12,7 @@ Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi Op
 
 1. GitHub `borankaraduman-star/meeting-os` → v0.1 dalı. Yeni bir Mac ya da ekip arkadaşı: `git clone -b v0.1 … && sh scripts/install.sh`, adım adım [EKIP.md](EKIP.md). İkinci Mac için `docs/TWO_MAC_WORKFLOW.md`.
 2. Uygulamayı açın, **Ayarlar (⌘,) → Sistem → Kurulum durumu** kartına bakın: mikrofon, ekran kaydı (sistem sesi bununla alınır), bildirim, takvim, hatırlatıcı izinleri; OpenRouter anahtarı; sözlük; sürüm; teşhis rapor klasörü. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; **İzin iste** hiç sorulmamışsa macOS’a sordurur, **Ayarları aç** reddedilmiş izin için ilgili Sistem Ayarları bölmesini açar.
-3. OpenRouter anahtarı ilk bulut işleminde istenir ve Keychain’e bir kez kaydedilir.
+3. OpenRouter anahtarı **Ayarlar → Sistem → OpenRouter anahtarı** satırından girilir (ilk bulut işleminde de istenir) ve Keychain’e bir kez kaydedilir.
 4. Sözlük: Slack agent çıktısı `glossary.jsonl` iCloud Drive `MeetingOS-Shared/` altında; bütün Mac’ler okur (bkz. bölüm 9).
 
 ## 2. Kayıt
@@ -50,14 +50,14 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 
 **Bir şey ters giderse (1.2.27):**
 - OpenRouter geçici hata verirse parçalar 2 / 8 / 20 sn arayla yeniden denenir; ödenmiş her parça kaydedilir, hiçbir şey iki kez yüklenmez.
-- Anahtar geçersiz (401) ya da kredi bitmişse kenar çubuğunda tek satır görürsünüz (“Anahtar geçersiz · Ayarlar”); ses silinmez. Sorunu giderince toplantı, Mac boştayken kendiliğinden yeniden alınır (10 dk → 30 dk → 2 sa → 6 sa → günlük); Ayarlar → Sistem’den kapatılabilir.
+- Anahtar geçersiz (401) ya da kredi bitmişse kenar çubuğunda tek satır görürsünüz (“Anahtar geçersiz · Ayarlar → Sistem → OpenRouter anahtarı”); ses silinmez. Sorunu giderince toplantı, Mac boştayken kendiliğinden yeniden alınır (10 dk → 30 dk → 2 sa → 6 sa → günlük); Ayarlar → Sistem’den kapatılabilir.
 - Kayıt sırasında yardımcı süreç ölür ya da takılırsa aynı klasöre kaldığı saniyeden devam eder (saatte en çok 5 kez); uyku/uyanmada ses akışı yeniden kurulur. Panelde “Kayıt devam ediyor · N sn boşluk” görürsünüz; rapor `capture` bloğunda `relaunches`/`wakes` sayıları kalır.
 - Kayıt bittiğinde önceki toplantının işi sürüyorsa yeni toplantı kuyruğa girer; ⌃⌥R hiçbir zaman beklemez.
 
 ## 4. Kenar çubuğu
 
 - **Yeni kayıt** (⌘R; her yerden ⌃⌥R) en üstte. **Toplantı adı alanı** yalnız işe yaradığı anda görünür: hiçbir toplantı seçili değilken sıradaki kaydı adlandırır, hâlâ “9 Eyl 2026 14:05” gibi bir zaman damgası adı taşıyan bir toplantı seçiliyken o toplantıyı yeniden adlandırır (⏎). Kayıt sürerken ya da bir iş dönerken gizlidir; adı her zaman başlıktaki kalem düğmesinden de değiştirebilirsiniz.
-- **Sürüm satırı:** tek satır — “Sürüm 1.2.27 · güncel” ve mini **Kontrol et**; yeni sürüm varsa “Güncelle ve yeniden başlat” (Zoom açıkken “Güncelleme toplantı bitince”).
+- **Sürüm satırı:** tek satır — “Sürüm 1.2.27 · güncel” ve mini **Güncelleme ara**; yeni sürüm varsa “Güncelle ve yeniden başlat” (Zoom açıkken “Güncelleme toplantı bitince”).
 - **Toplantılar** Bugün / Dün / Bu hafta / Daha eski gruplarında; satırda “40 dk · 4 kişi” ya da “Konuşma bulunmadı” ve “Bugün 14:05” gibi saat.
 - **Arama** başlık, tarih ve konuşmacı adında eşleşir.
 - Sağ tık → **Toplantıyı sil…** (ses, transkript, rapor birlikte silinir; ses profilleri kalır).
@@ -82,7 +82,7 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 - **İsimler kartı** (1.2.26): isimsiz ya da öneri bekleyen her ses için tek satır. ▶ ile dinleyin, ismi yazıp ⏎’ye basın ya da menüden seçin; öneri varsa tek tıkla onaylayın. Adlandırma bütün kümeye uygulanır ve ses profili kaydedilir. Bütün isimler bitince bayat özet kendiliğinden yenilenir.
 - **Geri al (⌘Z):** son adlandırmayı etiketleriyle ve öğrenilen ses örneğiyle birlikte geri alır (Son durum kartında “Geri al” düğmesi).
 - Konuşmacı adına tıklayın → menü: ses profilleri, takvim katılımcıları, “Yeni isim…”. Seçim o kişinin bütün paragraflarını adlandırır ve profili kaydeder.
-- **Düzelt** tek alan, tek eylem: ismi yazın, “Adlandır ve öğren”. Metin düzeltme, temiz örnekten profil kaydetme ve **Neden bu isim?** (benzerlik puanları) **Gelişmiş** altındadır.
+- **Konuşanı adlandır** tek alan, tek eylem: ismi yazın, “Adlandır ve öğren”. Metin düzeltme, temiz ses onayı (bu bölümden profil kaydeder) ve **Neden bu isim?** (tek cümle; puanlar ipucunda) **Gelişmiş** altındadır.
 - ▶ paragrafı dinletir. **⌘F** bu konuşmada arar; Esc temizler.
 - Mikrofon yankısı bölümleri gizlidir; üstteki satırdan gösterilebilir.
 
@@ -97,15 +97,15 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 
 ### Görevlerim (⌘3)
 
-![Görevlerim: filtre (Bana ait · Bu toplantı · Tüm görevler) ve sağda Dışa aktar menüsü (Brifing, gündem, gün/hafta özeti). Her satırda durum seçici, “Hatırlatıcılar’a ekle” ve ⋯ menü (Düzenle, Taslak hazırla, paket kaydet); altında kaynak alıntısı.](img/actions.jpg)
+![Görevlerim: filtre (Bana ait · Bu toplantı · Tüm görevler) ve sağda Dışa aktar menüsü (Brifing, gündem, gün/hafta özeti). Her satırda durum seçici ve ⋯ menü (Düzenle, Hatırlatıcılar’a ekle, Taslak hazırla, paket kaydet); altında kaynak alıntısı.](img/actions.jpg)
 
-*Görevlerim: filtre (Bana ait · Bu toplantı · Tüm görevler) ve sağda Dışa aktar menüsü (Brifing, gündem, gün/hafta özeti). Her satırda durum seçici, “Hatırlatıcılar’a ekle” ve ⋯ menü (Düzenle, Taslak hazırla, paket kaydet); altında kaynak alıntısı.*
+*Görevlerim: filtre (Bana ait · Bu toplantı · Tüm görevler) ve sağda Dışa aktar menüsü (Brifing, gündem, gün/hafta özeti). Her satırda durum seçici ve ⋯ menü (Düzenle, Hatırlatıcılar’a ekle, Taslak hazırla, paket kaydet); altında kaynak alıntısı.*
 
 ![Vade önerisi çipi: transkriptteki “haftaya salı” toplantı tarihine göre “Öneri: 15 Eyl” olur; Onayla’ya basmadan hiçbir yere yazılmaz.](img/due.jpg)
 
 *Vade önerisi çipi: transkriptteki “haftaya salı” toplantı tarihine göre “Öneri: 15 Eyl” olur; Onayla’ya basmadan hiçbir yere yazılmaz.*
 - Filtre: **Bana ait (n) · Bu toplantı (n) · Tüm görevler (n)**; listenin üstünde sabittir, kaydırmayla kaybolmaz. Seçim kalıcıdır: toplantı değiştirince de, uygulamayı yeniden açınca da yerinde kalır (varsayılan **Bana ait**). Sana atanmış görev yoksa filtre kendiliğinden değişmez; liste tek cümleyle nedenini söyler ve **Bu toplantı** bağlantısını sunar.
-- Satırda: durum (Açık / Devam ediyor / Tamamlandı / Kaldırıldı), **vade çipi**, **Hatırlatıcılar’a ekle**, ⋯ menü (Düzenle, Taslak hazırla, ChatGPT/Codex/Claude Code için paket kaydet).
+- Satırda: durum (Açık / Devam ediyor / Tamamlandı / Kaldırıldı), **vade çipi**, ⋯ menü (Düzenle, **Hatırlatıcılar’a ekle**, Taslak hazırla, ChatGPT/Codex/Claude Code için paket kaydet).
 - **Vade önerisi:** transkriptteki “yarın / haftaya salı / ay sonu / 15 Eylül / 3 gün içinde” toplantı tarihine göre tarihe çevrilir, “Öneri: 15 Eyl · Onayla” olarak gelir; onaylamadan hiçbir yere yazılmaz. Onaylı tarih Hatırlatıcılar’a o gün 09:00 alarmıyla gider; geçmiş tarihli açık görev turuncu görünür.
 - Önceki toplantıda benzer görev varsa gösterilir; **Aynı görev, eskisini kapat** ile bağlanır.
 - **Dışa aktar** menüsü: **Brifing…** (sıradaki takvim toplantısının katılımcıları için verdikleri sözler, açık sorular, kararlar), **Sonraki toplantı gündemi…**, **Gün sonu özeti…** (yalnız sana düşenler), **Hafta özeti…** (son 7 gün, toplantı toplantı; CLI ile isim maskeli).
@@ -125,7 +125,7 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 *Karne (1.2.23’ten itibaren Kontrol sekmesinde katlanır grup): son 7 günün saati, kararı, görevi, sorusu, ücreti; toplantı başına konuşma payı yüzdeleri.*
 - Şüpheli yerler sırayla: onay bekleyen isim (tek tık Onayla), isimsiz konuşmacı (takvim katılımcı çipleriyle adlandırma), çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev, sözlük düzeltmesi.
 - Üstte **Son 7 gün · N madde** (bütün toplantıların kontrol borcu; “Aç” ilgili bölüme götürür) ve katlanır **Son 7 gün karnesi** (toplantı saati, karar, görev, soru, ücret; toplantı başına konuşma payı).
-- **Sözlükle tara** transkripti sözlükle karşılaştırır; öneriler analiz modeline doğrulatılır. **Doğrulananları uygula (N)** hepsini tek seferde işler, **Uygula** tek tek, **Yoksay** düşürür. Özgün metin ve düzeltme geçmişi korunur.
+- **Sözlükle tara** (Kontrol başlığındaki ⋯ menüsünde, “Son 7 gün karnesi” ve “Haftalık bakım” anahtarlarıyla birlikte) transkripti sözlükle karşılaştırır; öneriler analiz modeline doğrulatılır. **Doğrulananları uygula (N)** hepsini tek seferde işler, **Uygula** tek tek, **Yoksay** düşürür. Özgün metin ve düzeltme geçmişi korunur.
 - **Adlandırma isabeti** satırı: otomatik doğru/yanlış, onaylanan/reddedilen öneri sayıları.
 
 ### Hafıza (⌘5, ⌘⇧F)
@@ -148,9 +148,9 @@ Tek arama alanı; bölüme göre çalışır:
 
 *Ayarlar (⌘,): üstte üç bölüm (Genel · Sesler ve sözlük · Sistem). Sesler ve sözlük: kişi kartları, sözlük, proje sözlüğü, ekip klasörü.*
 
-![Kurulum durumu kartı (Ayarlar → Sistem): her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta Öz-test düğmesi ve sonucu, uygulama yoklama gecikmesi.](img/setup.jpg)
+![Kurulum durumu kartı (Ayarlar → Sistem): her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Öz-test düğmesi ve sonucu ile uygulama yoklama gecikmesi Gelişmiş katında.](img/setup.jpg)
 
-*Kurulum durumu kartı (Ayarlar → Sistem): her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Altta Öz-test düğmesi ve sonucu, uygulama yoklama gecikmesi.*
+*Kurulum durumu kartı (Ayarlar → Sistem): her satırda izin/ayar durumu; eksik olanda “İzin iste” ya da “Ayarları aç”. Öz-test düğmesi ve sonucu ile uygulama yoklama gecikmesi Gelişmiş katında.*
 
 ![Koyu tema ve mavi vurgu seçili hâli; yüzen panel de temayı izler.](img/theme.jpg)
 
@@ -158,7 +158,7 @@ Tek arama alanı; bölüme göre çalışır:
 
 - **Genel — siz ve kayıt anı:** adınız (“Bana ait” filtresi ve mikrofon etiketi bu adı kullanır); tema (Sistem / Açık / Koyu) ve vurgu rengi; Zoom bildirimi; Zoom’da kendiliğinden kayıt; yüzen kayıt paneli; takvim bağlamı.
 - **Sesler ve sözlük — kim konuşuyor, sözcükler nasıl yazılıyor:** kayıtlı ses profilleri (örnekleri dinleme/silme, yeniden adlandırma, profil silme); sözlük (kişi adları / özel terimler, satır başına bir; **Sözlüğü kaydet**), `glossary.jsonl` içe aktarma; ekip klasörü ve **Sözlüğü ekip klasörüyle paylaş**.
-- **Sistem — makinenin kendi kendine yaptıkları:** **Yazıya çevirme** modu ve model (OpenRouter / Yerel; eskiden kenar çubuğundaydı); **Depolama** (toplam kullanım, en büyük toplantılar, **Sesleri sıkıştır**, **Eski toplantıların sesi** silinmesin / 14 / 30 / 60 / 90 gün sonra, önizlemeli **Eski sesleri temizle**); bulut maliyeti (bu ay / toplam); **Güncelleme ve raporlar** (Şimdi kontrol et, açılışta kendiliğinden güncelle, bulut hatasında boşta yeniden dene, her toplantıdan sonra teşhis raporu, raporlara transkript ekleme, rapor klasörü); **Kurulum durumu** (izinler, anahtar, sözlük, sürüm, rapor klasörü, **Öz-test**, uygulama yoklama gecikmesi p50/p95).
+- **Sistem — makinenin kendi kendine yaptıkları:** **Yazıya çevirme** modu ve model (OpenRouter / Yerel; eskiden kenar çubuğundaydı); **OpenRouter anahtarı**; **Depolama** (toplam kullanım, en büyük toplantılar, **Sesleri sıkıştır**); bulut maliyeti (bu ay / toplam); **Güncelleme ve raporlar** (Şimdi kontrol et); **Kurulum durumu** (izinler, anahtar, sözlük, sürüm, rapor klasörü). Seyrek kullanılanlar **Gelişmiş** katında: **Eski toplantıların sesi** silinmesin / 14 / 30 / 60 / 90 gün sonra ve önizlemeli **Eski sesleri temizle**, açılışta kendiliğinden güncelle, bulut hatasında boşta yeniden dene, her toplantıdan sonra teşhis raporu, raporlara transkript ekleme, rapor klasörü, **Öz-test**, uygulama yoklama gecikmesi p50/p95.
 
 ## 8. Ses profilleri (kişi tanıma)
 Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden ya da Düzelt ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur.

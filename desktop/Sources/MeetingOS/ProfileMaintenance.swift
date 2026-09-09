@@ -25,6 +25,22 @@ struct IdentityExplanation:Equatable {
     }
     /// The bar this person actually had to clear: their own when corrections have moved it, otherwise the global one.
     func bar(for c:IdentityCandidate)->Double { c.thresholdUsed>0 ? c.thresholdUsed : threshold }
+    /// "Neden bu isim?" in one sentence. Who this voice sounds like, and why that was — or was not — enough.
+    var sentence:String {
+        guard let top=candidates.first else { return "Karşılaştırılacak kayıtlı ses yok, bu yüzden isim verilmedi." }
+        let pct=Int((top.score*100).rounded())
+        let gap=candidates.count>1 ? top.score-candidates[1].score : 1.0
+        if top.score>=bar(for:top) && gap>=margin { return "Bu ses “\(top.name)” profiline %\(pct) benziyor ve ikinci adaydan açık ara önde — bu yüzden bu isim verildi." }
+        if top.score>=suggest && gap>=margin { return "Bu ses “\(top.name)” profiline %\(pct) benziyor ama emin olacak kadar değil — bu yüzden yalnızca önerildi." }
+        if gap<margin && candidates.count>1 { return "Bu ses “\(top.name)” profiline %\(pct) benziyor, ikinci adaya farkı az — bu yüzden isim verilmedi." }
+        return "En yakın kayıtlı ses “\(top.name)”, %\(pct) — yeterince benzemiyor, bu yüzden isim verilmedi."
+    }
+    /// The numbers behind that sentence: every candidate, the bars they had to clear, and how much voice there was.
+    var detail:String {
+        let rows=candidates.map { c in "\(c.name): \(String(format:"%.2f",c.score)) (merkez \(String(format:"%.2f",c.centroid)), en yakın örnek \(String(format:"%.2f",c.bestSample)), \(c.samples) örnek, eşik \(String(format:"%.2f",bar(for:c))))"+(c.personNote.isEmpty ? "" : " · "+c.personNote) }
+        let bars="İsim eşiği \(String(format:"%.2f",threshold)), öneri eşiği \(String(format:"%.2f",suggest)), ikinci adaya en az \(String(format:"%.2f",margin)) fark · bu kümede \(String(format:"%.0f",seconds)) sn ses"
+        return (rows+[bars]).joined(separator:"\n")
+    }
     func verdict(for c:IdentityCandidate,rank:Int)->String {
         let gap=rank==0 && candidates.count>1 ? c.score-candidates[1].score : 1.0
         if rank>0 { return "" }

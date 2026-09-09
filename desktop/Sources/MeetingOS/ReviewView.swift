@@ -32,11 +32,23 @@ struct ReviewView:View {
     @State private var showMaintenance=false
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:14) {
-            HStack { Text("Kontrol").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary);Button("Sözlükle tara") { Task { await model.scanGlossary() } }.disabled(model.busy || model.selected==nil).help("Transkripti proje sözlüğüyle karşılaştırır; bulut modunda öneriler analiz modeline doğrulatılır").accessibilityIdentifier("scanGlossaryButton") }
+            HStack {
+                Text("Kontrol").font(.system(size:23,weight:.bold,design:.rounded))
+                Spacer()
+                Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary)
+                Menu {
+                    Button("Sözlükle tara") { Task { await model.scanGlossary() } }.disabled(model.busy || model.selected==nil).accessibilityIdentifier("scanGlossaryButton")
+                    Divider()
+                    Toggle("Son 7 gün karnesi",isOn:$showScorecard).accessibilityIdentifier("scorecardToggle")
+                    Toggle("Haftalık bakım",isOn:$showMaintenance).accessibilityIdentifier("maintenanceToggle")
+                } label: { Image(systemName:"ellipsis.circle") }.menuStyle(.borderlessButton).fixedSize()
+                    .help("Sözlükle tara: transkripti proje sözlüğüyle karşılaştırır. Karne ve bakım panellerini buradan açıp kapatırsınız.")
+                    .accessibilityIdentifier("reviewMenu")
+            }
             Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
             ReviewDebtView(m:model)
-            DisclosureGroup(isExpanded:$showScorecard) { ScorecardView(m:model).padding(.top,8) } label: { Label("Son 7 gün karnesi · toplantı saati, karar, görev, konuşma payı",systemImage:"chart.bar").font(.callout) }.accessibilityIdentifier("scorecardGroup")
-            DisclosureGroup(isExpanded:$showMaintenance) { MaintenanceView(m:model).padding(.top,8) } label: { Label("Haftalık bakım · profiller, öğrenilen kurallar, disk",systemImage:"wrench.and.screwdriver").font(.callout) }.accessibilityIdentifier("maintenanceGroup")
+            if showScorecard { VStack(alignment:.leading,spacing:8) { Label("Son 7 gün karnesi · toplantı saati, karar, görev, konuşma payı",systemImage:"chart.bar").font(.callout); ScorecardView(m:model) }.accessibilityIdentifier("scorecardGroup") }
+            if showMaintenance { VStack(alignment:.leading,spacing:8) { Label("Haftalık bakım · profiller, öğrenilen kurallar, disk",systemImage:"wrench.and.screwdriver").font(.callout); MaintenanceView(m:model) }.accessibilityIdentifier("maintenanceGroup") }
             if verifiedGlossary>0 {
                 HStack(spacing:10) {
                     Label("\(verifiedGlossary) sözlük düzeltmesi analiz modelince doğrulandı",systemImage:"character.book.closed").font(.callout)

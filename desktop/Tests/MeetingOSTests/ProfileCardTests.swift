@@ -38,6 +38,22 @@ final class ProfileCardTests:XCTestCase {
         XCTAssertEqual(model.adaptationNote(["renamed":0,"suggested":2])," · 2 kişi daha önerildi")
         XCTAssertEqual(model.adaptationNote(["renamed":1,"suggested":2])," · 1 kişi daha tanındı, 2 kişi daha önerildi")
     }
+    func testWhyThisNameIsOneSentenceAndTheNumbersAreATooltip() {
+        let named=IdentityExplanation.parse(["threshold":0.87,"margin":0.05,"suggest":0.83,"seconds":9.0,
+            "candidates":[["name":"Ayşe","score":0.91,"centroid":0.9,"best_sample":0.92,"samples":3]]])
+        XCTAssertEqual(named.sentence,"Bu ses “Ayşe” profiline %91 benziyor ve ikinci adaydan açık ara önde — bu yüzden bu isim verildi.")
+        let tooClose=IdentityExplanation.parse(["threshold":0.87,"margin":0.05,"suggest":0.83,"seconds":9.0,
+            "candidates":[["name":"Ayşe","score":0.91,"centroid":0.9,"best_sample":0.92,"samples":3],
+                          ["name":"Veli","score":0.89,"centroid":0.89,"best_sample":0.89,"samples":2]]])
+        XCTAssertEqual(tooClose.sentence,"Bu ses “Ayşe” profiline %91 benziyor, ikinci adaya farkı az — bu yüzden isim verilmedi.")
+        let low=IdentityExplanation.parse(["threshold":0.87,"margin":0.05,"suggest":0.83,"seconds":9.0,
+            "candidates":[["name":"Ayşe","score":0.60,"centroid":0.6,"best_sample":0.6,"samples":1]]])
+        XCTAssertTrue(low.sentence.hasSuffix("yeterince benzemiyor, bu yüzden isim verilmedi."))
+        XCTAssertEqual(IdentityExplanation.parse([:]).sentence,"Karşılaştırılacak kayıtlı ses yok, bu yüzden isim verilmedi.")
+        XCTAssertTrue(named.detail.contains("0.91"))          // every number the sentence dropped is still in .help
+        XCTAssertTrue(named.detail.contains("İsim eşiği 0.87"))
+        XCTAssertFalse(named.sentence.contains("0.87"))
+    }
     func testCleanCandidateKeepsWhereTheTurnCameFrom() {
         let c=CleanCandidate(["id":42,"meeting":"m1","meeting_title":"Salı","start":61.5,"end":80.0,"seconds":18.5,"source":"system","text":"uzun bir cümle"])
         XCTAssertEqual(c.id,42); XCTAssertEqual(c.meeting,"m1"); XCTAssertEqual(c.start,61.5); XCTAssertEqual(c.seconds,18.5)
