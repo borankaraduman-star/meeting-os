@@ -419,6 +419,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    /// Evidence / review navigation: scroll the reading view to the paragraph and flash it, keeping context around it.
+    @Published var revealTarget:Int?; @Published var revealToken=0; @Published var highlighted:Int?
+    func reveal(segment id:Int) {
+        tab="transcript"; search=""; focusedSegment=nil; revealTarget=id; revealToken+=1; highlighted=id
+        let token=revealToken
+        DispatchQueue.main.asyncAfter(deadline:.now()+2.5) { [weak self] in if self?.revealToken==token { self?.highlighted=nil } }
+    }
+    /// Paragraph that contains a segment (evidence may point at a non-lead row of a block).
+    func blockId(containing id:Int)->Int? { blocks.first { $0.rows.contains { $0.id==id } || $0.asides.contains { $0.id==id } }?.id }
     /// Live capture health for the floating panel (mic / system audio), refreshed with every poll while recording.
     @Published var captureDots:[String:String]=[:]
     /// A job that started before the next Zoom meeting opened is pushed to Darwin background (CPU, I/O and

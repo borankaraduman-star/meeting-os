@@ -54,7 +54,7 @@ struct ReviewView:View {
                     if !item.text.isEmpty { Text("“"+item.text+"”").font(.system(size:14)).foregroundStyle(.secondary).lineLimit(3) }
                     HStack(spacing:10) {
                         if let seg=item.segment {
-                            Button("Bölüme git") { model.focusedSegment=seg;model.tab="transcript" }.accessibilityIdentifier("reviewGo-\(item.id)")
+                            Button("Bölüme git") { model.reveal(segment:seg) }.accessibilityIdentifier("reviewGo-\(item.id)")
                             if model.rows.contains(where:{ $0.id==seg }) { Button("Dinle") { if let row=model.rows.first(where:{ $0.id==seg }) { model.play(row) } } }
                         }
                         if item.kind=="suggested_name", !item.suggested.isEmpty {

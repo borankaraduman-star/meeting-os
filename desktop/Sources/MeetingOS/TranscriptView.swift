@@ -3,7 +3,7 @@ import SwiftUI
 struct TranscriptView:View {
     @ObservedObject var model:Model
     var body:some View {
-        ScrollView {
+        ScrollViewReader { proxy in ScrollView {
             // Plain VStack: LazyVStack's height estimation oscillated with long wrapped paragraphs and
             // pinned the main thread at 100% CPU after scrolling or renaming a speaker. Meetings have
             // at most a few hundred rows, so eager layout is cheap and deterministic.
@@ -38,14 +38,19 @@ struct TranscriptView:View {
                         }
                     }
 
-                    ForEach(blocks) { block in TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides) }
+                    ForEach(blocks) { block in TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false).id(block.id) }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
-                    ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable() }
+                    ForEach(model.filteredRows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable().id(row.id) }
                     if model.filteredRows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 }
             }.padding(24)
         }
+        .onChange(of:model.revealToken) { _,_ in
+            guard let target=model.revealTarget else { return }
+            let anchor=(model.readingMode && model.search.isEmpty) ? (model.blockId(containing:target) ?? target) : target
+            withAnimation(.easeInOut(duration:0.35)) { proxy.scrollTo(anchor,anchor:.center) }
+        } }
     }
 }
 
@@ -98,6 +103,17 @@ struct TranscriptBlockView:View {
     let canPlay:Bool
     let canEdit:Bool
     let showAsides:Bool
+    var highlighted:Bool=false
+    /// Rename this speaker's whole cluster from the paragraph header: saved profiles, calendar attendees, or the full editor.
+    var speakerMenu:some View {
+        Menu {
+            let known=Array(Set(model.profiles.map(\.name))).sorted()
+            if !known.isEmpty { Section("Ses profilleri") { ForEach(known,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
+            if !model.calendarAttendees.isEmpty { Section("Takvim katılımcıları") { ForEach(model.calendarAttendees,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
+            Button("Yeni isim…") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }
+        } label: { HStack(spacing:4) { Text(block.label).font(.headline).lineLimit(1); Image(systemName:"chevron.down").font(.caption2).foregroundStyle(.secondary) } }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Bu konuşmacının bütün paragraflarını adlandır").accessibilityIdentifier("speakerMenu-\(block.id)")
+    }
     var body:some View {
         HStack(alignment:.top,spacing:14) {
             if canPlay {
@@ -110,7 +126,7 @@ struct TranscriptBlockView:View {
             } else { Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width:48) }
             VStack(alignment:.leading,spacing:7) {
                 HStack {
-                    Text(block.label).font(.headline).lineLimit(1)
+                    if canEdit && block.lead.source != "mic" && block.lead.flags.contains("cloud_diarization") { speakerMenu } else { Text(block.label).font(.headline).lineLimit(1) }
                     if !block.lead.suggested.isEmpty && block.lead.name.isEmpty {
                         Button("Onayla") { Task { await model.confirmSuggestion(block.lead) } }.controlSize(.small).disabled(!canEdit).help("Ses profiline benziyor; tek tıkla adı onaylayın").accessibilityIdentifier("confirmSuggestion-\(block.id)")
                     }
@@ -133,6 +149,6 @@ struct TranscriptBlockView:View {
                     }.fixedSize(horizontal:false,vertical:true)
                 }
             }.frame(maxWidth:.infinity,alignment:.leading)
-        }.padding(20).meetingCard()
+        }.padding(20).meetingCard().overlay(RoundedRectangle(cornerRadius:14).stroke(MeetingStyle.accent.opacity(highlighted ? 0.9 : 0),lineWidth:2)).background(MeetingStyle.accent.opacity(highlighted ? 0.08 : 0),in:RoundedRectangle(cornerRadius:14)).animation(.easeOut(duration:0.4),value:highlighted)
     }
 }

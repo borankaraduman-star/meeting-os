@@ -81,7 +81,7 @@ extension Model {
         if e.destination(in:rows)==nil && ["processing","provisional"].contains(meeting?.status ?? "") { return }
         pendingEvidence=nil
         if let row=e.destination(in:rows) {
-            focusedSegment=row.id
+            reveal(segment:row.id)
             if !row.text.contains(e.quote) { error="Kaynak metin değişmiş. Güncel konuşma bölümü gösteriliyor." }
         } else {
             focusedSegment=nil
