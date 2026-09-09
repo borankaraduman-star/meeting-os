@@ -82,11 +82,18 @@ struct SidebarView:View {
                     }
                 }.task { await model.loadCloudModels() }
             }.padding(18)
-            HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text("\(model.meetings.count)").monospacedDigit().font(.caption) }
+            HStack { Text("TOPLANTILAR").font(.system(size:10,weight:.semibold)).tracking(1.5);Spacer();Text(model.filter.isEmpty ? "\(model.meetings.count)" : "\(model.visibleMeetings.count)/\(model.meetings.count)").monospacedDigit().font(.caption) }
                 .foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,6)
                 .accessibilityHidden(true)
+            if model.meetings.count>6 {
+                HStack(spacing:6) {
+                    Image(systemName:"magnifyingglass").foregroundStyle(.secondary).font(.caption)
+                    TextField("Toplantı ara",text:$model.filter).textFieldStyle(.plain).font(.callout).accessibilityIdentifier("meetingFilter")
+                    if !model.filter.isEmpty { Button { model.filter="" } label:{ Image(systemName:"xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain) }
+                }.padding(.horizontal,10).padding(.vertical,6).background(.primary.opacity(0.05),in:RoundedRectangle(cornerRadius:8)).padding(.horizontal,14).padding(.bottom,6)
+            }
             List(selection:$model.selected) {
-                ForEach(model.meetings) { meeting in
+                ForEach(model.visibleMeetings) { meeting in
                     MeetingLibraryRow(meeting:meeting)
                         .tag(meeting.id)
                         .contextMenu { Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(model.busy || meeting.recoveryState=="active") }

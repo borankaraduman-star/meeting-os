@@ -336,6 +336,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard panel.runModal() == .OK, let url=panel.url else { return }
         do { _=try await request(["action":format=="analysis.md" ? "export_analysis":"export","meeting":mid,"path":url.path,"format":format]); activity="Dışa aktarıldı: \(url.lastPathComponent)" } catch { self.error=error.localizedDescription }
     }
+    /// Sidebar search: matches title, date and the auto-title words, case- and diacritic-insensitively.
+    @Published var filter=""
+    var visibleMeetings:[Meeting] {
+        let q=filter.trimmingCharacters(in:.whitespaces)
+        if q.isEmpty { return meetings }
+        return meetings.filter { ($0.title+" "+$0.created).range(of:q,options:[.caseInsensitive,.diacriticInsensitive]) != nil }
+    }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
     @Published var showRecorderPanel=UserDefaults.standard.object(forKey:"showRecorderPanel") as? Bool ?? true { didSet { UserDefaults.standard.set(showRecorderPanel,forKey:"showRecorderPanel"); if !showRecorderPanel { RecorderPanel.hide() } else if recording { RecorderPanel.show(model:self) } } }
