@@ -48,6 +48,12 @@ Ses dosyası: kenar çubuğu → **Ses dosyası aç…** bir dosyayı OpenRouter
 
 Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bulut işi durmaz; yalnız yerel model işleri durur.
 
+**Bir şey ters giderse (1.2.27):**
+- OpenRouter geçici hata verirse parçalar 2 / 8 / 20 sn arayla yeniden denenir; ödenmiş her parça kaydedilir, hiçbir şey iki kez yüklenmez.
+- Anahtar geçersiz (401) ya da kredi bitmişse kenar çubuğunda tek satır görürsünüz (“Anahtar geçersiz · Ayarlar”); ses silinmez. Sorunu giderince toplantı, Mac boştayken kendiliğinden yeniden alınır (10 dk → 30 dk → 2 sa → 6 sa → günlük); Ayarlar → Sistem’den kapatılabilir.
+- Kayıt sırasında yardımcı süreç ölür ya da takılırsa aynı klasöre kaldığı saniyeden devam eder (saatte en çok 5 kez); uyku/uyanmada ses akışı yeniden kurulur. Panelde “Kayıt devam ediyor · N sn boşluk” görürsünüz; rapor `capture` bloğunda `relaunches`/`wakes` sayıları kalır.
+- Kayıt bittiğinde önceki toplantının işi sürüyorsa yeni toplantı kuyruğa girer; ⌃⌥R hiçbir zaman beklemez.
+
 ## 4. Kenar çubuğu
 
 - **Toplantılar** Bugün / Dün / Bu hafta / Daha eski gruplarında; satırda “40 dk · 4 kişi” ya da “Konuşma bulunmadı” ve “Bugün 14:05” gibi saat.
