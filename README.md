@@ -239,3 +239,7 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 ### İsteğe bağlı OpenRouter transkripsiyonu
 
 Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
+
+### Takvim bağlamı (isteğe bağlı)
+
+Ayarlar → Kayıt sırasında → **Kayıt başlarken takvimdeki toplantının adını başlık yap…** açıldığında macOS takvim izni istenir (yalnız okuma). Kayıt başlarken o anda süren etkinlik (±5 dk) bulunursa başlık etkinliğin adı olur; katılımcı adları toplantıya kaydedilir ve Düzelt penceresinde tek tıkla konuşmacı adı olarak seçilir. Takvime hiçbir şey yazılmaz; kapalıyken takvim okunmaz.
