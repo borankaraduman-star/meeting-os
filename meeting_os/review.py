@@ -53,3 +53,27 @@ def review_queue(store, mid):
             items.append({'segment_id':seg,'start':None,'speaker':None,'text':task['title'][:120],'kind':'task_owner','severity':2,'reason':'Görev sahibi belirsiz; kaynağı dinleyip sahibini yazın','task':task['id']})
     items.sort(key=lambda i:(i['severity'],i['start'] if i['start'] is not None else 1e9))
     return {'items':items,'count':len(items)}
+
+
+def review_debt(store, days=7):
+    """Haftalık gözden geçirme borcu: pencerede kaydedilen tamamlanmış toplantıların Kontrol kuyrukları tek listede,
+    önce en ağır madde, sonra en yeni toplantı. Read-only."""
+    from datetime import datetime,timedelta,timezone
+    cutoff=datetime.now(timezone.utc)-timedelta(days=max(1,int(days)))
+    meetings=[]
+    for row in store.meetings():
+        if row['status']!='complete': continue
+        try: created=datetime.fromisoformat(row['created'] or '')
+        except ValueError: continue
+        if created.tzinfo is None: created=created.replace(tzinfo=timezone.utc)
+        if created<cutoff: continue
+        meetings.append(row)
+    items=[];counts={}
+    for row in meetings:
+        for item in review_queue(store,row['id'])['items']:
+            items.append({**item,'meeting':row['id'],'meeting_title':row['title'],'created':row['created']})
+            counts[item['kind']]=counts.get(item['kind'],0)+1
+    items.sort(key=lambda i:i['start'] if i['start'] is not None else 1e9)
+    items.sort(key=lambda i:i['created'] or '',reverse=True)   # stable: newest meeting first within one severity
+    items.sort(key=lambda i:i['severity'])
+    return {'days':int(days),'meetings':len(meetings),'counts':counts,'items':items,'count':len(items)}

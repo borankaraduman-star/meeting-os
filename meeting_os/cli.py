@@ -138,7 +138,10 @@ def parser():
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
-    dg=sub.add_parser('digest',help='End-of-day personal digest: your tasks, open questions and decisions from one day, with sources'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--owner',default='Boran'); dg.add_argument('--output',type=Path)
+    dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',default='Boran'); dg.add_argument('--output',type=Path)
+    wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',default='Boran'); wt.add_argument('--output',type=Path)
+    dl=sub.add_parser('decisions',help='Decision log across every meeting, newest first, with earlier similar decisions'); dl.add_argument('--query'); dl.add_argument('--limit',type=int,default=200); dl.add_argument('--mask-names',action='store_true'); dl.add_argument('--output',type=Path)
+    rd=sub.add_parser('review-debt',help='Review queue of every meeting recorded in the last N days, worst first'); rd.add_argument('--days',type=int,default=7)
     sh=sub.add_parser('share',help='Share preview of one meeting as Markdown; names can be masked, decisions-only mode'); sh.add_argument('--meeting',required=True); sh.add_argument('--mask-names',action='store_true'); sh.add_argument('--only-decisions',action='store_true'); sh.add_argument('--no-transcript',action='store_true'); sh.add_argument('--no-summary',action='store_true'); sh.add_argument('--include-segments',help='Comma-separated segment ids'); sh.add_argument('--exclude-segments',help='Comma-separated segment ids'); sh.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
     rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir')
@@ -302,9 +305,24 @@ def main(supervised=False):
                 else: print(text)
             elif args.command=='digest':
                 from .digest import build_digest,render_digest
-                digest=build_digest(store,args.day,args.owner);text=render_digest(digest)
-                if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output),'day':digest['day'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'meetings':len(digest['meetings'])})
+                from . import glossary as G
+                digest=build_digest(store,args.day,args.owner,start=args.date_from,end=args.date_to,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None)
+                text=render_digest(digest)
+                if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output),'day':digest['day'],'from':digest['from'],'to':digest['to'],'masked_names':digest['masked_names'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'risks':len(digest['risks']),'meetings':len(digest['meetings'])})
                 else: print(text)
+            elif args.command=='waiting':
+                from .waiting import build_waiting,render_waiting
+                board=build_waiting(store,args.owner)
+                if args.output: args.output.write_text(render_waiting(board),encoding='utf-8');output({'path':str(args.output),'people':len(board['people']),'total':board['total']})
+                else: output(board)
+            elif args.command=='decisions':
+                from .decisions import decision_log,export_decision_log
+                from . import glossary as G
+                if args.output: output(export_decision_log(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None))
+                else: output(decision_log(store,args.query,args.limit))
+            elif args.command=='review-debt':
+                from .review import review_debt
+                output(review_debt(store,args.days))
             elif args.command=='share':
                 from .share import prepare_share
                 from . import glossary as G
