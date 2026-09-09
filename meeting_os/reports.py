@@ -40,7 +40,7 @@ def load_settings(data_dir):
     try: data = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
     except ValueError: data = {}
     if not isinstance(data, dict): data = {}
-    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False}
+    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30}
     return {**defaults, **{k: v for k, v in data.items() if k in defaults}}
 
 
@@ -48,6 +48,7 @@ def save_settings(data_dir, changes):
     current = load_settings(data_dir)
     for key, value in (changes or {}).items():
         if key in ('share_reports', 'share_text', 'auto_update') and isinstance(value, bool): current[key] = value
+        elif key == 'audio_retention_days' and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     settings_path(data_dir).write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -99,8 +100,8 @@ def capture_block(directory, duration_seconds=0.0):
         if not root.is_dir(): return None
         chunks = {}; full = {}
         for p in root.glob('*.wav'):
-            if p.name.endswith('-full.wav'):
-                try: full[p.name[:-len('-full.wav')]] = p.stat().st_size
+            if p.name.endswith(('-full.wav','-full.flac')):
+                try: full[p.name.split('-full.')[0]] = p.stat().st_size
                 except OSError: pass
                 continue
             found = re.fullmatch(r'([A-Za-z]+)-\d{6}\.wav', p.name)

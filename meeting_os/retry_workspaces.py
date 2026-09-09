@@ -31,7 +31,7 @@ def _remove(root_fd,row):
                 names.append(entry.name)
         entries={}
         for name in names:
-            if name not in ('events.jsonl','mic-full.wav','system-full.wav') and not re.fullmatch(r'[0-9]{6}\.wav',name):raise ValueError('Unexpected workspace contents')
+            if name not in ('events.jsonl','mic-full.wav','system-full.wav','mic-full.flac','system-full.flac') and not re.fullmatch(r'[0-9]{6}\.wav',name):raise ValueError('Unexpected workspace contents')
             entry=os.stat(name,dir_fd=fd,follow_symlinks=False)
             if not stat.S_ISREG(entry.st_mode) or entry.st_uid!=os.getuid() or entry.st_nlink!=1:raise ValueError('Unexpected workspace entry')
             entries[name]=(entry.st_dev,entry.st_ino)

@@ -425,7 +425,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func heartbeatIfDue() {
         guard !recording, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
         lastHeartbeat=Date()
-        Task { _=try? await request(["action":"heartbeat","app":["version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "","bridge":BridgeStats.shared.snapshot]]) }
+        Task {
+            _=try? await request(["action":"heartbeat","app":["version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "","bridge":BridgeStats.shared.snapshot]])
+            if !recording, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
+                let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
+                if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
+            }
+        }
     }
     // Cross-meeting PM views (loaded on demand, never while recording)
     @Published var decisions:[DecisionEntry]=[]; @Published var waiting:[WaitingPerson]=[]; @Published var debt:[DebtItem]=[]; @Published var debtSummary=""
@@ -524,7 +530,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         catch { self.error=error.localizedDescription }
     }
     func compactStorage() async {
-        do { let r=try await request(["action":"storage_compact"]); activity="Parçalar sıkıştırıldı · \(r["meetings"] as? Int ?? 0) toplantı, \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)) boşaldı"; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
+        do { let r=try await request(["action":"storage_compact"]); let ab=r["archived_bytes"] as? Int ?? 0; activity="Sesler sıkıştırıldı · parçalardan \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)), FLAC’ten \(StorageReport.format(bytes:ab)) boşaldı (\(r["archived_meetings"] as? Int ?? 0) toplantı)"; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
         catch { self.error=error.localizedDescription }
     }
     func keepMeeting(_ id:String,keep:Bool) async { do { _=try await request(["action":"keep_meeting","meeting":id,"keep":keep]); await refresh() } catch { self.error=error.localizedDescription } }

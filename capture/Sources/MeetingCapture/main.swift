@@ -42,8 +42,10 @@ final class ChunkWriter {
         if file == nil {
             start = max(0, time); frames = 0; rate = buffer.format.sampleRate
             temporary = directory.appendingPathComponent(String(format: "%@-%06d.partial.wav", source, index))
-            var settings = buffer.format.settings
-            settings[AVLinearPCMIsNonInterleaved] = false
+            // 16-bit PCM on disk (AVAudioFile converts from the float processing format): the 12-second
+            // chunks are transient and were the largest thing on disk at 48 kHz stereo float32.
+            let settings: [String: Any] = [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: buffer.format.sampleRate, AVNumberOfChannelsKey: buffer.format.channelCount,
+                                           AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false]
             file = try AVAudioFile(forWriting: temporary!, settings: settings, commonFormat: buffer.format.commonFormat, interleaved: buffer.format.isInterleaved)
         }
         try file!.write(from: buffer)

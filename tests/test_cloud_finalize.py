@@ -564,7 +564,7 @@ class CompactTests(unittest.TestCase):
             d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite');mid=store.create_meeting('C',{'capture_dir':str(d)});store.status(mid,'incomplete')
             finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=FakeEmbedder())
             names=sorted(p.name for p in d.iterdir())
-            self.assertIn('system-full.wav',names);self.assertIn('mic-full.wav',names);self.assertNotIn('system-000000.wav',names);self.assertNotIn('mic-000000.wav',names);self.assertIn('capture-native.jsonl',names)
+            self.assertIn('system-full.flac',names);self.assertIn('mic-full.flac',names);self.assertNotIn('system-full.wav',names);self.assertNotIn('system-000000.wav',names);self.assertNotIn('mic-000000.wav',names);self.assertIn('capture-native.jsonl',names)
             meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);self.assertEqual(meta['chunks_removed'],2)
             self.assertEqual(compact_capture(store,mid),0)   # idempotent
             store.close()

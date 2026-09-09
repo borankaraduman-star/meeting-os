@@ -529,6 +529,8 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(metadata),mid))
             store.status(mid,'complete');emit('complete')
             compact_capture(store,mid)
+            from .audio_archive import archive_meeting
+            archive_meeting(store,mid)   # float32 WAV → 16-bit FLAC, lossless, 3–4× smaller
             from .reports import write_meeting_report
             from . import __version__
             write_meeting_report(store,mid,data_dir,version=__version__)

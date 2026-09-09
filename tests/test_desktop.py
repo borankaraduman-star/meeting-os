@@ -54,6 +54,24 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual((r['reports_on'],r['reports_writable'],r['reports_written']),(True,True,0))
    class F:returncode=44;stdout='';stderr=''
    with patch('subprocess.run',return_value=F()):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])
+ def test_archive_converts_full_wav_to_flac_and_housekeeping_respects_retention(self):
+  import numpy as np, soundfile as sf
+  from meeting_os import reports
+  from meeting_os.audio_archive import archive_meeting
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db);rec=data/'recordings'/'cap';rec.mkdir(parents=True)
+   wav=rec/'system-full.wav';sf.write(wav,(np.random.default_rng(1).standard_normal(16000*3)*0.1).astype('float32'),16000,subtype='FLOAT')
+   mid=s.create_meeting('Arşiv',{'paths':{'system':str(wav)},'capture_dir':str(rec),'cloud_mode':'capture'});s.status(mid,'complete')
+   saved=archive_meeting(s,mid);self.assertGreater(saved,0);self.assertFalse(wav.exists())
+   meta=json.loads(s.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0]);flac=Path(meta['paths']['system']);self.assertEqual(flac.suffix,'.flac')
+   audio,rate=sf.read(flac,dtype='float32');self.assertEqual((len(audio),rate),(16000*3,16000));self.assertEqual(archive_meeting(s,mid),0)   # idempotent
+   s.close()
+   st=reports.save_settings(data,{'audio_retention_days':0});self.assertEqual(st['audio_retention_days'],0)
+   r=dispatch({'action':'storage_housekeeping'},db);self.assertEqual((r['retention_days'],r['removed_meetings']),(0,0));self.assertTrue(flac.exists())
+   reports.save_settings(data,{'audio_retention_days':1})
+   Store(db).db.execute("UPDATE meetings SET created='2025-01-01T10:00:00+00:00' WHERE id=?",(mid,)).connection.commit()
+   r=dispatch({'action':'storage_housekeeping'},db);self.assertEqual(r['removed_meetings'],1);self.assertFalse(rec.exists())
+   self.assertEqual(reports.save_settings(data,{'audio_retention_days':True})['audio_retention_days'],1)   # bools are not day counts
  def test_cost_report_sums_real_charges_by_month(self):
   from datetime import datetime,timezone
   with tempfile.TemporaryDirectory() as tmp:

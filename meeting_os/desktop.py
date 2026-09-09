@@ -352,11 +352,21 @@ def dispatch(request, db=None):
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
         if action=='storage_compact':
             from .cloud_finalize import compact_capture
+            from .audio_archive import archive_all
             freed=0;count=0
             for m in store.meetings():
                 b=compact_capture(store,m['id'])
                 if b: freed+=b;count+=1
-            return {'meetings':count,'bytes':freed}
+            arch=archive_all(store)
+            return {'meetings':count,'bytes':freed,'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes']}
+        if action=='storage_housekeeping':
+            # Hourly, only when nothing records: archive finished audio, then drop audio older than the retention setting.
+            from .audio_archive import archive_all
+            from .reports import load_settings
+            data=DATA_DIR if db is None else Path(db).parent
+            arch=archive_all(store); days=int(load_settings(data).get('audio_retention_days') or 0)
+            cleaned=storage_cleanup(store,data,days=days,dry_run=False) if days>0 else {'meetings':[],'bytes':0}
+            return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes']}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='setup_status':
