@@ -207,6 +207,7 @@ struct DetailHeader:View {
                 HStack(spacing:6) {
                     Circle().fill(MeetingStyle.statusColor(model.meeting?.displayStatus ?? "")).frame(width:6,height:6)
                     Text(model.meeting.map { statusLabel($0.displayStatus) } ?? "Toplantı seçilmedi").font(.caption).foregroundStyle(.secondary)
+                    if let strip=model.headerStrip { Text("· "+strip).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("headerStrip") }
                 }.padding(.top,5)
             }
             Spacer(minLength:12)

@@ -136,6 +136,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var analysisModel=UserDefaults.standard.string(forKey:"cloudAnalysisModel") ?? "openai/gpt-4.1-mini" { didSet { UserDefaults.standard.set(analysisModel,forKey:"cloudAnalysisModel") } }
     /// analyze/prepare/ask run through OpenRouter whenever transcription does; the local Qwen path stays for local mode.
     var cloudAnalysisArguments:[String] { transcriptionMode=="openrouter" ? ["--openrouter-model",analysisModel] : [] }
+    /// One line under the title: when, how long, who, what still needs a look. Built from data already loaded.
+    var headerStrip:String? {
+        guard let m=meeting, m.status=="complete" else { return nil }
+        var parts=[MeetingDates.label(m.created)]
+        if m.segments>0 { parts.append(m.seconds>=60 ? "\(Int(m.seconds/60)) dk" : "\(Int(m.seconds)) sn"); if m.speakers>0 { parts.append("\(m.speakers) kişi") } } else { parts.append("konuşma yok") }
+        let open=openTaskCount; if open>0 { parts.append("\(open) açık görev") }
+        if !review.isEmpty { parts.append("\(review.count) kontrol maddesi") }
+        return parts.joined(separator:" · ")
+    }
+    var openTaskCount:Int { actions.filter { $0.meeting==selected && !$0.stale && !["done","dismissed"].contains($0.state) }.count }
     func loadReview() async {
         guard let mid=selected else { review=[]; return }
         do { let r=try await request(["action":"review_queue","meeting":mid]); review=(r["items"] as? [[String:Any]] ?? []).map(ReviewItem.init) } catch { review=[] }
@@ -219,7 +229,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
-            if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
+            if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); let changed=rows != nextRows; if changed { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted); if changed, !recording, meeting?.status=="complete" { await loadReview() } }
         } catch { self.error=error.localizedDescription }
     }
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
