@@ -20,9 +20,14 @@ enum RemindersBridge {
         if !due.isEmpty { lines.append("Zaman: \(due)") }
         return lines.joined(separator:"\n")
     }
-    static func add(title:String,meetingTitle:String,owner:String,due:String) throws {
+    static func add(title:String,meetingTitle:String,owner:String,due:String,dueDate:String?=nil) throws {
         let r=EKReminder(eventStore:store)
         r.title=title; r.notes=note(meetingTitle:meetingTitle,owner:owner,due:due)
+        if let iso=dueDate, let d=MeetingDates.day(iso) {   // approved date → due 09:00 with an alarm
+            var comps=Calendar.current.dateComponents([.year,.month,.day],from:d); comps.hour=9; comps.minute=0
+            r.dueDateComponents=comps
+            if let at=Calendar.current.date(from:comps) { r.addAlarm(EKAlarm(absoluteDate:at)) }
+        }
         guard let list=store.defaultCalendarForNewReminders() else { throw NSError(domain:"MeetingOS",code:1,userInfo:[NSLocalizedDescriptionKey:"Hatırlatıcılar’da varsayılan liste bulunamadı"]) }
         r.calendar=list
         try store.save(r,commit:true)

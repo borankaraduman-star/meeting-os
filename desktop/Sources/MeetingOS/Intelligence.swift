@@ -13,8 +13,8 @@ struct Insight:Identifiable {
     init(_ d:[String:Any]) { text=d["text"] as? String ?? ""; evidence=(d["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); review=d["needs_review"] as? Bool ?? false }
 }
 struct ActionItem:Identifiable {
-    let id:String; let title:String; let owner:String; let due:String; let state:String; let meeting:String; let meetingTitle:String; let stale:Bool; let route:String; let evidence:[Evidence]
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; owner=d["owner"] as? String ?? ""; due=d["due_text"] as? String ?? ""; state=d["state"] as? String ?? "open"; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? ""; stale=d["stale"] as? Bool ?? false; route=d["route"] as? String ?? ""; evidence=((d["payload"] as? [String:Any])?["evidence"] as? [[String:Any]] ?? []).map { Evidence($0.merging(["meeting":d["meeting"] as? String ?? "", "meeting_title":d["meeting_title"] as? String ?? ""]) { _,new in new }) } }
+    let id:String; let title:String; let owner:String; let due:String; let state:String; let meeting:String; let meetingTitle:String; let stale:Bool; let route:String; let evidence:[Evidence]; let dueDate:String
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; owner=d["owner"] as? String ?? ""; due=d["due_text"] as? String ?? ""; state=d["state"] as? String ?? "open"; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? ""; stale=d["stale"] as? Bool ?? false; route=d["route"] as? String ?? ""; dueDate=(d["payload"] as? [String:Any])?["due_date"] as? String ?? ""; evidence=((d["payload"] as? [String:Any])?["evidence"] as? [[String:Any]] ?? []).map { Evidence($0.merging(["meeting":d["meeting"] as? String ?? "", "meeting_title":d["meeting_title"] as? String ?? ""]) { _,new in new }) } }
 }
 struct DraftItem:Identifiable { let id:String; let task:String; let text:String; let stale:Bool
     init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; task=d["task"] as? String ?? ""; text=d["text"] as? String ?? ""; stale=d["stale"] as? Bool ?? false }
@@ -27,6 +27,11 @@ extension Model {
         analysis=result["analysis"] as? [String:Any]
         actions=(result["tasks"] as? [[String:Any]] ?? []).map(ActionItem.init)
         drafts=(result["drafts"] as? [[String:Any]] ?? []).map(DraftItem.init)
+        dueSuggestions=Dictionary(uniqueKeysWithValues:(result["due_suggestions"] as? [[String:Any]] ?? []).compactMap { d in (d["task"] as? String).flatMap { t in (d["suggested"] as? String).map { (t,$0) } } })
+    }
+    /// Approve (or clear) a calendar date for a task; the transcript's own wording stays as due_text.
+    func setDue(_ item:ActionItem,_ iso:String?) async {
+        do { _=try await request(["action":"task_set_due","task":item.id,"due_date":iso as Any]); activity=iso==nil ? "Tarih kaldırıldı" : "Vade onaylandı · \(MeetingDates.dayLabel(iso!))"; try await refreshIntelligence(selected ?? "") } catch { self.error=error.localizedDescription }
     }
     func analyzeAutomatically(_ mid:String) {
         if transcriptionMode=="openrouter" { analyzeMeeting(mid); return }   // cloud analysis loads no local model; safe on 16 GB
@@ -132,6 +137,18 @@ struct ActionsView:View {
             .disabled(m.busy || item.stale || ["done","dismissed"].contains(item.state))
             .accessibilityIdentifier("prepareDraft-\(item.id)")
     }
+    /// Confirmed date, or the parser's proposal with one-tap approval. Never writes a date on its own.
+    func dueChip(_ item:ActionItem)->some View {
+        HStack(spacing:6) {
+            if !item.dueDate.isEmpty {
+                Label(MeetingDates.dayLabel(item.dueDate),systemImage:"calendar").font(.caption).foregroundStyle(MeetingDates.isPast(item.dueDate) && !["done","dismissed"].contains(item.state) ? .orange : .secondary)
+                Button("Kaldır") { Task { await m.setDue(item,nil) } }.controlSize(.mini).buttonStyle(.plain).foregroundStyle(.secondary)
+            } else if let s=m.dueSuggestions[item.id] {
+                Label("Öneri: \(MeetingDates.dayLabel(s))",systemImage:"calendar.badge.clock").font(.caption).foregroundStyle(.secondary).help("“\(item.due)” ifadesi toplantı tarihine göre çevrildi; onaylamadan hiçbir yere yazılmaz")
+                Button("Onayla") { Task { await m.setDue(item,s) } }.controlSize(.mini).accessibilityIdentifier("approveDue-\(item.id)")
+            }
+        }
+    }
     func reminderButton(_ item:ActionItem)->some View {
         Button("Hatırlatıcılar’a ekle") { m.addReminder(item) }
             .disabled(["done","dismissed"].contains(item.state))
@@ -164,8 +181,8 @@ struct ActionsView:View {
                 }
                 EvidenceView(m:m,evidence:item.evidence)
                 ViewThatFits(in:.horizontal) {
-                    HStack { draftButton(item);handoffButton(item);reminderButton(item) }
-                    VStack(alignment:.leading,spacing:8) { draftButton(item);handoffButton(item);reminderButton(item) }
+                    HStack { draftButton(item);handoffButton(item);reminderButton(item);dueChip(item) }
+                    VStack(alignment:.leading,spacing:8) { draftButton(item);handoffButton(item);reminderButton(item);dueChip(item) }
                 }
                 ForEach(m.drafts.filter {$0.task==item.id}.prefix(1)) { draft in DisclosureGroup(draft.stale ? "Güncel olmayan taslak":"İncelenecek taslak · gönderilmedi") { VStack(alignment:.leading) { Text(draft.text).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(.top,8);Button("Taslağı düzenle") { draftEdit=draft;draftText=draft.text }.disabled(draft.stale) } } }
             }.padding(20).meetingCard() }

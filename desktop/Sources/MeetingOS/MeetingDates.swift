@@ -15,6 +15,19 @@ enum MeetingDates {
         return "Daha eski"
     }
     static let order=["Bugün","Dün","Bu hafta","Daha eski"]
+    /// "2026-09-12" → Date at local midnight; nil for anything else.
+    static func day(_ iso:String)->Date? {
+        let f=DateFormatter(); f.locale=Locale(identifier:"en_US_POSIX"); f.dateFormat="yyyy-MM-dd"; f.timeZone=TimeZone.current
+        return f.date(from:String(iso.prefix(10)))
+    }
+    /// "12 Eyl" / "12 Eyl 2025" for a calendar date.
+    static func dayLabel(_ iso:String,now:Date=Date())->String {
+        guard let d=day(iso) else { return iso }
+        let f=DateFormatter(); f.locale=Locale(identifier:"tr_TR")
+        f.dateFormat=Calendar.current.component(.year,from:d)==Calendar.current.component(.year,from:now) ? "d MMM" : "d MMM yyyy"
+        return f.string(from:d)
+    }
+    static func isPast(_ iso:String,now:Date=Date())->Bool { day(iso).map { Calendar.current.startOfDay(for:$0) < Calendar.current.startOfDay(for:now) } ?? false }
     /// "Bugün 14:05", "Dün 09:30", "8 Eyl 14:05", "8 Eyl 2025".
     static func label(_ created:String,now:Date=Date(),calendar:Calendar = .current)->String {
         guard let d=date(created) else { return String(created.prefix(10)) }

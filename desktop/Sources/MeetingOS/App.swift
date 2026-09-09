@@ -428,6 +428,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     var pendingCalendar:CalendarEvent?
     var pollTick=0
+    @Published var dueSuggestions:[String:String]=[:]
     /// Sidebar: the transcription mode/model pickers are folded behind one caption line by default.
     @Published var showTranscriptionOptions=UserDefaults.standard.bool(forKey:"showTranscriptionOptions") { didSet { UserDefaults.standard.set(showTranscriptionOptions,forKey:"showTranscriptionOptions") } }
     /// Poll fingerprints: rows and intelligence are re-fetched only when the Python side reports a change.
@@ -507,7 +508,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func addReminder(_ item:ActionItem) {
         let go={ [weak self] in
             guard let self=self else { return }
-            do { try RemindersBridge.add(title:item.title,meetingTitle:item.meetingTitle,owner:item.owner,due:item.due); self.activity="Hatırlatıcılar’a eklendi · “\(item.title.prefix(60))”" }
+            do { try RemindersBridge.add(title:item.title,meetingTitle:item.meetingTitle,owner:item.owner,due:item.due,dueDate:item.dueDate.isEmpty ? nil : item.dueDate); self.activity="Hatırlatıcılar’a eklendi · “\(item.title.prefix(60))”"+(item.dueDate.isEmpty ? "" : " · \(MeetingDates.dayLabel(item.dueDate)) 09:00") }
             catch { self.error="Hatırlatıcı eklenemedi: \(error.localizedDescription)" }
         }
         if RemindersBridge.authorized { go() }

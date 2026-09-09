@@ -60,6 +60,15 @@ class Memory:
                 self.db.execute('''INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,created,updated) VALUES(?,?,?,?,?,?,?,'open',?,?,?)
                 ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=excluded.payload,title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
         return self.latest(mid)
+    def set_due_date(self,tid,due_date):
+        """Store an approved calendar date (ISO, or None to clear) inside the task payload; due_text stays as the source said it."""
+        row=self.db.execute('SELECT payload FROM tasks WHERE id=?',(tid,)).fetchone()
+        if not row:raise ValueError('Görev bulunamadı')
+        payload=json.loads(row['payload'] or '{}')
+        if due_date: payload['due_date']=str(due_date)[:10]
+        else: payload.pop('due_date',None)
+        with self.db:self.db.execute('UPDATE tasks SET payload=?,user_edited=1,updated=? WHERE id=?',(json.dumps(payload,ensure_ascii=False),now(),tid))
+        return payload.get('due_date')
     def actions(self,owner=None,meeting=None):
         result=[];hashes={};latest_ids={r['meeting']:r['id'] for r in self.db.execute('SELECT meeting,MAX(id) AS id FROM analyses GROUP BY meeting')}
         for row in self.db.execute('SELECT tasks.*,meetings.title AS meeting_title FROM tasks JOIN meetings ON meetings.id=tasks.meeting ORDER BY tasks.created DESC'):

@@ -201,7 +201,10 @@ def dispatch(request, db=None):
         from .assistant import drafts,handoff,route,edit_draft
         memory=Memory(store)
         if action=='intelligence':
-            return {'analysis':memory.latest(request.get('meeting','')),'tasks':[{**t,'route':route(t['title'])} for t in memory.actions()], 'drafts':drafts(store)}
+            from .due_dates import suggestions_for_tasks
+            tasks=[{**t,'route':route(t['title'])} for t in memory.actions()]
+            return {'analysis':memory.latest(request.get('meeting','')),'tasks':tasks,'drafts':drafts(store),'due_suggestions':suggestions_for_tasks(tasks)}
+        if action=='task_set_due':return {'due_date':memory.set_due_date(request['task'],request.get('due_date'))}
         if action=='draft_update':return edit_draft(store,request['draft'],request['text'])
         if action=='action_update':return memory.update_action(request['task'],request['changes'])
         if action=='search_memory':return {'hits':memory.search(request['query'],speaker=request.get('speaker'))}

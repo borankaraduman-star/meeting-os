@@ -16,4 +16,12 @@ final class MeetingDatesTests: XCTestCase {
         XCTAssertFalse(MeetingDates.label("2026-09-01T14:05:00+03:00",now:now,calendar:cal).contains("2026"))
         XCTAssertTrue(MeetingDates.label("2025-03-01T14:05:00+03:00",now:now,calendar:cal).contains("2025"))
     }
+
+    func testDayLabels() {
+        let now=MeetingDates.date("2026-09-09T12:00:00+03:00")!
+        XCTAssertEqual(MeetingDates.dayLabel("2026-09-12",now:now),"12 Eyl")
+        XCTAssertEqual(MeetingDates.dayLabel("2025-01-05",now:now),"5 Oca 2025")
+        XCTAssertEqual(MeetingDates.dayLabel("garbage",now:now),"garbage")
+        XCTAssertTrue(MeetingDates.isPast("2026-09-08",now:now)); XCTAssertFalse(MeetingDates.isPast("2026-09-09",now:now))
+    }
 }
