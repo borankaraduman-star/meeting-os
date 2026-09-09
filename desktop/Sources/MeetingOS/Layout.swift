@@ -331,6 +331,7 @@ struct SettingsSheet:View {
                 }
                 Text("Güncelleme ve raporlar").font(.headline)
                 Text(model.update?.headline ?? "Sürüm kontrolü yapılmadı").font(.caption).foregroundStyle(.secondary)
+                Text("Yeni sürüm varsa kenar çubuğunda ve menü çubuğu simgesinde “Güncelle ve yeniden başlat” görünür; güncelken düğme yoktur. Kontrol açılışta, uygulama öne gelince ve 15 dakikada bir yapılır.").font(.caption2).foregroundStyle(.secondary)
                 HStack {
                     Button("Şimdi kontrol et") { Task { await model.checkForUpdates(force:true) } }
                     if model.update?.available==true { Button("Güncelle ve yeniden başlat") { model.startUpdate() }.disabled(model.busy || model.recording) }

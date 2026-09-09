@@ -65,6 +65,7 @@ struct QuickMenu:View {
             Button("Bana görev") { model.markMoment("task") }
             Button("Sonra bak") { model.markMoment("later") }
         }
+        if let u=model.update, u.available { Divider(); Button("Güncelle ve yeniden başlat · \(u.behind) değişiklik") { model.startUpdate() }.disabled(model.busy || model.recording || model.updating) }
         Divider()
         Button("Uygulamayı göster") { model.showMainWindow() }
         if !model.recording, model.meeting != nil { Button("Kontrol sekmesini aç") { model.tab="review"; model.showMainWindow() } }

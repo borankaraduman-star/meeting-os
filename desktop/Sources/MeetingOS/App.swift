@@ -173,6 +173,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             zoomMeetingOpen=ZoomWatch.current()
             if recording, let started=jobStarted { let s=Int(Date().timeIntervalSince(started)); elapsedText=String(format:"%02d:%02d",s/60,s%60) }
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
+            if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 15*60 { Task { await checkForUpdates() } }
             if wanted==selected { let nextRows=(result["segments"] as? [[String:Any]] ?? []).map(Row.init); if rows != nextRows { rows=nextRows }; resolvePendingEvidence(); try await refreshIntelligence(wanted) }
         } catch { self.error=error.localizedDescription }
     }
@@ -329,7 +330,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var lastUpdateCheck:Date?
     /// Called after the first snapshot and every six hours; a fetch, nothing more.
     func checkForUpdates(force:Bool=false) async {
-        if !force, let last=lastUpdateCheck, Date().timeIntervalSince(last) < 6*3600 { return }
+        if !force, let last=lastUpdateCheck, Date().timeIntervalSince(last) < 15*60 { return }   // on launch, on activation, at most every 15 minutes
         lastUpdateCheck=Date()
         if let status=try? await request(["action":"update_status"]), let state=status["state"] as? String, let msg=status["message"] as? String, state != "running", UserDefaults.standard.string(forKey:"lastShownUpdate") != (status["time"] as? String ?? "") {
             UserDefaults.standard.set(status["time"] as? String ?? "",forKey:"lastShownUpdate"); activity=(state=="done" ? "Güncelleme tamam · " : "Güncelleme başarısız · ")+msg
