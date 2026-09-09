@@ -559,3 +559,7 @@ Boran: “ses dosyaları çok yer kaplıyor”. Ölçüm: 9 toplantı 416 MB; 41
 ## 2026-09-09 18:55 — 1.2.18: kayıt yardımcısı dayanıklılığı
 
 `capture/main.swift`: `didStopWithError` artık ölümcül değil → `restartStream` (stopCapture, 2 sn, yeni SCStream; 3 deneme), 20 sn örnek gelmezse aynı yol; disk eşikleri 3 GB uyarı (`low_disk` olayı) / 400 MB durdurma / 600 MB başlangıç. `capture_state` `restarted`’ı capturing sayar, `restarts` ve `low_disk_bytes` verir. Self-test ve 26 sn gerçek kayıt temiz (4 parça, yeniden başlatma yok, FLAC arşivi oluştu). Uyku senaryosu canlı denenmedi.
+
+## 2026-09-09 19:10 — 1.2.19: okuma görünümü belge gibi
+
+Kart kabuğu kalktı, zaman sol olukta, aynı konuşmacının ardışık paragrafları başlıksız devam ediyor, konuşmacı değişiminde ince ayraç, metin sütunu 760 pt. Ekranda doğrulandı: aynı pencerede görünen paragraf sayısı belirgin arttı. Kurul turu 1.2.15–1.2.19: sağlamlık 7/7 madde (2’si canlı denenmedi), PM 4/6, arayüz 6/6.
