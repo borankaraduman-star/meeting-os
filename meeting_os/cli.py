@@ -136,6 +136,7 @@ def parser():
     a=sub.add_parser('handoff'); a.add_argument('task'); a.add_argument('path',type=Path)
     a=sub.add_parser('search'); a.add_argument('query'); a.add_argument('--speaker')
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
+    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true')
     sub.add_parser('mcp')
     return p
 
@@ -242,6 +243,12 @@ def main(supervised=False):
                 from .retry_workspaces import cleanup_workspaces
                 output(cleanup_workspaces(RetryStore(store)))
             elif args.command=='retry': output(run_retry(args,store))
+            elif args.command=='quality':
+                from . import quality
+                if args.action=='report': output(quality.report(store))
+                else:
+                    from .openrouter import OpenRouterClient
+                    output(quality.compare(store,args.model or ['microsoft/mai-transcribe-2'],OpenRouterClient(max_audio_bytes=24*1024*1024),consent=args.allow_upload,limit=args.limit))
             elif args.command=='meetings': output(store.meetings())
             elif args.command=='recovery':
                 from .recovery import list_recovery,mark_interrupted

@@ -342,3 +342,28 @@ class QuoteLocateTests(unittest.TestCase):
         self.assertEqual(locate_quote('Deep Work diye bir kitap önerisinde bulunmuştum',text),'Deep Work” diye bir kitap önerisinde bulunmuştum')  # exact source span, opening quote mark not required
         self.assertEqual(locate_quote('o onunla hiç ilgim yok',text),'o onunla hiçbir ilgim yok.')  # one dropped syllable, fuzzy
         self.assertIsNone(locate_quote('yarın rapor hazır olacak',text));self.assertIsNone(locate_quote('   ',text))
+
+class QualitySetTests(unittest.TestCase):
+    def test_wer_and_reference_set_and_identity_scorecard(self):
+        from meeting_os.quality import wer, reference_set, identity_report, report, compare
+        from meeting_os.types import Segment
+        self.assertEqual(wer('Yarın rapor hazır olur.','yarın rapor hazır olur'),0.0);self.assertAlmostEqual(wer('a b c d','a x c'),0.5);self.assertEqual(wer('','x'),1.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');wav=Path(tmp)/'sys.wav';sf.write(wav,np.zeros(16000*5,dtype='float32'),16000,subtype='FLOAT')
+            mid=store.create_meeting('Q',{'model':'microsoft/mai-transcribe-2','paths':{'system':str(wav)}})
+            flags=['cloud_transcript','cloud_diarization']
+            a=store.add_segment(mid,Segment(0,2,'yarın rapor hazır olsun','system','Konuşmacı 1',metrics={'cluster':'0:0','model':'microsoft/mai-transcribe-2','identity':{'name':'Ayşe'}},flags=flags))
+            b=store.add_segment(mid,Segment(2,4,'tamam','system','Konuşmacı 2',metrics={'cluster':'0:1','identity':{'name':None,'suggested':'Mehmet'}},flags=flags))
+            store.status(mid,'complete')
+            store.correct_text(mid,a,'Yarın rapor hazır olur.')
+            store.correct(mid,'Konuşmacı 1','Ali')          # auto name overridden -> wrong
+            store.enroll_speaker(mid,'Konuşmacı 2','Mehmet') # suggestion confirmed
+            refs=reference_set(store);self.assertEqual(len(refs),1);self.assertEqual(refs[0]['reference'],'Yarın rapor hazır olur.');self.assertAlmostEqual(refs[0]['wer'],0.25)
+            rep=report(store);self.assertEqual(rep['text_edits'],1);self.assertEqual(rep['mean_wer_by_model'],{'microsoft/mai-transcribe-2':0.25})
+            ident=rep['identity'];self.assertEqual((ident['auto_wrong'],ident['suggestion_confirmed'],ident['auto_precision']),(1,1,0.0))
+            class C:
+                def transcribe(self,audio,fmt,*,model,consent,**k):return {'text':'Yarın rapor hazır olur' if 'mai' in model else 'yarin rapor','usage':{'cost':0.001}}
+            out=compare(store,['microsoft/mai-transcribe-2','openai/whisper-large-v3'],C(),consent=True,encode=lambda p,a,b:b'OggS')
+            self.assertEqual(out['segments'],1);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer'],0.0);self.assertEqual(out['models']['openai/whisper-large-v3']['mean_wer'],0.75)
+            with self.assertRaises(Exception):compare(store,['x/y'],C(),consent=True)
+            store.close()
