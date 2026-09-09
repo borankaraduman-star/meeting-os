@@ -356,7 +356,9 @@ def main(supervised=False):
                     output(full if args.json else summary)
                 else:
                     from .openrouter import OpenRouterClient
-                    output(quality.compare(store,args.model or ['microsoft/mai-transcribe-2'],OpenRouterClient(max_audio_bytes=24*1024*1024),consent=args.allow_upload,limit=args.limit))
+                    from . import glossary as G
+                    entries=G.load(DATA_DIR,ROOT)
+                    output(quality.compare(store,args.model or ['microsoft/mai-transcribe-2'],OpenRouterClient(max_audio_bytes=24*1024*1024),consent=args.allow_upload,limit=args.limit,hint=G.stt_hint(entries) if entries else None))
             elif args.command=='meetings': output(store.meetings())
             elif args.command=='recovery':
                 from .recovery import list_recovery,mark_interrupted

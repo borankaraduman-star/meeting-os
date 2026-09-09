@@ -407,11 +407,16 @@ class QualitySetTests(unittest.TestCase):
             store.enroll_speaker(mid,'Konuşmacı 2','Mehmet') # suggestion confirmed
             refs=reference_set(store);self.assertEqual(len(refs),1);self.assertEqual(refs[0]['reference'],'Yarın rapor hazır olur.');self.assertAlmostEqual(refs[0]['wer'],0.25)
             rep=report(store);self.assertEqual(rep['text_edits'],1);self.assertEqual(rep['mean_wer_by_model'],{'microsoft/mai-transcribe-2':0.25})
+            self.assertEqual((rep['wer'],rep['wer_no_filler'],rep['transcript_words'],rep['edits_per_1000_words']),(0.25,0.25,5,200.0))
             ident=rep['identity'];self.assertEqual((ident['auto_wrong'],ident['suggestion_confirmed'],ident['auto_precision']),(1,1,0.0))
             class C:
-                def transcribe(self,audio,fmt,*,model,consent,**k):return {'text':'Yarın rapor hazır olur' if 'mai' in model else 'yarin rapor','usage':{'cost':0.001}}
-            out=compare(store,['microsoft/mai-transcribe-2','openai/whisper-large-v3'],C(),consent=True,encode=lambda p,a,b:b'OggS')
-            self.assertEqual(out['segments'],1);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer'],0.0);self.assertEqual(out['models']['openai/whisper-large-v3']['mean_wer'],0.75)
+                hints=[]
+                def transcribe(self,audio,fmt,*,model,consent,hint=None,**k):
+                    self.hints.append(hint);return {'text':'Eee yarın rapor hazır olur' if 'mai' in model else 'yarin rapor','usage':{'cost':0.001}}
+            out=compare(store,['microsoft/mai-transcribe-2','openai/whisper-large-v3'],C(),consent=True,encode=lambda p,a,b:b'OggS',hint='PMD, Trendyol')
+            self.assertEqual(C.hints,['PMD, Trendyol']*2);self.assertTrue(out['hint'])
+            self.assertEqual(out['segments'],1);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer'],0.25);self.assertEqual(out['models']['microsoft/mai-transcribe-2']['mean_wer_no_filler'],0.0)
+            self.assertEqual(out['models']['openai/whisper-large-v3']['mean_wer'],0.75);self.assertEqual(out['stored_model_mean_wer_no_filler'],0.25)
             with self.assertRaises(Exception):compare(store,['x/y'],C(),consent=True)
             store.close()
 

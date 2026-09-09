@@ -79,15 +79,9 @@ def identity_report(store):
             'auto_precision':round(auto_ok/(auto_ok+auto_wrong),3) if auto_ok+auto_wrong else None}
 
 
-def report(store):
-    refs=reference_set(store)
-    by_model={}
-    for r in refs: by_model.setdefault(r['model'] or '?',[]).append(r['wer'])
-    return {'text_edits':len(refs),'mean_wer_by_model':{m:round(sum(v)/len(v),3) for m,v in by_model.items()},'identity':identity_report(store)}
-
-
-def compare(store, models, client, *, consent=False, limit=20, encode=None):
-    """Re-transcribe corrected segments with the given models and score them against the user's text. Paid."""
+def compare(store, models, client, *, consent=False, limit=20, encode=None, hint=None):
+    """Re-transcribe corrected segments with the given models and score them against the user's text. Paid.
+    `hint` is the glossary spelling hint (glossary.stt_hint), passed exactly as the real job passes it."""
     from .openrouter import _consent, validate_stt_model
     from .cloud_finalize import encode_piece
     _consent(consent)
@@ -95,18 +89,28 @@ def compare(store, models, client, *, consent=False, limit=20, encode=None):
     encode=encode or encode_piece
     refs=[r for r in reference_set(store) if r['audio'] and Path(r['audio']).is_file()][:limit]
     if not refs: raise ValueError('Kalite seti boş: önce transkriptte metin düzeltmeleri yapın')
-    scores={m:[] for m in models};cost={m:0.0 for m in models};baseline=[]
+    scores={m:[] for m in models};clean={m:[] for m in models};cost={m:0.0 for m in models}
     for r in refs:
         audio=encode(r['audio'],r['start'],r['end'])
-        baseline.append(r['wer'])
         for m in models:
-            out=client.transcribe(audio,'ogg',model=m,consent=True)
-            scores[m].append(wer(r['reference'],out['text']));cost[m]+=float((out.get('usage') or {}).get('cost') or 0)
-    return {'segments':len(refs),'stored_model_mean_wer':round(sum(baseline)/len(baseline),3),
-            'models':{m:{'mean_wer':round(sum(v)/len(v),3),'cost':round(cost[m],5)} for m,v in scores.items()}}
+            out=client.transcribe(audio,'ogg',model=m,consent=True,hint=hint)
+            scores[m].append(wer(r['reference'],out['text']));clean[m].append(wer_no_filler(r['reference'],out['text']));cost[m]+=float((out.get('usage') or {}).get('cost') or 0)
+    return {'segments':len(refs),'hint':bool(hint),'stored_model_mean_wer':_mean([r['wer'] for r in refs]),'stored_model_mean_wer_no_filler':_mean([r['wer_no_filler'] for r in refs]),
+            'models':{m:{'mean_wer':_mean(v),'mean_wer_no_filler':_mean(clean[m]),'cost':round(cost[m],5)} for m,v in scores.items()}}
 
 
 def _mean(values, digits=3): return round(sum(values)/len(values),digits) if values else None
+
+
+def report(store):
+    refs=reference_set(store)
+    by_model={}
+    for r in refs: by_model.setdefault(r['model'] or '?',[]).append(r)
+    words=sum(len(_words(t)) for (t,) in store.db.execute("SELECT json_extract(payload,'$.text') FROM segments WHERE meeting IN (SELECT id FROM meetings WHERE status='complete')"))
+    return {'text_edits':len(refs),'mean_wer_by_model':{m:_mean([r['wer'] for r in v]) for m,v in by_model.items()},
+            'mean_wer_no_filler_by_model':{m:_mean([r['wer_no_filler'] for r in v]) for m,v in by_model.items()},
+            'wer':_mean([r['wer'] for r in refs]),'wer_no_filler':_mean([r['wer_no_filler'] for r in refs]),
+            'transcript_words':words,'edits_per_1000_words':round(1000*len(refs)/words,2) if words else None,'identity':identity_report(store)}
 
 
 def replay_identity(store, threshold=None, margin=None):
