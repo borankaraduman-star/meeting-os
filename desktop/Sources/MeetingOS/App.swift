@@ -200,7 +200,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
     func refreshSummaryIfNamesDone() {
-        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !busy, !recording, !zoomMeetingOpen else { return }
+        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !busy, !recording, recordProcess==nil, !zoomMeetingOpen else { return }   // recordProcess: the helper still drains after `recording` goes false
         guard !review.contains(where:{ ($0.kind=="unnamed_speaker" || $0.kind=="suggested_name") && !$0.speakerKey.isEmpty }) else { return }
         activity="İsimler tamam · özet isimlerle yenileniyor"; analyzeMeeting(mid)
     }
@@ -225,10 +225,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func request(_ req:[String:Any]) async throws -> [String:Any] { try await Bridge.call(runtime,req) }
     var jobStopsOnPressure=false
     func stopForResources() {
-        guard let process=job, jobStopsOnPressure, resourceStopMessage.isEmpty else { return }
+        guard let process=job,
+              ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:jobStopsOnPressure,recording:recording,alreadyStopped:!resourceStopMessage.isEmpty) == .terminateJob else { return }
         resourceStopMessage="Bellek baskısı nedeniyle işlem durduruldu. Kaynak ses korunuyor; ağır uygulamaları kapatıp yeniden deneyin."
         error=resourceStopMessage
-        if recording { stop() } else { process.terminate() }
+        process.terminate()   // `job` is never the recorder (separate slot): pressure never stops a live meeting
     }
     @Published var microphoneHint=""
     func refresh() async {
@@ -321,7 +322,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                     else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress) }
                     if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
-                    if !isRecord, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
+                    // Quitting is not the moment to start an upload: the queued meetings keep their audio and the
+                    // idle queue picks them up on the next launch. Popping here would begin a job we cannot finish.
+                    if !isRecord, !self.requestedQuit, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
                     if self.requestedQuit && self.job==nil && self.recordProcess==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }

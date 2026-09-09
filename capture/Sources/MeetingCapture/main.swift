@@ -156,9 +156,12 @@ func run() async throws {
     guard startOffset.isFinite, startOffset < 86400 else {
         throw NSError(domain:"MeetingCapture", code:8, userInfo:[NSLocalizedDescriptionKey:"start-offset must be 0...86400"])
     }
+    // The flag itself says "the supervisor is handing this folder back", not its value: a helper that died
+    // before its first chunk hands back 0.000 seconds, and that relaunch must be allowed like any other.
+    let continuation = CommandLine.arguments.contains("--start-offset")
     let journalURL = directory.appendingPathComponent("capture-native.jsonl")
     let inherited = FileManager.default.fileExists(atPath: journalURL.path)
-    guard !inherited || startOffset > 0 else {
+    guard !inherited || continuation else {
         throw NSError(domain:"MeetingCapture", code:5, userInfo:[NSLocalizedDescriptionKey:"Choose a new recording folder"])
     }
     if !inherited { FileManager.default.createFile(atPath: journalURL.path, contents: nil, attributes: [.posixPermissions:0o600]) }
