@@ -138,3 +138,31 @@ class HeartbeatBridgeTests(unittest.TestCase):
             beat=json.loads(Path(path).read_text())
             from meeting_os import __version__
             self.assertEqual((beat['app_version'],beat['meetings']),(__version__,0))
+
+class UserNameTests(unittest.TestCase):
+    def test_the_name_is_validated_and_falls_back_to_the_label_older_recordings_carry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)
+            self.assertEqual(reports.load_settings(data)['user_name'],reports.DEFAULT_USER_NAME)
+            self.assertEqual(reports.settings_owner(data),'Boran')   # no settings file: segments already labelled “Boran” keep matching
+            self.assertEqual(reports.save_settings(data,{'user_name':'  Ayşe Yılmaz  '})['user_name'],'Ayşe Yılmaz')
+            self.assertEqual(reports.settings_owner(data),'Ayşe Yılmaz')
+            for junk in ('','   ','x'*(reports.NAME_LIMIT+1),None,5,True,['Ayşe']):
+                self.assertEqual(reports.save_settings(data,{'user_name':junk})['user_name'],'Ayşe Yılmaz')
+            self.assertEqual(reports.save_settings(data,{'user_name':'x'*reports.NAME_LIMIT})['user_name'],'x'*reports.NAME_LIMIT)
+            reports.settings_path(data).write_text(json.dumps({'user_name':'   '}),encoding='utf-8')
+            self.assertEqual(reports.settings_owner(data),'Boran')   # a blank value in the file is not a name
+    def test_the_bridge_reads_and_writes_the_name(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';Store(db).close()
+            self.assertEqual(dispatch({'action':'report_settings'},db)['user_name'],'Boran')
+            self.assertEqual(dispatch({'action':'report_settings_set','changes':{'user_name':'Deniz'}},db)['user_name'],'Deniz')
+            self.assertEqual(reports.settings_owner(data),'Deniz')
+    def test_the_microphone_speaker_label_follows_the_setting(self):
+        from meeting_os.cloud_finalize import source_labels, speaker_label
+        self.assertEqual(source_labels('Deniz'),{'mic':'Deniz','system':'Karşı taraf'})
+        self.assertEqual(source_labels(None),source_labels('   '))
+        self.assertEqual(speaker_label('mic','2',0,False,'Deniz'),'Deniz')
+        self.assertEqual(speaker_label('system',None,0,False,'Deniz'),'Karşı taraf')
+        self.assertEqual(speaker_label('system','1',2,True,'Deniz'),'Konuşmacı 3-2')   # the setting never touches diarized labels

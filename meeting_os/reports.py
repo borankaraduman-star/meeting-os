@@ -23,6 +23,8 @@ DEFAULT_SUBDIR = 'MeetingOS-Reports'
 
 
 REAL_DATA_DIR = Path.home() / 'Library/Application Support/MeetingOS'
+DEFAULT_USER_NAME = 'Boran'   # the label every segment recorded before this setting existed carries; a teammate overwrites it on first run
+NAME_LIMIT = 40
 
 
 def default_report_dir(data_dir):
@@ -40,7 +42,8 @@ def load_settings(data_dir):
     try: data = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
     except ValueError: data = {}
     if not isinstance(data, dict): data = {}
-    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30}
+    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30,
+                'user_name': DEFAULT_USER_NAME}
     return {**defaults, **{k: v for k, v in data.items() if k in defaults}}
 
 
@@ -50,9 +53,18 @@ def save_settings(data_dir, changes):
         if key in ('share_reports', 'share_text', 'auto_update') and isinstance(value, bool): current[key] = value
         elif key == 'audio_retention_days' and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
+        elif key == 'user_name' and isinstance(value, str) and 0 < len(value.strip()) <= NAME_LIMIT: current[key] = value.strip()
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     settings_path(data_dir).write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding='utf-8')
     return current
+
+
+def settings_owner(data_dir):
+    """Who this Mac belongs to. One lookup for every place that used to say “Boran”: the microphone speaker
+    label, the “Bana ait” task filter, the digest and the waiting board. Falls back to the historical label so
+    an existing database whose mic segments say “Boran” keeps matching."""
+    name = load_settings(data_dir).get('user_name')
+    return name.strip() if isinstance(name, str) and name.strip() else DEFAULT_USER_NAME
 
 
 def host_name():

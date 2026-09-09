@@ -327,7 +327,8 @@ def dispatch(request, db=None):
         if action=='digest':
             from .digest import build_digest,render_digest
             from . import glossary as G
-            digest=build_digest(store,request.get('day'),request.get('owner') or 'Boran',start=request.get('from'),end=request.get('to'),
+            from .reports import settings_owner
+            digest=build_digest(store,request.get('day'),request.get('owner') or settings_owner(DATA_DIR if db is None else Path(db).parent),start=request.get('from'),end=request.get('to'),
                 mask_names=request.get('mask_names') is True,glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT) if request.get('mask_names') is True else None)
             text=render_digest(digest)
             if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
@@ -335,7 +336,8 @@ def dispatch(request, db=None):
                     'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'risks':len(digest['risks']),'meetings':len(digest['meetings']),'groups':digest['groups']}
         if action=='waiting_board':
             from .waiting import build_waiting,render_waiting
-            board=build_waiting(store,request.get('owner') or 'Boran')
+            from .reports import settings_owner
+            board=build_waiting(store,request.get('owner') or settings_owner(DATA_DIR if db is None else Path(db).parent))
             if request.get('path'): Path(request['path']).write_text(render_waiting(board),encoding='utf-8')
             return {**board,'path':request.get('path')}
         if action in ('decision_log','decision_log_export'):

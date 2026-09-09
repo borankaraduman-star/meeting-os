@@ -94,7 +94,7 @@ class WaitingTests(unittest.TestCase):
  def test_board_keeps_other_people_only_and_marks_repeats(self):
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'db';a,sa,b,sb,old,now=week(db)
-   board=build_waiting(Store(db))
+   board=build_waiting(Store(db),owner='Boran')   # the caller resolves the name; reports.settings_owner does it in the app
    self.assertEqual([g['owner'] for g in board['people']],['İpek','Mehmet Can'])
    self.assertEqual(board['total'],3)
    ipek=board['people'][0]

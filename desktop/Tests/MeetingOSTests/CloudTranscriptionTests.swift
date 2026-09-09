@@ -65,9 +65,10 @@ final class UpdaterTests:XCTestCase {
         XCTAssertEqual(UpdateInfo.parse(["available":false,"local":"aaa"]).headline,"Güncel (aaa)")
         XCTAssertEqual(UpdateInfo.parse(["available":false,"dirty":true]).headline,"Yerel değişiklikler var; otomatik güncelleme kapalı")
         XCTAssertEqual(UpdateInfo.parse(["error":"GitHub’a ulaşılamadı"]).headline,"GitHub’a ulaşılamadı")
-        var s=ReportSettings.parse(["share_reports":false,"share_text":true,"auto_update":true,"report_dir":"/x"]); s.shareText=false
-        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x","audio_retention_days":30] as NSDictionary)
+        var s=ReportSettings.parse(["share_reports":false,"share_text":true,"auto_update":true,"report_dir":"/x","user_name":"Ayşe"]); s.shareText=false
+        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x","audio_retention_days":30,"user_name":"Ayşe"] as NSDictionary)
         XCTAssertEqual(ReportSettings.parse(["audio_retention_days":60]).audioRetentionDays,60)
+        XCTAssertEqual(ReportSettings.parse([:]).userName,"Boran")   // a settings file written before the name existed
     }
 }
 final class ZoomWatchTests:XCTestCase {

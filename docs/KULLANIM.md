@@ -150,7 +150,7 @@ Tek arama alanı; bölüme göre çalışır:
 - **Kurulum durumu:** izinler, anahtar, sözlük, sürüm, rapor klasörü; uygulama yoklama gecikmesi (p50/p95).
 
 ## 8. Ses profilleri (kişi tanıma)
-Bir kişiyi bir kez adlandırın (Kontrol’de, konuşmacı menüsünden ya da Düzenle ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur; yanlış adlandırmayı düzeltmek profili düzeltir. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı doğrudan “Boran”dır.
+Bir kişiyi bir kez adlandırın (Kontrol’de, konuşmacı menüsünden ya da Düzenle ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur; yanlış adlandırmayı düzeltmek profili düzeltir. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı doğrudan Ayarlar → Genel → Adınız değeriyle etiketlenir.
 
 ## 9. Sözlük
 `iCloud Drive/MeetingOS-Shared/glossary.jsonl` (her satır `{"term": …, "expansion": …, "category": …}`); `~/Library/Application Support/MeetingOS/glossary.jsonl` Mac’e özel ek. Üç yerde kullanılır: bulut STT’ye yazım ipucu (prompt kabul eden modellerde), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham transkript kendiliğinden değişmez. Slack agent istemi: `docs/GLOSSARY.md`.

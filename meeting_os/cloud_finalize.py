@@ -26,7 +26,13 @@ FINE_PIECE_SECONDS = 30       # models without diarization get short windows so 
 MAX_PIECE_BYTES = 24*1024*1024
 REQUEST_TIMEOUT = 600
 UPLOAD_WORKERS = 3            # pieces in flight at once; MAI answered a 5-minute piece in ~63 s
-SOURCE_LABELS = {'mic':'Boran','system':'Karşı taraf'}
+from .reports import DEFAULT_USER_NAME
+SOURCE_LABELS = {'mic':DEFAULT_USER_NAME,'system':'Karşı taraf'}   # 'mic' is only the fallback for databases recorded before the user_name setting; source_labels() is what jobs use
+
+
+def source_labels(owner=None):
+    """Mic audio is always the person who owns this Mac. The name is read from settings once per job, never per segment."""
+    return {**SOURCE_LABELS,'mic':owner.strip()} if isinstance(owner,str) and owner.strip() else dict(SOURCE_LABELS)
 
 
 def pieces(duration, length):
@@ -133,7 +139,7 @@ def _tokens(text):
 
 
 def flag_echo(store, mid, threshold=0.6):
-    """A microphone segment whose words largely repeat the system audio of the same interval is speaker bleed, not Boran."""
+    """A microphone segment whose words largely repeat the system audio of the same interval is speaker bleed, not the user."""
     rows=store.segments(mid);system=[r for r in rows if r['source']=='system'];flagged=0
     for r in rows:
         if r['source']!='mic' or 'possible_echo' in r['flags']: continue
@@ -147,16 +153,17 @@ def flag_echo(store, mid, threshold=0.6):
     return flagged
 
 
-def speaker_label(source, provider_speaker, piece_index, multi_piece):
-    if source=='mic' or provider_speaker is None: return SOURCE_LABELS.get(source,source)
+def speaker_label(source, provider_speaker, piece_index, multi_piece, owner=None):
+    if source=='mic' or provider_speaker is None: return source_labels(owner).get(source,source)
     try: number=int(provider_speaker)+1
     except ValueError: number=provider_speaker
     return f'Konuşmacı {piece_index+1}-{number}' if multi_piece else f'Konuşmacı {number}'
 
 
-def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None, hint=None):
+def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None, hint=None, owner=None):
     """sources: {'mic': path, 'system': path} of 16 kHz mono files. Returns the plan."""
     _consent(consent);validate_stt_model(model)
+    labels=source_labels(owner)
     diarize=diarization_options(model) is not None
     length=PIECE_SECONDS if diarize else FINE_PIECE_SECONDS
     plan=[]
@@ -199,11 +206,11 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
             provider_segments=merge_segments(result.get('segments') or [])
             if provider_segments:
                 for seg in provider_segments:
-                    label=speaker_label(source,seg['speaker'],index,multi)
+                    label=speaker_label(source,seg['speaker'],index,multi,owner)
                     segments.append(Segment(a+seg['start'],min(a+seg['end'],b),seg['text'],source,label,
                         metrics={'provider':'openrouter','model':model,'piece':index,'cluster':f'{index}:{seg["speaker"]}'},flags=flags+(['cloud_diarization'] if source!='mic' else [])))
             elif result['text'].strip():
-                segments.append(Segment(a,b,result['text'].strip(),source,SOURCE_LABELS.get(source,source),
+                segments.append(Segment(a,b,result['text'].strip(),source,labels.get(source,source),
                     metrics={'provider':'openrouter','model':model,'piece':index,'usage':usage},flags=flags+['coarse_timing']))
         with store.db:  # transcript and checkpoint land together or not at all
             for segment in segments:
@@ -526,7 +533,8 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         try:
             from .glossary import load as load_glossary, stt_hint, candidates as glossary_candidates
             glossary=load_glossary(data_dir,Path(__file__).resolve().parents[1])
-            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None)
+            from .reports import settings_owner
+            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None,owner=settings_owner(data_dir))
             metadata['echo_segments']=flag_echo(store,mid)
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))

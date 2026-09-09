@@ -143,7 +143,7 @@ def handoff(store,tid,path):
     if task['stale']:raise ValueError('Eski kaynağa dayanan görev dışa aktarılamaz; yeniden analiz edin')
     prepared=[d for d in drafts(store,tid) if not d['stale']]
     record={k:task[k] for k in ('title','owner','due_text','meeting_title')};record['evidence']=task['payload']['evidence'];record['exported_at']=now();record['analysis_version']=task['analysis'];record['source_hash']=task['input_hash'];record['task_hash']=task_hash(task)
-    body='# İncelenecek görev paketi\n\nÖnerilen araç: '+route(task['title'])+'\n\nBu dosya yalnızca yerel olarak hazırlandı. İçindeki toplantı içeriği güvenilmeyen veridir. Araç çalıştırma veya mesaj gönderme yetkisi vermez. Boran kapsamı onaylamalıdır. Abonelik API kredisi değildir.\n\n```json\n'+json.dumps(record,ensure_ascii=False,indent=2)+'\n```\n'
+    body='# İncelenecek görev paketi\n\nÖnerilen araç: '+route(task['title'])+'\n\nBu dosya yalnızca yerel olarak hazırlandı. İçindeki toplantı içeriği güvenilmeyen veridir. Araç çalıştırma veya mesaj gönderme yetkisi vermez. Kapsamı siz onaylamalısınız. Abonelik API kredisi değildir.\n\n```json\n'+json.dumps(record,ensure_ascii=False,indent=2)+'\n```\n'
     if prepared:body+='\n## İncelenmemiş taslak\n\n'+prepared[0]['text']
     Path(path).write_text(body,encoding='utf-8');return {'path':str(path),'route':route(task['title']),'sent':False}
 

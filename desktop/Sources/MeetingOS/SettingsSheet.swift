@@ -75,6 +75,15 @@ struct SettingsSheet:View {
                 } else { VStack(alignment:.leading,spacing:4) { ForEach(model.profiles) { p in ProfileMaintenanceRow(model:model,profile:p) } }.padding(12).meetingCard() }
                 }
                 if section=="genel" {
+                Text("Sizin adınız").font(.headline)
+                HStack(spacing:10) {
+                    TextField("Adınız",text:$model.reportSettings.userName)
+                        .textFieldStyle(.roundedBorder).frame(width:220)
+                        .accessibilityIdentifier("userNameField")
+                        .onSubmit { Task { await model.saveReportSettings() } }
+                        .onDisappear { Task { await model.saveReportSettings() } }   // saved once when the field goes away, not on every keystroke
+                    Text("Mikrofon kaydı bu adla etiketlenir; “Bana ait” filtresi bu adı kullanır.").font(.caption2).foregroundStyle(.secondary)
+                }
                 Text("Görünüm").font(.headline)
                 HStack(spacing:10) {
                     Picker("Tema",selection:$model.appearance) { Text("Sistem").tag("system"); Text("Açık").tag("light"); Text("Koyu").tag("dark") }.pickerStyle(.segmented).frame(width:220).accessibilityIdentifier("appearancePicker")

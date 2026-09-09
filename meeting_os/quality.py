@@ -116,14 +116,16 @@ def report(store):
 def replay_identity(store, threshold=None, margin=None):
     """Leave-one-meeting-out replay: every named speaker cluster of every finished meeting is scored against the
     profiles WITHOUT the samples that meeting contributed. Says whether today's threshold would have named it."""
-    from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SOURCE_LABELS, linked_centroid
+    from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, source_labels, linked_centroid
+    from .reports import settings_owner
     threshold=IDENTITY_THRESHOLD if threshold is None else threshold;margin=IDENTITY_MARGIN if margin is None else margin
+    mic=source_labels(settings_owner(Path(store.path).parent))['mic']   # the user's own voice is not a profile to score
     clusters=[];people={}
     for m in store.meetings():
         if m['status']!='complete': continue
         groups={}
         for r in store.segments(m['id']):
-            if r['source']=='mic' or not r.get('speaker_name') or r['speaker_name']==SOURCE_LABELS['mic']: continue
+            if r['source']=='mic' or not r.get('speaker_name') or r['speaker_name']==mic: continue
             groups.setdefault((r['source'],r['speaker'],r['speaker_name']),[]).append(r)
         for (source,speaker,name),members in groups.items():
             models={r.get('embedding_model') for r in members if r.get('embedding') and r.get('embedding_model')}
