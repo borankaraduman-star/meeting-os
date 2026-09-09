@@ -50,3 +50,20 @@ class CorrectionMemoryTests(unittest.TestCase):
         self.assertEqual(cm.glossary_proposals(rules,entries),[{'term':'Splendo','mishearing':'Spilendo','meetings':2}])
 
 if __name__=='__main__': unittest.main()
+
+
+class LearningProgressTests(unittest.TestCase):
+    def test_weekly_series_counts_auto_and_user_names(self):
+        from meeting_os.quality import learning_progress
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('a'); db.status(mid,'complete')
+            db.add_segment(mid,Segment(0,5,'bir iki üç','system','system:S1',metrics={'cluster':'0:S1','identity':{'name':'Ali'}}))
+            db.add_segment(mid,Segment(5,9,'dört beş','system','system:S2',metrics={'cluster':'0:S2','identity':{'suggested':'Veli'}}))
+            db.add_segment(mid,Segment(9,12,'altı','system','system:S3',metrics={'cluster':'0:S3','identity':{}}))
+            db.correct(mid,'system:S2','Veli')
+            db.correct(mid,'system:S1','Ayşe')   # the automatic name was wrong
+            rows=learning_progress(db)
+            self.assertEqual(len(rows),1); r=rows[0]
+            self.assertEqual((r['clusters'],r['auto'],r['auto_wrong'],r['suggested_ok'],r['unnamed']),(3,1,1,1,1))
+            self.assertEqual(r['auto_share'],0.0)   # 1 auto − 1 wrong over 2 known voices
+            db.close()

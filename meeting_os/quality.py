@@ -110,7 +110,51 @@ def report(store):
     return {'text_edits':len(refs),'mean_wer_by_model':{m:_mean([r['wer'] for r in v]) for m,v in by_model.items()},
             'mean_wer_no_filler_by_model':{m:_mean([r['wer_no_filler'] for r in v]) for m,v in by_model.items()},
             'wer':_mean([r['wer'] for r in refs]),'wer_no_filler':_mean([r['wer_no_filler'] for r in refs]),
-            'transcript_words':words,'edits_per_1000_words':round(1000*len(refs)/words,2) if words else None,'identity':identity_report(store)}
+            'transcript_words':words,'edits_per_1000_words':round(1000*len(refs)/words,2) if words else None,'identity':identity_report(store),'progress':learning_progress(store)}
+
+
+def learning_progress(store, weeks=6):
+    """Q10: is the tool getting better week by week? Per ISO week of the meeting date: how many voices it
+    named by itself (and how many of those the user overruled), how much text the user still had to fix."""
+    from datetime import datetime
+    corrected={(r['meeting'],r['speaker']):(r['name'],r['previous_name'] if 'previous_name' in r.keys() else None) for r in store.db.execute('SELECT * FROM corrections WHERE speaker NOT LIKE ? ORDER BY created',('segment:%',))}
+    week_of={};title_of={}
+    for r in store.db.execute("SELECT id,created FROM meetings WHERE status='complete'"):
+        try: d=datetime.fromisoformat(r['created']); week_of[r['id']]=f'{d.isocalendar()[0]}-W{d.isocalendar()[1]:02d}'
+        except (TypeError,ValueError): continue
+    rows={}
+    def bucket(mid):
+        w=week_of.get(mid)
+        if w is None: return None
+        return rows.setdefault(w,{'week':w,'meetings':set(),'clusters':0,'auto':0,'auto_wrong':0,'suggested':0,'suggested_ok':0,'named_by_user':0,'unnamed':0,'text_edits':0,'words':0})
+    seen=set()
+    for row in store.db.execute("SELECT meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
+        b=bucket(row['meeting'])
+        if b is None: continue
+        p=json.loads(row['payload']);m=p.get('metrics') or {};cl=m.get('cluster')
+        b['words']+=len(_words(p.get('text') or ''));b['meetings'].add(row['meeting'])
+        if cl is None or (row['meeting'],cl) in seen: continue
+        seen.add((row['meeting'],cl));ident=m.get('identity') or {};b['clusters']+=1
+        final=(corrected.get((row['meeting'],row['speaker'])) or (row['speaker_name'],None))[0]
+        if ident.get('name'):
+            b['auto']+=1
+            if final and final!=ident['name']: b['auto_wrong']+=1
+        elif ident.get('suggested'):
+            b['suggested']+=1
+            if final==ident['suggested']: b['suggested_ok']+=1
+            elif final: b['named_by_user']+=1
+            else: b['unnamed']+=1
+        elif final: b['named_by_user']+=1
+        else: b['unnamed']+=1
+    for r in store.db.execute('SELECT meeting FROM text_edits'):
+        b=bucket(r['meeting'])
+        if b is not None: b['text_edits']+=1
+    out=[]
+    for w in sorted(rows)[-weeks:]:
+        b=rows[w];known=b['auto']+b['suggested_ok']+b['named_by_user']
+        out.append({**b,'meetings':len(b['meetings']),'auto_share':round((b['auto']-b['auto_wrong'])/known,2) if known else None,
+                    'edits_per_1000_words':round(1000*b['text_edits']/b['words'],1) if b['words'] else None})
+    return out
 
 
 def replay_identity(store, threshold=None, margin=None):
