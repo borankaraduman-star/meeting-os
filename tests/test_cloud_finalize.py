@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 from meeting_os.store import Store
-from meeting_os.cloud_finalize import finalize_capture, import_file_cloud_only, pieces, speaker_label, is_silent, merge_segments, flag_echo
+from meeting_os.cloud_finalize import finalize_capture, import_file_cloud_only, pieces, speaker_label, is_silent, merge_segments, flag_echo, assign_identities
 from meeting_os.openrouter import OpenRouterError
 
 def capture_dir(root,seconds=4):
@@ -166,3 +166,26 @@ class MergeEchoTests(unittest.TestCase):
             with patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):
                 with self.assertRaises(MemoryPressureError):_hash_file(f)
                 self.assertEqual(len(_hash_file(f,allow_warning=True)[1]),64)
+
+class AssignmentTests(unittest.TestCase):
+    def test_one_profile_names_only_its_best_cluster(self):
+        a,b,c=[{'id':1}],[{'id':2}],[{'id':3}]
+        scored=[(a,{'name':'Gözlük','similarity':0.837}),(b,{'name':'Gözlük','similarity':0.853}),(c,{'name':'Gözlük','similarity':0.954})]
+        out=assign_identities(scored)
+        self.assertEqual(out,{id(c):'Gözlük'})
+        split=[(a,{'name':'Ayşe','similarity':0.95}),(b,{'name':'Ayşe','similarity':0.94}),(c,{'name':None,'similarity':0.5})]
+        self.assertEqual(assign_identities(split),{id(a):'Ayşe',id(b):'Ayşe'})
+        self.assertEqual(assign_identities([(a,{'name':None,'similarity':None})]),{})
+
+class ReidentifyTests(unittest.TestCase):
+    def test_already_embedded_clusters_are_still_matched(self):
+        from meeting_os.cloud_finalize import identify_clusters
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite')
+            mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=LongFakeClient(),embedder=FakeEmbedder())
+            self.assertEqual([r['speaker_name'] for r in store.segments(mid)],[None,None])
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',4.0,'later')  # profile saved after the meeting was processed
+            paths=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])['paths']
+            self.assertEqual(identify_clusters(store,mid,paths,FakeEmbedder()),{'embedded':0,'named':1})
+            self.assertEqual([r['speaker_name'] for r in store.segments(mid)],['Ayşe',None]);store.close()

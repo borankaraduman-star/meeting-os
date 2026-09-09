@@ -39,9 +39,11 @@ struct TranscriptRow:View, Equatable {
                     HStack { Text(row.label).font(.headline).lineLimit(1); Spacer(minLength:12); editButton }
                     Text(row.source=="mic" ? "Mikrofon" : (row.source=="system" ? "Sistem sesi" : "Aktarılan metin")).font(.caption).foregroundStyle(.secondary)
                 }
-                Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6)
-                if !row.notices.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange) }
-            }
+                // fixedSize(vertical) pins wrapped-text heights so LazyVStack estimates converge; without it long
+                // paragraphs made the layout engine oscillate and the app spun at 100% CPU.
+                Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
+                if !row.notices.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
+            }.frame(maxWidth:.infinity,alignment:.leading)
         }.padding(20).meetingCard()
     }
     var editButton:some View {

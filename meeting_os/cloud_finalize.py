@@ -182,7 +182,7 @@ def identify_clusters(store, mid, sources, embedder=None):
     """Local, light voiceprint step: one vector per diarized segment, cluster centroid matched against saved profiles.
     Never blocks the transcript: caller records failures in metadata."""
     rows=[r for r in store.segments(mid) if 'cloud_diarization' in r['flags'] and r['end']-r['start']>=3 and r.get('embedding') is None and r['source'] in sources]
-    if not rows: return {'embedded':0,'named':0}
+    if not rows and not any('cloud_diarization' in r['flags'] for r in store.segments(mid)): return {'embedded':0,'named':0}
     if embedder is None:
         from .final_identity import FinalEmbedder
         embedder=FinalEmbedder(light=True)
@@ -202,16 +202,39 @@ def identify_clusters(store, mid, sources, embedder=None):
     for r in store.segments(mid):
         key=(r['source'],(r.get('metrics') or {}).get('cluster'))
         if key[1] is not None: clusters.setdefault(key,[]).append(r)
+    scored=[]
     for (source,cluster),members in clusters.items():
         vectors=[r['embedding'] for r in members if r.get('embedding') and r.get('embedding_model')==embedder.model_id]
         if not vectors: continue
         centroid=[sum(col)/len(vectors) for col in zip(*vectors)]
-        identity=store.identify(centroid,embedder.model_id,.80,.08)
+        scored.append((members,store.identify(centroid,embedder.model_id,IDENTITY_THRESHOLD,IDENTITY_MARGIN)))
+    assignment=assign_identities(scored)
+    for members,identity in scored:
+        name=assignment.get(id(members))
         for r in members:
-            r.setdefault('metrics',{})['identity']=identity
-            with store.db: store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(identity['name'],json.dumps(r,ensure_ascii=False),r['id'],mid))
-        if identity['name']: named+=len(members)
+            r.setdefault('metrics',{})['identity']={**identity,'name':name}
+            with store.db: store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(name,json.dumps(r,ensure_ascii=False),r['id'],mid))
+        if name: named+=len(members)
     return {'embedded':embedded,'named':named}
+
+
+IDENTITY_THRESHOLD=0.88   # cluster centroids of different people scored 0.84–0.85 against one profile in a real meeting
+IDENTITY_MARGIN=0.05
+OVERSPLIT_THRESHOLD=0.93  # a second cluster may share a name only when it is nearly as close as the best one
+
+def assign_identities(scored):
+    """One person per meeting: a profile names only its best-scoring cluster, unless another cluster is clearly the same voice."""
+    best={}
+    for members,identity in scored:
+        name,sim=identity.get('name'),identity.get('similarity') or 0
+        if name and (name not in best or sim>best[name][1]): best[name]=(id(members),sim)
+    assignment={}
+    for members,identity in scored:
+        name,sim=identity.get('name'),identity.get('similarity') or 0
+        if not name: continue
+        top_id,top_sim=best[name]
+        if id(members)==top_id or (sim>=OVERSPLIT_THRESHOLD and top_sim-sim<=0.03): assignment[id(members)]=name
+    return assignment
 
 
 def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
