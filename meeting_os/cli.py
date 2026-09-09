@@ -234,6 +234,9 @@ def main(supervised=False):
             elif args.command=='openrouter-finalize':
                 from .cloud_finalize import finalize_capture
                 result=finalize_capture(store,args.meeting,DATA_DIR,consent=args.allow_upload,model=args.model)
+                from .correction_memory import apply_rules   # learned fixes land before the summary reads the text
+                try: result['auto_corrections']=apply_rules(store,args.meeting)
+                except Exception as exc: result['auto_corrections']={'error':str(exc)}
                 if args.output:args.output.write_text(json.dumps(result,ensure_ascii=False))
                 output(result)
             elif args.command=='import':

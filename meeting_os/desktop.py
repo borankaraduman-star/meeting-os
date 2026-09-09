@@ -372,6 +372,15 @@ def dispatch(request, db=None):
         if action=='quality_report':
             from .quality import report
             return report(store)
+        if action in ('correction_rules','apply_learned_corrections','revert_auto_correction','accept_rule','reject_rule'):
+            from . import correction_memory as CM
+            if action=='apply_learned_corrections': return CM.apply_rules(store,request['meeting'])
+            if action=='revert_auto_correction': return CM.revert(store,request['meeting'],int(request['segment']))
+            if action=='accept_rule': CM.accept_rule(store,request['original']); return {'ok':True}
+            if action=='reject_rule': CM.reject_rule(store,request['original']); return {'ok':True}
+            from .glossary import load as load_glossary
+            rules=CM.learned_rules(store)
+            return {'rules':rules,'glossary_proposals':CM.glossary_proposals(rules,load_glossary(DATA_DIR,ROOT))}
         if action=='review_queue':
             from .review import review_queue
             return review_queue(store,request['meeting'])
