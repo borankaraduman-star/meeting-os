@@ -331,32 +331,36 @@ CLUSTER_MIN_SECONDS=2.0   # concatenated back-channels; the embedder accepts ≥
 CLUSTER_MAX_SECONDS=60.0
 
 def embed_short_clusters(store, mid, sources, embedder):
-    """Back-channel speakers (“hı hı”, “aynen”) never reach 3 s in one turn. Their cluster's pieces are
-    concatenated into one private snapshot and embedded once, so the cluster can still be matched or enrolled."""
+    """Back-channel speakers (“hı hı”, “aynen”) never reach 3 s in one turn. Every such cluster's pieces are
+    concatenated, all clusters are appended to one private snapshot and embedded in a single guarded child
+    (one span per cluster), so Torch is imported and the weights hashed once instead of once per cluster."""
     import tempfile
     clusters={}
     for r in store.segments(mid):
         cl=(r.get('metrics') or {}).get('cluster')
         if cl is not None and 'cloud_diarization' in r['flags'] and r['source'] in sources: clusters.setdefault((r['source'],cl),[]).append(r)
+    with tempfile.TemporaryDirectory(prefix='meeting-os-cluster-') as tmp:
+        snapshot=Path(tmp)/'cluster.wav';batch=[];offset=0
+        with sf.SoundFile(snapshot,'w',samplerate=16000,channels=1,subtype='FLOAT') as out:
+            for (source,cl),members in clusters.items():
+                if any(r.get('embedding') for r in members): continue
+                total=sum(r['end']-r['start'] for r in members)
+                if total<CLUSTER_MIN_SECONDS: continue
+                with sf.SoundFile(sources[source]) as f:
+                    pieces=[];kept=0.0
+                    for r in sorted(members,key=lambda r:r['start']):
+                        a=max(0,round(r['start']*f.samplerate));b=min(f.frames,round(r['end']*f.samplerate))
+                        if b<=a: continue
+                        f.seek(a);pieces.append(f.read(b-a,dtype='float32'));kept+=(b-a)/f.samplerate
+                        if kept>=CLUSTER_MAX_SECONDS: break
+                if not pieces or kept<CLUSTER_MIN_SECONDS: continue
+                audio=np.concatenate(pieces);out.write(audio)   # one cluster in memory at a time
+                batch.append((members,kept,(offset,offset+len(audio))));offset+=len(audio)
+        if not batch: return 0
+        with contextlib.redirect_stdout(__import__('sys').stderr):
+            vectors=embedder.embed_file(str(snapshot),[span for _,_,span in batch])
     count=0
-    for (source,cl),members in clusters.items():
-        if any(r.get('embedding') for r in members): continue
-        total=sum(r['end']-r['start'] for r in members)
-        if total<CLUSTER_MIN_SECONDS: continue
-        with sf.SoundFile(sources[source]) as f:
-            pieces=[];kept=0.0
-            for r in sorted(members,key=lambda r:r['start']):
-                a=max(0,round(r['start']*f.samplerate));b=min(f.frames,round(r['end']*f.samplerate))
-                if b<=a: continue
-                f.seek(a);pieces.append(f.read(b-a,dtype='float32'));kept+=(b-a)/f.samplerate
-                if kept>=CLUSTER_MAX_SECONDS: break
-        if not pieces or kept<CLUSTER_MIN_SECONDS: continue
-        audio=np.concatenate(pieces)
-        with tempfile.TemporaryDirectory(prefix='meeting-os-cluster-') as tmp:
-            snapshot=Path(tmp)/'cluster.wav';sf.write(snapshot,audio,16000,subtype='FLOAT')
-            with contextlib.redirect_stdout(__import__('sys').stderr):
-                vectors=embedder.embed_file(str(snapshot),[(0,len(audio))])
-        vector=vectors[0] if vectors else None
+    for (members,kept,_),vector in zip(batch,vectors):
         if vector is None: continue
         for r in members:
             r['embedding']=vector;r['embedding_model']=embedder.model_id;r.setdefault('metrics',{})['cluster_embedding']=round(kept,2)

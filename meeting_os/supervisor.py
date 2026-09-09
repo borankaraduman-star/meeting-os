@@ -9,6 +9,11 @@ import tempfile
 import time
 from .resources import check_pressure, physical_memory, GIB, ResourceProbeError
 
+# Seconds between resource probes. The probes fork /bin/ps and sysctl; at ten a
+# second they were their own load on a Mac that is in a meeting. The first
+# sample is taken immediately so a short job still reports a peak.
+SAMPLE_INTERVAL=1.0
+
 
 class JobTimeoutError(RuntimeError):
     pass
@@ -81,12 +86,16 @@ def run_guarded(command, timeout=600, isolated=False, passthrough=False, on_fail
             def canceled(sig,frame):raise JobCancelledError('İşlem iptal edildi; ses korunuyor')
             for sig in (signal.SIGINT,signal.SIGTERM):
                 old_handlers[sig]=signal.signal(sig,canceled)
-        start=time.monotonic();peak=0;samples=0
+        start=time.monotonic();peak=0;samples=0;next_sample=start
         try:
             while process.poll() is None:
                 if cancel_requested and cancel_requested():raise JobCancelledError("Canlı metin işlemi durduruldu; ses korunuyor")
-                if time.monotonic()-start > timeout:
+                now=time.monotonic()
+                if now-start > timeout:
                     raise JobTimeoutError('Yerel model süre sınırını aştı; ses korunuyor')
+                if now<next_sample:
+                    time.sleep(.1);continue   # cancellation and the deadline stay 10 Hz; only the probes below slow down
+                next_sample=now+SAMPLE_INTERVAL
                 check_pressure(allow_warning=light)
                 try:
                     if isolated:

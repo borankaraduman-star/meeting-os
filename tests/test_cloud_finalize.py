@@ -249,6 +249,53 @@ class ShortClusterTests(unittest.TestCase):
             result=dispatch({'action':'label_speaker','meeting':mid,'speaker':'Konuşmacı 2','name':'Sağ üst','enroll':True},db)
             self.assertTrue(result['profile_saved']);self.assertAlmostEqual(result['seconds'],3.5)
 
+class TwoBackchannelClient(FakeClient):
+    """Two clusters that never reach 3 s in one turn, so both need the concatenated path."""
+    def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
+        self.calls.append({'diarize':diarize})
+        return {'text':'x','usage':{'seconds':8},'segments':[{'start':0.0,'end':1.2,'text':'Hı hı.','speaker':'0'},{'start':1.2,'end':2.4,'text':'Aynen.','speaker':'0'},
+                {'start':4.0,'end':5.2,'text':'Tamam.','speaker':'1'},{'start':5.2,'end':6.4,'text':'Olur.','speaker':'1'}]}
+
+class BatchedShortClusterTests(unittest.TestCase):
+    def test_every_short_cluster_is_embedded_in_one_child_with_one_span_each(self):
+        from meeting_os.cloud_finalize import embed_short_clusters
+        class Batching:
+            model_id='resemblyzer:test'
+            def __init__(self):self.calls=[]
+            def embed_file(self,path,spans):
+                self.calls.append((str(path),list(spans)))
+                return [[1.0,0.0] if a==0 else [0.0,1.0] for a,b in spans]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite')
+            store.enroll('Sağ üst',[0.0,1.0],'resemblyzer:test',10.0,'earlier')
+            mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            emb=Batching();finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=TwoBackchannelClient(),embedder=emb)
+            self.assertEqual(len(emb.calls),1)                     # one guarded child, not one per cluster
+            path,spans=emb.calls[0]
+            self.assertIn('cluster.wav',path);self.assertEqual(len(spans),2)
+            self.assertEqual(spans[0][0],0);self.assertEqual(spans[1][0],spans[0][1])   # clusters appended back to back
+            rows=store.segments(mid);by={}
+            for r in rows: by.setdefault(r['speaker'],[]).append(r)
+            self.assertTrue(by['Konuşmacı 1'] and all(r['embedding']==[1.0,0.0] for r in by['Konuşmacı 1']))
+            self.assertTrue(by['Konuşmacı 2'] and all(r['embedding']==[0.0,1.0] for r in by['Konuşmacı 2']))
+            self.assertTrue(all(r['speaker_name']=='Sağ üst' for r in by['Konuşmacı 2']))
+            self.assertEqual(by['Konuşmacı 1'][0]['metrics']['cluster_embedding'],2.4)
+            self.assertEqual(by['Konuşmacı 2'][0]['metrics']['cluster_embedding'],2.4)
+            paths={'system':str(d/'system-000000.wav'),'mic':str(d/'mic-000000.wav')}
+            self.assertEqual(embed_short_clusters(store,mid,paths,emb),0)   # already embedded: no further child
+            self.assertEqual(len(emb.calls),1)
+            store.close()
+    def test_no_short_cluster_never_starts_a_child(self):
+        from meeting_os.cloud_finalize import embed_short_clusters
+        class Never:
+            model_id='resemblyzer:test'
+            def embed_file(self,path,spans):raise AssertionError('no short cluster to embed')
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=8);store=Store(Path(tmp)/'db.sqlite')
+            mid=store.create_meeting('K',{'capture_dir':str(d)});store.status(mid,'incomplete')
+            self.assertEqual(embed_short_clusters(store,mid,{'system':str(d/'system-000000.wav')},Never()),0)
+            store.close()
+
 class SuggestionAndFeedingTests(unittest.TestCase):
     def test_identify_blends_centroid_and_nearest_sample_and_reports_candidate(self):
         with tempfile.TemporaryDirectory() as tmp:
