@@ -22,6 +22,8 @@ struct SettingsSheet:View {
                             }
                         }
                         Text("Kırmızı: kayıt ya da güncelleme bu izin/ayar olmadan çalışmaz. Gri: isteğe bağlı.").font(.caption2).foregroundStyle(.secondary)
+                        HStack { Button("Öz-test") { Task { await model.runProbe() } }.controlSize(.small).disabled(model.recording || model.busy).help("Kayıt yardımcısı, ffmpeg, ses modeli, veritabanı, disk, anahtar, sözlük ve rapor klasörünü birkaç saniyede sınar; toplantıdan önce çalıştırın").accessibilityIdentifier("probeButton"); Text("toplantıdan önce her şeyin yerinde olduğunu doğrular").font(.caption2).foregroundStyle(.secondary) }
+                        if !model.probeLines.isEmpty { VStack(alignment:.leading,spacing:2) { ForEach(Array(model.probeLines.enumerated()),id:\.offset) { i,l in Text(l).font(i==0 ? .caption.weight(.semibold) : .caption2.monospacedDigit()).foregroundStyle(i==0 ? .primary : .secondary) } }.accessibilityIdentifier("probeResult") }
                         Text("Uygulama yoklaması · \(BridgeStats.shared.summary)").font(.caption2).foregroundStyle(.secondary).help("Python köprüsüne yapılan çağrıların süresi; p95 birkaç yüz ms üzerindeyse Mac yavaşlamış demektir")
                     }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
                 }

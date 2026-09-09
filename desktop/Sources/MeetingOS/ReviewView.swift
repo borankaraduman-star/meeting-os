@@ -29,12 +29,14 @@ struct ReviewView:View {
     /// Glossary items the analysis model accepted (their reason carries the model's note, not the local-only hint).
     private var verifiedGlossary:Int { model.review.filter { $0.kind=="glossary" && $0.verified }.count }
     @State private var showScorecard=false
+    @State private var showMaintenance=false
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:14) {
             HStack { Text("Kontrol kuyruğu").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(model.review.count) madde").font(.caption).foregroundStyle(.secondary);Button("Sözlükle tara") { Task { await model.scanGlossary() } }.disabled(model.busy || model.selected==nil).help("Transkripti proje sözlüğüyle karşılaştırır; bulut modunda öneriler analiz modeline doğrulatılır").accessibilityIdentifier("scanGlossaryButton") }
             Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
             ReviewDebtView(m:model)
             DisclosureGroup(isExpanded:$showScorecard) { ScorecardView(m:model).padding(.top,8) } label: { Label("Son 7 gün karnesi · toplantı saati, karar, görev, konuşma payı",systemImage:"chart.bar").font(.callout) }.accessibilityIdentifier("scorecardGroup")
+            DisclosureGroup(isExpanded:$showMaintenance) { MaintenanceView(m:model).padding(.top,8) } label: { Label("Haftalık bakım · profiller, öğrenilen kurallar, disk",systemImage:"wrench.and.screwdriver").font(.callout) }.accessibilityIdentifier("maintenanceGroup")
             if verifiedGlossary>0 {
                 HStack(spacing:10) {
                     Label("\(verifiedGlossary) sözlük düzeltmesi analiz modelince doğrulandı",systemImage:"character.book.closed").font(.callout)

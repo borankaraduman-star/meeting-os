@@ -180,6 +180,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// ⌘Z after a naming: labels, the learned sample and the rejection all go back. Only the newest naming of the open meeting.
     @Published var canUndoNaming=false
+    @Published var probeLines:[String]=[]
+    @Published var maintenance:[String:Any]?
     func undoNaming() async {
         guard let mid=selected, canUndoNaming, !busy else { return }
         do { let r=try await request(["action":"undo_correction","meeting":mid]); canUndoNaming=false

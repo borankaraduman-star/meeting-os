@@ -132,6 +132,25 @@ extension Model {
         else { try? FileManager.default.removeItem(at:lowPriorityFlag); activity="Zoom toplantısı bitti · arka plan işi normal hızda" }
     }
 
+    /// One-shot self-test through the bridge (helper --self-test, ffmpeg, sqlite quick_check, disk, key…). Never while recording.
+    func runProbe() async {
+        guard !recording, !busy else { return }
+        probeLines=["Öz-test çalışıyor…"]
+        do { let r=try await request(["action":"probe"])
+            let items=r["items"] as? [[String:Any]] ?? []
+            probeLines=[r["summary"] as? String ?? ""]+items.map { i in
+                let ok=i["ok"] as? Bool ?? false; let fix=(i["fix"] as? String).map { " → "+$0 } ?? ""
+                return (ok ? "✔ " : ((i["level"] as? String)=="warning" ? "! " : "✘ "))+(i["detail"] as? String ?? "")+(ok ? "" : fix) } }
+        catch { probeLines=["Öz-test çalıştırılamadı: \(error.localizedDescription)"] }
+    }
+    func loadMaintenance() async { maintenance=try? await request(["action":"maintenance"]) }
+    func deleteWeakSample(_ id:Int) async {
+        do { _=try await request(["action":"delete_sample","sample":id]); activity="Zayıf ses örneği silindi"; await loadMaintenance(); await refresh() } catch { self.error=error.localizedDescription }
+    }
+    func rejectRule(_ original:String) async {
+        guard !original.isEmpty else { return }
+        do { _=try await request(["action":"reject_rule","original":original]); activity="Kural kapatıldı · “\(original)” artık kendiliğinden düzeltilmez"; await loadMaintenance() } catch { self.error=error.localizedDescription }
+    }
     func loadSetupStatus() async {
         var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
         let settings=await UNUserNotificationCenter.current().notificationSettings()
