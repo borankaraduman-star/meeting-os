@@ -12,7 +12,7 @@ struct Meeting: Identifiable {
 }
 extension Meeting {
     /// Cheap change detector for the sidebar: publishing an identical list every poll re-rendered the whole window.
-    var fingerprint:String { "\(id)|\(title)|\(status)|\(displayStatus)|\(recoveryState)|\(segments)|\(Int(seconds))|\(speakers)|\(metadata.count)|\((metadata["keep"] as? Bool) ?? false)|\((metadata["markers"] as? [Any])?.count ?? 0)|\((capture["state"] as? String) ?? "")|\(Int((capture["seconds"] as? Double) ?? 0))" }
+    var fingerprint:String { "\(id)|\(title)|\(status)|\(displayStatus)|\(recoveryState)|\(segments)|\(Int(seconds))|\(speakers)|\(metadata.count)|\((metadata["keep"] as? Bool) ?? false)|\((metadata["markers"] as? [Any])?.count ?? 0)|\((capture["state"] as? String) ?? "")|\(Int((capture["seconds"] as? Double) ?? 0))|\((capture["restarts"] as? Int) ?? 0):\((capture["relaunches"] as? Int) ?? 0):\((capture["wakes"] as? Int) ?? 0)" }
     var captureSourcesEmpty:Bool { (capture["sources"] as? [String:Any] ?? [:]).isEmpty }
     /// Sidebar line under the title: what the finished recording holds, or a plain "no speech" for an empty one.
     var sidebarDetail:String {
@@ -96,6 +96,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             guard let self=self else { return }
             self.pollTick+=1
             if RefreshCadence.shouldRefresh(tick:self.pollTick,recording:self.recording,busy:self.busy,active:NSApp.isActive) { await self.refresh() }
+        } }
+        // Sleep/wake is the one moment a recording can lose minutes without anything else noticing. No timer and
+        // no extra polling: the wake notification simply runs the poll that was due anyway, right now.
+        let workspace=NSWorkspace.shared.notificationCenter
+        workspace.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main) { [weak self] _ in Task { @MainActor in
+            guard let self=self, self.recordProcess != nil else { return }
+            self.sleptAt=Date()
+        } }
+        workspace.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main) { [weak self] _ in Task { @MainActor in
+            guard let self=self, self.recordProcess != nil else { return }
+            self.sleptAt=nil
+            await self.refresh()
         } }
         Task { await refresh() }
     }
@@ -197,6 +209,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                     activity=CaptureSignalPresentation.label(active.capture)
                     captureDots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
                 }
+                // One line, once, when the recording had to survive something. The first reading of a meeting
+                // only seeds the comparison, so a restored session never announces old history.
+                let seen=RecordingContinuity.read(active.capture)
+                if let was=continuitySeen, let line=RecordingContinuity.notice(from:was,to:seen) { recordingNotice=line; activity=line }
+                continuitySeen=seen
             }
             if !restoredOnLaunch {
                 restoredOnLaunch=true
@@ -264,14 +281,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard recordProcess==nil else { return }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; markerCount=0; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
+        recordingDir=dir; recording=true; markerCount=0; recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
         if title.isEmpty, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
         recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
-            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); DisplaySleepGuard.end(); RecorderPanel.hide()
+            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
             if !ok { self.activity="Kayıt tamamlanamadı · Toplantılar listesindeki kayıt durumunu kontrol edin" }
@@ -410,6 +427,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var pollTick=0
     /// Recording lives in its own process slot (see launch); jobs never block it.
     var recordProcess:Process?; var recordStartedAt:Date?; var stopArmedAt:Date?
+    var sleptAt:Date?; var continuitySeen:RecordingContinuity.State?
+    /// One passive line in the recorder panel when a recording survived a stream rebuild, a helper relaunch or a sleep.
+    @Published var recordingNotice=""
     var finalizeQueue:[String]=[]
     /// A meeting that finished while the user was reading another one; the status line offers to open it.
     @Published var pendingReady:String?

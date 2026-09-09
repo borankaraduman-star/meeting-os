@@ -172,7 +172,7 @@ func run() async throws {
         pcm.frameLength = 16000
         for n in 0..<16000 { pcm.floatChannelData![0][n] = Float(sin(Double(n)*0.1)*0.1) }
         for source in ["mic", "system"] {
-            let writer = ChunkWriter(directory, source, 1)
+            let writer = ChunkWriter(directory, source, 1, offset: startOffset)   // same timeline rules the real path uses
             try writer.append(pcm, time: source == "mic" ? 0.25 : 0.5)
             try writer.finish()
         }
