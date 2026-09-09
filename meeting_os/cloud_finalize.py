@@ -292,7 +292,7 @@ def embed_short_clusters(store, mid, sources, embedder):
 
 SUGGEST_THRESHOLD=0.83    # below the naming threshold but worth a one-click confirmation ("Sol Üst?")
 FEED_THRESHOLD=0.93       # a match this strong adds one more sample to the profile automatically
-FEED_MARGIN=0.10
+FEED_MARGIN=0.08          # correct real matches showed margins 0.086–0.144; 0.10 skipped a 0.941 match
 FEED_MIN_SECONDS=10.0
 MAX_AUTO_SAMPLES=8        # per person; manual samples count too
 IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap
