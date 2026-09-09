@@ -141,3 +141,122 @@ class LiveTests(unittest.TestCase):
             with self.assertRaises(OSError):record(binary,root/'capture',1,1,store=db,result_path=root/'missing-parent/receipt.json')
             self.assertTrue((root/'capture/events.jsonl').exists());self.assertEqual(len(db.meetings()),1)
             self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
+
+
+# One fake helper covers every supervisor case: what it does is decided by the flag file the test writes
+# and by whether the supervisor handed it --start-offset. It never touches ScreenCaptureKit.
+FAKE_HELPER = '''#!/usr/bin/env python3
+import json,os,signal,sys,time
+from pathlib import Path
+args=sys.argv
+def opt(key,default=None): return args[args.index(key)+1] if key in args else default
+out=Path(opt('--output'));out.mkdir(parents=True,exist_ok=True)
+offset=float(opt('--start-offset','0') or 0)
+plan=json.loads(Path(os.environ['FAKE_PLAN']).read_text())
+runs=out/'runs';runs.write_text(str(int(runs.read_text() if runs.exists() else 0)+1))
+run=int(runs.read_text())
+journal=out/'capture-native.jsonl'
+def emit(event):
+    line=json.dumps(event)
+    print(line,flush=True)
+    with journal.open('a') as f: f.write(line+'\\n')
+emit({'event':'started','start_offset':offset})
+for n in range(plan['chunks'] if run==1 else plan.get('chunks_after',plan['chunks'])):
+    start=offset+12.0*n
+    path=out/('mic-%06d.wav'%(int(start)//12))
+    path.write_bytes(b'audio')
+    emit({'event':'chunk','source':'mic','path':str(path),'start':start,'duration':12.0})
+if run>1: (out/'relaunched').write_text(str(offset))
+if plan.get('error') and run<=plan.get('error_runs',99): emit({'event':'error','message':'device gone'})
+if plan.get('exit') is not None and run<=plan.get('exit_runs',99): sys.exit(plan['exit'])
+signal.signal(signal.SIGINT,lambda *a: sys.exit(0))
+time.sleep(plan.get('sleep',30))
+'''
+
+
+class SupervisedHelperTests(unittest.TestCase):
+    """The recording has to outlive the capture helper: it dies, it hangs, it runs out of chances."""
+    def helper(self,root,plan):
+        import json,os
+        (root/'plan.json').write_text(json.dumps(plan))
+        p=root/'fake-helper';p.write_text(FAKE_HELPER);p.chmod(0o700)
+        os.environ['FAKE_PLAN']=str(root/'plan.json')
+        return p
+    def stopper(self,marker,timeout=10):
+        """Deliver the recorder's own SIGINT handler once the fake helper says it is where the test wants it."""
+        import signal,threading,time
+        def wait():
+            deadline=time.monotonic()+timeout
+            while not marker.exists():
+                if time.monotonic()>deadline: return
+                time.sleep(.01)
+            time.sleep(.05)
+            handler=signal.getsignal(signal.SIGINT)
+            if callable(handler): handler(signal.SIGINT,None)
+        def factory():
+            threading.Thread(target=wait,daemon=True).start()
+        return factory
+    def journal(self,root):
+        import json
+        out=[]
+        for line in (root/'capture/events.jsonl').read_text().splitlines():
+            try: out.append(json.loads(line))
+            except ValueError: pass
+        return out
+    def test_dead_helper_is_relaunched_on_the_same_timeline(self):
+        import json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':2,'exit':3,'exit_runs':1,'chunks_after':1,'sleep':30})
+            db=Store(root/'db');receipt=root/'receipt.json'
+            with patch('meeting_os.live.RELAUNCH_MIN_UPTIME_SECONDS',0),patch('meeting_os.live.RELAUNCH_WAIT_SECONDS',.01):
+                mid=record(binary,root/'capture',600,12,store=db,result_path=receipt,
+                           pipeline_factory=self.stopper(root/'capture/relaunched'))
+            events=self.journal(root)
+            relaunch=[e for e in events if e.get('event')=='relaunch']
+            self.assertEqual(len(relaunch),1)
+            self.assertEqual(relaunch[0]['start_offset'],24.0)   # two 12 s chunks are already on disk
+            self.assertEqual(relaunch[0]['reason'],'exit')
+            self.assertEqual([e['start'] for e in events if e.get('event')=='chunk'],[0.0,12.0,24.0])
+            self.assertEqual((root/'capture/relaunched').read_text(),'24.0')
+            self.assertEqual(db.meetings()[0]['status'],'provisional')   # it recovered: not incomplete
+            self.assertEqual(json.loads(receipt.read_text())['relaunches'],1)
+            self.assertEqual(json.loads(receipt.read_text())['finalized_chunks'],3)
+            self.assertEqual(db.meetings()[0]['id'],mid);db.close()
+    def test_silent_but_alive_helper_is_killed_and_relaunched(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':0,'chunks_after':1,'sleep':30})
+            db=Store(root/'db')
+            with patch('meeting_os.live.RELAUNCH_MIN_UPTIME_SECONDS',0),patch('meeting_os.live.RELAUNCH_WAIT_SECONDS',.01),\
+                 patch('meeting_os.live.STALL_MARGIN_SECONDS',.1),patch('meeting_os.live.CAPTURE_STOP_GRACE_SECONDS',.5):
+                record(binary,root/'capture',600,.1,store=db,pipeline_factory=self.stopper(root/'capture/relaunched'))
+            relaunch=[e for e in self.journal(root) if e.get('event')=='relaunch']
+            self.assertEqual([e['reason'] for e in relaunch],['stall'])
+            self.assertEqual(relaunch[0]['start_offset'],0.0)   # nothing was captured, so nothing is skipped
+            self.assertTrue((root/'capture/relaunched').exists())
+            self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
+    def test_exhausted_relaunch_budget_surfaces_the_error_and_keeps_the_audio(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':1,'chunks_after':0,'exit':4})
+            db=Store(root/'db');receipt=root/'receipt.json'
+            with patch('meeting_os.live.RELAUNCH_MIN_UPTIME_SECONDS',0),patch('meeting_os.live.RELAUNCH_WAIT_SECONDS',.01),\
+                 patch('meeting_os.live.RELAUNCH_LIMIT',2):
+                with self.assertRaisesRegex(RuntimeError,'2 kez yeniden başlatıldı'):
+                    record(binary,root/'capture',600,12,store=db,result_path=receipt)
+            self.assertEqual(len([e for e in self.journal(root) if e.get('event')=='relaunch']),2)
+            self.assertEqual(db.meetings()[0]['status'],'incomplete')
+            self.assertFalse(receipt.exists())
+            self.assertEqual((root/'capture/mic-000000.wav').read_bytes(),b'audio')   # captured audio is never touched
+            self.assertEqual(len([e for e in self.journal(root) if e.get('event')=='chunk']),1);db.close()
+    def test_startup_failure_is_reported_instead_of_relaunched(self):
+        # A helper that dies in its first seconds is failing at startup; five silent retries would only bury
+        # the permission message the owner has to read.
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':0,'error':True,'exit':1})
+            db=Store(root/'db')
+            with self.assertRaisesRegex(RuntimeError,'device gone'):
+                record(binary,root/'capture',600,12,store=db)
+            self.assertEqual([e for e in self.journal(root) if e.get('event')=='relaunch'],[])
+            self.assertEqual(db.meetings()[0]['status'],'incomplete');db.close()

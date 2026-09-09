@@ -127,6 +127,50 @@ class HeartbeatTests(unittest.TestCase):
             self.assertEqual(summary['hosts']['Mac-Sessiz']['reports'],0)   # alive but has written no meeting report
             self.assertIsNone(summary['hosts']['Mac-Sessiz']['heartbeat']['free_disk'])
 
+class RecordingHeartbeatTests(unittest.TestCase):
+    """While a meeting is being taped, both Macs should be able to see that it still is."""
+    STATE={'meeting':'m1','elapsed_seconds':2460.0,'last_chunk_age_seconds':4.0,'chunks':{'mic':205,'system':205},
+           'restarts':1,'relaunches':1,'gap_seconds':2.5,'wake_gap_seconds':180.0,'free_disk':1234}
+    def test_it_is_written_read_and_cleared_and_answers_in_one_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                path=reports.write_recording_heartbeat(data,self.STATE)
+                self.assertTrue(path.endswith('/Test-Mac/recording-heartbeat.json'),path)
+                beat=reports.read_recording_heartbeat(Path(path).parent)
+                self.assertEqual(beat['line'],'kayıt sürüyor · 41 dk · son parça 4 sn önce · 1 kez yeniden başlatıldı · 182 sn boşluk')
+                self.assertEqual(beat['meeting'],'m1');self.assertLess(beat['age_seconds'],5)
+                reports.clear_recording_heartbeat(data)
+                self.assertIsNone(reports.read_recording_heartbeat(Path(path).parent))
+                reports.clear_recording_heartbeat(data)   # clearing twice must not raise
+    def test_a_stale_file_is_not_reported_as_a_live_recording(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            host=Path(tmp)/'Mac';host.mkdir()
+            (host/reports.RECORDING_HEARTBEAT_FILE).write_text(json.dumps({'host':'Mac','written':'2020-01-01T00:00:00+00:00','elapsed_seconds':60}))
+            self.assertIsNone(reports.read_recording_heartbeat(host))
+            (host/reports.RECORDING_HEARTBEAT_FILE).write_text('bozuk')
+            self.assertIsNone(reports.read_recording_heartbeat(host))
+    def test_sharing_off_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);reports.save_settings(data,{'report_dir':str(data/'shared'),'share_reports':False})
+            self.assertIsNone(reports.write_recording_heartbeat(data,self.STATE))
+            self.assertFalse((data/'shared').exists())
+    def test_heartbeat_and_summary_carry_it_without_listing_it_as_a_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s=Store(data/'meeting-os.sqlite')
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                reports.write_recording_heartbeat(data,self.STATE)
+                beat=json.loads(Path(reports.write_heartbeat(s,data)).read_text())
+                self.assertEqual(beat['recording']['meeting'],'m1')
+                self.assertIn('kayıt sürüyor',beat['recording']['line'])
+                summary=reports.summarize(str(data/'shared'))
+            self.assertEqual(summary['reports'],[])   # it is state, not a meeting report
+            live=summary['hosts']['Test-Mac']['recording']
+            self.assertEqual((live['relaunches'],live['last_chunk_age_seconds']),(1,4.0))
+            self.assertIn('41 dk',live['line'])
+            s.close()
+
 class HeartbeatBridgeTests(unittest.TestCase):
     def test_bridge_action_writes_the_file_and_returns_its_path(self):
         from meeting_os.desktop import dispatch

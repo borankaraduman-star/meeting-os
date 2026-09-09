@@ -26,7 +26,12 @@ struct RecorderPanelView:View {
         HStack(spacing:10) {
             Circle().fill(.red).frame(width:10,height:10)
             Text(model.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
-            Text(model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).frame(maxWidth:110,alignment:.leading).help(model.recordingTitle)
+            // The meeting is in progress: a line about a survived interruption replaces the title in place —
+            // no notification, no sound, nothing that moves or asks for attention.
+            Text(model.recordingNotice.isEmpty ? (model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle) : model.recordingNotice)
+                .font(.caption).foregroundStyle(model.recordingNotice.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                .lineLimit(1).truncationMode(.tail).frame(maxWidth:110,alignment:.leading)
+                .help(model.recordingNotice.isEmpty ? model.recordingTitle : model.recordingNotice)
             SignalDot(label:"Mik",state:model.captureDots["mic"] ?? "unknown")
             SignalDot(label:"Sis",state:model.captureDots["system"] ?? "unknown")
             if model.markerCount>0 { Text("⌘M \(model.markerCount)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary).help("İşaretlenen an sayısı") }

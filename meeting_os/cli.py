@@ -262,7 +262,7 @@ def main(supervised=False):
                 from .live import record
                 from .live_worker import IsolatedLivePipeline
                 factory=(lambda: IsolatedLivePipeline(args)) if args.live else None
-                record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory,result_path=args.output)
+                record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory,result_path=args.output,data_dir=DATA_DIR)
             elif args.command=='cleanup-retries':
                 from .retry import RetryStore
                 from .retry_workspaces import cleanup_workspaces
