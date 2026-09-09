@@ -360,6 +360,18 @@ struct SettingsSheet:View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
                 Text("Sözlük ve ses profilleri").font(.title2.bold())
+                if !model.setupChecks.isEmpty {
+                    VStack(alignment:.leading,spacing:6) {
+                        HStack { Text("Kurulum durumu").font(.headline);Spacer();Button("Yenile") { Task { await model.loadSetupStatus() } }.controlSize(.small) }
+                        ForEach(model.setupChecks) { c in
+                            HStack(alignment:.top,spacing:8) {
+                                Circle().fill(c.state == .ok ? MeetingStyle.accent : (c.state == .missing ? Color.red : (c.state == .unknown ? Color.orange : Color.secondary))).frame(width:8,height:8).padding(.top,5)
+                                VStack(alignment:.leading,spacing:1) { Text(c.title).font(.callout); Text(c.hint).font(.caption2).foregroundStyle(.secondary) }
+                            }
+                        }
+                        Text("Kırmızı: kayıt ya da güncelleme bu izin/ayar olmadan çalışmaz. Gri: isteğe bağlı.").font(.caption2).foregroundStyle(.secondary)
+                    }.padding(14).meetingCard().accessibilityIdentifier("setupStatus")
+                }
                 Text("Kişi adlarını ve özel terimleri her satıra bir tane yazın.")
                 TextEditor(text:$model.vocabulary).font(.body.monospaced()).frame(height:160).border(.quaternary)
                 Text("Proje sözlüğü (glossary.jsonl)").font(.headline)

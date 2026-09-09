@@ -369,6 +369,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         return meetings.filter { ($0.title+" "+$0.created).range(of:q,options:[.caseInsensitive,.diacriticInsensitive]) != nil }
     }
     @Published var cost:[String:Any]?
+    @Published var setupChecks:[SetupCheck]=[]
+    func loadSetupStatus() async {
+        var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
+        let settings=await UNUserNotificationCenter.current().notificationSettings()
+        checks.append(SetupStatus.notificationCheck(settings))
+        if let r=try? await request(["action":"setup_status"]) { checks+=SetupStatus.serviceChecks(r) }
+        setupChecks=checks
+    }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false; @Published var elapsedText="00:00"
     /// Read the calendar when a recording starts: the live event names the meeting and its attendees become naming shortcuts.
@@ -520,6 +528,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             await loadGlossarySummary()
             storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse)   // read-only walk; a failure hides the section only
             cost=try? await request(["action":"cost_report"])
+            await loadSetupStatus()
             showSettings=true
         } catch { self.error=error.localizedDescription }
     }

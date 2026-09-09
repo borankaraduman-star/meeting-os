@@ -44,6 +44,15 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM cloud_chunks').fetchone()[0],0)
    self.assertEqual(s.db.execute('SELECT COUNT(*) FROM segments').fetchone()[0],1);s.close()
    with self.assertRaises(ValueError):dispatch({'action':'delete_meeting','meeting':mid},db)
+ def test_setup_status_reports_key_presence_and_glossary(self):
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';Store(db).close();(Path(tmp)/'vocabulary.txt').write_text('PMD\n')
+   class R:returncode=0
+   with patch('subprocess.run',return_value=R()):r=dispatch({'action':'setup_status'},db)
+   self.assertEqual((r['api_key'],r['glossary_terms']>=1,r['glossary_shared'],r['update_behind']),(True,True,False,0))
+   class F:returncode=44
+   with patch('subprocess.run',return_value=F()):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])
  def test_cost_report_sums_real_charges_by_month(self):
   from datetime import datetime,timezone
   with tempfile.TemporaryDirectory() as tmp:

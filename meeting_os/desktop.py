@@ -319,6 +319,22 @@ def dispatch(request, db=None):
             return {'meetings':count,'bytes':freed}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
+        if action=='setup_status':
+            # Presence only: `security` without -w prints metadata and never prompts for the secret.
+            import subprocess
+            from .openrouter import KEYCHAIN_SERVICE
+            from . import glossary as G
+            try: has_key=subprocess.run(['/usr/bin/security','find-generic-password','-s',KEYCHAIN_SERVICE],capture_output=True,timeout=5).returncode==0
+            except Exception: has_key=False
+            data=DATA_DIR if db is None else Path(db).parent
+            entries=G.load(data,ROOT); paths=[p for p in G.sources(data) if p.is_file()]
+            behind=0
+            if db is None:
+                try:
+                    from .updater import check
+                    behind=int((check(ROOT) or {}).get('behind') or 0)
+                except Exception: behind=0
+            return {'api_key':has_key,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind}
         if action=='cost_report':
             # Real OpenRouter transcription charges per piece (analysis calls are not metered by the provider response).
             from datetime import datetime,timezone
