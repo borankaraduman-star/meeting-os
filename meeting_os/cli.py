@@ -114,6 +114,7 @@ def parser():
     p.add_argument('--db',type=Path,default=DATA_DIR/'meeting-os.sqlite')
     sub=p.add_subparsers(dest='command',required=True)
     sub.add_parser('doctor')
+    pr=sub.add_parser('probe',help='Self-test: can this Mac record, transcribe and keep its data'); pr.add_argument('--network',action='store_true'); pr.add_argument('--json',action='store_true')
     diagnostic=sub.add_parser('diagnostics'); diagnostic.add_argument('--output',type=Path); diagnostic.add_argument('--progress',type=Path)
     models=sub.add_parser('models'); m=models.add_subparsers(dest='action',required=True)
     m.add_parser('list'); f=m.add_parser('fetch'); f.add_argument('name'); f.add_argument('--root',type=Path,default=ROOT/'models'); f.add_argument('--revision',default='main')
@@ -186,6 +187,9 @@ def main(supervised=False):
                 export_report(args.output,report);output({'diagnostics_saved':True})
             else:output(report)
             return
+        if args.command=='probe':
+            from .probe import main as probe_main
+            raise SystemExit(probe_main(['--network'] if args.network else []) if not args.json else probe_main(['--json']+(['--network'] if args.network else [])))
         if args.command=='doctor':
             import platform, importlib.util
             output({'python':sys.version.split()[0],'machine':platform.machine(),'macos':platform.mac_ver()[0],

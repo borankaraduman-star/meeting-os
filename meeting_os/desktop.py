@@ -475,6 +475,10 @@ def dispatch(request, db=None):
             return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes']}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
+        if action=='probe':
+            from .probe import run,summary_line
+            result=run(ROOT,DATA_DIR if db is None else Path(db).parent,network=bool(request.get('network')))
+            return {**result,'summary':summary_line(result)}
         if action=='setup_status':
             # Presence only: `security` without -w prints metadata and never prompts for the secret.
             import subprocess
