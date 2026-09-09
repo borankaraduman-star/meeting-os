@@ -15,6 +15,16 @@ final class CloudTranscriptionTests:XCTestCase {
         let legacy=Meeting(["id":"m3","status":"incomplete","recovery_state":"interrupted","metadata":["engine":"openrouter","model":"openai/gpt-transcribe"]])
         XCTAssertEqual(CloudTranscription.resumeArguments(meeting:legacy,model:"openai/gpt-transcribe",output:"/o").first,"openrouter-import")
     }
+    func testCloudRowsShowClusterLabelsUntilNamed() {
+        let cluster=Row(["id":1,"start":0.0,"end":3.0,"text":"x","speaker":"Konuşmacı 2","source":"system","flags":["cloud_transcript","cloud_diarization"]])
+        XCTAssertEqual(cluster.label,"Konuşmacı 2")
+        let named=Row(["id":2,"start":0.0,"end":3.0,"text":"x","speaker":"Konuşmacı 2","speaker_name":"Ayşe","source":"system","flags":["cloud_transcript"]])
+        XCTAssertEqual(named.label,"Ayşe")
+        let mic=Row(["id":3,"start":0.0,"end":3.0,"text":"x","speaker":"Boran","source":"mic","flags":["cloud_transcript"]])
+        XCTAssertEqual(mic.label,"Boran")
+        let local=Row(["id":4,"start":0.0,"end":3.0,"text":"x","speaker":"S1","source":"system","flags":[]])
+        XCTAssertEqual(local.label,"Konuşmacı 2")
+    }
     func testFinalizeOnlyForStoppedRecordingsWithAudio() {
         let rec=Meeting(["id":"r","status":"incomplete","recovery_state":"interrupted","metadata":["capture_dir":"/c"]])
         XCTAssertTrue(CloudTranscription.canFinalize(meeting:rec,busy:false))
