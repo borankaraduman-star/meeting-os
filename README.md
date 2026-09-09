@@ -146,8 +146,19 @@ isimlerin kesin yazılmasını garanti eden otomatik değiştirme listesi değil
 
 ## Başka bir Mac / yeniden kurulum
 
+Kaynak: <https://github.com/borankaraduman-star/meeting-os> — en son sürüm ZIP’i ve SHA256 toplamı
+<https://github.com/borankaraduman-star/meeting-os/releases/latest> adresinde. Git ile:
+
+```sh
+git clone https://github.com/borankaraduman-star/meeting-os.git
+cd meeting-os && open "Meeting OS.command"
+```
+
 macOS 15+, Apple Silicon, Xcode Command Line Tools, Python 3.12 ve ffmpeg gerekir.
-ZIP’i açıp kaynak klasörünü iCloud dışında yerel bir dizine yerleştirin.
+ZIP kullanıyorsanız açıp kaynak klasörünü iCloud dışında yerel bir dizine yerleştirin.
+Yeni Mac’te OpenRouter anahtarını uygulamadaki **OpenRouter ile ses aç** penceresinden bir kez
+kaydedin (anahtar o Mac’in Anahtar Zinciri’nde kalır); ses profilleri ve toplantılar Mac’e özeldir,
+taşınmaz.
 `Meeting OS.command` dosyasını çift tıklayın; eksik Homebrew/Python/ffmpeg araçlarını
 kurmaya yönlendirir ve ardından `scripts/setup.sh` çalıştırır.
 macOS indirilen dosyayı engellerse Sistem Ayarları → Gizlilik ve Güvenlik içindeki
