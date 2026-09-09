@@ -523,3 +523,7 @@ Ayarlar’da gerçek OpenRouter transkript harcaması (bu ay/toplam; ekranda $0.
 ## 2026-09-09 14:45 — 1.2.9: Görevlerim → Apple Hatırlatıcılar
 
 `RemindersBridge` (EventKit, yalnız hatırlatıcı yazma; takvim okuma ayrı). Görev satırında “Hatırlatıcılar’a ekle”; not = kaynak toplantı + sahip + transkriptteki zaman ifadesi (tarih tahmin edilmez). Uçtan uca doğrulandı: düğme → EventKit kaydı → Reminders’ta “Kitapları farklı dillere…” bulundu, notu doğru, deneme silindi. Not: tam test paketi bir kez geçici `JobTimeoutError` (supervisor) hatalarıyla düştü, iki tekrar temiz; sürüm zincirinde `tail -1` sonucu maskeledi, sonraki zincirlerde `set -o pipefail` kullan.
+
+## 2026-09-09 14:50 — 1.2.10: Görevlerim filtre sayaçları ve otomatik geçiş
+
+Segmentlerde açık görev sayıları (“Boran’ın görevleri (0) · Bu toplantı (8) · Tüm görevler (10)”); Boran’a atanmış görev yokken sekme kendiliğinden “Bu toplantı”ya açılır (ekranda doğrulandı). 13:35–14:50 arasında yayınlanan sürümler: 1.2.3, 1.2.4, 1.2.5, 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.2.10.
