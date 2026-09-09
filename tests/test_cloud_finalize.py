@@ -490,6 +490,41 @@ class LinkClustersTests(unittest.TestCase):
             self.assertEqual(labels,{'0:0':'Konuşmacı 1','0:1':'Konuşmacı 2','1:0':'Konuşmacı 2','1:1':'Konuşmacı 3'})
             self.assertEqual(link_clusters(store,mid,'m'),0);store.close()   # idempotent
 
+class LinkedIdentityTests(unittest.TestCase):
+    def test_linked_speaker_is_scored_and_named_as_one_cluster(self):
+        """Three 5-minute pieces, one colleague: the provider restarts speaker numbers per piece, link_clusters joins them,
+        and the identity must land on the whole linked speaker (and feed the profile with the linked duration), not on
+        the single sub-cluster that happens to score best."""
+        from meeting_os.cloud_finalize import identify_clusters
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');wav=Path(tmp)/'sys.wav';sf.write(wav,np.zeros(16000*2,dtype='float32'),16000,subtype='FLOAT')
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',10,'earlier')
+            mid=store.create_meeting('L',{'paths':{'system':str(wav)}});flags=['cloud_transcript','cloud_diarization']
+            def seg(a,b,sp,cl,vec):return Segment(a,b,'x','system',sp,metrics={'cluster':cl},flags=flags,embedding=vec,embedding_model='resemblyzer:test')
+            store.add_segment(mid,seg(0,4,'Konuşmacı 1-1','0:0',[1.0,0.0]))          # exact
+            store.add_segment(mid,seg(300,304,'Konuşmacı 2-1','1:0',[0.92,0.392]))   # 0.92 to the profile: linked (≥0.90) but alone not ≥0.93
+            store.add_segment(mid,seg(600,604,'Konuşmacı 3-1','2:0',[0.95,0.312]))   # 0.95: linked, alone would not share the name (1.0-0.95>0.03)
+            store.add_segment(mid,seg(605,609,'Konuşmacı 3-2','2:1',[0.0,1.0]))      # someone else
+            out=identify_clusters(store,mid,{'system':str(wav)},FakeEmbedder())
+            rows=store.segments(mid);named={r['metrics']['cluster']:r['speaker_name'] for r in rows}
+            self.assertEqual({r['speaker'] for r in rows},{'Konuşmacı 1','Konuşmacı 2'})
+            self.assertEqual(named,{'0:0':'Ayşe','1:0':'Ayşe','2:0':'Ayşe','2:1':None})
+            self.assertEqual((out['named'],out['fed']),(3,1))   # 12 s linked ≥ FEED_MIN_SECONDS although every sub-cluster is 4 s
+            ident={r['metrics']['identity']['similarity'] for r in rows if r['speaker']=='Konuşmacı 1'};self.assertEqual(len(ident),1)   # one score for the linked speaker
+            self.assertEqual([s['provenance'] for s in store.db.execute("SELECT provenance FROM samples WHERE name='Ayşe'")],['earlier',f'auto:{mid}:0:0']);store.close()
+    def test_conflicting_linked_speaker_still_abstains(self):
+        from meeting_os.cloud_finalize import identify_clusters
+        from meeting_os.types import Segment
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db');wav=Path(tmp)/'sys.wav';sf.write(wav,np.zeros(16000*2,dtype='float32'),16000,subtype='FLOAT')
+            store.enroll('Ayşe',[1.0,0.0],'resemblyzer:test',10,'a');store.enroll('Mehmet',[0.95,0.312],'resemblyzer:test',10,'b')   # two profiles 0.95 apart
+            mid=store.create_meeting('C',{'paths':{'system':str(wav)}});flags=['cloud_transcript','cloud_diarization']
+            store.add_segment(mid,Segment(0,20,'x','system','Konuşmacı 1',metrics={'cluster':'0:0'},flags=flags,embedding=[0.99,0.16],embedding_model='resemblyzer:test'))
+            out=identify_clusters(store,mid,{'system':str(wav)},FakeEmbedder())
+            r=store.segments(mid)[0];self.assertIsNone(r['speaker_name']);self.assertIsNone(r['metrics']['identity']['suggested']);self.assertLess(r['metrics']['identity']['margin'],0.05)
+            self.assertEqual(out,{'embedded':0,'named':0,'suggested':0,'fed':0});store.close()
+
 class UncertaintyFlagTests(unittest.TestCase):
     def test_cloud_information_flags_do_not_mark_items_for_review(self):
         from meeting_os.intelligence import uncertain
