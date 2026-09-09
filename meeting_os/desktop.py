@@ -344,6 +344,16 @@ def dispatch(request, db=None):
                 return export_decision_log(store,request['path'],query=request.get('query'),limit=request.get('limit',200),mask_names=request.get('mask_names') is True,
                     glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT) if request.get('mask_names') is True else None)
             return decision_log(store,request.get('query'),request.get('limit',200))
+        if action in ('question_radar','question_radar_export'):
+            from .questions import question_radar,export_question_radar
+            from . import glossary as G
+            if action=='question_radar_export':
+                return export_question_radar(store,request['path'],query=request.get('query'),limit=request.get('limit',100),mask_names=request.get('mask_names') is True,
+                    glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT) if request.get('mask_names') is True else None)
+            return question_radar(store,request.get('query'),request.get('limit',100))
+        if action=='scorecard':
+            from .scorecard import build_scorecard
+            return build_scorecard(store,start=request.get('from'),end=request.get('to'))
         if action=='review_debt':
             from .review import review_debt
             return review_debt(store,request.get('days',7))
