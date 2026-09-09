@@ -274,3 +274,26 @@ class ReviewDebtTests(unittest.TestCase):
    self.assertEqual(dispatch({'action':'review_debt','days':1},db)['meetings'],1)
    p=subprocess.run([sys.executable,'-m','meeting_os','--db',str(db),'review-debt','--days','30'],capture_output=True,text=True)
    self.assertEqual(p.returncode,0,p.stderr);self.assertEqual(json.loads(p.stdout)['counts']['ambiguous'],1)
+
+
+class BriefTests(unittest.TestCase):
+    def test_brief_groups_owed_tasks_and_history_by_attendee(self):
+        import tempfile, json
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.memory import Memory
+        from meeting_os.types import Segment
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'m.sqlite'; s=Store(db); mid=s.create_meeting('Sprint',{})
+            s.add_segment(mid,Segment(0,10,'Cuma raporu ben gönderirim.','system','Konuşmacı 1',speaker_name='Ayşe Yılmaz')); s.status(mid,'complete')
+            mem=Memory(s)
+            with mem.db:
+                mem.db.execute("INSERT INTO analyses(meeting,input_hash,model,payload,created) VALUES(?,?,?,?,?)",(mid,'h','m',json.dumps({'decisions':[{'text':'Rapor cuma gidecek'}],'questions':[{'text':'Bütçe onayı kimde?'}]}),'2026-09-09T10:00:00+00:00'))
+                mem.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated) VALUES('t1',?,NULL,'h','Raporu gönder','Ayşe','cuma','open','{}',0,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",(mid,))
+                mem.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated) VALUES('t2',?,NULL,'h','Bütçeyi sor','Boran',NULL,'open','{}',0,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",(mid,))
+            s.close()
+            r=dispatch({'action':'brief','title':'Haftalık','attendees':['Ayşe Yılmaz','Yeni Kişi']},db)
+            self.assertEqual((r['people'],r['owed'],r['questions']),(2,1,1))
+            self.assertIn('## Ayşe Yılmaz · son görüşme: Sprint',r['text']); self.assertIn('- Raporu gönder · cuma',r['text']); self.assertIn('Bütçe onayı kimde?',r['text'])
+            self.assertIn('## Yeni Kişi · kayıtlı toplantı yok',r['text']); self.assertIn('- Bütçeyi sor',r['text'])

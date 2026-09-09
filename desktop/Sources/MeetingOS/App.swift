@@ -113,6 +113,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         activity="İşaretlendi · \(Marker.labels[kind] ?? "Önemli an") · \(String(format:"%02d:%02d",Int(seconds)/60,Int(seconds)%60))"
     }
     /// Draft agenda for the next meeting from recent open tasks, questions and decisions; saved where the user chooses.
+    /// Brief for the next calendar meeting (or the selected meeting's attendees): each person's open promises, questions and decisions.
+    func exportBrief() async {
+        var title=""; var attendees:[String]=[]
+        if useCalendar, let e=CalendarContext.upcoming() { title=e.title; attendees=e.attendees }
+        if attendees.isEmpty { attendees=calendarAttendees; if title.isEmpty { title=meeting?.title ?? "" } }
+        guard !attendees.isEmpty else { error=useCalendar ? "Yakın takvim etkinliğinde katılımcı adı yok; brifing için katılımcılı bir etkinlik gerekir." : "Brifing için takvim bağlamını açın (Ayarlar → Genel) ya da katılımcılı bir toplantı seçin."; return }
+        let panel=NSSavePanel(); panel.nameFieldStringValue="brifing-\(title.isEmpty ? "toplanti" : String(title.prefix(30))).md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do { let r=try await request(["action":"brief","title":title,"attendees":attendees,"path":url.path]); activity="Brifing kaydedildi · \(r["people"] as? Int ?? 0) kişi, \(r["owed"] as? Int ?? 0) açık söz, \(r["questions"] as? Int ?? 0) soru" }
+        catch { self.error=error.localizedDescription }
+    }
     func exportAgenda() async {
         let panel=NSSavePanel();panel.nameFieldStringValue="sonraki-toplanti-gundemi.md";panel.allowedContentTypes=[UTType.plainText]
         guard panel.runModal() == .OK, let url=panel.url else { return }

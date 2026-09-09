@@ -318,6 +318,11 @@ def dispatch(request, db=None):
         if action=='supersede_task':
             from .continuity import supersede
             return supersede(store,request['old'],request['new'])
+        if action=='brief':
+            from .brief import build_brief,render_brief
+            brief=build_brief(store,request.get('title') or '',request.get('attendees') or []);text=render_brief(brief)
+            if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
+            return {'path':request.get('path'),'people':len(brief['people']),'owed':sum(len(p['owed']) for p in brief['people']),'questions':sum(len(p['questions']) for p in brief['people']),'text':text if not request.get('path') else None}
         if action=='agenda':
             from .agenda import build_agenda,render_agenda
             agenda=build_agenda(store,int(request.get('limit',5)));text=render_agenda(agenda)

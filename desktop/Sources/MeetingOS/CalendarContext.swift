@@ -35,6 +35,16 @@ enum CalendarContext {
         return pick(events,now:now)
     }
     struct Candidate { let title:String; let start:Date; let end:Date; let attendees:[String] }
+    /// The live event if any, else the next one starting within `hours`.
+    static func upcoming(hours:Double=12,now:Date=Date())->CalendarEvent? {
+        if let live=current(now:now) { return live }
+        guard authorized else { return nil }
+        let predicate=store.predicateForEvents(withStart:now,end:now.addingTimeInterval(hours*3600),calendars:nil)
+        let events=store.events(matching:predicate).filter { !$0.isAllDay && !($0.title ?? "").trimmingCharacters(in:.whitespaces).isEmpty }.sorted { $0.startDate<$1.startDate }
+        guard let e=events.first else { return nil }
+        var seen=Set<String>(); let names=(e.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType != .resource && $0.participantType != .room }.compactMap { participantName($0) }.filter { seen.insert($0.lowercased()).inserted }
+        return CalendarEvent(title:String((e.title ?? "").prefix(120)),attendees:Array(names.prefix(30)),start:e.startDate,end:e.endDate)
+    }
     /// The event covering `now` (5 min grace on both ends); among overlaps the one that started most recently.
     static func pick(_ events:[Candidate],now:Date)->CalendarEvent? {
         let grace:TimeInterval=5*60
