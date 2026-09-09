@@ -141,6 +141,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":item.speakerKey,"name":item.suggested,"enroll":true]); activity="“\(item.suggested)” onaylandı · profil güncellendi"; await refresh(); await loadReview() }
         catch { self.error=error.localizedDescription }
     }
+    /// Name a diarized cluster straight from Kontrol (calendar attendee chip). Enrolls like a confirmed suggestion.
+    func nameSpeaker(_ speakerKey:String,_ name:String) async {
+        guard let mid=selected, !speakerKey.isEmpty, !name.isEmpty else { return }
+        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":speakerKey,"name":name,"enroll":true]); activity="“\(name)” adlandırıldı · profil güncellendi"; await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    var calendarAttendees:[String] { (meeting?.metadata["calendar"] as? [String:Any])?["attendees"] as? [String] ?? [] }
     @Published var readingMode=true
     @Published var showAsides=false
     @Published var hideFillers=UserDefaults.standard.object(forKey:"hideFillers") as? Bool ?? true { didSet { UserDefaults.standard.set(hideFillers,forKey:"hideFillers") } }

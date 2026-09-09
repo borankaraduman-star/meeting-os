@@ -64,6 +64,14 @@ struct ReviewView:View {
                             Button("Adlandır…") { model.editRow=row;model.editName=row.name;model.editText=row.text;model.clean=false }
                         }
                         if item.kind=="task_owner" { Button("Görevlerim’de aç") { model.tab="actions" } }
+                    }.font(.callout)
+                    if (item.kind=="unnamed_speaker" || item.kind=="short_match"), !item.speakerKey.isEmpty, !model.calendarAttendees.isEmpty {
+                        VStack(alignment:.leading,spacing:5) {
+                            Text("Takvimdeki katılımcılardan seç").font(.caption).foregroundStyle(.secondary)
+                            FlowChips(items:model.calendarAttendees) { name in Task { await model.nameSpeaker(item.speakerKey,name) } }
+                        }
+                    }
+                    HStack(spacing:0) {
                         if item.kind=="glossary" {
                             Button("Uygula: “\(item.replacement)”") { Task { await model.applyGlossary(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).accessibilityIdentifier("applyGlossary-\(item.id)")
                             Button("Yoksay") { Task { await model.dismissGlossary(item) } }.disabled(model.busy).help("Öneriyi listeden kaldırır; metin değişmez").accessibilityIdentifier("dismissGlossary-\(item.id)")

@@ -27,7 +27,7 @@ def review_queue(store, mid):
             continue
         if metrics.get('cluster_embedding') and r.get('speaker_name') and (cluster,'short') not in seen_clusters:
             seen_clusters.add((cluster,'short'))
-            items.append({**base,'kind':'short_match','severity':3,'reason':f"Yalnız {metrics['cluster_embedding']:.1f} sn sesle tanındı; ismi bir kez kontrol edin"})
+            items.append({**base,'kind':'short_match','severity':3,'reason':f"Yalnız {metrics['cluster_embedding']:.1f} sn sesle tanındı; ismi bir kez kontrol edin",'speaker_key':r['speaker']})
             continue
         if 'low_asr_confidence' in r['flags'] or 'possible_non_speech' in r['flags'] or 'repetition' in r['flags']:
             items.append({**base,'kind':'asr','severity':3,'reason':'Model bu bölümde emin değil; dinleyerek kontrol edin'})
