@@ -54,6 +54,18 @@ class DigestTests(unittest.TestCase):
    out=Path(tmp)/'ozet.md';r=dispatch({'action':'digest','path':str(out)},db)
    self.assertEqual((r['tasks'],r['questions'],r['decisions'],r['meetings']),(1,1,1,1));self.assertIn('# Gün sonu özeti',out.read_text())
    self.assertEqual(dispatch({'action':'digest','day':'2000-01-01'},db)['meetings'],0)
+ def test_digest_and_waiting_follow_the_user_name_setting(self):
+  """Whose day it is comes from settings; nothing is hard-wired to one person."""
+  with tempfile.TemporaryDirectory() as tmp:
+   from meeting_os import reports
+   db=Path(tmp)/'meeting-os.sqlite';seed(db);out=Path(tmp)/'ozet.md'
+   dispatch({'action':'digest','path':str(out)},db)   # no setting yet: the historical label still owns the day
+   self.assertIn('Raporu çıkarmak',out.read_text());self.assertNotIn('Tasarımı bitirmek',out.read_text())
+   self.assertEqual([g['owner'] for g in dispatch({'action':'waiting_board'},db)['people']],['İpek'])
+   reports.save_settings(Path(tmp),{'user_name':'İpek'})
+   dispatch({'action':'digest','path':str(out)},db)
+   self.assertIn('Tasarımı bitirmek',out.read_text());self.assertIn('İpek için',out.read_text())
+   self.assertEqual([g['owner'] for g in dispatch({'action':'waiting_board'},db)['people']],['Boran'])
 
 class ShareTests(unittest.TestCase):
  def test_placeholders_and_masker_are_stable_and_turkish_aware(self):

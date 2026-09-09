@@ -7,6 +7,15 @@ struct WelcomeView:View {
         VStack(alignment:.leading,spacing:18) {
             Text("Hoş geldin").font(.system(size:27,weight:.bold,design:.rounded))
             Text("Meeting OS Zoom toplantılarını kaydeder, bulutta Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
+            HStack(spacing:10) {
+                Text("Adınız").font(.callout)
+                TextField("Adınız",text:$model.reportSettings.userName)
+                    .textFieldStyle(.roundedBorder).frame(width:200)
+                    .accessibilityIdentifier("welcomeUserNameField")
+                    .onSubmit { Task { await model.saveReportSettings() } }
+                    .onDisappear { Task { await model.saveReportSettings() } }   // first run: the name is asked once, saved when the view goes away
+                Text("Mikrofon kaydınız bu adla etiketlenir; sonradan Ayarlar → Genel’den değişir.").font(.caption).foregroundStyle(.secondary)
+            }
             VStack(alignment:.leading,spacing:12) {
                 step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya yüzen paneldeki “Bitir”.")
                 step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses buluta gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol kuyruğu hazır olur.")

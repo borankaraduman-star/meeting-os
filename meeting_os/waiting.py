@@ -27,8 +27,9 @@ def reminder_text(owner, items):
     return '\n'.join(lines)
 
 
-def build_waiting(store, owner='Boran', threshold=REPEAT_THRESHOLD):
-    """Open tasks owned by someone other than the user, grouped by that person. An empty owner is not waiting on anyone."""
+def build_waiting(store, owner=None, threshold=REPEAT_THRESHOLD):
+    """Open tasks owned by someone other than the user, grouped by that person. An empty owner is not waiting on anyone.
+    Callers resolve the name from reports.settings_owner."""
     memory = Memory(store)
     dates = {m['id']: (m['created'] or '')[:10] for m in store.meetings()}
     everything = [t for t in memory.actions() if t.get('state') in OPEN]

@@ -43,13 +43,14 @@ def meeting_line(store, memory, m):
             'speakers': len(speakers), 'analyzed': latest is not None, 'stale': bool(latest and latest.get('stale'))}, latest
 
 
-def build_digest(store, day=None, owner='Boran', start=None, end=None, mask_names=False, glossary=None):
+def build_digest(store, day=None, owner=None, start=None, end=None, mask_names=False, glossary=None):
+    """owner is the name the digest is written for; callers resolve it from reports.settings_owner."""
     first, last = parse_range(day, start, end)
     memory = Memory(store)
     inside = lambda created: (lambda d: d is not None and first <= d <= last)(local_day(created))
     meetings = sorted((m for m in store.meetings() if inside(m['created'])), key=lambda m: m['created'])
     titles = {m['id']: m['title'] for m in meetings}
-    wanted = normalize(owner or '')
+    owner = (owner or '').strip(); wanted = normalize(owner)
     period = [t for t in memory.actions() if t.get('meeting') in titles]
     tasks = [t for t in period if wanted and normalize(t.get('owner') or '') == wanted and t.get('state') != 'dismissed']
     lines = []; questions = []; decisions = []; risks = []; groups = []

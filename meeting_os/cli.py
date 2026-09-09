@@ -143,15 +143,15 @@ def parser():
     a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
-    dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',default='Boran'); dg.add_argument('--output',type=Path)
-    wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',default='Boran'); wt.add_argument('--output',type=Path)
+    dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); dg.add_argument('--output',type=Path)
+    wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); wt.add_argument('--output',type=Path)
     dl=sub.add_parser('decisions',help='Decision log across every meeting, newest first, with earlier similar decisions'); dl.add_argument('--query'); dl.add_argument('--limit',type=int,default=200); dl.add_argument('--mask-names',action='store_true'); dl.add_argument('--output',type=Path)
     qr=sub.add_parser('questions',help='Soru radarı: tekrar eden açık sorular, en çok toplantıda sorulan üstte'); qr.add_argument('--query'); qr.add_argument('--limit',type=int,default=100); qr.add_argument('--mask-names',action='store_true'); qr.add_argument('--output',type=Path)
     sc=sub.add_parser('scorecard',help='Toplantı karnesi: süre, konuşma payı, karar/görev sayısı, maliyet ve dönem toplamı'); sc.add_argument('--from',dest='date_from',help='YYYY-MM-DD (dönem başı; öntanımlı son 7 gün)'); sc.add_argument('--to',dest='date_to',help='YYYY-MM-DD (dönem sonu)')
     rd=sub.add_parser('review-debt',help='Review queue of every meeting recorded in the last N days, worst first'); rd.add_argument('--days',type=int,default=7)
     sh=sub.add_parser('share',help='Share preview of one meeting as Markdown; names can be masked, decisions-only mode'); sh.add_argument('--meeting',required=True); sh.add_argument('--mask-names',action='store_true'); sh.add_argument('--only-decisions',action='store_true'); sh.add_argument('--no-transcript',action='store_true'); sh.add_argument('--no-summary',action='store_true'); sh.add_argument('--include-segments',help='Comma-separated segment ids'); sh.add_argument('--exclude-segments',help='Comma-separated segment ids'); sh.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
-    rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir')
+    rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir, user_name, team_dir, share_glossary, audio_retention_days')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
     dc=sub.add_parser('document',help='Meeting → PRD / bug report / customer request / Claude Code prompt'); dc.add_argument('--meeting',required=True); dc.add_argument('--kind',choices=['prd','bug','customer','claude'],default='prd'); dc.add_argument('--output',type=Path); dc.add_argument('--openrouter-model',default='openai/gpt-4.1-mini')
     sub.add_parser('mcp')
@@ -270,14 +270,17 @@ def main(supervised=False):
             elif args.command=='retry': output(run_retry(args,store))
             elif args.command=='reports':
                 from . import reports
-                if args.action=='summarize': output(reports.summarize(reports.load_settings(DATA_DIR)['report_dir']))
+                if args.action=='summarize': output(reports.summarize(reports.report_root(reports.load_settings(DATA_DIR))))
                 elif args.action=='heartbeat':
                     from . import __version__
                     output({'path':reports.write_heartbeat(store,DATA_DIR,app={'version':__version__,'commit':None})})
                 elif args.action=='settings':
                     changes={}
                     for kv in args.set:
-                        k,_,v=kv.partition('=');changes[k]=(v.lower() in ('1','true','evet','on')) if k!='report_dir' else v
+                        k,_,v=kv.partition('=')
+                        if k in ('report_dir','user_name','team_dir'): changes[k]=v            # free text; save_settings validates it
+                        elif k=='audio_retention_days': changes[k]=int(v) if v.strip().isdigit() else v
+                        else: changes[k]=v.lower() in ('1','true','evet','on')
                     output(reports.save_settings(DATA_DIR,changes) if changes else reports.load_settings(DATA_DIR))
                 else:
                     if not args.meeting: raise ValueError('--meeting gerekli')
@@ -322,13 +325,15 @@ def main(supervised=False):
             elif args.command=='digest':
                 from .digest import build_digest,render_digest
                 from . import glossary as G
-                digest=build_digest(store,args.day,args.owner,start=args.date_from,end=args.date_to,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None)
+                from .reports import settings_owner
+                digest=build_digest(store,args.day,args.owner or settings_owner(args.db.parent),start=args.date_from,end=args.date_to,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None)
                 text=render_digest(digest)
                 if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output),'day':digest['day'],'from':digest['from'],'to':digest['to'],'masked_names':digest['masked_names'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'risks':len(digest['risks']),'meetings':len(digest['meetings'])})
                 else: print(text)
             elif args.command=='waiting':
                 from .waiting import build_waiting,render_waiting
-                board=build_waiting(store,args.owner)
+                from .reports import settings_owner
+                board=build_waiting(store,args.owner or settings_owner(args.db.parent))
                 if args.output: args.output.write_text(render_waiting(board),encoding='utf-8');output({'path':str(args.output),'people':len(board['people']),'total':board['total']})
                 else: output(board)
             elif args.command=='decisions':

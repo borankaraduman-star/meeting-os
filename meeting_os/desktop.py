@@ -342,7 +342,7 @@ def dispatch(request, db=None):
             base=DATA_DIR if db is None else Path(db).parent
             if action=='report_settings': return reports.load_settings(base)
             if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
-            if action=='reports_summary': return reports.summarize(reports.load_settings(base)['report_dir'])
+            if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
             if action=='heartbeat': return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
@@ -391,7 +391,8 @@ def dispatch(request, db=None):
         if action=='digest':
             from .digest import build_digest,render_digest
             from . import glossary as G
-            digest=build_digest(store,request.get('day'),request.get('owner') or 'Boran',start=request.get('from'),end=request.get('to'),
+            from .reports import settings_owner
+            digest=build_digest(store,request.get('day'),request.get('owner') or settings_owner(DATA_DIR if db is None else Path(db).parent),start=request.get('from'),end=request.get('to'),
                 mask_names=request.get('mask_names') is True,glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT) if request.get('mask_names') is True else None)
             text=render_digest(digest)
             if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
@@ -399,7 +400,8 @@ def dispatch(request, db=None):
                     'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'risks':len(digest['risks']),'meetings':len(digest['meetings']),'groups':digest['groups']}
         if action=='waiting_board':
             from .waiting import build_waiting,render_waiting
-            board=build_waiting(store,request.get('owner') or 'Boran')
+            from .reports import settings_owner
+            board=build_waiting(store,request.get('owner') or settings_owner(DATA_DIR if db is None else Path(db).parent))
             if request.get('path'): Path(request['path']).write_text(render_waiting(board),encoding='utf-8')
             return {**board,'path':request.get('path')}
         if action in ('decision_log','decision_log_export'):

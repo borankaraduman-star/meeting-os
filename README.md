@@ -1,14 +1,16 @@
-# Meeting OS — Boran’ın yerel toplantı hafızası
+# Meeting OS — yerel toplantı hafızası
 
 Mac uygulaması ve CLI: ayrı mikrofon/sistem sesi, canlı Türkçe transkript,
 toplantı sonunda nihai metin, konuşmacı ayrımı ve kalıcı ses
-profilleri. Yerel özet, karar, risk, açık soru ve görev çıkarımı; Boran’ın görev
+profilleri. Yerel özet, karar, risk, açık soru ve görev çıkarımı; kendi görev
 kuyruğu; kaynaklı arşiv araması ve görev taslakları. Varsayılan işleme bu Mac’te
 yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktur.
 
 ![Meeting OS tek bakışta](docs/img/tanitim.png)
 
 Tam kullanım kılavuzu: [docs/KULLANIM.md](docs/KULLANIM.md) (bütün özellikler, sekmeler, ayarlar, kısayollar, sınırlar).
+
+Ekibe yeni katılan biri için tek sayfalık başlangıç: [docs/EKIP.md](docs/EKIP.md) — `git clone -b v0.1 … && sh scripts/install.sh` ile kurulum, gizlilik, ilk gün ve ilk hafta.
 
 ## Bu Mac’te aç
 
@@ -64,7 +66,7 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 - **Görevlerim:** önceki toplantıdaki benzer görev gösterilir, “Aynı görev, eskisini kapat” ile bağlanır; Özet’te kararların önceki hâli listelenir. **Gün sonu özeti…** yalnız sana düşenleri toplar.
 - **Düzelt → Neden bu isim?** ses profili puanlarını ve eşikleri gösterir; Ayarlar’da kişi başına örnekler silinebilir, isimler birleştirilebilir.
 - **Görevlerim → Sonraki toplantı gündemi…** son 5 toplantının açık görev, soru ve kararlarından kaynaklı bir Markdown taslak kaydeder; hiçbir yere gönderilmez.
-- **Görevlerim → Gün sonu özeti…** o gün kaydedilen toplantılardan yalnız sana düşenleri kaydeder: verdiğin sözler (sahibi Boran olan görevler), senden beklenen cevaplar (açık sorular), alınan kararlar ve toplantı listesi; her madde `Kaynak #` alıntısıyla gelir. CLI: `digest --day 2026-09-09 --output ozet.md`.
+- **Görevlerim → Gün sonu özeti…** o gün kaydedilen toplantılardan yalnız sana düşenleri kaydeder: verdiğin sözler (sahibi siz olan görevler), senden beklenen cevaplar (açık sorular), alınan kararlar ve toplantı listesi; her madde `Kaynak #` alıntısıyla gelir. CLI: `digest --day 2026-09-09 --output ozet.md`.
 - **Haftalık paydaş raporu:** aynı özet bir tarih aralığına genişler. `digest --from 2026-09-01 --to 2026-09-07 [--mask-names] --output hafta.md` dönemdeki her toplantıyı yeniden eskiye sıralar ve her biri için kararlar, riskler, cevapsız sorular, o dönemde kapanan görevler ve hâlâ açık görevler başlıklarını verir; `--mask-names` Paylaş’taki maskelemeyi kullanır (kayıtlı veri değişmez).
 - **Beklediklerim:** sahibi sen olmayan (ve sahibi boş olmayan) açık görevler kişi kişi listelenir; her madde yaşı (gün), toplantısı, ilk `Kaynak` alıntısı ve aynı iş ≥2 toplantıda geçiyorsa TEKRAR EDEN işaretiyle gelir. Kişi başına kopyalanabilir kibar bir hatırlatma taslağı hazırlanır — hiçbir yere gönderilmez. CLI: `waiting [--output bekleyenler.md]`.
 - **Karar günlüğü:** bütün toplantıların en güncel analizindeki kararlar tek listede, yenisi üstte; her kararın kaynağı ve varsa önceki toplantılardaki benzer hâlleri gösterilir. CLI: `decisions [--query metin] [--mask-names] [--output kararlar.md]`.
@@ -75,7 +77,7 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 
 ## Proje sözlüğü (terimler, kısaltmalar, isimler)
 
-İçe aktarılan sözlük `iCloud Drive/MeetingOS-Shared/glossary.jsonl` dosyasına yazılır ve bütün Mac’lerde okunur (Sözlük ve ses profilleri → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`); `~/Library/Application Support/MeetingOS/glossary.jsonl` varsa Mac’e özel ek/üstüne yazma olarak önce okunur. Git deposuna girmez. Her satır bir JSON nesnesi:
+İçe aktarılan sözlük `iCloud Drive/MeetingOS-Shared/glossary.jsonl` dosyasına yazılır ve bütün Mac’lerde okunur (Sözlük ve ses profilleri → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`); `~/Library/Application Support/MeetingOS/glossary.jsonl` varsa Mac’e özel ek/üstüne yazma olarak önce okunur. Git deposuna girmez. iCloud Drive tek Apple Kimliğine bağlı olduğu için ekip için Ayarlar → Sözlük ve sesler → **Ekip klasörü** vardır: ortak klasör seçilince sözlük `<ekip klasörü>/glossary.jsonl` ile birleştirilerek okunur/yazılır (yerel dosya önceliklidir, ekip dosyası yalnız eksikleri tamamlar) ve teşhis raporları kişisel klasör yerine `<ekip klasörü>/reports/<mac-adı>/` altına yazılır. Ses, transkript ve ses profilleri bu klasöre girmez. Her satır bir JSON nesnesi:
 
 ```
 {"term":"PMD","expansion":"Product Management Daily","category":"kısaltma","aliases":["pi em di"],"mishearings":["pemede","PMB"],"context":"ürün ekibinin günlük toplantısı","confidence":"yüksek","source_count":14}
@@ -87,7 +89,7 @@ Slack agent için istem `docs/GLOSSARY.md` içindedir.
 
 ## Özet, görevler ve hafıza
 
-**Görevlerim**: Boran’a atanmış, bu toplantıya ait veya bütün görevleri görün.
+**Görevlerim**: Size atanmış, bu toplantıya ait veya bütün görevleri görün.
 Başlık/sahip/tarihi düzenleyin; Açık / Devam ediyor / Tamamlandı / Kaldırıldı
 seçin. Yeniden analiz elle düzenlemeleri ve görev durumunu sıfırlamaz. Sonraki
 analizin desteklemediği görevler güncel değil diye işaretlenir; silinmez.
@@ -161,7 +163,7 @@ Proje klasöründen:
 .venv/bin/python -m meeting_os enroll MEETING_ID SEGMENT_ID 'İpek' --confirmed-clean
 .venv/bin/python -m meeting_os profiles
 .venv/bin/python -m meeting_os analyze MEETING_ID
-.venv/bin/python -m meeting_os actions --owner Boran
+.venv/bin/python -m meeting_os actions --owner "Adınız"
 .venv/bin/python -m meeting_os prepare TASK_ID
 .venv/bin/python -m meeting_os handoff TASK_ID /local/path/task.md
 .venv/bin/python -m meeting_os ask "onboarding PRD"
@@ -181,9 +183,11 @@ Kaynak: <https://github.com/borankaraduman-star/meeting-os> — en son sürüm Z
 <https://github.com/borankaraduman-star/meeting-os/releases/latest> adresinde. Git ile:
 
 ```sh
-git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git
-cd meeting-os && open "Meeting OS.command"
+git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git ~/meeting-os
+sh ~/meeting-os/scripts/install.sh
 ```
+
+`scripts/install.sh` eksik araçları kurar, `scripts/setup.sh` ile ortamı hazırlar, adınızı ve OpenRouter anahtarınızı sorar, `doctor` ile bitirir; tekrar çalıştırılabilir. `Meeting OS.command` çift tıklanınca uygulama kuruluysa açar, değilse aynı betiği çağırır.
 
 macOS 15+, Apple Silicon, Xcode Command Line Tools, Python 3.12 ve ffmpeg gerekir.
 ZIP kullanıyorsanız açıp kaynak klasörünü iCloud dışında yerel bir dizine yerleştirin.

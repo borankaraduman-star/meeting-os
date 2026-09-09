@@ -31,7 +31,7 @@ struct SidebarView:View {
             VStack(alignment:.leading,spacing:14) {
                 HStack(spacing:11) {
                     Image(systemName:"waveform").font(.system(size:23,weight:.semibold)).foregroundStyle(MeetingStyle.accent).frame(width:45,height:45).background(MeetingStyle.accent.opacity(0.13),in:RoundedRectangle(cornerRadius:14))
-                    VStack(alignment:.leading,spacing:3) { Text("Meeting OS").font(.system(size:23,weight:.bold,design:.rounded));Text("Boran’ın toplantı hafızası").font(.caption).foregroundStyle(.secondary) }
+                    VStack(alignment:.leading,spacing:3) { Text("Meeting OS").font(.system(size:23,weight:.bold,design:.rounded));Text("Toplantı hafızası").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.bottom,4).accessibilityElement(children:.combine)
                 TextField("Toplantıya bir ad ver",text:$model.title)
                     .textFieldStyle(.roundedBorder)

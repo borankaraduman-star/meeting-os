@@ -10,7 +10,7 @@ Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi Op
 
 ## 1. İlk kurulum
 
-1. GitHub `borankaraduman-star/meeting-os` → v0.1 dalı. İkinci Mac için `docs/TWO_MAC_WORKFLOW.md`.
+1. GitHub `borankaraduman-star/meeting-os` → v0.1 dalı. Yeni bir Mac ya da ekip arkadaşı: `git clone -b v0.1 … && sh scripts/install.sh`, adım adım [EKIP.md](EKIP.md). İkinci Mac için `docs/TWO_MAC_WORKFLOW.md`.
 2. Uygulamayı açın, **Ayarlar (⌘,) → Kurulum durumu** kartına bakın: mikrofon, ekran kaydı (sistem sesi bununla alınır), bildirim, takvim, hatırlatıcı izinleri; OpenRouter anahtarı; sözlük; sürüm; teşhis rapor klasörü. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; **İzin iste** hiç sorulmamışsa macOS’a sordurur, **Ayarları aç** reddedilmiş izin için ilgili Sistem Ayarları bölmesini açar.
 3. OpenRouter anahtarı ilk bulut işleminde istenir ve Keychain’e bir kez kaydedilir.
 4. Sözlük: Slack agent çıktısı `glossary.jsonl` iCloud Drive `MeetingOS-Shared/` altında; bütün Mac’ler okur (bkz. bölüm 9).
@@ -160,10 +160,12 @@ Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden y
 **Öğrenme döngüsü (1.2.26):**
 - Yanlış otomatik ismi düzelttiğinizde o kümenin yanlış kişiye beslediği ses örneği silinir ve bu ses o kişi için “reddedildi” olarak hatırlanır; bir daha ona eşleşmez.
 - Aynı kelimeyi iki farklı toplantıda aynı şekilde düzelttiyseniz bu bir kural olur: sonraki transkriptlerde kendiliğinden uygulanır, paragraf işaretlenir ve geri alınabilir (geri alma kuralı kapatır). Sözlükteki bir terime denk gelen kurallar yanlış-duyma önerisi olarak sunulur.
-- Kontrol → Karne altındaki “Öğrenme” satırı bu haftanın kendiliğinden tanıma oranını ve 1000 kelimede düzeltme sayısını geçen haftayla karşılaştırır. Birkaç hafta düzenli düzeltmeyle oran yükselmelidir; yükselmiyorsa `quality replay` çıktısını inceleyin. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı doğrudan “Boran”dır.
+- Kontrol → Karne altındaki “Öğrenme” satırı bu haftanın kendiliğinden tanıma oranını ve 1000 kelimede düzeltme sayısını geçen haftayla karşılaştırır. Birkaç hafta düzenli düzeltmeyle oran yükselmelidir; yükselmiyorsa `quality replay` çıktısını inceleyin. Aynı adda farklı kişiler için ayırt edici ad kullanın (“Ali Tasarım”). Mikrofon kaynağı Ayarlar → Genel → Adınız değeriyle etiketlenir.
 
 ## 9. Sözlük
 `iCloud Drive/MeetingOS-Shared/glossary.jsonl` (her satır `{"term": …, "expansion": …, "category": …}`); `~/Library/Application Support/MeetingOS/glossary.jsonl` Mac’e özel ek. Üç yerde kullanılır: bulut STT’ye yazım ipucu (prompt kabul eden modellerde), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham transkript kendiliğinden değişmez. Slack agent istemi: `docs/GLOSSARY.md`.
+
+**Ekip klasörü** (Ayarlar → Sözlük ve sesler → Ekip klasörü): iCloud tek Apple Kimliğine bağlı olduğundan ekip için ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçilir. Sözlük okunurken yerel dosya → iCloud → ekip dosyası sırasıyla bakılır, terimi ilk tanımlayan kazanır; içe aktarma ekip dosyasını **birleştirerek** yazar (önce yeniden okur, geçici dosyaya yazıp yerine taşır), böylece aynı anda yazan başka bir Mac’in terimleri silinmez. Ekip klasörü doluyken teşhis raporları da kişisel klasör yerine `<ekip klasörü>/reports/<mac-adı>/` altına yazılır. Ses, transkript ve ses profilleri bu klasöre girmez.
 
 ## 10. İki Mac ve güncelleme
 Geliştirme bu Mac’te, kullanım diğer Mac’te. Diğer Mac toplantı yokken kenar çubuğundan **Güncelle ve yeniden başlat** ile v0.1 dalının son hâlini kurar (derleme düşük öncelikte; Zoom açıkken yapılmaz). Her tamamlanan toplantıdan sonra iCloud `MeetingOS-Reports/<Mac adı>/` altına sayısal rapor (maliyet, kaç parça, kimlik karnesi, işin CPU/bellek/süresi, yakalama sağlığı) ve saatte bir `heartbeat.json` (disk, bellek baskısı, termal, yük, son hatalar) yazılır. Transkript metni yalnız ayar açıkken rapora girer.

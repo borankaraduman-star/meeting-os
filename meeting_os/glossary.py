@@ -8,6 +8,7 @@ agent) plus the legacy `vocabulary.txt` (one term per line). The glossary is use
 """
 import difflib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -45,15 +46,47 @@ def shared_path():
 REAL_DATA_DIR = Path.home() / 'Library/Application Support/MeetingOS'
 
 
+def team_path(data_dir):
+    """`<team_dir>/glossary.jsonl`, or None. iCloud Drive is per-Apple-ID; teammates share an ordinary folder."""
+    from .reports import team_dir
+    from .reports import load_settings
+    team = team_dir(load_settings(data_dir))
+    return team / FILENAME if team else None
+
+
 def sources(data_dir):
-    """Local file first (per-Mac override), then the iCloud-shared file — the shared file only for the
-    real data folder, so tests and private copies never read or count the synced glossary."""
+    """Local file first (per-Mac override), then the iCloud-shared file, then the team file. Order is what
+    resolves conflicts: the first file to define a term wins, so local beats the team and the team only fills
+    gaps. The iCloud file is read only for the real data folder, so tests and private copies never touch it."""
     out = [Path(data_dir) / FILENAME]
     sp = shared_path()
     try: is_real = Path(data_dir).resolve() == REAL_DATA_DIR.resolve()
     except OSError: is_real = False
     if sp and is_real: out.append(sp)
+    team = team_path(data_dir)
+    if team: out.append(team)
     return out
+
+
+def merge_into(path, entries):
+    """Append-merge entries into a glossary file other Macs may be writing at the same time. The file is
+    re-read first (so terms a teammate added since we loaded ours survive), what is already there wins, and
+    the result is written to a temporary file and renamed into place — a reader never sees half a file.
+    Two Macs writing in the very same instant can still lose one side's addition; the next import restores it."""
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    kept = []; seen = set()
+    if path.is_file():
+        for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+            e = parse_line(line)
+            if e and e['term'].casefold() not in seen: seen.add(e['term'].casefold()); kept.append(e)
+    added = 0
+    for e in entries:
+        if e and e['term'].casefold() not in seen and len(kept) < MAX_TERMS:
+            seen.add(e['term'].casefold()); kept.append(e); added += 1
+    temporary = path.with_name(f'{path.name}.{os.getpid()}.tmp')
+    temporary.write_text('\n'.join(json.dumps(e, ensure_ascii=False) for e in kept) + '\n', encoding='utf-8')
+    temporary.replace(path)
+    return {'added': added, 'total': len(kept), 'path': str(path)}
 
 
 def load(data_dir, repo_root=None, with_counts=False):
@@ -78,7 +111,8 @@ def load(data_dir, repo_root=None, with_counts=False):
 
 def import_file(source, data_dir, shared=False):
     """Validate a glossary.jsonl and store it where every Mac reads it (iCloud-shared when available,
-    else the local data folder). Returns counts and the destination."""
+    else the local data folder). When a team folder is set and sharing is on, the same terms are also
+    merged into the team file — merged, not overwritten, because teammates write to it too."""
     text = Path(source).read_text(encoding='utf-8')
     lines = [l for l in text.splitlines() if l.strip()]
     parsed = [parse_line(l) for l in lines]; good = [p for p in parsed if p]
@@ -86,7 +120,14 @@ def import_file(source, data_dir, shared=False):
     target = (shared_path() if shared else None) or (Path(data_dir) / FILENAME)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text('\n'.join(json.dumps(p, ensure_ascii=False) for p in good[:MAX_TERMS]) + '\n', encoding='utf-8')
-    return {'imported': min(len(good), MAX_TERMS), 'skipped': len(lines) - len(good), 'path': str(target), 'shared': target != Path(data_dir) / FILENAME}
+    result = {'imported': min(len(good), MAX_TERMS), 'skipped': len(lines) - len(good), 'path': str(target), 'shared': target != Path(data_dir) / FILENAME}
+    team = team_path(data_dir)
+    from .reports import load_settings
+    if team and load_settings(data_dir).get('share_glossary') is not False:
+        try: result['team'] = merge_into(team, good)
+        except OSError as exc:  # an unmounted share must not fail the user's own import
+            result['team_error'] = type(exc).__name__
+    return result
 
 
 def stt_hint(entries, limit=900):

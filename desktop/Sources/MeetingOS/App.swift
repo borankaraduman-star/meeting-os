@@ -33,7 +33,7 @@ struct Row: Identifiable, Equatable {
         if !name.isEmpty { return name }
         if flags.contains("provisional") { return "Geçici konuşmacı" }
         if !suggested.isEmpty { return suggested+"?" }  // borderline voice match awaiting one-click confirmation
-        if flags.contains("possible_echo") { return "Hoparlör yankısı" }  // microphone picked up the speakers; not Boran talking
+        if flags.contains("possible_echo") { return "Hoparlör yankısı" }  // microphone picked up the speakers; not the user talking
         if flags.contains("cloud_transcript"), !speaker.isEmpty, speaker != "unknown" { return speaker }  // cloud path stores human-readable cluster labels
         if let tail=speaker.split(separator:":").last, tail.hasPrefix("S"), let n=Int(tail.dropFirst()) { return "Konuşmacı \(n+1)" }
         return "İsimsiz konuşmacı"
@@ -564,6 +564,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         else if id==GlobalHotkeys.mark, recording { markMoment("important") }
     }
     @Published var update:UpdateInfo?; @Published var updating=false; @Published var reportSettings=ReportSettings(shareReports:true,shareText:false,autoUpdate:false,reportDir:"")
+    /// The person this Mac belongs to (Ayarlar → Genel → Adınız); never a hard-coded name.
+    var userName:String { let n=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines); return n.isEmpty ? "Boran" : n }
     var lastUpdateCheck:Date?
     /// Called after the first snapshot and every six hours; a fetch, nothing more.
     func checkForUpdates(force:Bool=false) async {
