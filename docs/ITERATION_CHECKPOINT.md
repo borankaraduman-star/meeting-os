@@ -535,3 +535,7 @@ Segmentlerde açık görev sayıları (“Boran’ın görevleri (0) · Bu topla
 ## 2026-09-09 15:05 — 1.2.12: Kurulum kartında “İzin iste / Ayarları aç”, ⌘,
 
 Hiç sorulmamış izinlerde macOS sorusu açılır; reddedilmiş izinlerde ilgili Sistem Ayarları bölmesi açılır (bildirimler için doğrulandı: AX ile basıldı → System Settings açıldı). `⌘,` ayarları açar. Not: kartın `accessibilityIdentifier`’ı çocuk düğmelerin kimliğini eziyordu (`accessibilityElement(children:.contain)` ile düzeltildi); CGEvent tıklamaları bu pencerede güvenilmez, AX yolu `scroll area 1 of group 1 of sheet 1`.
+
+## 2026-09-09 15:00 — 1.2.13: Kurulum kartında teşhis raporu klasörü
+
+`setup_status` artık rapor paylaşımının açık olup olmadığını, klasörün yazılabilirliğini (ilk var olan üst klasörde W_OK) ve yazılmış rapor sayısını döner; kart “Teşhis raporları · Açık · N rapor iCloud Drive’da” gösterir. Kullanım Mac’inde rapor gelmiyorsa nedeni burada görünür.
