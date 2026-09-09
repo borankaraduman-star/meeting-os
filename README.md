@@ -252,6 +252,10 @@ Uygulama toplantıyı hiçbir zaman yavaşlatmamalı. Bunun için: kayıt işi n
 
 Ayarlar sayfasının başındaki **Kurulum durumu** kartı mikrofon, ekran kaydı, takvim, hatırlatıcı ve bildirim izinlerini, OpenRouter anahtarının Keychain’de olup olmadığını (değer okunmaz, yalnız varlık), sözlük terim sayısını/paylaşımını ve sürümün güncel olup olmadığını tek listede gösterir. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; gri: isteğe bağlı.
 
+### Klavye kısayolları
+
+Her yerden: ⌃⌥R kaydı başlat/bitir, ⌃⌥M önemli an. Uygulama içinde: ⌘1 Transkript · ⌘2 Özet · ⌘3 Görevlerim · ⌘4 Kontrol · ⌘5 Hafıza (Git menüsü), ⌘F konuşmada ara, ⌘⇧F hafızada ara, ⌘, Ayarlar, Esc aramayı temizler. Kayıt sırasında ⌘⇧M karar anı, ⌘⌥M görev, ⌘⌃M sonra bak.
+
 ### Toplantı öncesi brifing (1.2.23+)
 
 Görevlerim → **Brifing…**: takvim bağlamı açıksa sıradaki (ya da süren) takvim etkinliğinin katılımcılarını alır; yoksa seçili toplantının takvim katılımcılarını kullanır. Her kişi için verdiği açık sözler, birlikte olduğunuz toplantılardan açık sorular ve kararlar, son görüşme; sonunda sizin açık görevleriniz. Markdown olarak kaydedilir, hiçbir yere gönderilmez. CLI karşılığı yok; `brief` köprü eylemi.
