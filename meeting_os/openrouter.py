@@ -49,7 +49,40 @@ def validate_stt_model(model):
 
 KEYCHAIN_SERVICE = 'local.boran.meeting-os.openrouter'
 
-class OpenRouterError(ValueError): pass
+class OpenRouterError(ValueError):
+    """Base for everything the cloud path can fail with. `kind` and `user_message` are what the app persists
+    and shows; `retryable` decides whether a piece is worth sending again."""
+    kind='other';retryable=False;user_message=None
+
+class CloudAuthError(OpenRouterError):
+    """401/403: the key is wrong or the account may not use this model. Retrying only wastes the meeting's time."""
+    kind='auth';user_message='OpenRouter anahtarı geçersiz — Ayarlar → OpenRouter'
+
+class CloudCreditError(OpenRouterError):
+    """402: nothing is broken, the account is simply out of money. Only the user can fix it."""
+    kind='credit';user_message='OpenRouter kredisi bitti'
+
+class CloudUnavailable(OpenRouterError):
+    """Timeout, dropped connection, 408/429/5xx: the service, not the account. Worth another try later."""
+    kind='unavailable';retryable=True;user_message='OpenRouter şu an yanıt vermiyor; ses güvende, boşta yeniden denenecek'
+
+
+def cloud_error_class(code):
+    """HTTP status → the exception class that carries the right Turkish line and retry decision."""
+    if code in (401,403): return CloudAuthError
+    if code==402: return CloudCreditError
+    if code in (408,429) or code>=500: return CloudUnavailable
+    return OpenRouterError   # 400/404/413: a request we must not repeat unchanged
+
+
+def error_kind(exc): return getattr(exc,'kind','other')
+
+def error_message(exc):
+    """One honest sentence for the meeting list: the classified line when we have one, the raw message otherwise."""
+    return getattr(exc,'user_message',None) or str(exc)[:300]
+
+
+RETRYABLE_CODES = (408,429)   # plus every 5xx; see cloud_error_class
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl): return None
@@ -95,7 +128,9 @@ def http_error_message(code):
             429:'OpenRouter hız sınırı; biraz bekleyip sürdürün.'}.get(code)
     if detail is None:
         detail='OpenRouter hizmet hatası; biraz bekleyip sürdürün.' if code>=500 else 'Anahtarı, bakiyeyi veya hizmet durumunu kontrol edin.'
-    return f'OpenRouter HTTP {code}. {detail} Otomatik tekrar yapılmadı; tamamlanan parçalar korunuyor.'
+    # Transient statuses are now retried in place (see cloud_finalize.RETRY_WAITS); the others still are not.
+    tail='Birkaç kez yeniden denendi' if code in RETRYABLE_CODES or code>=500 else 'Otomatik tekrar yapılmadı'
+    return f'OpenRouter HTTP {code}. {detail} {tail}; tamamlanan parçalar korunuyor.'
 
 
 def parse_segments(raw):
@@ -138,9 +173,9 @@ class OpenRouterClient:
                 except Exception: detail=''
                 detail=re.sub(r'\s+',' ',detail)[:220]
             if detail: print(f'OpenRouter sağlayıcı ayrıntısı (HTTP {exc.code}): {detail}',file=__import__('sys').stderr,flush=True)  # log only; the user-facing message stays free of provider/request echoes
-            raise OpenRouterError(http_error_message(exc.code)) from None
+            raise cloud_error_class(exc.code)(http_error_message(exc.code)) from None
         except (OSError, TimeoutError):
-            raise OpenRouterError('OpenRouter bağlantısı tamamlanamadı. Ücret oluşmuş olabilir; otomatik tekrar yapılmadı.') from None
+            raise CloudUnavailable('OpenRouter bağlantısı tamamlanamadı. Ücret oluşmuş olabilir; tamamlanan parçalar korunuyor.') from None
         if len(raw)>self.MAX_RESPONSE_BYTES: raise OpenRouterError('OpenRouter yanıtı boyut sınırını aştı.')
         try: result=json.loads(raw)
         except (ValueError,UnicodeError): raise OpenRouterError('OpenRouter geçerli JSON döndürmedi.') from None

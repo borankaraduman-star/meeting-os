@@ -673,3 +673,102 @@ class JobPriorityTests(unittest.TestCase):
         with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
             self.assertEqual(CF.upload_workers(),1)
             self.assertEqual((CF.job_usage(0)['low_priority'],CF.job_usage(0)['upload_workers']),(True,1))
+
+
+class CloudFailureTests(unittest.TestCase):
+    """T7: OpenRouter down, key invalid or credit exhausted must never cost a meeting."""
+
+    def _meeting(self,tmp,seconds=95):
+        d=capture_dir(tmp,seconds=seconds);store=Store(Path(tmp)/'db.sqlite')
+        mid=store.create_meeting('Kritik toplantı',{'capture_dir':str(d)});store.status(mid,'incomplete')
+        return store,mid
+
+    def test_rate_limit_is_retried_twice_and_every_paid_piece_is_kept(self):
+        from unittest.mock import patch
+        from meeting_os.openrouter import CloudUnavailable
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            calls=[];waits=[]
+            class C:
+                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
+                    calls.append(1)
+                    if len(calls)<=2: raise CloudUnavailable('OpenRouter HTTP 429.')   # the first piece is refused twice
+                    return {'text':'metin','usage':{'seconds':30,'cost':0.001}}
+            with patch('time.sleep',waits.append):
+                finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            self.assertEqual(store.db.execute('SELECT status FROM meetings WHERE id=?',(mid,)).fetchone()[0],'complete')
+            self.assertEqual(len(calls),4)                       # 2 pieces + 2 refusals
+            self.assertEqual(len(waits),2)                       # 2 s then 8 s, plus up to 25% jitter
+            self.assertTrue(all(b<=w<=b*1.25 for w,b in zip(waits,(2,8))),waits)
+            paid=[u for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if '"cost"' in (u or '')]
+            self.assertEqual(len(paid),2)
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertNotIn('cloud_error',meta);self.assertNotIn('cloud_retry_after',meta)
+            store.close()
+
+    def test_invalid_key_is_not_retried_and_is_written_down_as_auth(self):
+        from unittest.mock import patch
+        from meeting_os.openrouter import CloudAuthError
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            calls=[];waits=[]
+            class C:
+                def transcribe(self,*a,**kw):
+                    calls.append(1);raise CloudAuthError('OpenRouter HTTP 401.')
+            with patch('time.sleep',waits.append), self.assertRaises(CloudAuthError):
+                finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            self.assertEqual(waits,[])                    # a wrong key does not get better by waiting
+            self.assertEqual(len(calls),1)
+            row=store.db.execute('SELECT status,metadata FROM meetings WHERE id=?',(mid,)).fetchone()
+            self.assertEqual(row['status'],'incomplete');meta=json.loads(row['metadata'])
+            self.assertEqual(meta['cloud_error']['kind'],'auth')
+            self.assertEqual(meta['cloud_error']['message'],'OpenRouter anahtarı geçersiz — Ayarlar → OpenRouter')
+            self.assertEqual(meta['cloud_retry_attempt'],1);self.assertIn('cloud_retry_after',meta)
+            self.assertTrue(Path(meta['capture_dir']).is_dir())   # the audio is still there
+            store.close()
+
+    def test_exhausted_credit_is_written_down_as_credit(self):
+        from meeting_os.openrouter import CloudCreditError
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            class C:
+                def transcribe(self,*a,**kw):raise CloudCreditError('OpenRouter HTTP 402.')
+            with self.assertRaises(CloudCreditError):
+                finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual((meta['cloud_error']['kind'],meta['cloud_error']['message']),('credit','OpenRouter kredisi bitti'))
+            store.close()
+
+    def test_connection_loss_exhausts_the_retries_then_schedules_the_next_try(self):
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+        from meeting_os.openrouter import CloudUnavailable
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            calls=[];waits=[]
+            class C:
+                def transcribe(self,*a,**kw):
+                    calls.append(1);raise CloudUnavailable('bağlantı yok')
+            with patch('time.sleep',waits.append), self.assertRaises(CloudUnavailable):
+                finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            self.assertEqual(len(waits),3)                         # three waits, then the batch gives up
+            self.assertTrue(all(b<=w<=b*1.25 for w,b in zip(waits,(2,8,20))),waits)
+            self.assertEqual(len(calls),4)
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual(meta['cloud_error']['kind'],'unavailable')
+            self.assertEqual(meta['cloud_retry_attempt'],1)
+            minutes=(datetime.fromisoformat(meta['cloud_retry_after'])-datetime.now(timezone.utc)).total_seconds()/60
+            self.assertTrue(9<minutes<=10,minutes)               # first backoff is 10 minutes
+            # A second failure moves the next try out to 30 minutes; the audio is never touched.
+            with patch('time.sleep',waits.append), self.assertRaises(CloudUnavailable):
+                finalize_capture(store,mid,tmp,consent=True,client=C())
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual(meta['cloud_retry_attempt'],2)
+            self.assertTrue(29<(datetime.fromisoformat(meta['cloud_retry_after'])-datetime.now(timezone.utc)).total_seconds()/60<=30)
+            self.assertTrue(Path(meta['capture_dir']).is_dir())
+            store.close()
+
+    def test_backoff_ladder_caps_at_a_day_and_attempts_are_capped(self):
+        from meeting_os.cloud_finalize import backoff_minutes, MAX_CLOUD_RETRIES
+        self.assertEqual([backoff_minutes(n) for n in (1,2,3,4,5,30)],[10,30,120,360,1440,1440])
+        self.assertEqual(MAX_CLOUD_RETRIES,30)
