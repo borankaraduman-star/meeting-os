@@ -555,3 +555,7 @@ Kurul (3 ajan) 24 fikir; hedef listesi canlı sürüm günlüğünde. Bu sürüm
 ## 2026-09-09 18:40 — 1.2.17: ses dosyaları
 
 Boran: “ses dosyaları çok yer kaplıyor”. Ölçüm: 9 toplantı 416 MB; 41 dk’lık kayıt 313 MB (iki float32 WAV). Çözüm: `audio_archive.py` (WAV → FLAC PCM_16, doğrulamalı, finalize sonunda ve `storage_compact`/saatlik `storage_housekeeping` ile), kayıt parçaları PCM16 (capture helper), `audio_retention_days` ayarı (varsayılan 30; UI seçici). Sonuç bu Mac’te 416 → 115 MB. Doğrulandı: `read_audio` FLAC okuyor, AVAudioPlayer FLAC açıyor (40 dk), yeni kayıt parçaları `PCM_16`, finalize sonunda `system-full.flac` oluştu.
+
+## 2026-09-09 18:55 — 1.2.18: kayıt yardımcısı dayanıklılığı
+
+`capture/main.swift`: `didStopWithError` artık ölümcül değil → `restartStream` (stopCapture, 2 sn, yeni SCStream; 3 deneme), 20 sn örnek gelmezse aynı yol; disk eşikleri 3 GB uyarı (`low_disk` olayı) / 400 MB durdurma / 600 MB başlangıç. `capture_state` `restarted`’ı capturing sayar, `restarts` ve `low_disk_bytes` verir. Self-test ve 26 sn gerçek kayıt temiz (4 parça, yeniden başlatma yok, FLAC arşivi oluştu). Uyku senaryosu canlı denenmedi.
