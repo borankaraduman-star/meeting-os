@@ -127,6 +127,12 @@ struct ActionsView:View {
             .disabled(m.busy || item.stale || ["done","dismissed"].contains(item.state))
             .accessibilityIdentifier("prepareDraft-\(item.id)")
     }
+    func reminderButton(_ item:ActionItem)->some View {
+        Button("Hatırlatıcılar’a ekle") { m.addReminder(item) }
+            .disabled(["done","dismissed"].contains(item.state))
+            .help("Görevi Apple Hatırlatıcılar’daki varsayılan listeye ekler; kaynak toplantı ve zaman notu ile")
+            .accessibilityIdentifier("addReminder-\(item.id)")
+    }
     func handoffButton(_ item:ActionItem)->some View {
         Button("\(item.route) için paket kaydet") { Task { await m.exportHandoff(item) } }
             .disabled(item.stale || ["done","dismissed"].contains(item.state))
@@ -153,8 +159,8 @@ struct ActionsView:View {
                 }
                 EvidenceView(m:m,evidence:item.evidence)
                 ViewThatFits(in:.horizontal) {
-                    HStack { draftButton(item);handoffButton(item) }
-                    VStack(alignment:.leading,spacing:8) { draftButton(item);handoffButton(item) }
+                    HStack { draftButton(item);handoffButton(item);reminderButton(item) }
+                    VStack(alignment:.leading,spacing:8) { draftButton(item);handoffButton(item);reminderButton(item) }
                 }
                 ForEach(m.drafts.filter {$0.task==item.id}.prefix(1)) { draft in DisclosureGroup(draft.stale ? "Güncel olmayan taslak":"İncelenecek taslak · gönderilmedi") { VStack(alignment:.leading) { Text(draft.text).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(.top,8);Button("Taslağı düzenle") { draftEdit=draft;draftText=draft.text }.disabled(draft.stale) } } }
             }.padding(20).meetingCard() }

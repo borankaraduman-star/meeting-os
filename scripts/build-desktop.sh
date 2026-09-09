@@ -28,6 +28,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>NSScreenCaptureUsageDescription</key><string>Meeting OS toplantı sistem sesini yerel olarak kaydeder. Ekran görüntüsü saklanmaz.</string>
 <key>NSCalendarsFullAccessUsageDescription</key><string>Meeting OS kayıt başlarken o andaki takvim etkinliğinin adını ve katılımcılarını okur; takvime hiçbir şey yazmaz.</string>
 <key>NSCalendarsUsageDescription</key><string>Meeting OS kayıt başlarken o andaki takvim etkinliğinin adını ve katılımcılarını okur; takvime hiçbir şey yazmaz.</string>
+<key>NSRemindersFullAccessUsageDescription</key><string>Meeting OS seçtiğiniz görevi Apple Hatırlatıcılar’a ekler; başka hiçbir şey okumaz veya değiştirmez.</string>
+<key>NSRemindersUsageDescription</key><string>Meeting OS seçtiğiniz görevi Apple Hatırlatıcılar’a ekler; başka hiçbir şey okumaz veya değiştirmez.</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST

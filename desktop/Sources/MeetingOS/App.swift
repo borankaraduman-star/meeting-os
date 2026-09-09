@@ -379,6 +379,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
     }
     var pendingCalendar:CalendarEvent?
+    /// Send one task to Apple Reminders; asks for reminders access on first use.
+    func addReminder(_ item:ActionItem) {
+        let go={ [weak self] in
+            guard let self=self else { return }
+            do { try RemindersBridge.add(title:item.title,meetingTitle:item.meetingTitle,owner:item.owner,due:item.due); self.activity="Hatırlatıcılar’a eklendi · “\(item.title.prefix(60))”" }
+            catch { self.error="Hatırlatıcı eklenemedi: \(error.localizedDescription)" }
+        }
+        if RemindersBridge.authorized { go() }
+        else { RemindersBridge.requestAccess { [weak self] ok in if ok { go() } else { self?.error="Hatırlatıcılar erişimi verilmedi · Sistem Ayarları → Gizlilik ve Güvenlik → Hatırlatıcılar" } } }
+    }
     /// Title of the recording in progress, shown on the floating panel.
     @Published var recordingTitle=""
     /// Hands-free Zoom: start when a meeting window has been open ~10 s, stop an auto-started recording 60 s after it closes.
