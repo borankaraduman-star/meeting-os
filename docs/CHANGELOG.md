@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 69 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 70 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.65](#v1265) | 2026-09-10 22:03 | Meeting OS 1.2.65 — ekipteki hata ve çökmeler tek yerde toplanır |
 | [v1.2.64](#v1264) | 2026-09-10 21:51 | Meeting OS 1.2.64 — Kontrol'de onaylanan sözlük düzeltmesi bir daha sorulmaz |
 | [v1.2.63](#v1263) | 2026-09-10 21:45 | Meeting OS 1.2.63 — ekip klasörü ortak bilgi tabanı: profiller ve kelimeler herkeste birikir |
 | [v1.2.62](#v1262) | 2026-09-10 21:34 | Meeting OS 1.2.62 — ekran paylaşırken göze batmaz |
@@ -89,6 +90,17 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1265"></a>
+### Meeting OS 1.2.65 — ekipteki hata ve çökmeler tek yerde toplanır
+
+2026-09-10 22:03 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "3–5 kişi kullanınca yaşanan hata/çökme gibi şeyleri de toplayalım ki görüp fixleyebilelim."
+- Her Mac'te maskelenmiş bir hata günlüğü (`errors.jsonl`): arayüzde gösterilen hatalar, iş/bulut/kayıt hataları, başarısız güncellemeler ve macOS çökme raporlarının özeti (süreç, sürüm, istisna türü, bizim koddaki üst 8 çerçeve). Transkript metni, ses, konuşmacı adı asla girmez; ev dizini yolları maskelenir; aynı hata 10 dakikada bir kez.
+- Saatlik nabızda `error_journal` (son 24 saat sayımları, son 5 satır, çökme sayısı); `reports summarize` her Mac için hata satırı; çökme → hata uyarısı, günde ≥5 hata → uyarı.
+- Ayarlar → Sistem → "Hatalar" kartı: son 5 kayıt, "Tanılama raporunu dışa aktar" (hata günlüğü ve çökme özetleri dahil), "Hata günlüğünü temizle". CLI: `errors list|clear`.
+- EKIP.md gizlilik bölümünde günlüğün içeriği ve bir sorunun nasıl bildirileceği.
 
 <a id="v1264"></a>
 ### Meeting OS 1.2.64 — Kontrol'de onaylanan sözlük düzeltmesi bir daha sorulmaz
