@@ -8,12 +8,20 @@ STOPWORDS={'ve','bir','bu','şu','o','ne','kaç','mi','mı','mu','mü','ile','i�
 
 
 RETIRED=('dismissed','superseded')   # a task the user removed by hand, or one a newer analysis of the same meeting left behind
+# The Turkish word for every task state, in one place: the digest, the share preview and the analysis export
+# used to keep their own copies, and an export that printed the raw 'in_progress' was the proof they drifted.
+STATE_LABELS={'open':'açık','in_progress':'devam ediyor','done':'tamamlandı','dismissed':'kaldırıldı','superseded':'yenilendi'}
+
+def state_label(state):
+    return STATE_LABELS.get(state,state)
 
 def owner_key(name):
     """Loose match for a person's name: case, İ/I/ı and diacritics do not separate "İlker", "Ilker" and "ilker".
-    `metrics.normalize` keeps ı and i apart (right for word error rates, wrong for a name typed two ways)."""
+    `metrics.normalize` keeps ı and i apart (right for word error rates, wrong for a name typed two ways).
+
+    The name this side of the code knows the rule by; `store.fold_name` is the rule."""
     from .store import fold_name
-    return fold_name(name or '').replace('ı','i')
+    return fold_name(name)
 
 def rename_task_owners(db,old,new,meeting=None,segments=None):
     """Move the tasks of a person whose label just changed onto the new spelling. Returns how many moved.
@@ -70,9 +78,6 @@ def score_and_hits(terms,text):
         total+=best
         if best:hits+=1
     return total,hits
-
-def match_score(terms,text):
-    return score_and_hits(terms,text)[0]
 
 def _title_tokens(text):
     # Short tokens are dropped as noise — except numbers: "10 Ekim" and "15 Ekim" are two different deadlines.

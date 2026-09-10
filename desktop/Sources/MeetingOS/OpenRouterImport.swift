@@ -61,10 +61,6 @@ enum OpenRouterCredential {
         if status==errSecDuplicateItem { status=SecItemUpdate(query as CFDictionary,[kSecValueData as String:Data(value.utf8)] as CFDictionary) }
         guard status==errSecSuccess else { throw failure("Anahtar macOS Anahtar Zinciri’ne kaydedilemedi (\(status)).") }
     }
-    static func forget() {
-        lock.lock(); memo=nil; keychainAsked=false; lastError=nil; lock.unlock()
-        try? FileManager.default.removeItem(at:cacheURL); SecItemDelete(query as CFDictionary)
-    }
     static func failure(_ message:String)->NSError { NSError(domain:"MeetingOS.OpenRouter",code:1,userInfo:[NSLocalizedDescriptionKey:message]) }
 }
 

@@ -3,12 +3,10 @@ decisions, risks and the tasks opened/closed in the period, with sources. Draft 
 nothing stored is changed; masking happens in the rendered text only."""
 from datetime import date, datetime, timezone
 from .insights import build_masker, local_day, prepared_header, source_line
-from .memory import Memory, RETIRED
-from .metrics import normalize
-from .intelligence import REVERSED_NOTE, row_person
+from .memory import Memory, RETIRED, STATE_LABELS
+from .intelligence import REVERSED_NOTE, row_label, row_person
 from .memory import owner_key
 
-STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı', 'superseded': 'yenilendi'}
 
 
 def parse_day(day):
@@ -48,10 +46,10 @@ def duration_label(seconds):
     return f'{minutes // 60} sa {minutes % 60:02d} dk'
 
 
-def meeting_line(store, memory, m):
+def meeting_line(store, memory, m, owner=None):
     rows = store.display_segments(m['id'])
     seconds = max((r['end'] for r in rows if r.get('end') is not None), default=0)
-    speakers = {r.get('speaker_name') or r.get('speaker') for r in rows}
+    speakers = {row_label(r, owner) for r in rows}   # the mic row is the owner, not a second anonymous "Ben"
     speakers.discard(None); speakers.discard(''); speakers.discard('unknown')
     latest = memory.latest(m['id'])
     return {'id': m['id'], 'title': m['title'], 'created': m['created'], 'status': m['status'], 'seconds': seconds,
@@ -70,7 +68,7 @@ def build_digest(store, day=None, owner=None, start=None, end=None, mask_names=F
     tasks = [t for t in period if wanted and owner_key(t.get('owner') or '') == wanted and t.get('state') not in RETIRED]
     lines = []; questions = []; decisions = []; risks = []; groups = []
     for m in meetings:
-        line, latest = meeting_line(store, memory, m)
+        line, latest = meeting_line(store, memory, m, owner)
         lines.append(line)
         payload = (latest or {}).get('payload') or {}
         pick = lambda key: [{'meeting': m['id'], 'title': m['title'], 'text': i.get('text'), 'evidence': i.get('evidence', []),

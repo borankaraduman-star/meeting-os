@@ -1,7 +1,6 @@
 """Transparent evaluation; rates are fractions, never percentages."""
 import re
 import unicodedata
-from collections import Counter
 
 def normalize(text):
     text = unicodedata.normalize('NFC', text).translate(str.maketrans({'I':'ı', 'İ':'i'})).lower()

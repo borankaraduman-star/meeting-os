@@ -130,6 +130,16 @@ def rename_owner_segments(store, old, new):
     return {'meetings': meetings, 'segments': segments, 'tasks': tasks, 'renamed_from': renamed} if segments or tasks else None
 
 
+def save_settings_with_rename(store, data_dir, changes):
+    """Save the settings, then relabel the mic rows a changed `user_name` left behind. The bridge and the CLI
+    both do this and both have to return the same counts, so it is written once."""
+    before = (load_settings(data_dir).get('user_name') or '').strip()
+    saved = save_settings(data_dir, changes)
+    # A name typed after the first meeting was already recorded has to reach that meeting too.
+    renamed = rename_owner_segments(store, before, saved.get('user_name')) if (saved.get('user_name') or '').strip() != before else None
+    return {**saved, 'renamed_meetings': (renamed or {}).get('meetings', 0), 'renamed_segments': (renamed or {}).get('segments', 0)}
+
+
 def host_name():
     """Stable, file-safe Mac name (System Settings → local hostname); falls back to the network hostname."""
     import subprocess
@@ -370,7 +380,9 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         'speakers': speakers, 'review_queue': kinds, 'analysis': analysis_summary, 'scorecard': identity_report(store), 'errors': _errors(Path(data_dir) / 'last-job.log'),
     }
     if include_text:
-        report['transcript'] = [{'start': r['start'], 'speaker': r.get('speaker_name') or r['speaker'], 'text': r.get('text')} for r in rows]
+        from .intelligence import row_label
+        owner = settings_owner(data_dir)
+        report['transcript'] = [{'start': r['start'], 'speaker': row_label(r, owner), 'text': r.get('text')} for r in rows]
     return report
 
 

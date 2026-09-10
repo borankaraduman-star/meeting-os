@@ -60,7 +60,7 @@ final class MarkerTests:XCTestCase {
 }
 final class UpdaterTests:XCTestCase {
     func testHeadlinesAndSettingsRoundTrip() {
-        let u=UpdateInfo.parse(["available":true,"behind":3,"subjects":["Fix a","Fix b"],"local":"aaa","remote":"bbb"])
+        let u=UpdateInfo.parse(["available":true,"behind":3,"subjects":["Fix a","Fix b"],"local":"aaa"])
         XCTAssertEqual(u.headline,"Yeni sürüm hazır · 3 değişiklik · Fix a")
         XCTAssertEqual(UpdateInfo.parse(["available":false,"local":"aaa"]).headline,"Güncel (aaa)")
         XCTAssertEqual(UpdateInfo.parse(["available":false,"dirty":true]).headline,"Yerel değişiklikler var; otomatik güncelleme kapalı")

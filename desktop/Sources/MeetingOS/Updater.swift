@@ -3,13 +3,13 @@ import Foundation
 /// One-click updates from the GitHub branch. The check is a `git fetch` done by the backend; the update
 /// itself runs in scripts/update.sh after the app quits, then relaunches the rebuilt, re-signed app.
 struct UpdateInfo:Equatable {
-    let available:Bool; let behind:Int; let subjects:[String]; let error:String; let local:String; let remote:String; let dirty:Bool
+    let available:Bool; let behind:Int; let subjects:[String]; let error:String; let local:String; let dirty:Bool
     /// A branch that carries commits GitHub has never seen cannot be fast-forwarded, so `scripts/update.sh`
     /// refuses and this Mac would otherwise sit on "güncel" forever while the setup card said "N değişiklik geride".
     /// `hint` is the bridge's own sentence when it has one; `ahead` is how many local commits caused it.
     let diverged:Bool; let ahead:Int; let hint:String
     static func parse(_ d:[String:Any])->UpdateInfo {
-        UpdateInfo(available:d["available"] as? Bool ?? false,behind:d["behind"] as? Int ?? 0,subjects:d["subjects"] as? [String] ?? [],error:d["error"] as? String ?? "",local:d["local"] as? String ?? "",remote:d["remote"] as? String ?? "",dirty:d["dirty"] as? Bool ?? false,diverged:d["diverged"] as? Bool ?? false,ahead:d["ahead"] as? Int ?? 0,hint:d["hint"] as? String ?? "")
+        UpdateInfo(available:d["available"] as? Bool ?? false,behind:d["behind"] as? Int ?? 0,subjects:d["subjects"] as? [String] ?? [],error:d["error"] as? String ?? "",local:d["local"] as? String ?? "",dirty:d["dirty"] as? Bool ?? false,diverged:d["diverged"] as? Bool ?? false,ahead:d["ahead"] as? Int ?? 0,hint:d["hint"] as? String ?? "")
     }
     /// The one sentence every screen uses for a diverged branch, so the sidebar, Ayarlar and the setup card agree.
     static let divergedMessage="Dal ayrışmış · yeni sürüm kurulamıyor · Boran’a bildirin"
@@ -27,7 +27,7 @@ struct UpdateInfo:Equatable {
         if dirty { return "Yerel değişiklikler var; otomatik güncelleme kapalı" }
         return "Güncel (\(local))"
     }
-    /// The sidebar keeps one line, not a card: "Sürüm 1.2.27 · güncel". `version` is
+    /// The sidebar keeps one line, not a card: "Sürüm <x.y.z> · güncel". `version` is
     /// CFBundleShortVersionString (empty in a plain `swift build`), so the git hash stands in for it.
     static func sidebarLine(version:String,info:UpdateInfo?)->String {
         let name=version.isEmpty ? (info?.local ?? "") : version

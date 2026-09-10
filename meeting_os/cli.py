@@ -300,11 +300,7 @@ def main(supervised=False):
                         elif k=='audio_retention_days': changes[k]=int(v) if v.strip().isdigit() else v
                         else: changes[k]=v.lower() in ('1','true','evet','on')
                     if not changes: output(reports.load_settings(DATA_DIR))
-                    else:
-                        before=(reports.load_settings(DATA_DIR).get('user_name') or '').strip()
-                        saved=reports.save_settings(DATA_DIR,changes)
-                        renamed=reports.rename_owner_segments(store,before,saved.get('user_name')) if (saved.get('user_name') or '').strip()!=before else None
-                        output({**saved,'renamed_meetings':(renamed or {}).get('meetings',0),'renamed_segments':(renamed or {}).get('segments',0)})
+                    else: output(reports.save_settings_with_rename(store,DATA_DIR,changes))
                 else:
                     if not args.meeting: raise ValueError('--meeting gerekli')
                     from . import __version__
@@ -313,19 +309,21 @@ def main(supervised=False):
                 from . import updater
                 output(updater.check(ROOT) if args.action=='check' else (updater.start(ROOT,DATA_DIR) if args.action=='start' else updater.status(DATA_DIR)))
             elif args.command=='glossary':
+                # The glossary is read from the folder --db points at, not the real data folder: `glossary.load`
+                # seeds vocabulary.txt on first read, and with DATA_DIR a test run wrote into the user's own data.
                 from . import glossary as G
                 if args.action=='import':
                     if not args.path: raise ValueError('glossary.jsonl yolu gerekli')
                     output(G.import_file(args.path,DATA_DIR,shared=True))
-                elif args.action=='show': output({'count':len(G.load(DATA_DIR,ROOT)),'entries':G.load(DATA_DIR,ROOT)[:50]})
-                elif args.action=='hint': output({'hint':G.stt_hint(G.load(DATA_DIR,ROOT))})
+                elif args.action=='show': output({'count':len(G.load(args.db.parent,ROOT)),'entries':G.load(args.db.parent,ROOT)[:50]})
+                elif args.action=='hint': output({'hint':G.stt_hint(G.load(args.db.parent,ROOT))})
                 else:
                     if not args.meeting: raise ValueError('--meeting gerekli')
                     llm=None
                     if args.openrouter_model:
                         from .openrouter import OpenRouterClient,validate_analysis_model
                         llm=OpenRouterClient().analysis(validate_analysis_model(args.openrouter_model),consent=True)
-                    entries=G.load(DATA_DIR,ROOT);suggestions=G.suggest_for_meeting(store,args.meeting,entries,llm)
+                    entries=G.load(args.db.parent,ROOT);suggestions=G.suggest_for_meeting(store,args.meeting,entries,llm)
                     applied=0
                     if args.apply and llm is not None:
                         for sg in list(suggestions):
@@ -346,7 +344,7 @@ def main(supervised=False):
                 from .openrouter import OpenRouterClient,validate_analysis_model
                 from .glossary import load as load_glossary, analysis_context
                 llm=OpenRouterClient().analysis(validate_analysis_model(args.openrouter_model),consent=True)
-                doc=build_document(store,args.meeting,args.kind,llm,glossary=analysis_context(load_glossary(DATA_DIR,ROOT)))
+                doc=build_document(store,args.meeting,args.kind,llm,glossary=analysis_context(load_glossary(args.db.parent,ROOT)))
                 if args.output: args.output.write_text(doc['text'],encoding='utf-8');output({'path':str(args.output),'sections':doc['sections'],'sources':doc['sources']})
                 else: print(doc['text'])
             elif args.command=='agenda':
@@ -358,7 +356,7 @@ def main(supervised=False):
                 from .digest import build_digest,render_digest
                 from . import glossary as G
                 from .reports import settings_owner
-                digest=build_digest(store,args.day,args.owner or settings_owner(args.db.parent),start=args.date_from,end=args.date_to,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None)
+                digest=build_digest(store,args.day,args.owner or settings_owner(args.db.parent),start=args.date_from,end=args.date_to,mask_names=args.mask_names,glossary=G.load(args.db.parent,ROOT) if args.mask_names else None)
                 text=render_digest(digest)
                 if args.output: args.output.write_text(text,encoding='utf-8');output({'path':str(args.output),'day':digest['day'],'from':digest['from'],'to':digest['to'],'masked_names':digest['masked_names'],'tasks':len(digest['tasks']),'questions':len(digest['questions']),'decisions':len(digest['decisions']),'risks':len(digest['risks']),'meetings':len(digest['meetings'])})
                 else: print(text)
@@ -371,12 +369,12 @@ def main(supervised=False):
             elif args.command=='decisions':
                 from .decisions import decision_log,export_decision_log
                 from . import glossary as G
-                if args.output: output(export_decision_log(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None))
+                if args.output: output(export_decision_log(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(args.db.parent,ROOT) if args.mask_names else None))
                 else: output(decision_log(store,args.query,args.limit))
             elif args.command=='questions':
                 from .questions import question_radar,export_question_radar
                 from . import glossary as G
-                if args.output: output(export_question_radar(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(DATA_DIR,ROOT) if args.mask_names else None))
+                if args.output: output(export_question_radar(store,args.output,query=args.query,limit=args.limit,mask_names=args.mask_names,glossary=G.load(args.db.parent,ROOT) if args.mask_names else None))
                 else: output(question_radar(store,args.query,args.limit))
             elif args.command=='scorecard':
                 from .scorecard import build_scorecard
@@ -389,7 +387,7 @@ def main(supervised=False):
                 from . import glossary as G
                 ids=lambda s:[int(x) for x in s.split(',') if x.strip()] if s else None
                 kinds=[k for k,off in (('transcript',args.no_transcript),('summary',args.no_summary)) if not off]
-                result=prepare_share(store,args.meeting,include_segments=ids(args.include_segments),exclude_segments=ids(args.exclude_segments),mask_names=args.mask_names,only_decisions=args.only_decisions,kinds=kinds,glossary=G.load(DATA_DIR,ROOT))
+                result=prepare_share(store,args.meeting,include_segments=ids(args.include_segments),exclude_segments=ids(args.exclude_segments),mask_names=args.mask_names,only_decisions=args.only_decisions,kinds=kinds,glossary=G.load(args.db.parent,ROOT))
                 if args.output: args.output.write_text(result['text'],encoding='utf-8');output({'path':str(args.output),'masked_names':result['masked_names'],'segments':result['segments']})
                 else: print(result['text'])
             elif args.command=='quality':
@@ -401,7 +399,7 @@ def main(supervised=False):
                 else:
                     from .openrouter import OpenRouterClient
                     from . import glossary as G
-                    entries=G.load(DATA_DIR,ROOT)
+                    entries=G.load(args.db.parent,ROOT)
                     output(quality.compare(store,args.model or ['microsoft/mai-transcribe-2'],OpenRouterClient(max_audio_bytes=24*1024*1024),consent=args.allow_upload,limit=args.limit,hint=G.stt_hint(entries) if entries else None))
             elif args.command=='meetings': output(store.meetings())
             elif args.command=='recovery':

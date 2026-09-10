@@ -1,5 +1,5 @@
 """Conservative admission checks for local inference on a shared Mac."""
-import json,subprocess,sys
+import json,os,subprocess,sys
 from pathlib import Path
 GIB=1024**3
 
@@ -20,8 +20,13 @@ def physical_memory():
     except (OSError,ValueError,subprocess.SubprocessError):return 0
 
 def check_pressure(allow_warning=False):
-    """allow_warning=True admits level 2 (warning) for light workers such as the voice embedder; critical still blocks."""
+    """allow_warning=True admits level 2 (warning) for light workers such as the voice embedder; critical still blocks.
+
+    MEETING_OS_TEST_IGNORE_PRESSURE=1 skips the check entirely so a test run on a busy Mac is not decided by
+    what else that Mac is doing. Tests only: `diagnostics` deliberately does NOT honour it, because a report
+    that says "pressure normal" has to mean the machine, never the environment it was asked in."""
     if sys.platform!='darwin':return
+    if os.environ.get('MEETING_OS_TEST_IGNORE_PRESSURE'):return
     try:level=int(subprocess.check_output(['/usr/sbin/sysctl','-n','kern.memorystatus_vm_pressure_level'],timeout=2,start_new_session=True))
     except (OSError,ValueError,subprocess.SubprocessError) as exc:
         raise ResourceProbeError(f"Bellek durumu okunamadı ({type(exc).__name__}); güvenlik için yerel model başlatılmadı.") from exc

@@ -34,7 +34,11 @@ public enum RecordingContinuity {
     /// written for a minute and the supervisor has already used up its relaunches.
     public static func interrupted(_ state: State) -> Bool {
         if state.capture == "error" { return true }
-        return state.relaunches >= relaunchBudget && (state.lastEventAge ?? 0) > staleSeconds
+        guard state.relaunches >= relaunchBudget else { return false }
+        // No age at all: the journal could not be read. That is unknown, not "written a moment ago" — with the
+        // relaunch budget already spent, treating it as fresh would hide a dead recording behind a missing stat.
+        guard let age = state.lastEventAge else { return true }
+        return age > staleSeconds
     }
 
     public static func notice(from previous: State, to current: State) -> String? {

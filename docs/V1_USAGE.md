@@ -1,8 +1,12 @@
-# Meeting OS V1 — yerel çalışma
+# Meeting OS V1 — kullanım
 
 ## Akış
 
-Kayıt → canlı transkript → nihai transkript → yerel analiz → kaynaklı özet/kararlar/riskler/sorular/görevler → elle doğrulama → yerel taslak → elle dosya dışa aktarımı.
+Varsayılan akış buluttur: kayıt → (canlı metin yok) → OpenRouter transkripti →
+bulut analizi → kaynaklı özet/kararlar/riskler/sorular/görevler → elle doğrulama →
+taslak → elle dosya dışa aktarımı. Ayarlar → Sistem → **Yazıya çevirme** yerel
+modele alınırsa akış canlı transkript ve yerel analizle bu Mac’te kalır; aşağıdaki
+CLI komutları her iki yolda da aynıdır.
 
 Konuşmacı adı ve metin düzenlemesi özet/görevleri eski işaretler. Güncel analizi yeniden oluşturun. Elle düzenlenen görev alanları ve durumlar korunur. Kaldırılan görevler geçmiş için kalır. Aynı başlık+alıntı görev kimliğini korur; başlık veya alıntısı farklı yeni çıkarımlar ayrı öneri olabilir. Kaldırıldı durumuyla tekrarları ayıklayabilirsiniz.
 

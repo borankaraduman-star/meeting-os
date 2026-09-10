@@ -1,6 +1,5 @@
 """Each case/config is a fresh process: isolates model memory and profile state."""
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys

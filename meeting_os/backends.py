@@ -1,7 +1,6 @@
 """Whisper adapters. All inference consumes previously downloaded local models."""
 from pathlib import Path
 import json
-import subprocess
 import tempfile
 import soundfile as sf
 from .audio import RATE
