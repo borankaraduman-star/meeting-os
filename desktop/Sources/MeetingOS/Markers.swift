@@ -20,7 +20,11 @@ enum Markers {
     /// Markers that fall inside a paragraph, with a one-second grace so a mark pressed just after a sentence still lands on it.
     static func inBlock(_ markers:[Marker],start:Double,end:Double)->[Marker] { markers.filter { $0.seconds>=start-1 && $0.seconds<=end+1 } }
     static func line(seconds:Double,kind:String,now:Date=Date())->String {
-        let payload:[String:Any]=["seconds":(seconds*10).rounded()/10,"kind":kind,"created":ISO8601DateFormatter().string(from:now)]
+        // `wall` is the absolute moment the key was pressed: `seconds` counts from the app's record start, which
+        // is a second or two ahead of the capture helper's own timeline, and finalize needs one shared origin
+        // before it can subtract the sleep and relaunch seconds that never reached the audio clock.
+        let payload:[String:Any]=["seconds":(seconds*10).rounded()/10,"kind":kind,"created":ISO8601DateFormatter().string(from:now),
+                                  "wall":(now.timeIntervalSince1970*1000).rounded()/1000]
         return (try? String(data:JSONSerialization.data(withJSONObject:payload),encoding:.utf8)) ?? "{}"
     }
 }

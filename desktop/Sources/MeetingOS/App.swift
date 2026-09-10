@@ -121,7 +121,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var markerCount=0
     /// ⌘M while recording: append one line to markers.jsonl in the capture folder; nothing else changes.
     func markMoment(_ kind:String) {
-        guard recording, let dir=recordingDir, let started=jobStarted else { return }
+        // `jobStarted` belongs to finalize/analyze jobs and is nil while recording, so ⌘M wrote nothing at all —
+        // and wrote against the wrong origin whenever such a job happened to be running. The recording's own start is the origin.
+        guard recording, let dir=recordingDir, let started=recordStartedAt else { return }
         let seconds=Date().timeIntervalSince(started)
         let url=dir.appendingPathComponent("markers.jsonl")
         let line=Markers.line(seconds:seconds,kind:kind)+"\n"

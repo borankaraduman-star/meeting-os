@@ -239,8 +239,9 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     def prepare(position):
         """Main-thread decision per piece: skip (echo/silent) or hand encoded audio to an upload worker."""
         source,a,b,index=plan[position];path=sources[source]
-        if source=='mic' and 'system' in sources and not is_silent(path,a,b) and is_echo(path,sources['system'],a,b): return ('skip',{'skipped':'echo'})
-        if is_silent(path,a,b): return ('skip',{'skipped':'silent'})
+        silent=is_silent(path,a,b)   # one pass over the window: the echo branch and the silence branch ask the same question
+        if source=='mic' and 'system' in sources and not silent and is_echo(path,sources['system'],a,b): return ('skip',{'skipped':'echo'})
+        if silent: return ('skip',{'skipped':'silent'})
         audio=encode_piece(path,a,b,ffmpeg)
         if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
         return ('upload',audio)
@@ -521,17 +522,80 @@ def assign_identities(scored):
     return assignment
 
 
+MARKER_DRIFT_FLOOR=1.0   # under a second is launch jitter and write latency, not a clock that ran away
+
+def wall_audio_drift(capture_dir, journal='capture-native.jsonl'):
+    """How far the wall clock has run ahead of the recording's audio timeline, sampled at every finalized chunk.
+
+    Chunk `start` values are elapsed audio on the capture host clock. That clock stops while the Mac sleeps, and
+    a relaunched helper splices its own timeline onto the last finalized chunk (`--start-offset`), so the retire
+    grace and the relaunch wait are compressed out of it as well. Every journal line also carries the wall clock
+    it was written on, so the difference between the two clocks is measured here, not inferred from event counts.
+
+    Returns (origin_wall, [(wall_elapsed, drift)]) in journal order. A journal from a build that did not stamp
+    `wall`, or one that does not begin with its own `started` line, returns (None, []) — then nothing is
+    corrected and markers stay exactly as the app wrote them."""
+    try: lines=(Path(capture_dir)/journal).read_text(encoding='utf-8',errors='replace').splitlines()
+    except OSError: return None,[]
+    origin=None;base=None;out=[]
+    for line in lines:
+        try: event=json.loads(line)
+        except ValueError: continue
+        if not isinstance(event,dict): continue
+        wall=event.get('wall')
+        stamped=type(wall) in (int,float) and math.isfinite(wall)
+        if origin is None:
+            # The first line of a capture folder is the first helper's `started`; a relaunched helper appends to
+            # the same file, so this stays the origin of the one meeting even across relaunches. A journal that
+            # opens any other way (an older build, a helper that died before starting) is not measurable.
+            if not stamped or event.get('event')!='started': return None,[]
+            origin=float(wall);continue
+        if not stamped: continue
+        if event.get('event')!='chunk': continue
+        start,duration=event.get('start'),event.get('duration')
+        if type(start) not in (int,float) or type(duration) not in (int,float): continue
+        if not (math.isfinite(start) and math.isfinite(duration)): continue
+        measured=(float(wall)-origin)-(float(start)+float(duration))
+        # The audio timeline's origin is set before `started` reaches the journal, and a chunk is announced a
+        # moment after its last sample: the first chunk carries both constants, so it is the zero of the curve.
+        if base is None: base=measured
+        out.append((float(wall)-origin,max(0.0,measured-base)))
+    return origin,out
+
+
+def drift_before(samples, seconds):
+    """Drift accumulated by the time the wall clock read `seconds`. Each chunk is an independent measurement, so
+    a single slow fsync moves one marker slightly instead of poisoning every later one."""
+    value=0.0
+    for wall_elapsed,drift in samples:
+        if wall_elapsed>seconds: break
+        value=drift
+    return round(value,1) if value>=MARKER_DRIFT_FLOOR else 0.0
+
+
 def read_markers(capture_dir, limit=200):
-    """Moments the user marked with ⌘M while recording: {seconds, kind, created}. Written by the app, read once here."""
+    """Moments the user marked with ⌘M while recording: {seconds, kind, created}. The app stamps them on the wall
+    clock; the transcript runs on the audio timeline, which sleep freezes and a relaunch splices. The measured
+    difference is subtracted here, so a marker pressed after a five-minute lid-close still lands on the sentence
+    it was meant for instead of five minutes past it. `wall_seconds` keeps the uncorrected value when it moved."""
     path=Path(capture_dir)/'markers.jsonl'
     if not path.is_file(): return []
+    origin,samples=wall_audio_drift(capture_dir)
     out=[]
     for line in path.read_text(encoding='utf-8').splitlines()[:limit]:
         try: d=json.loads(line)
         except ValueError: continue
         secs=d.get('seconds');kind=d.get('kind')
         if isinstance(secs,(int,float)) and math.isfinite(secs) and secs>=0 and kind in ('important','decision','task','later'):
-            out.append({'seconds':round(float(secs),1),'kind':kind,'created':d.get('created')})
+            wall=round(float(secs),1)
+            # `seconds` counts from the app's record start; the drift curve counts from the helper's. When the
+            # marker carries its absolute moment, both are put on the helper's origin first.
+            stamp=d.get('wall')
+            if origin is not None and type(stamp) in (int,float) and math.isfinite(stamp) and stamp>=origin: wall=round(float(stamp)-origin,1)
+            shift=drift_before(samples,wall)
+            marker={'seconds':round(max(0.0,wall-shift),1),'kind':kind,'created':d.get('created')}
+            if shift: marker['wall_seconds']=wall
+            out.append(marker)
     return out
 
 
