@@ -11,6 +11,7 @@ import re
 import shutil
 import socket
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from .capture_metrics import journal_events
@@ -60,8 +61,8 @@ def save_settings(data_dir, changes):
         elif key == 'user_name' and isinstance(value, str) and 0 < len(value.strip()) <= NAME_LIMIT: current[key] = value.strip()
         # An unreachable team folder is refused rather than stored: the app would silently stop sharing.
         elif key == 'team_dir' and isinstance(value, str) and (not value.strip() or Path(value.strip()).expanduser().is_dir()): current[key] = value.strip()
-    Path(data_dir).mkdir(parents=True, exist_ok=True)
-    settings_path(data_dir).write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding='utf-8')
+    Path(data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
+    publish(settings_path(data_dir), json.dumps(current, ensure_ascii=False, indent=2))   # the report folder and the team folder live in here
     return current
 
 
@@ -102,6 +103,57 @@ def host_dir(settings):
     return report_root(settings) / host_name()
 
 
+PRIVATE_MODE = 0o600
+SHARED_MODE = 0o644          # inside a team folder: a teammate has to be able to open the file
+SHARED_DIR_MODE = 0o755
+
+
+def publish(path, text, *, shared=False):
+    """Write a file AT a mode. Path.write_text keeps whatever mode the file already had, so a report folder that
+    was once world-readable stayed world-readable for the life of the Mac; a fresh temp file plus os.replace
+    settles the mode on every write. Inside a team folder the mode is 0644 on purpose."""
+    path = Path(path); temporary = None
+    try:
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, prefix='.'+path.name+'.', delete=False) as out:
+            temporary = Path(out.name); os.fchmod(out.fileno(), SHARED_MODE if shared else PRIVATE_MODE)
+            out.write(text); out.flush(); os.fsync(out.fileno())
+        os.replace(temporary, path); temporary = None
+    finally:
+        if temporary is not None: temporary.unlink(missing_ok=True)
+    return path
+
+
+def prepare_folder(settings):
+    """(folder, shared) for this host's report folder. mkdir's `mode` is masked by the umask, and the bridge runs
+    under 077, so a team folder created that way came out 0700 and no teammate could list it. chmod says it
+    outright, on the host folder and on the `reports` root above it."""
+    folder = host_dir(settings); shared = bool(team_dir(settings))
+    folder.mkdir(parents=True, exist_ok=True)
+    for target in ((folder, folder.parent) if shared else (folder,)):
+        try: target.chmod(SHARED_DIR_MODE if shared else 0o700)
+        except OSError: pass   # a network volume or a synced folder may refuse; sharing still works
+    return folder, shared
+
+
+TIGHTEN_FILES = (SETTINGS_FILE, 'probe-last.json', 'last-job.log')
+
+
+def tighten_modes(data_dir):
+    """Pull the personal files back to 0600 and the data folder to 0700. Anything written before this Mac learned
+    to publish at a fixed mode keeps its old, wider mode forever. The team folder is deliberately left alone."""
+    data = Path(data_dir); fixed = []
+    try:
+        data.chmod(0o700); fixed.append(str(data))
+    except OSError: pass
+    try: personal = Path(load_settings(data_dir)['report_dir']) / host_name() / HEARTBEAT_FILE
+    except Exception: personal = None
+    for path in [data/name for name in TIGHTEN_FILES] + ([personal] if personal else []):
+        try:
+            if path.is_file() and (path.stat().st_mode & 0o777) != PRIVATE_MODE: path.chmod(PRIVATE_MODE); fixed.append(str(path))
+        except OSError: pass
+    return fixed
+
+
 def _errors(log_path, limit=8):
     if not Path(log_path).is_file(): return []
     out = []
@@ -133,12 +185,10 @@ def write_recording_heartbeat(data_dir, state):
     try:
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
-        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True, mode=0o755 if team_dir(settings) else 0o700)   # a team folder is meant to be read by teammates
+        folder, shared = prepare_folder(settings)
         payload = {'recording_heartbeat_version': 1, 'host': host_name(), 'written': datetime.now(timezone.utc).isoformat(), **state}
         payload['line'] = recording_line(payload)
-        target = folder / RECORDING_HEARTBEAT_FILE
-        target.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding='utf-8')
-        return str(target)
+        return str(publish(folder / RECORDING_HEARTBEAT_FILE, json.dumps(payload, ensure_ascii=False, indent=1), shared=shared))
     except Exception: return None
 
 
@@ -187,8 +237,8 @@ def capture_block(directory, duration_seconds=0.0):
             if kind == 'gap': gaps += 1
             elif kind == 'chunk' and isinstance(event.get('source'), str):
                 announced[event['source']] = announced.get(event['source'], 0) + 1
-        from .capture_metrics import capture_health
-        health = capture_health(events)
+        from .capture_metrics import journal_counters
+        health = journal_counters(journal)   # counted over the whole journal; `gaps` below stays the tail's own count
         expected = math.ceil(float(duration_seconds or 0)/CHUNK_SECONDS)
         # restarts/relaunches/wakes are how the owner sees, after the fact, that the recording survived something.
         return {'chunk_files': chunks, 'announced_chunks': announced, 'expected_chunks': expected, 'chunk_seconds': CHUNK_SECONDS,
@@ -211,7 +261,12 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         sp['segments'] += 1; sp['seconds'] += float(r['end'] - r['start']); sp['clusters'].add((r.get('metrics') or {}).get('cluster'))
         ident = (r.get('metrics') or {}).get('identity') or {}
         if ident.get('similarity') is not None: sp['similarity'] = round(float(ident['similarity']), 3); sp['suggested'] = ident.get('suggested')
-    for sp in speakers.values(): sp['clusters'] = len(sp['clusters']); sp['seconds'] = round(sp['seconds'], 1)
+    for sp in speakers.values(): sp['clusters'] = len(sp['clusters']); sp['seconds'] = round(sp['seconds'], 1); sp['named'] = bool(sp['name'])
+    if not include_text:
+        # The Settings caption promises "yalnız sayı, puan, maliyet, model adı ve hata satırı". A meeting title
+        # and a person's name are content, and this file lands in iCloud Drive or the team folder; the counts,
+        # the similarity and whether the cluster was named at all survive, the identity does not.
+        speakers = {f'S{i}': {**sp, 'name': None, 'suggested': None} for i, sp in enumerate(speakers.values(), 1)}
     from .review import review_queue
     from .quality import identity_report
     queue = review_queue(store, mid)
@@ -225,7 +280,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
     duration = round(max((r['end'] for r in rows), default=0.0), 1)
     report = {
         'report_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
-        'written': datetime.now(timezone.utc).isoformat(), 'meeting': row['id'], 'title': row['title'], 'created': row['created'], 'status': row['status'],
+        'written': datetime.now(timezone.utc).isoformat(), 'meeting': row['id'], 'title': row['title'] if include_text else None, 'created': row['created'], 'status': row['status'],
         'engine': meta.get('engine'), 'model': meta.get('model'), 'cloud_mode': meta.get('cloud_mode'),
         'duration_seconds': duration, 'segments': len(rows), 'words': sum(len((r.get('text') or '').split()) for r in rows),
         'capture': capture_block(meta.get('capture_dir'), duration),
@@ -247,10 +302,8 @@ def write_meeting_report(store, mid, data_dir, *, version=None, commit=None):
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
         report = build_meeting_report(store, mid, data_dir, include_text=bool(settings.get('share_text')), version=version, commit=commit)
-        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True, mode=0o755 if team_dir(settings) else 0o700)   # a team folder is meant to be read by teammates
-        target = folder / f"{report['created'][:10]}_{mid}.json"
-        target.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding='utf-8')
-        return str(target)
+        folder, shared = prepare_folder(settings)
+        return str(publish(folder / f"{report['created'][:10]}_{mid}.json", json.dumps(report, ensure_ascii=False, indent=1), shared=shared))
     except Exception as exc:  # reporting must never break a job
         import sys; print(f'Meeting OS: Rapor yazılamadı: {type(exc).__name__}', file=sys.stderr); return None
 
@@ -302,7 +355,7 @@ def build_heartbeat(store, data_dir, *, app=None):
     }
 
 
-PROBE_CACHE = 'probe-last.json'
+PROBE_CACHE = 'probe-last.json'   # kept in step with TIGHTEN_FILES above
 PROBE_EVERY_SECONDS = 24*3600
 
 
@@ -322,7 +375,7 @@ def daily_probe(data_dir, *, now=None, force=False):
         from .cli import ROOT
         result = run(ROOT, data)
         last = {'ok': result['ok'], 'failed': result['failed'], 'warnings': result['warnings'], 'summary': summary_line(result), 'at': result['at']}
-        cache.write_text(json.dumps(last, ensure_ascii=False), encoding='utf-8')
+        publish(cache, json.dumps(last, ensure_ascii=False))
     except Exception as exc:  # observability must never break the app
         last = {'ok': False, 'failed': ['probe'], 'warnings': [], 'summary': f'Öz-test çalıştırılamadı: {type(exc).__name__}', 'at': now.isoformat()}
     return last
@@ -334,10 +387,8 @@ def write_heartbeat(store, data_dir, *, app=None):
     try:
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
-        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True, mode=0o755 if team_dir(settings) else 0o700)   # a team folder is meant to be read by teammates
-        target = folder / HEARTBEAT_FILE
-        target.write_text(json.dumps(build_heartbeat(store, data_dir, app=app), ensure_ascii=False, indent=1), encoding='utf-8')
-        return str(target)
+        folder, shared = prepare_folder(settings)
+        return str(publish(folder / HEARTBEAT_FILE, json.dumps(build_heartbeat(store, data_dir, app=app), ensure_ascii=False, indent=1), shared=shared))
     except Exception as exc:  # observability must never break the app
         import sys; print(f'Meeting OS: Nabız yazılamadı: {type(exc).__name__}', file=sys.stderr); return None
 
@@ -371,7 +422,7 @@ def summarize(report_dir, limit=30):
     for path in sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
         try: r = json.loads(path.read_text(encoding='utf-8'))
         except ValueError: continue
-        named = sum(1 for s in (r.get('speakers') or {}).values() if s.get('name'))
+        named = sum(1 for s in (r.get('speakers') or {}).values() if s.get('named') or s.get('name'))   # `name` only in older reports and share_text ones
         out.append({'host': r.get('host'), 'file': path.name, 'title': r.get('title'), 'status': r.get('status'), 'duration_min': round((r.get('duration_seconds') or 0) / 60, 1), 'cost_usd': r.get('cost_usd'), 'model': r.get('model'),
                     'speakers': len(r.get('speakers') or {}), 'named': named, 'review': r.get('review_queue'), 'analysis': (r.get('analysis') or {}).get('counts'), 'errors': len(r.get('errors') or []), 'commit': r.get('commit'), 'app_version': r.get('app_version')})
     hosts = {}

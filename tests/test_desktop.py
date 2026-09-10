@@ -210,10 +210,14 @@ class DesktopTests(unittest.TestCase):
    s.status(mid,'complete');(data/'last-job.log').write_text('ok\nMeeting OS: OpenRouter HTTP 500. deneme /Users/boran/x\n');s.close()
    path=dispatch({'action':'report_write','meeting':mid},db)['path'];self.assertTrue(path.endswith(f'_{mid}.json'))
    r=json.loads(Path(path).read_text())
-   self.assertEqual((r['cost_usd'],r['pieces_skipped'],r['segments'],r['speakers']['Konuşmacı 1']['name']),(0.002,1,2,'Ayşe'))
+   # share_text off: numbers only. The name and the title are content and this file is shared (P0-1).
+   self.assertEqual((r['cost_usd'],r['pieces_skipped'],r['segments'],r['title']),(0.002,1,2,None))
+   self.assertEqual((r['speakers']['S1']['name'],r['speakers']['S1']['named'],r['speakers']['S1']['similarity']),(None,True,0.95))
+   self.assertNotIn('Ayşe',Path(path).read_text(encoding='utf-8'));self.assertNotIn('Sprint',Path(path).read_text(encoding='utf-8'))
    self.assertNotIn('transcript',r);self.assertIn('/Users/…',r['errors'][0]);self.assertEqual(r['review_queue'].get('unnamed_speaker'),1)
    reports.save_settings(data,{'share_text':True});dispatch({'action':'report_write','meeting':mid},db)
-   self.assertEqual(json.loads(Path(path).read_text())['transcript'][0]['speaker'],'Ayşe')
+   shared=json.loads(Path(path).read_text())
+   self.assertEqual((shared['transcript'][0]['speaker'],shared['title'],shared['speakers']['Konuşmacı 1']['name']),('Ayşe','Sprint','Ayşe'))
    summary=dispatch({'action':'reports_summary'},db);self.assertEqual(summary['reports'][0]['named'],1);self.assertEqual(list(summary['hosts'].values())[0]['reports'],1)
    reports.save_settings(data,{'share_reports':False});self.assertIsNone(reports.write_meeting_report(Store(db),mid,data))
    self.assertTrue(Path(path).exists());self.assertEqual(dispatch({'action':'delete_meeting','meeting':mid},db)['removed_reports'],[path]);self.assertFalse(Path(path).exists())
@@ -536,3 +540,19 @@ class CloudRetryQueueTests(unittest.TestCase):
             self.assertEqual(len(dispatch({'action':'retry_candidates'},db)['candidates']),1)
             with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
                 self.assertEqual(dispatch({'action':'retry_candidates'},db),{'candidates':[],'blocked':[],'low_priority':True})
+
+class CommandLineFallbackTests(unittest.TestCase):
+    """The app hands user-typed values over the environment instead of argv: a question can start with '-' or
+    hold a newline, and on macOS every process can read another process's command line."""
+    def _parse(self,env,argv):
+        import os
+        from unittest.mock import patch
+        from meeting_os.cli import parser
+        with patch.dict(os.environ,env,clear=False): return parser().parse_args(argv)   # the default is read per call
+    def test_the_question_comes_from_the_environment_when_argv_has_none(self):
+        self.assertEqual(self._parse({'MEETING_OS_QUESTION':'Karar ne oldu?'},['ask']).question,'Karar ne oldu?')
+        self.assertEqual(self._parse({'MEETING_OS_QUESTION':'Karar ne oldu?'},['ask','Baska soru']).question,'Baska soru')   # argv still wins
+        self.assertIsNone(self._parse({},['ask']).question)
+    def test_the_import_audio_path_comes_from_the_environment_and_stays_a_path(self):
+        self.assertEqual(self._parse({'MEETING_OS_AUDIO_PATH':'/tmp/kayit.wav'},['openrouter-import']).audio,Path('/tmp/kayit.wav'))
+        self.assertIsNone(self._parse({},['openrouter-import']).audio)

@@ -37,8 +37,8 @@ def capture_state(metadata, include_signal=False):
         if e.get('event') in ('started','chunk','restarted'): state='capturing'
         elif e.get('event') in ('error','stopped'):state=e['event']
     result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
-    from .capture_metrics import capture_health
-    health=capture_health(events)
+    from .capture_metrics import journal_counters
+    health=journal_counters(path)   # the whole journal: these lines fall out of the 64 KB tail on a long meeting
     # What the owner needs to see during and after a meeting: the stream was rebuilt, the whole helper was
     # replaced, the Mac slept — and how many seconds that cost. Zeros stay out of the poll payload.
     for key in ('restarts','relaunches','wakes','gap_seconds','wake_gap_seconds'):
@@ -53,6 +53,9 @@ def capture_state(metadata, include_signal=False):
         latest={e.get('source'):e for e in events if e.get('event')=='chunk'}
         result['signals']={source:inspect_signal(latest[source].get('path',''),directory) if source in latest else {'state':'unavailable'} for source in ('mic','system')}
     return result
+
+
+_TIGHTENED=False   # the hourly heartbeat action tightens the personal file modes once per bridge run
 
 
 # Statuses whose display still depends on the capture folder and the job owner.
@@ -360,7 +363,10 @@ def dispatch(request, db=None):
             if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
             if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
-            if action=='heartbeat': return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
+            if action=='heartbeat':
+                global _TIGHTENED
+                if not _TIGHTENED: reports.tighten_modes(base); _TIGHTENED=True   # once a run: files written before the mode was fixed stay 0644 forever
+                return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G

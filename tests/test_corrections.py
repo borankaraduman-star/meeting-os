@@ -354,3 +354,96 @@ class PrivacySweepTests(unittest.TestCase):
             meta2=db.delete_meeting(mid2)
             self.assertTrue(ws2.exists()); self.assertEqual(len(meta2['retry_workspaces']['kept']),1)
             db.close()
+
+
+class RenameHistoryTests(unittest.TestCase):
+    """A cluster the user names more than once. Every naming must take back only what it replaces: the verdicts
+    this same cluster filed earlier, the sample this same naming stored, the evidence it produced once."""
+    def _voice(self, seed):
+        import random
+        rnd=random.Random(seed); return [rnd.uniform(-1,1) for _ in range(8)]
+    def _cluster(self, db, mid, vector, speaker='system:S1', name=None, suggested=None, cluster='0:S1'):
+        seg=Segment(0,12,'uzun bir konuşma','system',speaker,metrics={'cluster':cluster,'identity':{'name':name,'suggested':suggested}},flags=['cloud_diarization'])
+        seg.embedding=vector; seg.embedding_model='m'
+        sid=db.add_segment(mid,seg)
+        if name: db.db.execute('UPDATE segments SET speaker_name=? WHERE id=?',(name,sid)); db.db.commit()
+        return sid
+    def test_renaming_back_to_the_first_person_lifts_that_clusters_own_veto(self):
+        """Ali → Veli → Ali. The veto the middle naming filed is this cluster's own verdict about Ali, so naming
+        the cluster Ali again has to cancel it: a rejection outranks any score, and Ali never came back."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            ali=self._voice(21); db.enroll('Ali',ali,'m',10,'manual')
+            db.add_sample_if_new('Ali',ali,'m',12,f'auto:{mid}:0:S1')
+            self._cluster(db,mid,ali,name='Ali')
+            db.enroll_speaker(mid,'system:S1','Veli')
+            self.assertEqual(db.identify(ali,'m',threshold=0.5,margin=0.0)['name'],'Veli')
+            self.assertEqual(db.db.execute("SELECT count(*) FROM rejections WHERE name='Ali'").fetchone()[0],1)
+            db.enroll_speaker(mid,'system:S1','Ali')
+            self.assertEqual(db.db.execute("SELECT count(*) FROM rejections WHERE name='Ali'").fetchone()[0],0)
+            self.assertEqual(db.identify(ali,'m',threshold=0.5,margin=0.0)['name'],'Ali')
+            self.assertEqual({p['name']:p['samples'] for p in db.profiles()}['Ali'],3)   # manual + the un-hidden auto one + the cluster
+            db.close()
+    def test_a_speaker_label_is_matched_whole_not_as_a_prefix(self):
+        """The rejection dedupe asked for provenance LIKE "…:speaker:S1%", which "…:speaker:S10@<time>" answers.
+        Naming S1 after S10 therefore filed no veto of its own and the wrong person stayed matchable."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            first=self._voice(22); second=self._voice(23)
+            db.enroll('Ali',first,'m',10,'manual')
+            self._cluster(db,mid,second,speaker='S10',name='Ali',cluster='0:S10')   # the model called both clusters Ali
+            self._cluster(db,mid,first,speaker='S1',name='Ali',cluster='0:S1')
+            db.enroll_speaker(mid,'S10','Deniz')
+            db.enroll_speaker(mid,'S1','Veli')
+            self.assertEqual(db.db.execute("SELECT count(*) FROM rejections WHERE name='Ali'").fetchone()[0],2)
+            self.assertNotEqual(db.identify(first,'m',threshold=0.5,margin=0.0)['name'],'Ali')
+            db.close()
+    def test_a_wildcard_in_a_speaker_label_stays_literal(self):
+        self.assertEqual(Store._mark_patterns('abc','%_x'),('abc:speaker:\\%\\_x@%','abc:speaker:%_x'))
+    def test_undo_deletes_only_the_sample_this_naming_stored(self):
+        """enroll_speaker skips the insert when the slot is already filled, but undo deleted by (name,
+        provenance) regardless — so undoing the second naming destroyed the first naming's sample."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            self._cluster(db,mid,self._voice(24))
+            db.enroll_speaker(mid,'system:S1','Ayşe')
+            first=db.db.execute("SELECT id FROM samples WHERE name='Ayşe'").fetchone()[0]
+            again=db.enroll_speaker(mid,'system:S1','Ayşe')   # the same person again: the slot is filled, no new sample
+            self.assertFalse(again['profile_saved'])
+            self.assertIsNone(json.loads(db.db.execute('SELECT feedback FROM corrections ORDER BY id DESC LIMIT 1').fetchone()[0])['sample_id'])
+            db.undo_correction(mid)
+            self.assertEqual([r[0] for r in db.db.execute('SELECT id FROM samples WHERE deleted_by IS NULL')],[first])
+            self.assertEqual(db.segments(mid)[0]['speaker_name'],'Ayşe')
+            db.close()
+    def test_one_automatic_mistake_is_convicted_once_however_often_the_user_renames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            veli=self._voice(25); db.enroll('Veli',veli,'m',10,'manual')
+            self._cluster(db,mid,veli,name='Veli')
+            for typed in ('Kaya','Deniz','Ece'): db.correct(mid,'system:S1',typed)
+            self.assertEqual(db.db.execute("SELECT wrong FROM profile_stats WHERE name='Veli'").fetchone()[0],1)
+            self.assertAlmostEqual(db.person_threshold('Veli',0.87),0.89)   # one mistake, not three
+            identity=db.segments(mid)[0]['metrics']['identity']
+            self.assertEqual((identity['settled'],identity['name']),('Ece','Veli'))   # judged once; the guess stays readable for the scorecard
+            db.close()
+    def test_a_confirmed_suggestion_is_counted_once_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            ali=self._voice(26); db.enroll('Ali',ali,'m',10,'manual')
+            self._cluster(db,mid,ali,suggested='Ali')
+            for _ in range(3): db.correct(mid,'system:S1','Ali')
+            self.assertEqual(db.db.execute("SELECT confirmed FROM profile_stats WHERE name='Ali'").fetchone()[0],1)
+            db.close()
+    def test_undo_restores_a_label_no_rejection_ever_recorded(self):
+        """"Ayşe" retyped as "Ayse" is a confirmation, so nothing is rejected and previous_name stayed NULL —
+        undo then blanked a label the user had never removed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            self._cluster(db,mid,self._voice(27))
+            db.correct(mid,'system:S1','Ayşe')
+            db.correct(mid,'system:S1','Ayse')
+            self.assertEqual(db.db.execute('SELECT previous_name FROM corrections ORDER BY id DESC LIMIT 1').fetchone()[0],'Ayşe')
+            db.undo_correction(mid)
+            self.assertEqual(db.segments(mid)[0]['speaker_name'],'Ayşe')
+            db.close()
+

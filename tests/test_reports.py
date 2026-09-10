@@ -71,6 +71,45 @@ class CaptureBlockTests(unittest.TestCase):
             self.assertIsNone(reports.build_meeting_report(s,other,data)['capture'])
             s.close()
 
+class ReportPrivacyTests(unittest.TestCase):
+    """The Settings caption promises numbers only. The report is written into iCloud Drive or a team folder, so
+    the meeting title and the people in it stay out of it unless the user turns transcript sharing on."""
+    def _meeting(self,data):
+        s=Store(data/'meeting-os.sqlite');mid=s.create_meeting('Yatırımcı görüşmesi',{})
+        s.add_segment(mid,Segment(0,10,'Merhaba','system','Konuşmacı 1',metrics={'cluster':0,'identity':{'similarity':0.91,'suggested':'Ayşe Yılmaz','name':None}}))
+        s.add_segment(mid,Segment(10,20,'Evet','system','Konuşmacı 2',metrics={'cluster':1}))
+        s.correct(mid,'Konuşmacı 1','Ayşe Yılmaz');s.status(mid,'complete')
+        return s,mid
+    def test_the_title_and_the_names_are_left_out_unless_transcript_sharing_is_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s,mid=self._meeting(data)
+            report=reports.build_meeting_report(s,mid,data)
+            blob=json.dumps(report,ensure_ascii=False)
+            self.assertIsNone(report['title'])
+            self.assertNotIn('Yatırımcı görüşmesi',blob);self.assertNotIn('Ayşe Yılmaz',blob)
+            self.assertEqual(sorted(report['speakers']),['S1','S2'])
+            first=report['speakers']['S1']
+            self.assertEqual((first['segments'],first['seconds'],first['clusters']),(1,10.0,1))
+            self.assertEqual((first['similarity'],first['named'],first['name'],first['suggested']),(0.91,True,None,None))
+            self.assertFalse(report['speakers']['S2']['named'])
+            s.close()
+    def test_transcript_sharing_brings_the_title_and_the_real_labels_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s,mid=self._meeting(data)
+            report=reports.build_meeting_report(s,mid,data,include_text=True)
+            self.assertEqual(report['title'],'Yatırımcı görüşmesi')
+            self.assertEqual(report['speakers']['Konuşmacı 1']['name'],'Ayşe Yılmaz')
+            self.assertEqual(report['transcript'][0]['speaker'],'Ayşe Yılmaz')
+            s.close()
+    def test_the_written_report_carries_the_same_redaction_and_the_digest_still_counts_named_people(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s,mid=self._meeting(data)
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run): path=reports.write_meeting_report(s,mid,data)
+            self.assertNotIn('Ayşe Yılmaz',Path(path).read_text(encoding='utf-8'))
+            self.assertEqual(reports.summarize(str(data/'shared'))['reports'][0]['named'],1)
+            s.close()
+
 class HeartbeatTests(unittest.TestCase):
     def test_heartbeat_is_one_file_per_host_with_sizes_disk_and_thermal(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -286,3 +325,66 @@ class TeamGlossaryTests(unittest.TestCase):
             self.assertNotIn('team',G.import_file(source,data))
             self.assertEqual(self.team_terms(team/G.FILENAME),['PMD','OKR','CAC'])
             self.assertIn('LTV',[e['term'] for e in G.load(data)])                       # the local copy is still written
+
+
+class FileModeTests(unittest.TestCase):
+    """Path.write_text keeps whatever mode a file already had, so one file created before umask 077 (or by an
+    older build) stayed group- and world-readable for the life of the Mac. A team folder is the deliberate
+    exception: teammates cannot read a 0700 folder."""
+    def mode(self,path): return Path(path).stat().st_mode & 0o777
+    def test_the_personal_files_are_published_at_0600_over_a_wider_predecessor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir()
+            reports.settings_path(data).write_text('{}',encoding='utf-8');reports.settings_path(data).chmod(0o644)
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            self.assertEqual(self.mode(reports.settings_path(data)),0o600)
+            s=Store(data/'meeting-os.sqlite');s.create_meeting('x',{})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run),patch('meeting_os.reports.daily_probe',return_value=None):
+                beat=reports.write_heartbeat(s,data)
+                report_dir=Path(beat).parent
+                (report_dir/'eski.json').write_text('{}');(report_dir/'eski.json').chmod(0o644)
+                self.assertEqual(self.mode(beat),0o600);self.assertEqual(self.mode(report_dir),0o700)
+                reports.write_recording_heartbeat(data,{'meeting':'x','elapsed_seconds':60})
+                self.assertEqual(self.mode(report_dir/reports.RECORDING_HEARTBEAT_FILE),0o600)
+            self.assertFalse(list(report_dir.glob('.*.json.*')))   # no temp file left behind
+            s.close()
+    def test_a_team_folder_stays_readable_for_teammates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir();team=Path(tmp)/'ekip';team.mkdir()
+            s=Store(data/'meeting-os.sqlite');mid=s.create_meeting('Ekip',{})
+            s.add_segment(mid,Segment(0,5,'Merhaba','system','Konuşmacı 1'));s.status(mid,'complete')
+            reports.save_settings(data,{'report_dir':str(data/'kisisel'),'team_dir':str(team)})
+            (team/'reports').mkdir();(team/'reports').chmod(0o700)   # what mkdir under umask 077 leaves behind
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                path=reports.write_meeting_report(s,mid,data)
+            self.assertEqual(self.mode(path),0o644)
+            self.assertEqual(self.mode(Path(path).parent),0o755);self.assertEqual(self.mode(team/'reports'),0o755)
+            s.close()
+    def test_tighten_modes_pulls_the_old_files_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)/'data';data.mkdir()
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            personal=data/'shared'/'Test-Mac';personal.mkdir(parents=True)
+            paths=[reports.settings_path(data),data/reports.PROBE_CACHE,data/'last-job.log',personal/reports.HEARTBEAT_FILE]
+            for path in paths[1:]: path.write_text('{}',encoding='utf-8')
+            for path in paths: path.chmod(0o644)   # what an older build (or a copied folder) leaves behind
+            data.chmod(0o755)
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                fixed=reports.tighten_modes(data)
+            self.assertEqual(self.mode(data),0o700)
+            for path in paths: self.assertEqual(self.mode(path),0o600,path)
+            self.assertEqual(len(fixed),5)
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                self.assertEqual(reports.tighten_modes(data),[str(data)])   # nothing left to fix
+    def test_the_bridge_tightens_once_per_run(self):
+        from unittest.mock import MagicMock
+        from meeting_os import desktop
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';Store(db).close()
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            desktop._TIGHTENED=False
+            with patch('meeting_os.reports.tighten_modes',MagicMock()) as tighten,patch('meeting_os.reports.write_heartbeat',return_value=None):
+                dispatch({'action':'heartbeat'},db);dispatch({'action':'heartbeat'},db)
+            self.assertEqual(tighten.call_count,1)
+

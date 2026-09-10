@@ -89,3 +89,42 @@ class CaptureStateTests(unittest.TestCase):
    with patch('meeting_os.recovery.classify',return_value='active'),patch('meeting_os.desktop.capture_state',return_value={'state':'capturing','sources':{}}) as probe:
     dispatch({'action':'snapshot'},db)
    self.assertEqual(sum(c.kwargs['include_signal'] for c in probe.call_args_list),1)
+
+class LongJournalTests(unittest.TestCase):
+ """A meeting past roughly 35 minutes writes more than the 64 KB tail in chunk lines alone, so the resilience
+ counters — a wake, a relaunch, the seconds they cost — scroll out of the window and every one reads zero."""
+ def _journal(self,root,minimum=200*1024):
+  events=[{'event':'started'},{'event':'restarted','attempt':1},{'event':'wake','gap':180.0},
+          {'event':'relaunch','attempt':1,'reason':'stall'},{'event':'gap','source':'mic','start':12,'end':14.5}]
+  lines=[json.dumps(e) for e in events]
+  index=0
+  while sum(len(l)+1 for l in lines)<minimum:
+   lines.append(json.dumps({'event':'chunk','source':'mic','path':f'/tmp/mic-{index:06d}.wav','start':index*12.0,'duration':12.0}));index+=1
+  path=Path(root)/'capture-native.jsonl';path.write_text('\n'.join(lines)+'\n')
+  return path,index
+ def test_the_counters_survive_a_journal_far_longer_than_the_tail(self):
+  from meeting_os.capture_metrics import journal_counters,capture_health,journal_events,JOURNAL_TAIL_BYTES
+  with tempfile.TemporaryDirectory() as tmp:
+   path,chunks=self._journal(tmp)
+   self.assertGreater(path.stat().st_size,3*JOURNAL_TAIL_BYTES)
+   self.assertEqual(capture_health(journal_events(path))['wakes'],0)   # what the tail alone can see
+   counted=journal_counters(path)
+   self.assertEqual((counted['restarts'],counted['relaunches'],counted['wakes']),(1,1,1))
+   self.assertEqual((counted['gap_seconds'],counted['wake_gap_seconds']),(2.5,180.0))
+   state=capture_state({'capture_dir':tmp})
+   self.assertEqual((state['restarts'],state['relaunches'],state['wakes'],state['wake_gap_seconds']),(1,1,1,180.0))
+   self.assertEqual(state['state'],'capturing')                        # still read from the tail
+   self.assertAlmostEqual(state['sources']['mic'],(chunks-1)*12.0+12.0)
+ def test_the_report_block_counts_them_too(self):
+  from meeting_os import reports
+  with tempfile.TemporaryDirectory() as tmp:
+   self._journal(tmp)
+   block=reports.capture_block(tmp,3600.0)
+   self.assertEqual((block['restarts'],block['relaunches'],block['wakes'],block['wake_gap_seconds']),(1,1,1,180.0))
+ def test_a_missing_or_broken_journal_answers_zeros(self):
+  from meeting_os.capture_metrics import journal_counters
+  with tempfile.TemporaryDirectory() as tmp:
+   self.assertEqual(journal_counters(Path(tmp)/'yok.jsonl')['wakes'],0)
+   broken=Path(tmp)/'bozuk.jsonl';broken.write_text('bir wake satırı ama JSON değil\n{"event":"wake","gap":5}\n')
+   self.assertEqual(journal_counters(broken),{'restarts':0,'relaunches':0,'wakes':1,'gap_seconds':0.0,'wake_gap_seconds':5.0,'capture_errors':0})
+
