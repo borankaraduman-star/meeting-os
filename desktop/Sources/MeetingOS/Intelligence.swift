@@ -41,8 +41,8 @@ extension Model {
     }
     func analyzeMeeting(_ mid:String?=nil) {
         guard let mid=mid ?? selected else { return }
-        activity="Özet hazırlanıyor…"
-        launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in guard let self else { return }; self.activity=ok ? "Toplantı hazır" : "Özet çıkarılamadı · Transkript duruyor"; if ok, !NSApp.isActive { let waiting=self.review.filter { $0.kind=="unnamed_speaker" || $0.kind=="suggested_name" }.count; self.notifyDone("Toplantı hazır",waiting>0 ? "\(waiting) isim bekliyor · aç ve onayla." : "Özet, kararlar ve görevler kaynaklarıyla hazır.") } }
+        let started=launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in guard let self else { return }; self.activity=ok ? "Toplantı hazır" : "Özet çıkarılamadı · Transkript duruyor"; if ok, !NSApp.isActive { let waiting=self.review.filter { $0.kind=="unnamed_speaker" || $0.kind=="suggested_name" }.count; self.notifyDone("Toplantı hazır",waiting>0 ? "\(waiting) isim bekliyor · aç ve onayla." : "Özet, kararlar ve görevler kaynaklarıyla hazır.") } }
+        if let line=LaunchOutcome.activity(started:started,onStart:"Özet hazırlanıyor…") { activity=line }   // a job already runs: the previous line still describes it
     }
     func resultMeeting(_ url:URL) -> String? {
         guard let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return nil }
@@ -67,7 +67,9 @@ extension Model {
         guard !memoryQuery.trimmingCharacters(in:.whitespaces).isEmpty else { return }
         let url=dataDir.appendingPathComponent("answer-\(UUID().uuidString).json")
         activity="Toplantı kayıtlarında yanıt aranıyor…";answer="";answerEvidence=[]
-        launch(["ask",memoryQuery,"--output",url.path]+cloudAnalysisArguments) { [weak self] ok in
+        jobQuestion=memoryQuery   // never on argv: the question names what this Mac's owner is looking for
+        launch(["ask","--output",url.path]+cloudAnalysisArguments) { [weak self] ok in
+            defer { try? FileManager.default.removeItem(at:url) }   // the receipt quotes the transcript verbatim; it lives only as long as this read
             guard let self=self else { return }
             if ok, let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] { self.answer=result["answer"] as? String ?? ""; self.answerEvidence=(result["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); self.activity="Arşiv yanıtı hazır · Kaynaklarla birlikte kontrol edin" }
         }

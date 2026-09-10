@@ -180,20 +180,25 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             catch { self.error=error.localizedDescription; break }
         }
         // The last call's counts describe the meeting after every confirmation, which is what the user now sees.
-        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"+adaptationNote(last); canUndoNaming=true }
+        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"+adaptationNote(last); canUndoNaming=true; undoBatch=named.count }
         await refresh(); await loadReview(); refreshSummaryIfNamesDone()
     }
     /// ⌘Z after a naming: labels, the learned sample and the rejection all go back. Only the newest naming of the open meeting.
-    @Published var canUndoNaming=false
+    @Published var canUndoNaming=false { didSet { if canUndoNaming { undoBatch=1 } } }   // one naming unless the caller raises it right after
+    /// How many namings the last confirmation made: "Tümünü onayla" names N voices, so ⌘Z must undo N.
+    var undoBatch=1
     @Published var probeLines:[String]=[]
     @Published var maintenance:[String:Any]?
     func undoNaming() async {
         guard let mid=selected, canUndoNaming, !busy else { return }
-        do { let r=try await request(["action":"undo_correction","meeting":mid]); canUndoNaming=false
-            let name=r["name"] as? String ?? ""; let prev=r["previous"] as? String
-            activity="Geri alındı · “\(name)”"+(prev.map { " yeniden “\($0)”" } ?? " isimsiz")+" · öğrenilen örnek silindi"
-            await refresh(); await loadReview() }
-        catch { self.error=error.localizedDescription }
+        var results:[[String:Any]]=[]
+        for _ in 0..<max(1,undoBatch) {
+            do { results.append(try await request(["action":"undo_correction","meeting":mid])) }
+            catch { if results.isEmpty { self.error=error.localizedDescription; return }; break }   // a half-undone batch stays undone; the offer is spent either way
+        }
+        canUndoNaming=false; undoBatch=1
+        activity=UndoNaming.message(results)
+        await refresh(); await loadReview()
     }
     /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
     func refreshSummaryIfNamesDone() {
@@ -268,7 +273,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            if recording || job != nil || pollTick%3==0 { lastZoomState=ZoomWatch.state() }   // window-list scan: every poll only while something runs
+            if ZoomWatch.shouldScan(tick:pollTick,autoRecord:zoomAutoRecord,zoomRunning:lastZoomState.running) { lastZoomState=ZoomWatch.state() }   // a full window-list walk on the main actor: only hands-free recording needs it every poll
             let zoomState=lastZoomState; let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
@@ -278,7 +283,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             updateBlockedHint()
             idleRetryIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {
-            case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"
+            case .start: if let line=LaunchOutcome.activity(started:start(),onStart:"Zoom toplantısı açıldı · kayıt kendiliğinden başladı",onRefusal:LaunchOutcome.recordBusy) { activity=line }
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
@@ -298,19 +303,21 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         } catch { self.error=error.localizedDescription }
     }
     /// Recording has its own process slot: a finalize/analyze job from the previous meeting must never block ⌃⌥R.
-    func launch(_ args:[String], complete:@escaping (Bool)->Void) {
+    /// Returns whether the child actually started: only then may the caller announce the work.
+    @discardableResult func launch(_ args:[String], complete:@escaping (Bool)->Void)->Bool {
         let isRecord=JobPriority.isRealtime(args)
-        guard isRecord ? recordProcess==nil : job==nil else { return }
+        let jobEnvironment=consumeJobEnvironment()   // a refused launch drops them too: they belong to this attempt only
+        guard isRecord ? recordProcess==nil : job==nil else { return false }
         let idle=idleRetry; idleRetry=false   // consumed by this launch only
         do {
-            try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true)
+            try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])   // transcripts and receipts live here; an existing folder keeps its mode
             let log=dataDir.appendingPathComponent("last-job.log")
             FileManager.default.createFile(atPath:log.path,contents:nil,attributes:[.posixPermissions:0o600])   // the log can carry job output; never world-readable
             let handle=try FileHandle(forWritingTo:log)
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobs.jobProgress="İşlem başlatılıyor" }
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path,"MEETING_OS_TITLE":jobTitle]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(jobEnvironment) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
@@ -328,10 +335,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             }
             try p.run(); error=""
             if isRecord { recordProcess=p; recordStartedAt=Date() } else { job=p; busy=true; jobBackgrounded=false }
-        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil } }
+            return true
+        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil }; return false }
     }
-    func start() {
-        guard recordProcess==nil else { return }
+    /// Returns false when the previous helper is still draining: the caller must not claim a recording started.
+    @discardableResult func start()->Bool {
+        guard recordProcess==nil else { return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
@@ -341,7 +350,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         jobTitle=name
-        launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
+        return launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recorder.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
@@ -493,6 +502,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var pollTick=0
     /// Title of the job being launched, handed to the child in MEETING_OS_TITLE (never on argv).
     var jobTitle=""
+    /// The typed archive question and the picked import file: MEETING_OS_QUESTION / MEETING_OS_AUDIO_PATH.
+    /// argv is world-readable through `ps`, and both name what this Mac's owner is working on.
+    var jobQuestion=""; var jobAudioPath=""
+    /// One-shot inputs for the child, consumed by the launch attempt that carries them: a later, unrelated
+    /// job must never inherit the previous meeting's title or the last question.
+    private func consumeJobEnvironment()->[String:String] {
+        defer { jobTitle="";jobQuestion="";jobAudioPath="" }
+        return ["MEETING_OS_TITLE":jobTitle,"MEETING_OS_QUESTION":jobQuestion,"MEETING_OS_AUDIO_PATH":jobAudioPath]
+    }
     /// Recording lives in its own process slot (see launch); jobs never block it.
     var recordProcess:Process?; var recordStartedAt:Date?; var stopArmedAt:Date?
     var sleptAt:Date?; var continuitySeen:RecordingContinuity.State?
@@ -614,7 +632,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if age<3 { return }   // key repeat / double press right after start: ignore
                 if age<15 { if let armed=stopArmedAt, Date().timeIntervalSince(armed)<2 { stop() } else { stopArmedAt=Date(); activity="Bitirmek için ⌃⌥R’ye bir kez daha bas" }; return }
                 stop()
-            } else { start(); activity="Kayıt başladı · ⌃⌥R ile bitir, ⌃⌥M ile an işaretle" }
+            } else if let line=LaunchOutcome.activity(started:start(),onStart:LaunchOutcome.recordStarted,onRefusal:LaunchOutcome.recordBusy) { activity=line }
         }
         else if id==GlobalHotkeys.mark, recording { markMoment("important") }
     }
@@ -631,11 +649,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
         if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r) }
-        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, !zoomMeetingOpen { startUpdate() }
+        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
     func startUpdate() {
         guard job==nil, !recording, !updating else { return }
+        if recordProcess != nil { activity="Önceki kayıt kapanıyor · birkaç saniye sonra güncelleyin"; return }   // the updater would wait 60 s on the draining helper and abort
         if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
         Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }

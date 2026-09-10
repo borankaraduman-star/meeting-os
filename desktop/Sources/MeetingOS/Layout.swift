@@ -49,7 +49,7 @@ struct SidebarView:View {
                         .accessibilityLabel("Toplantı adı")
                 case .hidden: EmptyView()
                 }
-                Button(action:{ model.recording ? model.stop() : model.start() }) {
+                Button(action:{ if model.recording { model.stop() } else { model.start() } }) {
                     Label(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind),systemImage:model.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity)
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(model.recording ? .red:MeetingStyle.accent)

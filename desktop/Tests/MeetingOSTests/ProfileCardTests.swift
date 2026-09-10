@@ -60,3 +60,15 @@ final class ProfileCardTests:XCTestCase {
         XCTAssertEqual(CleanCandidate([:]).meetingTitle,"bilinmeyen toplantı")
     }
 }
+
+/// "Tümünü onayla" names N voices in one pass; ⌘Z must take the whole batch back, not just the last name.
+final class UndoNamingTests:XCTestCase {
+    func testASingleUndoKeepsItsDetailedLine() {
+        XCTAssertEqual(UndoNaming.message([["name":"Ayşe","previous":"Sol Üst"]]),"Geri alındı · “Ayşe” yeniden “Sol Üst” · öğrenilen örnek silindi")
+        XCTAssertEqual(UndoNaming.message([["name":"Ayşe"]]),"Geri alındı · “Ayşe” isimsiz · öğrenilen örnek silindi")
+    }
+    func testABatchSaysHowManyWentBack() {
+        XCTAssertEqual(UndoNaming.message([["name":"Ayşe"],["name":"Ali"],["name":"Zeynep"]]),"3 adlandırma geri alındı · öğrenilen örnekler silindi")
+        XCTAssertEqual(UndoNaming.message([]),"0 adlandırma geri alındı · öğrenilen örnekler silindi")
+    }
+}

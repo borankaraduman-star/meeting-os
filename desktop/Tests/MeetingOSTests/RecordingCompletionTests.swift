@@ -38,3 +38,16 @@ extension RecordingCompletionTests {
         XCTAssertEqual(RecordingCompletion.retryMeeting(receipt,capture:alias.path),"recorded")
     }
 }
+
+/// ⌃⌥R twice in a row: the helper still drains after the stop, `start()` refuses, and the status line
+/// must say so instead of announcing a recording that never began.
+final class LaunchOutcomeTests:XCTestCase {
+    func testARefusedRecordingIsReportedInsteadOfClaimed() {
+        XCTAssertEqual(LaunchOutcome.activity(started:true,onStart:LaunchOutcome.recordStarted,onRefusal:LaunchOutcome.recordBusy),"Kayıt başladı · ⌃⌥R ile bitir, ⌃⌥M ile an işaretle")
+        XCTAssertEqual(LaunchOutcome.activity(started:false,onStart:LaunchOutcome.recordStarted,onRefusal:LaunchOutcome.recordBusy),"Önceki kayıt kapanıyor · birkaç saniye sonra tekrar deneyin")
+    }
+    func testARefusedJobLeavesTheStatusLineAlone() {
+        XCTAssertEqual(LaunchOutcome.activity(started:true,onStart:"Özet hazırlanıyor…"),"Özet hazırlanıyor…")
+        XCTAssertNil(LaunchOutcome.activity(started:false,onStart:"Özet hazırlanıyor…"))
+    }
+}
