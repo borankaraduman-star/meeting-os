@@ -1,6 +1,6 @@
 [Unit]
 Description=Meeting OS team sync server
-Documentation=https://github.com/boran/meeting-os/blob/v0.1/docs/TEAM_CLOUD.md
+Documentation=https://github.com/borankaraduman-star/meeting-os/blob/v0.1/docs/TEAM_CLOUD.md
 After=network-online.target
 Wants=network-online.target
 
