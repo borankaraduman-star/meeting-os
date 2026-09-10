@@ -70,7 +70,7 @@ final class UpdaterTests:XCTestCase {
         XCTAssertEqual(ReportSettings.parse(["audio_retention_days":60]).audioRetentionDays,60)
         XCTAssertTrue(ReportSettings.parse([:]).autoRetry)   // idle retry is on unless the user turns it off
         XCTAssertFalse(ReportSettings.parse(["auto_retry":false]).autoRetry)
-        XCTAssertEqual(ReportSettings.parse([:]).userName,"Boran")   // a settings file written before the name existed
+        XCTAssertEqual(ReportSettings.parse([:]).userName,"")   // no name until the user types one: nobody's voice is labelled with a stranger's name
         let team=ReportSettings.parse(["team_dir":"/Volumes/Ekip","share_glossary":false])
         XCTAssertEqual(team.teamDir,"/Volumes/Ekip");XCTAssertFalse(team.shareGlossary)
         XCTAssertTrue(ReportSettings.parse([:]).teamDir.isEmpty);XCTAssertTrue(ReportSettings.parse([:]).shareGlossary)
