@@ -34,6 +34,9 @@ ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on 
     {'id':'qwen/qwen3-235b-a22b-2507','name':'Qwen3 235B','pricing':'$0.22/M giriş, $0.88/M çıkış'},
     {'id':'mistralai/mistral-small-2603','name':'Mistral Small','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'z-ai/glm-5.3-flash','name':'GLM 5.3 Flash','pricing':'$0.15/M giriş, $0.50/M çıkış'},
+    {'id':'deepseek/deepseek-v4-flash','name':'DeepSeek V4 Flash','pricing':'$0.08/M giriş, $0.17/M çıkış'},
+    {'id':'deepseek/deepseek-v4.1-flash','name':'DeepSeek V4.1 Flash','pricing':'$0.15/M giriş, $0.60/M çıkış'},
+    {'id':'deepseek/deepseek-v4-pro','name':'DeepSeek V4 Pro','pricing':'$0.87/M giriş, $1.74/M çıkış'},
 )
 ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
 # USD per million tokens (input, output), read off the model pages on 9 Sep 2026 — the same numbers the
@@ -42,7 +45,8 @@ ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
 ANALYSIS_PRICES = {'openai/gpt-4.1-mini': (0.40, 1.60), 'openai/gpt-4o-mini': (0.15, 0.60), 'google/gemini-2.5-flash': (0.30, 2.50),
                    'anthropic/claude-haiku-4.5': (1.00, 5.00), 'anthropic/claude-sonnet-5': (2.00, 10.00), 'google/gemini-3-flash-preview': (0.50, 3.00),
                    'deepseek/deepseek-v3.2': (0.27, 0.40), 'openai/gpt-5-nano': (0.05, 0.40), 'openai/gpt-5.6-luna': (0.20, 1.20), 'qwen/qwen3-235b-a22b-2507': (0.22, 0.88),
-                   'mistralai/mistral-small-2603': (0.15, 0.60), 'z-ai/glm-5.3-flash': (0.15, 0.50)}
+                   'mistralai/mistral-small-2603': (0.15, 0.60), 'z-ai/glm-5.3-flash': (0.15, 0.50),
+                   'deepseek/deepseek-v4-flash': (0.08, 0.17), 'deepseek/deepseek-v4.1-flash': (0.15, 0.60), 'deepseek/deepseek-v4-pro': (0.87, 1.74)}
 
 
 def estimate_analysis_cost(model, prompt_tokens, completion_tokens):
