@@ -21,10 +21,10 @@ STT_MODELS = (
 )
 DIARIZATION_DEFAULT_MODEL = 'microsoft/mai-transcribe-2'
 ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on OpenRouter endpoints 2026-09-09
-    {'id':'deepseek/deepseek-v3.2','name':'DeepSeek V3.2 (varsayılan: 30/30 kıyas)','pricing':'$0.27/M giriş, $0.40/M çıkış; 2 saatlik toplantı ≈ 2 cent'},
     {'id':'openai/gpt-4.1-mini','name':'GPT-4.1 mini','pricing':'$0.40/M giriş, $1.60/M çıkış; 40 dk toplantı ≈ 3 cent, 2 saatlik toplantı ≈ $0,08'},
     {'id':'openai/gpt-4o-mini','name':'GPT-4o mini','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'google/gemini-2.5-flash','name':'Gemini 2.5 Flash','pricing':'$0.30/M giriş, $2.50/M çıkış'},
+    {'id':'deepseek/deepseek-v3.2','name':'DeepSeek V3.2 (kurgu kıyasta 30/30; gerçek toplantıda yavaş, 429)','pricing':'$0.27/M giriş, $0.40/M çıkış'},
     # Added 10 Sep 2026 for a head-to-head benchmark (Boran: "analizde neden GPT?"); prices read off OpenRouter that day.
     {'id':'anthropic/claude-haiku-4.5','name':'Claude Haiku 4.5','pricing':'$1.00/M giriş, $5.00/M çıkış'},
     {'id':'anthropic/claude-sonnet-5','name':'Claude Sonnet 5','pricing':'$2.00/M giriş, $10.00/M çıkış'},
@@ -38,11 +38,12 @@ ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on 
     {'id':'deepseek/deepseek-v4.1-flash','name':'DeepSeek V4.1 Flash','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'deepseek/deepseek-v4-pro','name':'DeepSeek V4 Pro','pricing':'$0.87/M giriş, $1.74/M çıkış'},
 )
-# 10–11 Sep 2026 head-to-head (scripts/benchmark-analysis-cloud.py, 10 fictional cases, 3 runs): DeepSeek V3.2 30/30 with no
-# dropped task and no leak; gpt-4.1-mini 26/30 (one leak); Mistral Small 18/20; GLM 5.3 Flash rate-limited upstream in 3
-# of 4 runs; Gemini 3 Flash broke quotes; Sonnet 5 ten times the price. DeepSeek is slower (≈26 s vs 9 s a chunk) — the
-# analysis runs after the meeting, so a 2-hour meeting costs ≈3 minutes instead of 1, for half the money.
-ANALYSIS_DEFAULT_MODEL = 'deepseek/deepseek-v3.2'
+# 10–11 Sep 2026 head-to-head on fictional cases (docs/BENCHMARK.md): DeepSeek V3.2 30/30, gpt-4.1-mini 26/30. On a REAL
+# 41-minute meeting the same night DeepSeek took ≈100 s a chunk, then failed twice (an invalid answer after 11 minutes,
+# then upstream 429) while gpt-4.1-mini finished in 214 s. Fixtures measure quality; the real meeting measures whether the
+# summary ever arrives. The default stays gpt-4.1-mini; a failed model falls back to it (see `Analysis.complete`).
+ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
+ANALYSIS_FALLBACK_MODEL = 'openai/gpt-4.1-mini'
 CHAT_TIMEOUT = 240   # a real 2-hour chunk on a slower model; 90 s was sized for gpt-4.1-mini and would cut DeepSeek mid-answer
 # USD per million tokens (input, output), read off the model pages on 9 Sep 2026 — the same numbers the
 # `pricing` strings above show the user. Only a fallback: OpenRouter returns the real charge in `usage.cost`
@@ -308,6 +309,18 @@ class OpenRouterLLM:
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
         payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
+        try: return self._complete(payload,max_tokens)
+        except (OpenRouterError,CloudUnavailable) as exc:
+            # The chosen model failed after its own retries (rate-limited upstream, an unusable answer): the summary
+            # still has to arrive. One more try on the fallback model — the analysis does not depend on which model
+            # wrote it, and the user sees the model that answered in the cost report. Auth/credit errors are not retried.
+            if isinstance(exc,(CloudAuthError,CloudCreditError)) or not ANALYSIS_FALLBACK_MODEL or self.model_id==ANALYSIS_FALLBACK_MODEL: raise
+            print(f'Meeting OS: {self.model_id} yanıt veremedi ({type(exc).__name__}); {ANALYSIS_FALLBACK_MODEL} ile deneniyor',file=__import__('sys').stderr,flush=True)
+            fresh={**payload,'model':ANALYSIS_FALLBACK_MODEL,'temperature':0,'max_tokens':max_tokens}; fresh.pop('reasoning',None)
+            self.model_id=ANALYSIS_FALLBACK_MODEL; self.fell_back=True
+            return self._complete(fresh,max_tokens)
+    fell_back=False
+    def _complete(self,payload,max_tokens):
         try: result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
         except OpenRouterError as exc:
             # Reasoning-family endpoints (GPT-5, Claude Sonnet 5) accept no `temperature`; with require_parameters
@@ -339,3 +352,4 @@ class OpenRouterLLM:
             print(f'Meeting OS: Analiz yanıtı geçersiz ({why})',file=__import__('sys').stderr,flush=True)
             raise OpenRouterError('Analiz yanıtı tamamlanmadı veya geçersiz; kısmi analiz kaydedilmedi.') from None
         return text
+    # `complete` above is the public entry: it adds the fallback around `_complete`.

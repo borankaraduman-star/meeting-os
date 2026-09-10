@@ -211,3 +211,11 @@ sağlayıcılara yönlendirilir (OpenRouter yönlendirme kuralı), gpt-4.1-mini'
 upstream" ve bozuk yanıtlar. Fiyatı ($0,15/$0,60) ve tek geçen senaryodaki hızı (16 sn) cazip; OpenRouter'daki sunumu
 düzelince yeniden ölçülmeli (`--model deepseek/deepseek-v4.1-flash`). Yedek sağlayıcı açmak da kurtarmadı; kalite
 tutarlılığı için istek tek sağlayıcıya bağlı kaldı (`allow_fallbacks: false`).
+
+**Gerçek toplantı düzeltmesi (11 Eylül 02:30–03:10):** 41 dk / 335 bölüm / 6 parça toplantı `analyze --force` ile.
+gpt-4.1-mini: 214 sn, başarılı, özet 9 madde (1.2.70 genişletmesiyle; önce 3). DeepSeek V3.2: parça başına ≈100 sn,
+663 sn sonra "yanıt tamamlanmadı/geçersiz" (ilk deneme), ikinci denemede üst sağlayıcı 429. Kurgu senaryolar (≈2k
+token) gerçek parçayı (≈8–10k token) temsil etmiyor. **Karar geri alındı: varsayılan `openai/gpt-4.1-mini`**; seçilen
+model kendi yeniden denemelerinden sonra da düşerse istemci aynı isteği `ANALYSIS_FALLBACK_MODEL` (gpt-4.1-mini) ile
+bir kez daha dener, düşen model ve neden iş günlüğüne yazılır. Ders: model kararı kurgu kıyas + en az bir gerçek toplantı
+ölçümü olmadan verilmez; `scripts/benchmark-analysis-cloud.py` gerçek boyutta bir kurgu parça senaryosu almalı (açık).

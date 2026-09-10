@@ -132,6 +132,24 @@ class OpenRouterTests(unittest.TestCase):
         client=self.client({'choices':[{'finish_reason':'length','message':{'content':'partial'}}]})
         with self.assertRaises(OpenRouterError):client.analysis('openai/gpt-5.6-luna',consent=True).complete('s','u')
 
+    def test_failed_model_falls_back_to_the_default_once(self):
+        """11 Sep 2026: DeepSeek V3.2 answered 429 on a real meeting after the fixtures said 30/30. The summary must
+        still arrive: the same request goes once more to gpt-4.1-mini, and auth/credit errors never trigger it."""
+        import io, urllib.error
+        calls=[]
+        def transport(request, timeout):
+            body=json.loads(request.data); calls.append(body['model'])
+            if body['model']=='deepseek/deepseek-v3.2':
+                raise urllib.error.HTTPError(request.full_url,429,'rate limited',{},io.BytesIO(b'{"error":{"message":"rate-limited upstream"}}'))
+            return Response(json.dumps({'choices':[{'finish_reason':'stop','message':{'content':'{"summary":[]}'}}]}).encode())
+        llm=OpenRouterClient('k',transport=transport).analysis('deepseek/deepseek-v3.2',consent=True)
+        self.assertEqual(llm.complete('s','u',schema={'type':'object'}),'{"summary":[]}')
+        self.assertEqual(calls,['deepseek/deepseek-v3.2','openai/gpt-4.1-mini']); self.assertTrue(llm.fell_back); self.assertEqual(llm.model_id,'openai/gpt-4.1-mini')
+        def auth(request, timeout): raise urllib.error.HTTPError(request.full_url,401,'no',{},io.BytesIO(b'{}'))
+        with self.assertRaises(OpenRouterError): OpenRouterClient('k',transport=auth).analysis('deepseek/deepseek-v3.2',consent=True).complete('s','u')
+        def always(request, timeout): raise urllib.error.HTTPError(request.full_url,429,'no',{},io.BytesIO(b'{}'))
+        with self.assertRaises(OpenRouterError): OpenRouterClient('k',transport=always).analysis('openai/gpt-4.1-mini',consent=True).complete('s','u')   # the default itself: no second try
+
     def test_every_advertised_model_is_sent_exactly_and_unknown_is_blocked(self):
         import tempfile
         from pathlib import Path

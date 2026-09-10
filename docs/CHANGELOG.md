@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 75 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 76 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.71](#v1271) | 2026-09-11 03:15 | v1.2.71 — Analiz modeli kararı gerçek toplantıyla düzeltildi: gpt-4.1-mini + otomatik yedek model |
 | [v1.2.70](#v1270) | 2026-09-11 02:45 | v1.2.70 — Daha geniş özet: konu başına madde, toplantı uzunluğuna göre |
 | [v1.2.69](#v1269) | 2026-09-11 01:45 | v1.2.69 — Analiz modeli: DeepSeek V3.2 (ölçüldü); CLI veri klasörü tuzağı |
 | [v1.2.68](#v1268) | 2026-09-11 00:15 | v1.2.68 — Terminalsiz ekibe katılım; ekip kimliği ve silme yayılımı; görev birleştirme güvenliği |
@@ -95,6 +96,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1271"></a>
+### v1.2.71 — Analiz modeli kararı gerçek toplantıyla düzeltildi: gpt-4.1-mini + otomatik yedek model
+
+2026-09-11 03:15 · yerel not · GitHub sürüm sayfası yok
+
+1.2.69 varsayılanı kurgu kıyasa göre DeepSeek V3.2 yapmıştı. Aynı gece gerçek 41 dakikalık toplantıda (335 bölüm, 6 parça) ölçüldü: **gpt-4.1-mini 214 sn, başarılı, özet 9 madde; DeepSeek V3.2 parça başına ≈100 sn, 663 sn sonra geçersiz yanıt, ikinci denemede üst sağlayıcı 429.** Kurgu senaryolar (≈2k token) gerçek parçayı (≈8–10k) temsil etmiyor.
+
+- **Varsayılan yeniden `openai/gpt-4.1-mini`.** 1.2.69'un taşıdığı Mac'ler bir kez otomatik geri döner; elle DeepSeek seçenler kalır.
+- **Otomatik yedek model:** seçilen model kendi yeniden denemelerinden sonra da yanıt veremezse (hız sınırı, geçersiz yanıt) aynı istek bir kez gpt-4.1-mini ile denenir; anahtar/bakiye hataları denenmez. Düşen model ve neden iş günlüğüne yazılır; maliyet raporu cevaplayan modeli gösterir.
+- Geçersiz analiz yanıtında bitiş nedeni ve boyut iş günlüğüne yazılır (içerik değil).
+- `docs/BENCHMARK.md`: gerçek toplantı düzeltmesi ve ders (model kararı kurgu kıyas + en az bir gerçek toplantı olmadan verilmez; kıyasa gerçek boyutta bir parça senaryosu eklenmesi açık).
+- Testler: Python 908 (yedek model testi), Swift 235. Canlı: gpt-4.1-mini gerçek toplantıda doğrulandı.
 
 <a id="v1270"></a>
 ### v1.2.70 — Daha geniş özet: konu başına madde, toplantı uzunluğuna göre

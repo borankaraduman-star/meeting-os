@@ -35,7 +35,7 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
 5. **Özet** ekranında her maddenin kaynak alıntısını kontrol edin.
-   Kayıt son işlemi ve dosya içe aktarımı bittiğinde özet/görev analizi OpenRouter’da (DeepSeek V3.2) otomatik başlar; yerel modda bu Mac’te çalışır.
+   Kayıt son işlemi ve dosya içe aktarımı bittiğinde özet/görev analizi OpenRouter’da (gpt-4.1-mini) otomatik başlar; yerel modda bu Mac’te çalışır.
    İsim/metin düzeltince analiz eski işaretlenir; Özet sekmesinin sağ üstündeki
    **Özeti güncelle** ile yenileyin.
 6. Aynı kişinin sonraki toplantılarda tanınması için temiz, tek konuşmacılı bir
@@ -123,7 +123,7 @@ Salt okunur MCP bağlantısı için [V1 kullanım rehberi](docs/V1_USAGE.md).
 Varsayılan yol **bulut** (1.2.x, 9 Eylül 2026 kararı): bu Mac’te model yüklenmez, toplantı sırasında yük yoktur.
 
 - Transkript ve konuşmacı ayrımı: **OpenRouter · `microsoft/mai-transcribe-2`** (Opus 32 kbps parçalar, ≈ $0,10/saat; mikrofona düşen hoparlör yankısı yüklenmeden atlanır).
-- Özet / karar / görev: **OpenRouter · `deepseek/deepseek-v3.2`** (11 Eylül kıyası: 30/30; gpt-4.1-mini seçilebilir); kaynak alıntıları yerelde doğrulanır, doğrulanamayan atılır.
+- Özet / karar / görev: **OpenRouter · `openai/gpt-4.1-mini`** (11 Eylül: kurgu kıyasta DeepSeek V3.2 daha iyi, gerçek toplantıda düştü; docs/BENCHMARK.md); kaynak alıntıları yerelde doğrulanır, doğrulanamayan atılır.
 - Kalıcı kişi eşleştirme: **Resemblyzer** (tek yerel model, hafif), model sürümüne bağlı SQLite profilleri; eşikler 0,87 / marj 0,05 / öneri 0,83 / otomatik örnek 0,93; `quality replay` ile regresyon (gerçek veri: 16 küme, 14 doğru, 0 yanlış, 2 atlanmış).
 - Yerel yol (MLX Whisper, sherpa-onnx, Silero VAD, Qwen3-4B MLX) CLI’de durur; uygulama artık kullanmaz.
 
@@ -277,7 +277,7 @@ Varsayılan bulut modunda transkript bitince özet/görev analizi kendiliğinden
 
 ### OpenRouter transkripsiyonu (varsayılan yol)
 
-Kenar çubuğunda **⋯ → Ses dosyası aç…**, kullanıcı onayıyla varsayılan `microsoft/mai-transcribe-2` veya model menüsündeki doğrulanmış alternatifleri kullanır. Bu ücretli bulut yolu varsayılandır. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı sağlayıcıdan gelir, özet/görev analizi de OpenRouter’da (DeepSeek V3.2) yapılır; yalnız ses profili eşleştirmesi bu Mac’te kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
+Kenar çubuğunda **⋯ → Ses dosyası aç…**, kullanıcı onayıyla varsayılan `microsoft/mai-transcribe-2` veya model menüsündeki doğrulanmış alternatifleri kullanır. Bu ücretli bulut yolu varsayılandır. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı sağlayıcıdan gelir, özet/görev analizi de OpenRouter’da (gpt-4.1-mini) yapılır; yalnız ses profili eşleştirmesi bu Mac’te kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
 
 ### Toplantı sırasında yük (1.2.14+)
 

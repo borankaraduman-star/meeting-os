@@ -1,14 +1,14 @@
 import Foundation
 
-/// The analysis model the app starts with, and the one-time move off the old default. 11 Sep 2026 benchmark
-/// (scripts/benchmark-compare-models.py): DeepSeek V3.2 30/30 fictional cases in three runs, gpt-4.1-mini 26/30 with
-/// one leak, at half the price. A Mac whose stored value is still the OLD default never chose it — it is moved once;
-/// a Mac that picked anything else keeps its choice.
+/// The analysis model the app starts with. 1.2.69 moved the default to DeepSeek V3.2 on a fictional-case benchmark;
+/// 1.2.71 moved it back after the real 41-minute meeting (DeepSeek: 100 s a chunk, then two failures; gpt-4.1-mini:
+/// 214 s, done). A stored value equal to the retired 1.2.69 default never was a choice — it is cleared once; a Mac
+/// that picked anything else keeps its choice.
 enum AnalysisModelDefault {
-    static let model="deepseek/deepseek-v3.2"
-    static let legacy="openai/gpt-4.1-mini"
+    static let model="openai/gpt-4.1-mini"
+    static let legacy="deepseek/deepseek-v3.2"
     static let key="cloudAnalysisModel"
-    static let migratedKey="cloudAnalysisModelMoved1269"
+    static let migratedKey="cloudAnalysisModelMoved1271"
     static func current(defaults:UserDefaults = .standard)->String {
         resolve(stored:defaults.string(forKey:key),migrated:defaults.bool(forKey:migratedKey)) { value in
             if let value { defaults.set(value,forKey:key) } else { defaults.removeObject(forKey:key) }
