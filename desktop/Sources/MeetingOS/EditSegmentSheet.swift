@@ -18,7 +18,11 @@ struct EditSegmentSheet:View {
     private var textOnly:Bool { model.meeting?.metadata["text_only"] as? Bool == true }
     private var cluster:Bool { row.flags.contains("cloud_diarization") && !row.speaker.isEmpty }
     private var name:String { model.editName.trimmingCharacters(in:.whitespaces) }
-    private var choices:[String] { Array(NSOrderedSet(array:model.calendarAttendees+model.profiles.map(\.name))) as? [String] ?? [] }
+    private var choices:[String] {
+        let offered=Array(NSOrderedSet(array:model.calendarAttendees+model.profiles.map(\.name))) as? [String] ?? []
+        return NameOrdering.order(choices:offered,ranked:cluster ? (model.explanation?.candidates ?? []) : [])
+    }
+    private var rankedByVoice:Bool { cluster && !(model.explanation?.candidates.isEmpty ?? true) }
     /// The words of this segment, as typed: the picker shows them without punctuation but teaches the raw token.
     private var words:[String] {
         var seen=Set<String>()
@@ -37,6 +41,7 @@ struct EditSegmentSheet:View {
                 TextField("Kim konuşuyor?",text:$model.editName).textFieldStyle(.roundedBorder).accessibilityIdentifier("editSpeakerNameField")
                     .onSubmit { Task { await primary() } }
                 if !choices.isEmpty { FlowChips(items:Array(choices.prefix(12))) { model.editName=$0 } }
+                if rankedByVoice { Text("İsimler bu sese benzerliğe göre sıralı; en benzeyen başta.").font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("nameOrderNote") }
             }
             if cluster && siblings.count>1 {
                 Picker("Yalnız bir bölüm için: hangisi?",selection:Binding(get:{ target?.id ?? row.id },set:{ id in target=siblings.first(where:{ $0.id==id }) })) {
@@ -94,6 +99,9 @@ struct EditSegmentSheet:View {
         }.padding(.horizontal,24).padding(.top,14).padding(.bottom,24)
         .sheetChrome(title:"Konuşanı adlandır") { model.editRow=nil }
         .frame(width:520)
+        // The ranking is the same call "Neden bu isim?" makes; fetched on open so the chips are ordered by the time
+        // the user looks at them. A previous row's answer is cleared first so a stale order never shows.
+        .task(id:row.id) { model.explanation=nil; if cluster { await model.explainIdentity(row) } }
     }
     /// One word, one correction: the model call also teaches it, so the sheet just closes on success.
     private func learnWord() async {

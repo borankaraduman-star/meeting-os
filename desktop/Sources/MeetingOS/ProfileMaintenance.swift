@@ -34,6 +34,17 @@ struct IdentityCandidate:Identifiable, Equatable {
 }
 
 /// "Why did it think this was Ayşe?" — scores against every saved person, with the thresholds that decide.
+/// The name chips under "Kim konuşuyor?": the voices this one sounds like come first, best match first, then everybody
+/// else in the order they were offered (calendar attendees, then profiles). Boran, 10 Sep 2026: "isimler mevcut sese
+/// yakınlığına göre sıralanmalı, şu an alfabetik geliyor". A ranked name that is not among the choices (a profile the
+/// list did not carry) is still shown: it is the one the voice actually resembles.
+enum NameOrdering {
+    static func order(choices:[String],ranked:[IdentityCandidate])->[String] {
+        let top=ranked.sorted { $0.score>$1.score }.map(\.name).filter { !$0.isEmpty }
+        return NameFold.unique(top+choices)
+    }
+}
+
 struct IdentityExplanation:Equatable {
     let candidates:[IdentityCandidate]; let threshold:Double; let margin:Double; let suggest:Double; let seconds:Double; let reason:String
     /// `explain_identity` sends threshold/margin/suggest on every branch; these stand in only for an answer from

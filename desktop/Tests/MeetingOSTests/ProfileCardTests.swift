@@ -71,4 +71,12 @@ final class UndoNamingTests:XCTestCase {
         XCTAssertEqual(UndoNaming.message([["name":"Ayşe"],["name":"Ali"],["name":"Zeynep"]]),"3 adlandırma geri alındı · öğrenilen örnekler silindi")
         XCTAssertEqual(UndoNaming.message([]),"0 adlandırma geri alındı · öğrenilen örnekler silindi")
     }
+    func testNameChipsFollowVoiceSimilarityThenTheOfferedOrder() {
+        let ranked=[IdentityCandidate(["name":"Zeynep","score":0.71]),IdentityCandidate(["name":"Ayşe","score":0.93]),IdentityCandidate(["name":"Mehmet","score":0.88])]
+        let choices=["Ali","Ayşe","Mehmet","Zeynep"]   // alphabetical, as the profile list arrives
+        XCTAssertEqual(NameOrdering.order(choices:choices,ranked:ranked),["Ayşe","Mehmet","Zeynep","Ali"])
+        XCTAssertEqual(NameOrdering.order(choices:choices,ranked:[]),choices)                       // no voice → the offered order stands
+        XCTAssertEqual(NameOrdering.order(choices:["ayşe","Ali"],ranked:[ranked[1]]),["Ayşe","Ali"])   // case folds: one chip per person
+        XCTAssertEqual(NameOrdering.order(choices:["Ali"],ranked:[ranked[1]]),["Ayşe","Ali"])         // a ranked profile missing from the list is still offered
+    }
 }
