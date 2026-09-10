@@ -129,9 +129,12 @@ Ekip bir **sınırdır**: bir ekipte öğrenilen hiçbir şey başka bir ekibe t
   `team-cloud-state-<ekip kısa id>.json`. `reports.load_settings` `_mirror` değerini aynı `mirror_dir()`
   üzerinden çözer, dolayısıyla `report_root`, `glossary.team_path`, `team_knowledge.shared_root` hepsi
   kendiliğinden doğru ekibin klasörüne bakar.
-- **Göç (bir kez):** 1.2.67 ve öncesinin düz `team/` klasörü ile `team-cloud-state.json` dosyası, durum
-  dosyasının söylediği ekibin (`team_id_short`; yoksa şimdiki ekip) altına TAŞINIR. Hiçbir şey silinmez,
-  birleştirilmez ve hiçbir yere yüklenmez.
+- **Göç:** 1.2.67 ve öncesinin düz `team/` klasörü ile `team-cloud-state.json` dosyası, durum dosyasının
+  söylediği ekibin (`team_id_short`; yoksa şimdiki ekip) altına TAŞINIR. Hiçbir şey silinmez ve hiçbir yere
+  yüklenmez. Denetim her `mirror_dir()`/`state_path()` çağrısında (tek dizin listelemesi) yapılır, yalnız ilk
+  kez değil: yanında koşan eski bir uygulama sürümü göçten sonra `team/reports/` klasörünü yeniden
+  yaratabiliyor. Adı zaten dolu olan bir klasör dosya dosya BİRLEŞTİRİLİR; ekip altında var olan bir dosyanın
+  üzerine yazılmaz.
 - **`join(data_dir, token, store=None)` taşınmadır, birleşme değil.** Başka bir ekibe geçildiğinde önceki ekibin
   çekmelerinin veritabanına koyduğu satırlar kaldırılır: `provenance` değeri `team:` ile başlayan ses örnekleri
   YUMUŞAK silinir (`deleted_by='team-join:<utc>'` — gizlenir, yok edilmez; geri alma sunulmuyor) ve `team_words`

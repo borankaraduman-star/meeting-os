@@ -172,21 +172,43 @@ def _legacy_owner(data_dir, short):
     return short
 
 
+def _move_into(path, destination):
+    """Move one legacy entry under the team folder. A folder whose name is already taken (an old app version
+    running beside a new one recreated `team/reports/` while the migrated copy existed) is MERGED file by file
+    rather than skipped: an orphaned reports folder is a meeting's diagnostics nobody can see any more."""
+    try:
+        if not destination.exists(): return os.replace(path, destination)
+        if not (path.is_dir() and destination.is_dir()): return None
+        for child in sorted(path.iterdir()): _move_into(child, destination / child.name)
+        if not any(path.iterdir()): path.rmdir()
+    except OSError: pass
+    return None
+
+
+def _legacy_entries(data_dir):
+    """What is still lying in the pre-1.2.68 places: anything directly under `team/` that is not a team folder.
+    One directory listing, so the check can run on every settings load — and it has to, because an older app
+    version running beside this one can recreate `team/reports/` long after the first migration."""
+    try: return [p for p in sorted((Path(data_dir) / MIRROR_NAME).iterdir()) if not TEAM_SHORT_RE.match(p.name)]
+    except OSError: return []
+
+
+def _needs_migration(data_dir):
+    return bool(_legacy_entries(data_dir)) or (Path(data_dir) / STATE_FILE).is_file()
+
+
 def _migrate_layout(data_dir, short):
-    """One-time move to the per-team layout: `team/*` → `team/<team>/`, `team-cloud-state.json` →
-    `team-cloud-state-<team>.json`. Nothing is deleted, nothing is merged and nothing is uploaded anywhere: the
-    files land under the team that produced them, which is exactly what keying them by team is for."""
+    """Move to the per-team layout: `team/*` → `team/<team>/`, `team-cloud-state.json` →
+    `team-cloud-state-<team>.json`. Nothing is deleted and nothing is uploaded anywhere: the files land under
+    the team that produced them, which is exactly what keying them by team is for."""
     data = Path(data_dir); base = data / MIRROR_NAME; owner = None
-    try: legacy = [p for p in sorted(base.iterdir()) if not TEAM_SHORT_RE.match(p.name)] if base.is_dir() else []
-    except OSError: legacy = []
+    legacy = _legacy_entries(data)
     if legacy:
         owner = _legacy_owner(data, short)
         try:
             target = base / owner
             target.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
-            for path in legacy:
-                destination = target / path.name
-                if not destination.exists(): os.replace(path, destination)
+            for path in legacy: _move_into(path, target / path.name)
         except OSError: pass
     old = data / STATE_FILE
     if old.is_file():
@@ -205,9 +227,8 @@ def mirror_dir(data_dir):
     data = Path(data_dir)
     short = team_id_short(token(data))
     if not short: return data / MIRROR_NAME
-    target = data / MIRROR_NAME / short
-    if not target.exists(): _migrate_layout(data, short)
-    return target
+    if _needs_migration(data): _migrate_layout(data, short)
+    return data / MIRROR_NAME / short
 
 
 def ensure_mirror(data_dir):
@@ -294,8 +315,8 @@ def state_path(data_dir):
     data = Path(data_dir)
     short = team_id_short(token(data))
     if not short: return data / STATE_FILE
-    path = data / f'{STATE_PREFIX}{short}.json'
-    if not path.exists(): _migrate_layout(data, short)
+    if not (path := data / f'{STATE_PREFIX}{short}.json').exists() and _needs_migration(data):
+        _migrate_layout(data, short)
     return path
 
 

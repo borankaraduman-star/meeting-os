@@ -346,6 +346,24 @@ class TeamBoundaryTests(CloudFixture):
         self.assertEqual(json.loads(TC.state_path(data).read_text(encoding='utf-8'))['pulled'], {'words/a.jsonl': 'x'})
         self.assertFalse((data / TC.STATE_FILE).exists())
 
+    def test_the_migration_merges_rather_than_orphans_a_folder_that_came_back(self):
+        """An old app version running beside a new one recreates `team/reports/<host>/` after the migration has
+        already made `team/<team>/reports/`. Skipping the name would leave those reports where nothing reads
+        them; they are merged, and a file that already exists under the team is never overwritten."""
+        data = self.tmp / 'ikisi'; data.mkdir()
+        (data / 'openrouter.key').write_text(self.KEY + '\n', encoding='utf-8')
+        short = TC.team_id_short(TC.token(data))
+        legacy = data / 'team'
+        (legacy / short / 'reports' / 'a').mkdir(parents=True)
+        (legacy / short / 'reports' / 'a' / 'eski.json').write_text('{"meeting":"eski"}', encoding='utf-8')
+        (legacy / 'reports' / 'a').mkdir(parents=True)
+        (legacy / 'reports' / 'a' / 'yeni.json').write_text('{"meeting":"yeni"}', encoding='utf-8')
+        (legacy / 'reports' / 'a' / 'eski.json').write_text('{"meeting":"başka"}', encoding='utf-8')
+        mirror = TC.mirror_dir(data)
+        self.assertEqual(sorted(p.name for p in (mirror / 'reports' / 'a').glob('*.json')), ['eski.json', 'yeni.json'])
+        self.assertEqual(json.loads((mirror / 'reports' / 'a' / 'eski.json').read_text(encoding='utf-8'))['meeting'], 'eski')
+        self.assertFalse((legacy / 'reports' / 'a' / 'yeni.json').exists())
+
     def test_a_legacy_folder_from_another_team_is_not_handed_to_this_one(self):
         """The state file names the team those files came from. If this Mac is in a different team now, the old
         mirror keeps its own name and the new team starts empty — the wrong answer here uploads one team's
