@@ -67,7 +67,7 @@ struct QuickMenu:View {
         if model.zoomMeetingOpen && !model.recording { Text("Zoom toplantısı açık").foregroundStyle(.secondary) }
         if !model.recording, model.useCalendar, let cal=CalendarContext.currentCached() { Text("Takvim: \(cal.title)").foregroundStyle(.secondary) }
         Divider()
-        Button(model.recording ? "Kaydı bitir  ⌃⌥R" : "Yeni kayıt  ⌃⌥R") { model.recording ? model.stop() : model.start() }.disabled(model.busy && !model.recording)
+        Button(model.recording ? "Kaydı bitir  ⌃⌥R" : "Yeni kayıt  ⌃⌥R") { if model.recording { model.stop() } else { model.start() } }.disabled(model.busy && !model.recording)
         if model.recording {
             Button("An  ⌃⌥M") { model.markMoment("important") }
             Button("Karar") { model.markMoment("decision") }

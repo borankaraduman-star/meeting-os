@@ -41,8 +41,8 @@ extension Model {
     }
     func analyzeMeeting(_ mid:String?=nil) {
         guard let mid=mid ?? selected else { return }
-        activity="Özet hazırlanıyor…"
-        launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in guard let self else { return }; self.activity=ok ? "Toplantı hazır" : "Özet çıkarılamadı · Transkript duruyor"; if ok, !NSApp.isActive { let waiting=self.review.filter { $0.kind=="unnamed_speaker" || $0.kind=="suggested_name" }.count; self.notifyDone("Toplantı hazır",waiting>0 ? "\(waiting) isim bekliyor · aç ve onayla." : "Özet, kararlar ve görevler kaynaklarıyla hazır.") } }
+        let started=launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in guard let self else { return }; self.activity=ok ? "Toplantı hazır" : "Özet çıkarılamadı · Transkript duruyor"; if ok, !NSApp.isActive { let waiting=self.review.filter { $0.kind=="unnamed_speaker" || $0.kind=="suggested_name" }.count; self.notifyDone("Toplantı hazır",waiting>0 ? "\(waiting) isim bekliyor · aç ve onayla." : "Özet, kararlar ve görevler kaynaklarıyla hazır.") } }
+        if let line=LaunchOutcome.activity(started:started,onStart:"Özet hazırlanıyor…") { activity=line }   // a job already runs: the previous line still describes it
     }
     func resultMeeting(_ url:URL) -> String? {
         guard let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return nil }

@@ -278,7 +278,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             updateBlockedHint()
             idleRetryIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {
-            case .start: start(); activity="Zoom toplantısı açıldı · kayıt kendiliğinden başladı"
+            case .start: if let line=LaunchOutcome.activity(started:start(),onStart:"Zoom toplantısı açıldı · kayıt kendiliğinden başladı",onRefusal:LaunchOutcome.recordBusy) { activity=line }
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
@@ -298,10 +298,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         } catch { self.error=error.localizedDescription }
     }
     /// Recording has its own process slot: a finalize/analyze job from the previous meeting must never block ⌃⌥R.
-    func launch(_ args:[String], complete:@escaping (Bool)->Void) {
+    /// Returns whether the child actually started: only then may the caller announce the work.
+    @discardableResult func launch(_ args:[String], complete:@escaping (Bool)->Void)->Bool {
         let isRecord=JobPriority.isRealtime(args)
         let jobEnvironment=consumeJobEnvironment()   // a refused launch drops them too: they belong to this attempt only
-        guard isRecord ? recordProcess==nil : job==nil else { return }
+        guard isRecord ? recordProcess==nil : job==nil else { return false }
         let idle=idleRetry; idleRetry=false   // consumed by this launch only
         do {
             try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])   // transcripts and receipts live here; an existing folder keeps its mode
@@ -329,10 +330,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             }
             try p.run(); error=""
             if isRecord { recordProcess=p; recordStartedAt=Date() } else { job=p; busy=true; jobBackgrounded=false }
-        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil } }
+            return true
+        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil }; return false }
     }
-    func start() {
-        guard recordProcess==nil else { return }
+    /// Returns false when the previous helper is still draining: the caller must not claim a recording started.
+    @discardableResult func start()->Bool {
+        guard recordProcess==nil else { return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
@@ -342,7 +345,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         jobTitle=name
-        launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
+        return launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recorder.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
@@ -624,7 +627,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if age<3 { return }   // key repeat / double press right after start: ignore
                 if age<15 { if let armed=stopArmedAt, Date().timeIntervalSince(armed)<2 { stop() } else { stopArmedAt=Date(); activity="Bitirmek için ⌃⌥R’ye bir kez daha bas" }; return }
                 stop()
-            } else { start(); activity="Kayıt başladı · ⌃⌥R ile bitir, ⌃⌥M ile an işaretle" }
+            } else if let line=LaunchOutcome.activity(started:start(),onStart:LaunchOutcome.recordStarted,onRefusal:LaunchOutcome.recordBusy) { activity=line }
         }
         else if id==GlobalHotkeys.mark, recording { markMoment("important") }
     }
@@ -641,11 +644,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
         if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r) }
-        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, !zoomMeetingOpen { startUpdate() }
+        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
     func startUpdate() {
-        guard job==nil, !recording, !updating else { return }
+        guard job==nil, !recording, recordProcess==nil, !updating else { return }   // the helper drains after a stop; the updater would wait 60 s and abort
         if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
         Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
