@@ -86,7 +86,7 @@ struct ReviewView:View {
                         if item.kind=="unnamed_speaker" || item.kind=="short_match" || item.kind=="suggested_name", let seg=item.segment, let row=model.rows.first(where:{ $0.id==seg }) {
                             Button("Adlandır…") { model.editRow=row;model.editName=row.name;model.editText=row.text;model.clean=false }
                         }
-                        if item.kind=="task_owner" { Button("Görevlerim’de aç") { model.tab="actions" } }
+                        if item.kind=="task_owner" { Button("Görevlerim’de aç") { model.navigate { model.tab="actions" } } }
                         if item.kind=="word" {
                             // One click teaches the word: this meeting is fixed everywhere and later meetings correct near misses on their own.
                             Button("Düzelt ve öğret") { Task { await model.applyWord(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).help("Bu toplantıdaki bütün geçişleri düzeltir ve kelimeyi öğrenir").accessibilityIdentifier("wordApply-\(item.segment.map(String.init) ?? item.original)")

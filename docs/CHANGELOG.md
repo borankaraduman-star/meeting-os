@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 63 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 64 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.59](#v1259) | 2026-09-10 21:10 | Meeting OS 1.2.59 — ortalı boş durumlar, her sayfada ✕, Geri düğmesi |
 | [v1.2.58](#v1258) | 2026-09-10 20:50 | Meeting OS 1.2.58 — tıkla-düzelt ve Özet'e ikinci görüş düzeltmeleri |
 | [v1.2.57](#v1257) | 2026-09-10 20:47 | Meeting OS 1.2.57 — soldaki listede çöp kutusu; 1–2 saniyelik seslere isim istenmez |
 | [v1.2.56](#v1256) | 2026-09-10 20:38 | Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli |
@@ -83,6 +84,16 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1259"></a>
+### Meeting OS 1.2.59 — ortalı boş durumlar, her sayfada ✕, Geri düğmesi
+
+2026-09-10 21:10 · yerel not · GitHub sürüm sayfası yok
+
+Boran'ın üç isteği:
+- **Boş sekmeler / uyarılar ortalı:** bütün boş durumlar (Transkript, Özet, Görevlerim, Kontrol, Hafıza, karne, Ara) tek bileşenle, pencere boyutundan bağımsız ortada; içerik sütunları (≈800 pt) pencerede ortalanır (Özet artık sola yapışık değil); şeritler dar pencerede kırpılmaz, sarar.
+- **Her sayfada kapatma:** Ayarlar, Paylaş, OpenRouter, Düzelt, temiz örnek, taslak/görev düzenleme ve kelime baloncuğunda sağ üstte ✕; Esc ve ⌘W sayfayı kapatır (pencereyi değil). Ayarlar'ın ✕'i kaydırmadan bağımsız her zaman görünür, sayfa ekrandan taşmaz.
+- **Geri:** "Bölüme git", kanıt alıntısı, Hafıza/karar/soru sonucu, Kontrol → Görevlerim gibi programlı atlamalardan sonra sekme şeridinde "← Geri" (⌘[; Git menüsünde de). Kenar çubuğu ve sekme tıklamaları geri yığınına girmez.
 
 <a id="v1258"></a>
 ### Meeting OS 1.2.58 — tıkla-düzelt ve Özet'e ikinci görüş düzeltmeleri
