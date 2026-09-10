@@ -73,6 +73,27 @@ class CorrectionMemoryTests(unittest.TestCase):
             cm.apply_rules(db,m3)
             self.assertEqual(next(x for x in db.segments(m3) if x['id']==sid)['text'],'İstanbul toplantısı')
             db.close()
+    def test_reverting_an_automatic_pass_leaves_a_taught_rule_alone(self):
+        """Undo convicts the rule the system inferred. A word the user taught by hand is their decision: it
+        stays in Ayarlar → Sesler ve sözlük, and only Unut takes it away."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db,m1,m2,m3=self._store(tmp)
+            self._edit(db,m1,'Spilendo ekibi','Splendo ekibi'); self._edit(db,m2,'spilendo sürümü','Splendo sürümü')
+            cm.teach(db,m1,'Jirra','Jira',None)
+            sid=db.add_segment(m3,Segment(0,5,'Spilendo ve Jirra','system','system:S1'))
+            self.assertEqual(cm.apply_rules(db,m3)['fixes'],2)
+            self.assertEqual(next(x for x in db.segments(m3) if x['id']==sid)['text'],'Splendo ve Jira')
+            self.assertEqual(cm.revert(db,m3,sid)['rejected'],['Spilendo'])   # the learned one only
+            self.assertEqual([(r['original'],r['source']) for r in cm.word_rules(db)],[('Jirra','taught')])
+            db.close()
+
+    def test_a_multi_word_rule_matches_by_turkish_folding(self):
+        """`re.IGNORECASE` calls "ISI" and "isi" the same word and misses "İ": a phrase rule folds instead."""
+        self.assertTrue(cm._pattern('kanal ekibi').search('Bugün Kanal Ekibi toplandı'))
+        self.assertTrue(cm._pattern('ısı testi').search('ISI TESTİ yapıldı'))
+        self.assertFalse(cm._pattern('isı testi').search('ISI TESTİ yapıldı'))
+        self.assertFalse(cm._pattern('kanal ekibi').search('kanal ekibimiz'))
+
     def test_glossary_proposals(self):
         rules=[{'original':'Spilendo','replacement':'Splendo','count':2,'meetings':2},{'original':'foo','replacement':'bar','count':2,'meetings':2}]
         entries=[{'term':'Splendo','aliases':[],'mishearings':['Splendou']}]

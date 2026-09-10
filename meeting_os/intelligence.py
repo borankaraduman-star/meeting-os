@@ -173,7 +173,16 @@ def validate_record(record,rows,mic_owner=None):
                 owner=item.get('owner');due=item.get('due_text');quotes=' '.join(e['quote'] for e in evidence)
                 owner=canonical_owner(owner,rows,mic_owner)   # "Deniz'in", "deniz bey" and "Deniz" are one person before anything is verified
                 owner_key=owner_match_key(owner)
-                if owner and not (re.search(r'(?<!\w)'+re.escape(owner_key)+r'(?!\w)',owner_match_key(quotes)) or any(owner_match_key(row_person(r,mic_owner) or '')==owner_key and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim)|i will|i ll)\b',normalize(r['text'])) for r in selected)):owner=None
+                # Two different folds, on purpose. The QUOTE text is scanned with the ı/i-only key: dropping
+                # diacritics there makes "Şen" equal "sen" and "Su" equal "şu", so an ordinary Turkish word
+                # vouched for a name nobody had said. The SPEAKER side keeps the full fold — "Gokhan" typed
+                # without its diacritics is still Gökhan — but only while it identifies one person: when two
+                # speakers in this meeting fold onto the same key, the label proves nothing and we abstain.
+                quote_key=_name_key(owner or '')
+                named_in_quote=bool(quote_key) and bool(re.search(r'(?<!\w)'+re.escape(quote_key)+r'(?!\w)',_name_key(quotes)))
+                same_key={n for n in (row_person(r,mic_owner) for r in rows) if n and owner_match_key(n)==owner_key}
+                claimed_it=len(same_key)<2 and any(owner_match_key(row_person(r,mic_owner) or '')==owner_key and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim)|i will|i ll)\b',normalize(r['text'])) for r in selected)
+                if owner and not (named_in_quote or claimed_it):owner=None
                 if not owner and not (item.get('owner') or '').strip():
                     # Only when the model left owner EMPTY (a wrong name it invented stays abstained + reviewed):
                     # "Ben … paylaşacağım" from a named speaker is that person's commitment.
@@ -232,7 +241,11 @@ def canonical_owner(owner,rows,mic_owner=None):
     if not cleaned:return None
     # "Ben raporu paylaşacağım" → owner "Ben" is a pronoun, not a person: the caller fills the owner from the speaker instead.
     if normalize(cleaned) in FIRST_PERSON:return None
-    for match in (normalize,_name_key):
+    # normalize → _name_key → owner_match_key: each step forgives one more way of typing the same name
+    # (case, then ı/i, then the diacritics), and the first step that finds exactly one speaker wins. The
+    # full fold lives here, on the speaker side, where a name is being matched against a name — never
+    # against the words of the transcript, where "sen" would vouch for "Şen".
+    for match in (normalize,_name_key,owner_match_key):
         key=match(cleaned)
         hits=[]
         for row in rows:

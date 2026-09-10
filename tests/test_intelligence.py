@@ -85,16 +85,32 @@ class OwnerNormalizationTests(unittest.TestCase):
   rows=[{'id':1,'start':0.,'end':8.,'source':'mic','speaker':'mic:S0','speaker_name':'Boran','text':"Bu işi Deniz üstlendi, hotfix'i o deploy edecek.",'flags':[]}]
   d=blank(actions=[{'title':'Hotfix deploy','owner':"Deniz'in",'due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
   self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Deniz')
- def test_owner_spelled_without_its_diacritics_still_clears_the_evidence_gate(self):
-  # `metrics.normalize` keeps ö/o apart, so "Gokhan" never matched the quote's "Gökhan" and the owner was
-  # dropped. The gate uses `memory.owner_key` semantics now: one person, however the name is typed.
-  rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gökhan','text':'Gökhan sunumu cuma günü hazırlayacak.','flags':[]}]
-  d=blank(actions=[{'title':'Sunumu hazırla','owner':'Gokhan','due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
-  self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Gokhan')   # kept, not abstained; canonical_owner still returns the model's own spelling
-  # The same gate through the speaker side: a first-person commitment by a row whose name is spelled the other way.
+ def test_owner_spelled_without_its_diacritics_clears_the_gate_through_the_speaker(self):
+  # Two folds, on purpose. The SPEAKER side keeps `memory.owner_key` semantics — "Gokhan" typed without its
+  # diacritics is still Gökhan — so a first-person commitment by that row owns the task.
   rows2=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gokhan','text':'Ben sunumu cuma günü hazırlayacağım.','flags':[]}]
   d2=blank(actions=[{'title':'Sunumu hazırla','owner':'Gökhan','due_text':None,'evidence':[{'segment_id':1,'quote':rows2[0]['text']}]}])
-  self.assertEqual(validate_record(d2,rows2)['actions'][0]['owner'],'Gökhan')
+  self.assertEqual(validate_record(d2,rows2)['actions'][0]['owner'],'Gokhan')   # one spelling per person: the transcript's own
+  # The QUOTE side does not drop diacritics: a name is only "said" in the transcript when the transcript
+  # spells it that way. An owner the evidence does not name is abstained and marked for a look.
+  rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gökhan','text':'Gökhan sunumu cuma günü hazırlayacak.','flags':[]}]
+  d=blank(actions=[{'title':'Sunumu hazırla','owner':'Gokhan','due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
+  self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Gökhan')   # canonical_owner snapped it onto the speaker's own spelling first
+
+ def test_a_turkish_word_is_not_a_person_the_evidence_named(self):
+  """The quote gate folded ş→s and ı→i together: "Şen" was vouched for by the word "sen", "Su" by "şu"."""
+  rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Kerem','text':'Bunu sen yarın şu ekrandan yaparsın.','flags':[]}]
+  for name in ('Şen','Su'):
+   d=blank(actions=[{'title':'Ekranı düzelt','owner':name,'due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
+   out=validate_record(d,rows)['actions'][0]
+   self.assertIsNone(out['owner'],name);self.assertTrue(out['needs_review'])
+
+ def test_two_speakers_that_fold_to_one_key_abstain_instead_of_guessing(self):
+  """"Ilker" and "İlker" both speak: the speaker side of the gate can no longer say which one committed."""
+  rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Ilker','text':'Ben raporu yarın paylaşacağım.','flags':[]},
+        {'id':2,'start':8.,'end':12.,'source':'system','speaker':'S2','speaker_name':'İlker','text':'Olur, bakarım.','flags':[]}]
+  d=blank(actions=[{'title':'Raporu paylaş','owner':'Ilker','due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
+  self.assertIsNone(validate_record(d,rows)['actions'][0]['owner'])
  def test_an_owner_no_spelling_of_which_appears_in_the_evidence_is_still_dropped(self):
   rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gökhan','text':'Sunumu cuma günü hazırlayacağız.','flags':[]}]
   d=blank(actions=[{'title':'Sunumu hazırla','owner':'Cem','due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])

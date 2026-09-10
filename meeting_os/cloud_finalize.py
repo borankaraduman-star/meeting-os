@@ -41,6 +41,7 @@ RETRY_WAITS = (2,8,20)        # a rate limit or a 5xx usually clears in seconds;
 RETRY_JITTER = 0.25           # three workers that failed together must not come back in lockstep
 BACKOFF_MINUTES = (10,30,120,360)   # idle-retry spacing after a failed job; every 24 h from then on
 DISK_FULL_RETRY_MINUTES = 30        # a full disk is fixed by the user, not by waiting longer and longer
+DISK_FULL_GRACE_HOURS = 48          # after two days of "free some space" it is a failure like any other
 MAX_CLOUD_RETRIES = 30        # the queue stops asking after this; the audio is still never deleted
 
 
@@ -74,15 +75,26 @@ def note_cloud_failure(store, mid, exc):
     open_attempt=meta.pop('cloud_attempt_open',None)
     stored=meta.get('cloud_retry_attempt')
     stored=stored if isinstance(stored,int) and not isinstance(stored,bool) and stored>0 else 0
-    if is_disk_full(exc):
-        # Nothing was asked of OpenRouter and nothing about this meeting is wrong: the user frees space and it
-        # works. Spending one of the thirty retries on it would eventually retire a perfectly good recording.
-        attempt=max(0,stored-1) if open_attempt else stored
+    now=datetime.now(timezone.utc)
+    free_space=is_disk_full(exc)
+    if free_space:
+        # Two days of the same "free some space" is not a temporary condition, it is a meeting that will never
+        # finish this way. Until then the attempt is left exactly as it stands: nothing was asked of
+        # OpenRouter, so spending one of the thirty retries would eventually retire a good recording — and
+        # GIVING one back (the old `stored-1`) let such a meeting be offered to the queue forever.
+        started=meta.get('cloud_disk_full_since')
+        try: started=datetime.fromisoformat(started) if isinstance(started,str) else None
+        except ValueError: started=None
+        if started and started.tzinfo is None: started=started.replace(tzinfo=timezone.utc)
+        if started and now-started>timedelta(hours=DISK_FULL_GRACE_HOURS): free_space=False
+        else: meta['cloud_disk_full_since']=(started or now).isoformat()
+    if free_space:
+        attempt=stored
         wait=DISK_FULL_RETRY_MINUTES
     else:
+        meta.pop('cloud_disk_full_since',None)
         attempt=(stored or next_attempt(meta)) if open_attempt else next_attempt(meta)
         wait=backoff_minutes(attempt)
-    now=datetime.now(timezone.utc)
     kind='disk_full' if is_disk_full(exc) else error_kind(exc)
     message=error_message(exc) if getattr(exc,'user_message',None) or not is_disk_full(exc) else 'Disk dolu; devam etmek için yer açın.'
     meta['cloud_error']={'kind':kind,'message':message,'at':now.isoformat()}
@@ -298,12 +310,15 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         if 0<=position<len(plan):
             if 'skipped' in usage: weight['total']-=seconds[position]
             else: weight['uploaded']+=seconds[position]
+    # What an earlier run already paid for is not this run's speed. Counting it made a resumed job that had
+    # uploaded 55 of 60 minutes look one minute from done the second it started, whatever it was doing.
+    baseline=weight['uploaded']
     import random, shutil as _shutil, tempfile, time
     from concurrent.futures import ThreadPoolExecutor
     staging=Path(tempfile.mkdtemp(prefix='meeting-os-pieces-'))
     def progress(detail='OpenRouter'):
-        emit('transcribing',finished,len(plan),detail,
-             uploaded_seconds=round(weight['uploaded'],1),total_seconds=round(max(weight['total'],weight['uploaded']),1))
+        done_now=max(0.0,weight['uploaded']-baseline);left=max(weight['total']-baseline,done_now)
+        emit('transcribing',finished,len(plan),detail,uploaded_seconds=round(done_now,1),total_seconds=round(left,1))
     def prepare(position):
         """Skip (echo/silent) or encode this piece. Runs on the encode pool one batch ahead of the uploads;
         the Opus bytes land in a scratch file so a prefetched batch never sits in memory."""
@@ -687,28 +702,37 @@ def compact_capture(store, mid):
     identity need; the 12-second capture chunks (48 kHz float, several times larger) are removed. The
     journal stays so the capture history remains readable. Returns bytes freed."""
     row=store.db.execute('SELECT status,metadata FROM meetings WHERE id=?',(mid,)).fetchone()
-    if not row or row['status']!='complete': return 0
+    if not row: return 0
     meta=json.loads(row['metadata'] or '{}');capture=meta.get('capture_dir');paths=meta.get('paths') or {}
     if not capture or meta.get('cloud_mode')!='capture': return 0
     directory=Path(capture)
-    full={k:Path(v) for k,v in paths.items() if isinstance(v,str)}
-    if not full or not all(f.is_file() and f.stat().st_size>0 for f in full.values()): return 0
-    # Both requested sources or nothing: the chunks are the only way back if one channel never got assembled.
-    from .audio import journal_source_ends
-    expected=journal_source_ends(directory)
-    if expected and set(expected)-set(full): return 0
-    freed=0;removed=0
+    freed=0;removed=0;stale=0
+    def record():
+        if stale: meta['stale_temporaries_removed']=meta.get('stale_temporaries_removed',0)+stale
+        if removed: meta['chunks_removed']=removed;meta['chunks_freed_bytes']=freed
+        if removed or stale:
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),mid))
+        return freed
     # Orphan `*-full.wav.tmp` / `*-full.flac.tmp`: an assembler or an archiver that was killed mid-write. They
     # are never adopted, nothing else sweeps them, and they are the size of the recording. An hour of grace
-    # keeps this away from anything still being written.
+    # keeps this away from anything still being written. This runs BEFORE every other test in this function:
+    # the meetings that leave such a file behind are exactly the ones that never reach `complete`, and the
+    # sweep used to be unreachable for them.
     import time
-    stale=0
+    from .audio import TEMPORARY_GRACE_SECONDS
     for pattern in ('*-full.wav.tmp','*-full.flac.tmp'):
         for orphan in directory.glob(pattern):
             try:
-                if time.time()-orphan.stat().st_mtime<3600: continue
+                if time.time()-orphan.stat().st_mtime<TEMPORARY_GRACE_SECONDS: continue
                 freed+=orphan.stat().st_size;orphan.unlink();stale+=1
             except OSError: pass
+    if row['status']!='complete': return record()
+    full={k:Path(v) for k,v in paths.items() if isinstance(v,str)}
+    if not full or not all(f.is_file() and f.stat().st_size>0 for f in full.values()): return record()
+    # Both requested sources or nothing: the chunks are the only way back if one channel never got assembled.
+    from .audio import journal_source_ends
+    expected=journal_source_ends(directory)
+    if expected and set(expected)-set(full): return record()
     # `*.partial.wav` is a chunk the helper was still writing when it was killed. It never announced a chunk
     # event, so the assembler skipped it and those seconds are NOT in *-full.wav — but neither is the file
     # usable, nothing else ever sweeps it, and it stayed on disk for the life of the meeting.
@@ -717,11 +741,7 @@ def compact_capture(store, mid):
             if chunk.resolve() in {f.resolve() for f in full.values()}: continue
             try: freed+=chunk.stat().st_size;chunk.unlink();removed+=1
             except OSError: pass
-    if stale: meta['stale_temporaries_removed']=meta.get('stale_temporaries_removed',0)+stale
-    if removed: meta['chunks_removed']=removed;meta['chunks_freed_bytes']=freed
-    if removed or stale:
-        with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),mid))
-    return freed
+    return record()
 
 
 def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):

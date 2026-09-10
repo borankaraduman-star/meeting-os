@@ -93,12 +93,21 @@ def journal_source_ends(directory):
 ADOPTION_TOLERANCE = 1.0   # seconds: the assembler rounds and the last chunk may be a hair short
 
 
+TEMPORARY_GRACE_SECONDS = 3600   # a `.tmp` younger than this may still be being written by a live assembler
+
+
 def adoptable_full_files(directory):
     """The assembled files of an earlier run, but only when every source the journal recorded has one and each
     is as long as the journal says. Anything else returns {} and the caller rebuilds from the chunks."""
     directory = Path(directory).resolve()
-    for stale in directory.glob('*-full.wav.tmp'):   # an assembler that was killed mid-write: never adopt it
-        try: stale.unlink()
+    # An assembler that was killed mid-write leaves `*-full.wav.tmp`: never adopted, and swept once it is old
+    # enough to be nobody's work in progress. The hour of grace is the one `compact_capture` already uses —
+    # without it this deleted the file a second assembler was writing at that very moment.
+    import time
+    for stale in directory.glob('*-full.wav.tmp'):
+        try:
+            if time.time()-stale.stat().st_mtime < TEMPORARY_GRACE_SECONDS: continue
+            stale.unlink()
         except OSError: pass
     expected = journal_source_ends(directory)
     present = {s: directory/f'{s}-full.wav' for s in ('mic', 'system') if (directory/f'{s}-full.wav').is_file()}

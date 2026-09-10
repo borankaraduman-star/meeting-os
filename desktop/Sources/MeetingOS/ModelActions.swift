@@ -174,7 +174,7 @@ extension Model {
     // MARK: - Kelimeyi bir kez düzelt, uygulama öğrensin
     /// One sentence for both entry points, so the promise reads the same wherever the word was taught.
     static func wordLearnedLine(original:String,replacement:String,fixes:Int)->String {
-        "“\(original)” → “\(replacement)” · bu toplantıda \(fixes) yerde düzeltildi · öğrenildi; sonraki kayıtlarda yakın yazımlar da düzeltilir"
+        "“\(original)” → “\(replacement)” · bu toplantıda \(fixes) yerde düzeltildi · öğrenildi; sonraki kayıtlarda aynı yazım düzeltilir, yakınları Kontrol'e önerilir"
     }
     /// Teach one word from the segment editor: every occurrence in this meeting is fixed now, and the rule
     /// is remembered so near-miss spellings in later meetings correct themselves.
@@ -230,8 +230,12 @@ extension Model {
     func forgetWord(_ original:String) async {
         guard !original.isEmpty else { return }
         do { let r=try await request(["action":"forget_word","original":original])
-            let segments=r["segments"] as? Int ?? 0, meetings=r["meetings"] as? Int ?? 0
-            activity="“\(original)” unutuldu · artık kendiliğinden düzeltilmez"+(segments>0 ? " · \(meetings) toplantıda \(segments) bölüm geri alındı" : "")
+            let segments=r["segments"] as? Int ?? 0, meetings=r["meetings"] as? Int ?? 0, kept=r["kept"] as? Int ?? 0
+            // A segment the user edited after the word was taught keeps their sentence; saying how many were
+            // left is the difference between "everything is back" and a silent hole in the undo.
+            let undone=segments>0 ? " · \(meetings) toplantıda \(segments) bölüm geri alındı" : ""
+            let left=kept>0 ? " · \(kept) bölüm elle düzenlendiği için bırakıldı" : ""
+            activity="“\(original)” unutuldu · artık kendiliğinden düzeltilmez"+undone+left
             await loadWordRules()
             if segments>0 { await refresh() } }
         catch { self.error=error.localizedDescription }

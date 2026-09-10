@@ -2,11 +2,14 @@
 habit of the transcription model, not a slip: from then on it is fixed automatically, marked, and
 reversible. Nothing here trains a model; the rules are plain substitutions learned from `text_edits`.
 
-"Teach a word once" sits on the same machinery. `teach` turns a single correction into a rule at once —
-the user said so, waiting for a second meeting would be pedantry — and a taught rule matches near-misses
-as well as the exact spelling, because a model that wrote "Trendyoll" once will write "Trendiyol" next
-time. Everything a taught rule touches keeps the sentence it replaced (`pre_word_text`) and is listed in
-`metrics.word_corrections`, so `forget_word` can put every one of them back.
+"Teach a word once" sits on the same machinery. `teach` turns a single correction into a rule at once — the
+user said so, waiting for a second meeting would be pedantry. A rule only ever rewrites the EXACT spelling it
+was taught: measured on real transcripts, 42.8 % of the distinct words in a meeting are one letter away from
+another real word, so a rule that also fixed near-misses rewrote "Aynen" while aiming at "Ayşe". Near-misses
+are offered in Kontrol instead ("muhtemelen"), where a person decides and the accepted one is learned.
+Everything a taught rule touches keeps the sentence it replaced (`pre_word_text`), the text it produced
+(`word_text`) and is listed in `metrics.word_corrections`, so `forget_word` can put every one of them back
+without overwriting an edit the user made afterwards.
 """
 import difflib
 import json
@@ -130,7 +133,7 @@ def _distance(a, b, limit):
     return previous[lb]
 
 
-def near_miss(token, target, allow_suffix=False):
+def near_miss(token, target, allow_suffix=False, max_distance=None):
     """Is `token` (folded, already a stem) a misspelling of `target` (folded)? Cheap tests first: the length
     has to be within ±2 and the first or the last letter has to survive — a mis-transcription rarely loses both."""
     if len(token) < MIN_FUZZY or len(target) < MIN_FUZZY: return False
@@ -139,8 +142,14 @@ def near_miss(token, target, allow_suffix=False):
     if not allow_suffix and len(token) > len(target) and token.startswith(target) and token[len(target):] in SUFFIXES:
         return False   # an inflected correct word, not a misspelling
     limit = 1 if len(token) < LONG_TOKEN else 2
+    if max_distance is not None: limit = min(limit, max_distance)
     distance = _distance(token, target, limit)
     return 0 < distance <= limit
+
+
+def _inflected(folded, target):
+    """`folded` is `target` plus a Turkish ending — a correct word doing its job, not a misspelling."""
+    return len(folded) > len(target) and folded.startswith(target) and folded[len(target):] in SUFFIXES
 
 
 def _split(token):
@@ -162,57 +171,48 @@ def vocabulary_terms(data_dir):
 
 
 def _protected(rules, data_dir, allow=()):
-    """Tokens a fuzzy rule may never rewrite: what the rules produce, and the words the user already told the
-    system are spelled right. `allow` lets `teach` correct a word that happens to sit in the vocabulary itself."""
+    """Tokens a rule may never rewrite: what the rules produce — every token of it, so "kanal ekibi" is not
+    taken apart by a rule about "kanal" — and the words the user already told the system are spelled right.
+    `allow` lets a taught word be corrected even when it happens to sit in the vocabulary itself."""
     keep = {_fold(a) for a in allow}
-    out = {_fold(r['replacement']) for r in rules} | {_fold(t) for t in vocabulary_terms(data_dir)}
+    out = {_fold(t) for t in vocabulary_terms(data_dir)}
+    for r in rules:
+        folded = _fold(r['replacement'])
+        out.add(folded); out.update(folded.split())
     return out - keep
 
 
 def _targets(rules):
-    """Folded (original, replacement) for every taught single-word rule; multi-word rules stay exact."""
+    """Folded (original, replacement) for every taught single-word rule. These take the token path, which
+    understands Turkish apostrophe suffixes; multi-word originals stay on the plain pattern path."""
     out = []
     for r in rules:
-        if not r.get('fuzzy') or ' ' in r['original'].strip(): continue
+        if r.get('source') != 'taught' or ' ' in r['original'].strip(): continue
         out.append({'rule': r, 'original': _fold(r['original']), 'replacement': _fold(r['replacement'])})
     return out
 
 
-def _inflected(folded, target):
-    """`folded` is `target` plus a Turkish ending — a correct word doing its job, not a misspelling."""
-    return len(folded) > len(target) and folded.startswith(target) and folded[len(target):] in SUFFIXES
-
-
-def _pick(folded, targets, protected, has_suffix):
-    """The taught rule that best explains a folded token, or None."""
-    if len(folded) < MIN_FUZZY or folded in protected: return None
-    for t in targets:
-        if folded == t['original'] and folded != t['replacement']: return t['rule']   # the exact taught spelling always wins
-    if folded in common_words(): return None
-    best = None
-    for t in targets:
-        # "Trendyola" is one letter from "Trendyoll" and would be rewritten on distance alone. An ending on
-        # either spelling of the rule means the word is inflected, and this rule has nothing to say about it.
-        if not has_suffix and (_inflected(folded, t['original']) or _inflected(folded, t['replacement'])): continue
-        for target in (t['original'], t['replacement']):
-            if not near_miss(folded, target, allow_suffix=True): continue
-            limit = 1 if len(folded) < LONG_TOKEN else 2
-            distance = _distance(folded, target, limit)
-            if best is None or distance < best[0]: best = (distance, t['rule'])
-    return best[1] if best else None
-
-
 def apply_taught(text, targets, protected):
-    """Rewrite every token of `text` that a taught rule explains. A Turkish apostrophe suffix is left where it
-    was — "Trendyoll'a" becomes "Trendyol'a", never "Trendyol"."""
+    """Rewrite every token whose folded spelling IS the taught `original`, and nothing else. A near-miss is
+    not corrected automatically: on real transcripts almost half of the distinct words sit one letter from
+    another real word, so "Ayşe → Ayşen" rewrote "Aynen" three times. Near-misses go to Kontrol as
+    suggestions. A Turkish apostrophe suffix is left where it was — "Trendyoll'a" becomes "Trendyol'a"."""
     hits = {}
     if not targets: return text, hits
+    by_original = {t['original']: t['rule'] for t in targets}
     def swap(m):
         token = m.group(0)
         stem, suffix = _split(token)
-        rule = _pick(_fold(stem), targets, protected, bool(suffix))
+        folded = _fold(stem)
+        if folded in protected: return token
+        rule = by_original.get(folded)
         if rule is None: return token
         replacement = rule['replacement']
+        # "kanal" → "kanal ekibi" over a sentence that already reads "kanal ekibi" is a rule that has already
+        # run, not one that is missing: teaching the same thing twice must not grow the sentence word by word.
+        parts = _fold(replacement).split()
+        if parts and parts[0] == folded and [_fold(t) for t in _tokens(m.string[m.end():])[:len(parts) - 1]] == parts[1:]:
+            return token
         if stem[:1].isupper() and not replacement[:1].isupper(): replacement = _upper_first(replacement)
         hits[rule['original']] = hits.get(rule['original'], 0) + 1
         return replacement + suffix
@@ -234,7 +234,7 @@ def taught_rules(store):
         try: meetings = json.loads(r['meetings'] or '[]')
         except ValueError: meetings = []
         out.append({'original': r['display'] or r['original'], 'replacement': r['replacement'], 'count': r['count'] or 1,
-                    'meetings': len(meetings), 'created': r['created'], 'source': 'taught', 'fuzzy': True,
+                    'meetings': len(meetings), 'created': r['created'], 'source': 'taught',
                     'vocabulary_added': bool(r['vocabulary_added'])})
     return out
 
@@ -243,25 +243,40 @@ def all_rules(store):
     """Taught rules first; a learned rule for a word the user has already taught is redundant and dropped."""
     taught = taught_rules(store)
     keys = {_fold(r['original']) for r in taught}
-    learned = [{**r, 'source': 'learned', 'fuzzy': False} for r in learned_rules(store) if _fold(r['original']) not in keys]
+    learned = [{**r, 'source': 'learned'} for r in learned_rules(store) if _fold(r['original']) not in keys]
     return taught + learned
 
 
+def _variants(ch):
+    """Every spelling of one character that folds to the same Turkish letter. `re.IGNORECASE` gets this wrong
+    in both directions: it matches "I" against "i" (a different letter here) and misses "İ"."""
+    folded = _fold(ch)
+    out = {v for v in {ch, ch.upper(), ch.lower(), ch.casefold(), 'İ', 'I', 'i', 'ı'} if _fold(v) == folded}
+    out = {v for v in out if len(v) == 1} or {ch}
+    return re.escape(next(iter(out))) if len(out) == 1 else '[' + ''.join(re.escape(v) for v in sorted(out)) + ']'
+
+
 def _pattern(original):
-    return re.compile(r'(?<![^\W\d_])' + r'\s+'.join(re.escape(t) for t in original.split()) + r'(?![^\W\d_])', re.IGNORECASE)
+    """A whole-word pattern for one rule. A multi-word original is matched by Turkish folding on both sides —
+    "Kanal Ekibi" and "kanal ekibi" are the same phrase, "Isı" and "isı" are not the same word."""
+    if len(original.split()) > 1:
+        body = r'\s+'.join(''.join(_variants(c) for c in token) for token in original.split())
+        return re.compile(r'(?<![^\W\d_])' + body + r'(?![^\W\d_])')
+    return re.compile(r'(?<![^\W\d_])' + re.escape(original) + r'(?![^\W\d_])', re.IGNORECASE)
 
 
 def apply_rules(store, mid, rules=None, data_dir=None):
     """Apply learned and taught rules to every segment of a meeting. What the segment said before this pass is
     kept in `pre_auto_text` — its own key, never the user's `original_text`, so reverting an automatic fix
     cannot throw away a manual edit — the segment is flagged `auto_corrected`, and every fix is listed for undo.
-    Taught single-word rules also catch near-misses (see `apply_taught`); `data_dir` is only needed for the
-    vocabulary list those fuzzy matches must never rewrite."""
+    Every rule matches the exact spelling only; near-misses are Kontrol suggestions, never automatic rewrites.
+    `data_dir` is only needed for the vocabulary list, which no rule may rewrite — except a word the user
+    taught by hand, which is allowed to be corrected even when the vocabulary also holds it."""
     rules = all_rules(store) if rules is None else rules
     if not rules: return {'segments': 0, 'fixes': 0, 'rules': 0}
-    fuzzy = _targets(rules)
-    compiled = [(_pattern(r['original']), r) for r in rules if not any(t['rule'] is r for t in fuzzy)]
-    protected = _protected(rules, data_dir) if fuzzy else set()
+    taught = _targets(rules)
+    compiled = [(_pattern(r['original']), r) for r in rules if not any(t['rule'] is r for t in taught)]
+    protected = _protected(rules, data_dir, allow=[r['original'] for r in rules]) if taught else set()
     segments = fixes = 0
     for row in store.db.execute('SELECT id,payload FROM segments WHERE meeting=?', (mid,)).fetchall():
         payload = json.loads(row['payload']); text = payload.get('text') or ''
@@ -273,9 +288,9 @@ def apply_rules(store, mid, rules=None, data_dir=None):
                 return _upper_first(rep) if s[:1].isupper() and not rep[:1].isupper() else rep
             new, n = pattern.subn(swap, text)
             if n: applied.append({'original': rule['original'], 'replacement': rule['replacement'], 'count': n}); text = new
-        if fuzzy:
-            text, hits = apply_taught(text, fuzzy, protected)
-            by_original = {t['rule']['original']: t['rule'] for t in fuzzy}
+        if taught:
+            text, hits = apply_taught(text, taught, protected)
+            by_original = {t['rule']['original']: t['rule'] for t in taught}
             for original, n in hits.items():
                 applied.append({'original': original, 'replacement': by_original[original]['replacement'], 'count': n})
         if not applied: continue
@@ -293,14 +308,18 @@ def revert(store, mid, segment_id):
     if not row: raise ValueError('Bölüm bulunamadı')
     payload = json.loads(row['payload']); applied = (payload.get('metrics') or {}).get('auto_corrections') or []
     if not applied: return {'reverted': 0}
-    for a in applied: reject_rule(store, a['original'])
+    # Only a rule the system inferred is convicted by an undo. A word the user taught by hand stays taught —
+    # rejecting it would make it vanish from Ayarlar → Sesler ve sözlük for a mistake it may not have made.
+    taught = {_fold(r['original']) for r in taught_rules(store)}
+    rejected = [a['original'] for a in applied if _fold(a['original']) not in taught]
+    for original in rejected: reject_rule(store, original)
     # pre_auto_text is what this segment said before the automatic pass — the user's manual edit, when there
     # was one. original_text is the fallback for segments corrected by a version that shared the two keys.
     payload['text'] = payload.pop('pre_auto_text', None) or payload.get('original_text') or payload['text']
     payload['flags'] = [f for f in payload.get('flags') or [] if f != 'auto_corrected']
     payload['metrics'].pop('auto_corrections', None)
     with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), segment_id))
-    return {'reverted': len(applied), 'rejected': [a['original'] for a in applied]}
+    return {'reverted': len(applied), 'rejected': rejected}
 
 
 def glossary_proposals(rules, entries):
@@ -349,16 +368,21 @@ def _vocabulary_remove(data_dir, term):
 
 
 def _apply_now(store, mid, rule, protected):
-    """Fix every occurrence of a just-taught word in the meeting the user is looking at. The sentence each
-    segment had is kept twice: in `original_text` (what the Düzelt box shows as the untouched transcript, when
-    nothing was there yet) and in `pre_word_text`, which is what `forget_word` puts back — a manual edit made
-    before the word was taught must survive being forgotten."""
+    """Fix every occurrence of a just-taught word in the meeting the user is looking at — the exact spelling
+    only, like every other rule; a near-miss in this meeting is offered in Kontrol. The sentence each segment
+    had is kept twice: in `original_text` (what the Düzelt box shows as the untouched transcript, when nothing
+    was there yet) and in `pre_word_text`, which is what `forget_word` puts back — a manual edit made before
+    the word was taught must survive being forgotten. `word_text` is what this pass produced, so a manual edit
+    made AFTER it can be recognised and left alone."""
+    key = _fold(rule['original'])
     single = ' ' not in rule['original'].strip()
     targets = _targets([rule]) if single else []
     pattern = None if single else _pattern(rule['original'])
     segments = fixes = 0
     for row in store.db.execute('SELECT id,payload FROM segments WHERE meeting=?', (mid,)).fetchall():
         payload = json.loads(row['payload']); text = payload.get('text') or ''
+        # Teaching the same word twice is one rule, not two passes: a segment this rule already rewrote is done.
+        if any(e.get('rule') == key for e in ((payload.get('metrics') or {}).get('word_corrections') or [])): continue
         if single:
             new, hits = apply_taught(text, targets, protected); count = sum(hits.values())
         else:
@@ -371,10 +395,10 @@ def _apply_now(store, mid, rule, protected):
         if 'original_text' not in payload:
             payload['original_text'] = text; metrics['word_original_set'] = True
         payload.setdefault('pre_word_text', text)
-        payload['text'] = new
+        payload['text'] = new; payload['word_text'] = new
         payload['flags'] = sorted(set(payload.get('flags') or []) | {'word_corrected'})
         entries = list(metrics.get('word_corrections') or [])
-        entries.append({'rule': _fold(rule['original']), 'original': rule['original'], 'replacement': rule['replacement'], 'count': count})
+        entries.append({'rule': key, 'original': rule['original'], 'replacement': rule['replacement'], 'count': count})
         metrics['word_corrections'] = entries
         with store.db: store.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), row['id']))
         segments += 1; fixes += count
@@ -406,7 +430,7 @@ def teach(store, mid, original, replacement, data_dir=None):
         store.db.execute('INSERT OR REPLACE INTO taught_words VALUES(?,?,?,?,?,?,?)',
                          (key, original, replacement, count, json.dumps(meetings), created, int(vocabulary_added or added)))
     rule = {'original': original, 'replacement': replacement, 'count': count, 'meetings': len(meetings), 'created': created,
-            'source': 'taught', 'fuzzy': True, 'vocabulary_added': bool(vocabulary_added or added)}
+            'source': 'taught', 'vocabulary_added': bool(vocabulary_added or added)}
     protected = _protected(all_rules(store), data_dir, allow=[original])
     result = _apply_now(store, mid, rule, protected) if mid else {'segments': 0, 'fixes': 0}
     return {'rule': rule, 'segments': result['segments'], 'fixes': result['fixes'], 'vocabulary_added': added}
@@ -425,7 +449,9 @@ def unteach(store, original, data_dir=None):
 
 def untaught_revert(store, mid, original):
     """Put back the sentences one taught word rewrote. A segment that a second taught word also touched is left
-    alone — undoing half of two overlapping rewrites would produce a sentence nobody ever wrote."""
+    alone — undoing half of two overlapping rewrites would produce a sentence nobody ever wrote — and so is a
+    segment the user has edited by hand since: forgetting a word must never throw away what a person typed.
+    Both cases are counted in `skipped`."""
     key = _fold(original)
     reverted = skipped = 0
     for row in store.db.execute('SELECT id,payload FROM segments WHERE meeting=?', (mid,)).fetchall():
@@ -433,8 +459,11 @@ def untaught_revert(store, mid, original):
         entries = metrics.get('word_corrections') or []
         if not entries: continue
         if any(e.get('rule') != key for e in entries): skipped += 1; continue
+        produced = payload.get('word_text')
+        if produced is not None and (payload.get('text') or '') != produced: skipped += 1; continue
         previous = payload.pop('pre_word_text', None) or payload.get('original_text')
         if previous: payload['text'] = previous
+        payload.pop('word_text', None)
         if metrics.pop('word_original_set', None): payload.pop('original_text', None)
         metrics.pop('word_corrections', None)
         payload['flags'] = [f for f in payload.get('flags') or [] if f != 'word_corrected']
@@ -469,41 +498,64 @@ def word_rules(store):
     return out
 
 
+def _ensure_dismissals(store):
+    store.db.execute('CREATE TABLE IF NOT EXISTS word_dismissals(word TEXT PRIMARY KEY, display TEXT, created TEXT)')
+
+
+def global_dismissals(store):
+    """Folded spellings the user has ever answered "Bu doğru" to. Kontrol asked about the same word in every
+    single meeting, because a dismissal only lived in the meeting it was made in."""
+    _ensure_dismissals(store)
+    return {r[0] for r in store.db.execute('SELECT word FROM word_dismissals')}
+
+
 def dismissed_words(store, mid):
     meta = json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?', (mid,)).fetchone()[0] or '{}')
     return meta, [w for w in (meta.get('word_dismissed') or []) if isinstance(w, str)]
 
 
 def dismiss_word(store, mid, original):
-    """"That is the word I meant": this spelling stops being flagged in this meeting."""
+    """"That is the word I meant": this spelling stops being flagged — in this meeting and in every other one.
+    The per-meeting list stays as it is: it is what the meeting's own Kontrol screen reads back."""
     original = (original or '').strip()
     if not original: raise ValueError('Kelime gerekli')
+    _ensure_dismissals(store)
     meta, current = dismissed_words(store, mid)
     if _fold(original) not in {_fold(w) for w in current}: current = current + [original]
     meta['word_dismissed'] = current[:200]
-    with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?', (json.dumps(meta, ensure_ascii=False), mid))
+    with store.db:
+        store.db.execute('UPDATE meetings SET metadata=? WHERE id=?', (json.dumps(meta, ensure_ascii=False), mid))
+        store.db.execute('INSERT OR REPLACE INTO word_dismissals VALUES(?,?,?)',
+                         (_fold(original), original, datetime.now(timezone.utc).isoformat()))
     return {'dismissed': True, 'words': len(meta['word_dismissed'])}
 
 
 REVIEW_LIMIT = 40
+VOCABULARY_MIN = 6    # a five-letter vocabulary term sits one letter from too many ordinary Turkish words
 
 
 def word_candidates(store, mid, data_dir=None, limit=REVIEW_LIMIT):
-    """Words in this meeting that are one slip away from a word the user taught or wrote in the vocabulary, and
-    are not that word. This is what Kontrol was blind to: a wrong word the model was confident about looks
-    exactly like a right one until you compare it with the list of words this team actually uses."""
+    """Words in this meeting that are ONE slip away from a word the user taught (either spelling of the rule)
+    or from a long vocabulary term, and are not that word. This is what Kontrol was blind to: a wrong word the
+    model was confident about looks exactly like a right one until you compare it with the list of words this
+    team actually uses. It is deliberately narrow — one letter, six letters of context for a vocabulary term —
+    because it is the only place a near-miss is raised at all now, and a list nobody reads flags nothing."""
     targets = []
     seen = set()
     for r in taught_rules(store):
-        folded = _fold(r['replacement'])
-        if len(folded) >= MIN_FUZZY and folded not in seen: seen.add(folded); targets.append((folded, r['replacement'], 'taught'))
+        # Both sides of the rule: the model writes the wrong spelling again, and it also writes near-misses of
+        # the right one. Either way the suggestion is the spelling the user asked for.
+        for spelling in (r['replacement'], r['original']):
+            folded = _fold(spelling)
+            if ' ' in folded or len(folded) < MIN_FUZZY or folded in seen: continue
+            seen.add(folded); targets.append((folded, r['replacement'], 'taught'))
     for term in vocabulary_terms(data_dir):
         folded = _fold(term)
-        if ' ' in folded or len(folded) < MIN_FUZZY or folded in seen: continue
+        if ' ' in folded or len(folded) < VOCABULARY_MIN or folded in seen: continue
         seen.add(folded); targets.append((folded, term, 'vocabulary'))
     if not targets: return []
     _, dismissed = dismissed_words(store, mid)
-    skip = seen | {_fold(w) for w in dismissed} | common_words()
+    skip = seen | {_fold(w) for w in dismissed} | global_dismissals(store) | common_words()
     found = {}
     for row in store.segments(mid):
         for token in _tokens(row.get('text') or ''):
@@ -512,8 +564,11 @@ def word_candidates(store, mid, data_dir=None, limit=REVIEW_LIMIT):
             if len(folded) < MIN_FUZZY or folded in skip: continue
             hit = found.get(folded)
             if hit: hit['count'] += 1; continue
+            # "Trendyola" is the right word inflected, and it is also one letter from the taught misspelling
+            # "Trendyoll". An ending on ANY of the words we know settles it before the distances are compared.
+            if any(_inflected(folded, t[0]) for t in targets): skip.add(folded); continue
             for target, display, source in targets:
-                if not near_miss(folded, target, allow_suffix=bool(suffix)): continue
+                if not near_miss(folded, target, allow_suffix=bool(suffix), max_distance=1): continue
                 found[folded] = {'original': stem, 'replacement': display, 'segment_id': row['id'], 'count': 1, 'source': source}
                 break
             else:

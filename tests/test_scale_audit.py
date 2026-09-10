@@ -49,14 +49,18 @@ class InterruptedAssemblyTests(unittest.TestCase):
             self.assertEqual(list(d.glob('*.tmp')),[])
 
     def test_a_killed_writer_leaves_nothing_that_can_be_adopted(self):
-        """The kill: a partial `*-full.wav.tmp` on disk and no rename. Resume must ignore and delete it."""
+        """The kill: a partial `*-full.wav.tmp` on disk and no rename. Resume must ignore it, and sweep it
+        once it is old enough to be nobody's work in progress — a live assembler's file is left alone."""
         with tempfile.TemporaryDirectory() as tmp:
             d=capture_dir(tmp,seconds=3)
             partial=d/'mic-full.wav.tmp'
             sf.write(partial,np.zeros(16000,dtype='float32'),16000,subtype='FLOAT',format='WAV')
             sf.write(d/'system-full.wav',np.zeros(16000*3,dtype='float32'),16000,subtype='FLOAT')
             self.assertEqual(adoptable_full_files(d),{})       # mic never finished
-            self.assertFalse(partial.exists())                 # and its leftovers are gone
+            self.assertTrue(partial.exists())                  # written seconds ago: another assembler may own it
+            os.utime(partial,(time.time()-7200,time.time()-7200))
+            self.assertEqual(adoptable_full_files(d),{})
+            self.assertFalse(partial.exists())                 # an hour on, the leftovers are gone
             rebuilt=assemble_capture(d)
             self.assertEqual(set(rebuilt),{'mic','system'})
             self.assertAlmostEqual(sf.info(rebuilt['mic']).duration,3.0,places=2)
@@ -135,7 +139,7 @@ class AssemblyReservationTests(unittest.TestCase):
             meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
             self.assertEqual(error['kind'],'disk_full')
             self.assertIn('Disk dolu',error['message'])
-            self.assertEqual(meta['cloud_retry_attempt'],0)   # the budget is given back
+            self.assertEqual(meta['cloud_retry_attempt'],1)   # not spent — and not given back either
             self.assertNotIn('cloud_attempt_open',meta)
             # A provider failure on the same meeting still counts.
             store.db.execute("UPDATE meetings SET metadata=? WHERE id=?",(json.dumps({'cloud_retry_attempt':1,'cloud_attempt_open':True}),mid));store.db.commit()
@@ -144,6 +148,41 @@ class AssemblyReservationTests(unittest.TestCase):
             self.assertEqual(meta['cloud_retry_attempt'],1)
             store.close()
 
+
+    def test_a_disk_that_stays_full_for_two_days_becomes_an_ordinary_failure(self):
+        """A full disk costs nothing while the user can still fix it. Costing nothing forever meant a meeting
+        that never fits was offered to the idle queue every half hour for the life of the app."""
+        from datetime import datetime,timedelta,timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'db.sqlite')
+            mid=store.create_meeting('Disk',{'cloud_retry_attempt':2,'cloud_attempt_open':True})
+            note_cloud_failure(store,mid,audio.disk_full(1_100_000_000))
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual(meta['cloud_retry_attempt'],2);self.assertIn('cloud_disk_full_since',meta)
+            meta['cloud_disk_full_since']=(datetime.now(timezone.utc)-timedelta(hours=49)).isoformat()
+            store.db.execute("UPDATE meetings SET metadata=? WHERE id=?",(json.dumps(meta),mid));store.db.commit()
+            note_cloud_failure(store,mid,audio.disk_full(1_100_000_000))
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual(meta['cloud_retry_attempt'],3)   # counted like any other failure now
+            self.assertNotIn('cloud_disk_full_since',meta)
+            store.close()
+
+    def test_a_resumed_job_reports_only_the_seconds_of_this_run(self):
+        """55 of 60 minutes were uploaded by an earlier run: the ETA must not claim one minute to go."""
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=180,sources=('system',));store=Store(Path(tmp)/'db.sqlite')
+            mid=store.create_meeting('Devam',{'capture_dir':str(d)})
+            sources=assemble_capture(d)
+            progress=Path(tmp)/'progress.json'
+            client=EchoFreeClient()
+            transcribe_sources(store,mid,sources,client,consent=True,model='openai/gpt-transcribe')
+            store.db.execute('DELETE FROM cloud_chunks WHERE meeting=? AND position=?',(mid,0));store.db.commit()
+            with patch.dict(os.environ,{'MEETING_OS_PROGRESS_PATH':str(progress)}):
+                transcribe_sources(store,mid,sources,client,consent=True,model='openai/gpt-transcribe')
+            data=json.loads(progress.read_text())
+            self.assertEqual(data['uploaded_seconds'],data['total_seconds'])
+            self.assertLess(data['total_seconds'],180.0)   # the resumed baseline is not this run's work
+            store.close()
 
     def test_a_full_disk_during_assembly_is_reported_and_retried_later(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -281,6 +320,22 @@ class StaleTemporaryTests(unittest.TestCase):
             freed=compact_capture(store,mid)
             self.assertFalse(old.exists());self.assertTrue(fresh.exists())   # a fresh one may still be being written
             self.assertGreaterEqual(freed,4096)
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual(meta['stale_temporaries_removed'],1)
+            store.close()
+
+    def test_an_unfinished_meeting_still_gets_its_temporaries_swept(self):
+        """The sweep sat below three early returns, and a meeting that never reached `complete` — exactly the
+        one that leaves a recording-sized `.tmp` behind — never reached it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            d=capture_dir(tmp,seconds=3);store=Store(Path(tmp)/'db.sqlite')
+            mid=store.create_meeting('Yarım',{'capture_dir':str(d),'cloud_mode':'capture'})
+            store.status(mid,'incomplete')
+            old=d/'system-full.wav.tmp';old.write_bytes(b'x'*8192)
+            os.utime(old,(time.time()-7200,time.time()-7200))
+            freed=compact_capture(store,mid)
+            self.assertFalse(old.exists());self.assertGreaterEqual(freed,8192)
+            self.assertTrue((d/'mic-000000.wav').is_file())   # the chunks of an unfinished meeting are untouched
             meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
             self.assertEqual(meta['stale_temporaries_removed'],1)
             store.close()

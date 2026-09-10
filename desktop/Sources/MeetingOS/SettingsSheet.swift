@@ -203,7 +203,7 @@ struct LearnedWordsSection:View {
                     }
                 }.padding(12).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("wordRulesList")
             }
-            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda yakın yazımlar da kendiliğinden düzeltilir. “Unut” kuralı kaldırır.").font(.caption2).foregroundStyle(.secondary)
+            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda aynı yazım kendiliğinden düzeltilir, yakın yazımlar Kontrol'e öneri olarak gelir. “Unut” kuralı kaldırır.").font(.caption2).foregroundStyle(.secondary)
         }.task { if model.wordRules.isEmpty { await model.loadWordRules() } }
     }
 }
