@@ -9,13 +9,9 @@ struct EditSegmentSheet:View {
     @State private var target:Row?   // the one piece "Yalnız bu bölüm" writes; defaults to the clicked paragraph's first piece
     /// Every piece of the paragraph this row opens: a wrong piece is usually one sentence inside a long paragraph.
     private var siblings:[Row] {
-        // From the full row list, not `model.blocks` (those follow the ⌘F filter and can stitch distant hits into one paragraph).
-        guard let at=model.rows.firstIndex(where:{ $0.id==row.id }) else { return [row] }
-        let same:(Row)->Bool = { $0.label==row.label && $0.source==row.source }
-        var lo=at, hi=at
-        while lo>0, same(model.rows[lo-1]) { lo-=1 }
-        while hi+1<model.rows.count, same(model.rows[hi+1]) { hi+=1 }
-        return Array(model.rows[lo...hi])
+        // The same grouping the reading view uses ("3 bölüm"), built from the full row list rather than
+        // `model.blocks` (those follow the ⌘F filter). Asides and hidden echo rows never split a paragraph here.
+        TranscriptBlocks.build(CloudTranscription.visibleRows(model.rows,showEcho:model.showEchoRows)).first(where:{ b in b.rows.contains(where:{ $0.id==row.id }) })?.rows ?? [row]
     }
     private var textOnly:Bool { model.meeting?.metadata["text_only"] as? Bool == true }
     private var cluster:Bool { row.flags.contains("cloud_diarization") && !row.speaker.isEmpty }

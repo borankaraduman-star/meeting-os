@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 53 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 54 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.49](#v1249) | 2026-09-10 23:20 | Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür |
 | [v1.2.48](#v1248) | 2026-09-10 22:50 | Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez |
 | [v1.2.47](#v1247) | 2026-09-10 21:40 | Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst |
 | [v1.2.46](#v1246) | 2026-09-10 19:40 | Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir |
@@ -73,6 +74,14 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1249"></a>
+### Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür
+
+2026-09-10 23:20 · yerel not · GitHub sürüm sayfası yok
+
+Canlı doğrulama (bu Mac, 1.2.48): ▶ çalarken ■ oluyor ve ikinci tıkta duruyor; Düzelt penceresinde "Yalnız bu bölüm"; Özet ve Kontrol sekmeleri düzgün. Bulunan eksik: 3 bölümlü paragrafta "hangi bölüm?" seçicisi çıkmıyordu, çünkü seçici bitişik satırlara bakıyor, okuma görünümünde gizli yankı satırları ve kısa "hı hı" araları paragrafı bölüyordu.
+- Bölüm seçici artık okuma görünümünün kendi paragraf gruplamasını kullanır (gizli yankı satırları ve kısa aralar paragrafı bölmez); "3 bölüm" yazan paragrafta üç seçenek listelenir.
 
 <a id="v1248"></a>
 ### Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez
