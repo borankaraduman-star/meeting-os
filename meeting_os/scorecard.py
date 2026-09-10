@@ -4,7 +4,7 @@ Talk share repeats the app's own computation (TalkShare.compute + Row.label): ec
 from datetime import datetime, timedelta, timezone
 from .digest import parse_range
 from .insights import local_day
-from .memory import Memory
+from .memory import Memory, RETIRED
 
 DEFAULT_DAYS = 7
 TOP_SPEAKERS = 8
@@ -30,14 +30,17 @@ def percent(share):
     return int(share * 100 + 0.5)   # Swift's (share*100).rounded(): half away from zero, not banker's rounding
 
 
-def talk_share(rows):
-    """Seconds and share per display label. Microphone echo of the speakers is excluded so the host is not double-counted."""
+def talk_share(rows, owner=None):
+    """Seconds and share per display label. Microphone echo of the speakers is excluded so the host is not
+    double-counted. `named` means the label belongs to a person, which includes the microphone owner: a cloud
+    mic row has no `speaker_name` at all, and reading only that column kept the user out of their own karne."""
+    from .intelligence import row_person
     totals = {}; named = set()
     for r in rows:
         start, end = r.get('start'), r.get('end')
         if 'possible_echo' in (r.get('flags') or []) or start is None or end is None or end <= start: continue
         who = label(r); totals[who] = totals.get(who, 0.0) + (end - start)
-        if (r.get('speaker_name') or '').strip(): named.add(who)
+        if row_person(r, owner): named.add(who)
     total = sum(totals.values())
     if total <= 0: return []
     out = [{'label': who, 'seconds': round(sec, 1), 'minutes': round(sec / 60, 1), 'share': round(sec / total, 4),
@@ -63,16 +66,24 @@ def analysis_costs(store):
     return out
 
 
-def meeting_scorecard(store, memory, m, cost=0.0, analysis=None):
+def meeting_scorecard(store, memory, m, cost=0.0, analysis=None, owner=None):
     rows = store.display_segments(m['id'])
     seconds = max((r['end'] for r in rows if r.get('end') is not None), default=0)
     latest = memory.latest(m['id'])
     payload = (latest or {}).get('payload') or {}
+    decisions = payload.get('decisions', [])
+    live = [d for d in decisions if not d.get('superseded')]
+    counts = {k: len(payload.get(k, [])) for k in ('decisions', 'actions', 'questions', 'risks')}
+    counts['decisions'] = len(live)   # a decision the meeting itself reversed is not one of that meeting's decisions
+    # An analysed meeting with no recorded call is a meeting whose cost nobody knows: it ran before usage was
+    # recorded, or through a local model. Zero would be a claim; None is the truth, and `analysis_cost_known` says so.
+    calls = (analysis or {}).get('calls', 0)
+    known = bool(calls) or latest is None
     return {'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'seconds': round(seconds, 1), 'minutes': round(seconds / 60, 1),
-            'speakers': talk_share(rows), 'counts': {k: len(payload.get(k, [])) for k in ('decisions', 'actions', 'questions', 'risks')},
+            'speakers': talk_share(rows, owner), 'counts': counts, 'superseded_decisions': len(decisions) - len(live),
             'analyzed': latest is not None, 'stale': bool(latest and latest.get('stale')), 'cost': cost,
-            'analysis_cost': (analysis or {}).get('cost', 0.0), 'analysis_calls': (analysis or {}).get('calls', 0),
-            'analysis_estimated': bool((analysis or {}).get('estimated'))}
+            'analysis_cost': (analysis or {}).get('cost', 0.0) if known else None, 'analysis_cost_known': known,
+            'analysis_calls': calls, 'analysis_estimated': bool((analysis or {}).get('estimated'))}
 
 
 def period_range(start=None, end=None):
@@ -83,13 +94,16 @@ def period_range(start=None, end=None):
     return parse_range(None, start, end)
 
 
-def build_scorecard(store, start=None, end=None):
+def build_scorecard(store, start=None, end=None, owner=None):
     first, last = period_range(start, end)
     memory = Memory(store)
+    if owner is None:
+        from .reports import store_owner
+        owner = store_owner(store)   # the mic label is a person: without it the user is missing from their own top speakers
     money = meeting_costs(store); analysis = analysis_costs(store)
     inside = lambda created: (lambda d: d is not None and first <= d <= last)(local_day(created))
     meetings = [m for m in store.meetings() if m['status'] == 'complete' and inside(m['created'])]   # newest first
-    cards = [meeting_scorecard(store, memory, m, money.get(m['id'], 0.0), analysis.get(m['id'])) for m in meetings]
+    cards = [meeting_scorecard(store, memory, m, money.get(m['id'], 0.0), analysis.get(m['id']), owner) for m in meetings]
     ids = {c['meeting'] for c in cards}
     people = {}
     for c in cards:
@@ -102,7 +116,9 @@ def build_scorecard(store, start=None, end=None):
     seconds = sum(c['seconds'] for c in cards)
     period = {'from': first.isoformat(), 'to': last.isoformat(), 'meetings': len(cards), 'seconds': round(seconds, 1), 'hours': round(seconds / 3600, 2),
               'decisions': sum(c['counts']['decisions'] for c in cards), 'questions': sum(c['counts']['questions'] for c in cards),
-              'risks': sum(c['counts']['risks'] for c in cards), 'tasks': sum(1 for t in memory.actions() if t.get('meeting') in ids),
-              'cost': round(sum(c['cost'] for c in cards), 4), 'analysis_cost': round(sum(c['analysis_cost'] for c in cards), 4),
-              'analysis_estimated': any(c['analysis_estimated'] for c in cards), 'speakers': top}
-    return {'period': period, 'meetings': cards}
+              'superseded_decisions': sum(c['superseded_decisions'] for c in cards),
+              'risks': sum(c['counts']['risks'] for c in cards), 'tasks': sum(1 for t in memory.actions() if t.get('meeting') in ids and t.get('state') not in RETIRED),
+              'cost': round(sum(c['cost'] for c in cards), 4), 'analysis_cost': round(sum(c['analysis_cost'] or 0.0 for c in cards), 4),
+              'analysis_cost_known': all(c['analysis_cost_known'] for c in cards), 'analysis_estimated': any(c['analysis_estimated'] for c in cards), 'speakers': top}
+    # An empty window is a real answer and the app has to say "bu dönemde toplantı yok" instead of drawing zeros.
+    return {'period': period, 'meetings': cards, 'empty': not cards}

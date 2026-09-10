@@ -4,7 +4,7 @@ that looks like an answer is offered as a hint ("muhtemelen cevaplandı"), nothi
 from difflib import SequenceMatcher
 from pathlib import Path
 from .continuity import prepare, score
-from .insights import build_masker, payload_items, prepared_header, source_line
+from .insights import build_masker, payload_items, prepared_header, source_line, stale_meetings
 from .memory import Memory, normalize
 
 REPEAT_THRESHOLD = 0.5
@@ -35,22 +35,25 @@ def question_radar(store, query=None, limit=DEFAULT_LIMIT, threshold=REPEAT_THRE
                 for d, p in zip(decisions, pd) if (d['created'] or '') > (newest['created'] or '')]
         hits = sorted([h for h in hits if h['similarity'] >= answer_threshold], key=lambda h: (h['similarity'], h['created'] or ''), reverse=True)
         groups.append({'text': newest['text'], 'meetings': meetings, 'count': len(meetings), 'created': newest['created'],
-                       'evidence': newest['evidence'], 'answered_by': hits[0] if hits else None})
+                       'evidence': newest['evidence'], 'answered_by': hits[0] if hits else None,
+                       'stale': any(questions[k].get('stale') for k in c)})
     groups.sort(key=lambda g: (g['count'], g['created'] or ''), reverse=True)   # most meetings first, then newest
     needle = normalize(query or '')
     matched = [g for g in groups if not needle or needle in normalize(g['text']) or any(needle in normalize(x['title'] or '') for x in g['meetings'])]
     return {'groups': matched[:min(max(1, int(limit or DEFAULT_LIMIT)), 1000)], 'total': len(groups), 'matched': len(matched),
-            'questions': len(questions), 'query': query or None}
+            'questions': len(questions), 'stale_meetings': stale_meetings(questions), 'query': query or None}
 
 
 def render_question_radar(radar, mask=None):
     m = mask or (lambda t: t)
     lines = prepared_header('Soru radarı',
-                            f"{radar['matched']}/{radar['total']} soru başlığı · {radar['questions']} kayıt" + (f" · filtre: {m(radar['query'])}" if radar.get('query') else ''),
+                            f"{radar['matched']}/{radar['total']} soru başlığı · {radar['questions']} kayıt"
+                            + (f" · {radar['stale_meetings']} toplantının analizi güncel değil" if radar.get('stale_meetings') else '')
+                            + (f" · filtre: {m(radar['query'])}" if radar.get('query') else ''),
                             'Her toplantının en güncel analizinden alınmıştır; hiçbir soru kendiliğinden kapanmaz, cevap ipuçlarını kaynağıyla doğrulayın.')
     if not radar['groups']: lines.append('- Kayıtlı açık soru yok.')
     for g in radar['groups']:
-        lines += ['', f"## {m(g['text'])}", f"- {g['count']} toplantıda soruldu"]
+        lines += ['', f"## {m(g['text'])}", f"- {g['count']} toplantıda soruldu" + (' · analiz güncel değil' if g.get('stale') else '')]
         for x in g['meetings']: lines.append(f"  - {m(x['title'] or 'Adsız toplantı')} · {(x['created'] or '')[:10]}")
         if g['evidence']: lines.append(source_line(g['evidence'], m))
         a = g['answered_by']
@@ -64,4 +67,5 @@ def export_question_radar(store, path, query=None, limit=DEFAULT_LIMIT, mask_nam
     masker = build_masker(store, glossary=glossary) if mask_names else None
     Path(path).write_text(render_question_radar(radar, masker.mask if masker else None), encoding='utf-8')
     return {'path': str(path), 'groups': len(radar['groups']), 'total': radar['total'], 'matched': radar['matched'],
-            'answered': sum(1 for g in radar['groups'] if g['answered_by']), 'masked_names': masker.masked_names if masker else 0}
+            'answered': sum(1 for g in radar['groups'] if g['answered_by']), 'stale_meetings': radar['stale_meetings'],
+            'masked_names': masker.masked_names if masker else 0}

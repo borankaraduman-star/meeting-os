@@ -2,7 +2,7 @@
 import json
 import re,hashlib,sys,uuid
 from pathlib import Path
-from .memory import Memory,now
+from .memory import Memory,RETIRED,now
 from .intelligence import analyze_rows,fingerprint,parse_json,validate_record
 from .metrics import normalize
 from .schemas import analysis_schema
@@ -39,8 +39,10 @@ def analyze(store,mid,llm=None,force=False):
     from .glossary import load as load_glossary, analysis_context
     from .cli import DATA_DIR, ROOT
     glossary=analysis_context(load_glossary(DATA_DIR,ROOT))
+    from .reports import settings_owner
+    owner=settings_owner(Path(store.path).parent if getattr(store,'path',None) else DATA_DIR)   # a cloud mic row carries the label in `speaker`; only Settings knows who 'Ben' is
     with usage_context(store,mid):
-        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None)
+        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner)
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
     auto_title(store,mid,result)
     from .reports import write_meeting_report
@@ -96,7 +98,7 @@ def task_hash(task):return hashlib.sha256(json.dumps({k:task[k] for k in ('title
 def prepare(store,tid,llm=None,force=False):
     mem=Memory(store);task=mem.task(tid)
     if task['stale']:raise ValueError('Kaynak değişti. Önce toplantıyı yeniden analiz edin ve görevi kontrol edin.')
-    if task['state'] in ('done','dismissed'):raise ValueError('Tamamlanmış veya kaldırılmış görev için taslak oluşturulamaz')
+    if task['state'] in ('done',)+RETIRED:raise ValueError('Tamamlanmış veya kaldırılmış görev için taslak oluşturulamaz')
     existing=[d for d in drafts(store,tid) if not d['stale']]
     initial_ids={d['id'] for d in existing}
     if existing and not force:return existing[0]
@@ -130,7 +132,7 @@ def prepare(store,tid,llm=None,force=False):
     with mem.db:
         mem.db.execute('BEGIN IMMEDIATE')
         current=mem.task(tid)
-        if current['stale'] or current['state'] in ('done','dismissed') or task_hash(current)!=digest:raise ValueError('Görev hazırlık sırasında değişti; tekrar deneyin')
+        if current['stale'] or current['state'] in ('done',)+RETIRED or task_hash(current)!=digest:raise ValueError('Görev hazırlık sırasında değişti; tekrar deneyin')
         competing=[d for d in drafts(store,tid) if not d['stale'] and d['id'] not in initial_ids]
         if competing:return competing[0]
         mem.db.execute('INSERT INTO drafts VALUES(?,?,?,?,?,?,?)',(did,tid,task['input_hash'],digest,route(task['title']),text,now()))
@@ -140,7 +142,7 @@ def prepare(store,tid,llm=None,force=False):
 def draft(store,did):
     mem=Memory(store);row=mem.db.execute('SELECT * FROM drafts WHERE id=?',(did,)).fetchone()
     if not row:raise ValueError('Taslak bulunamadı')
-    d=dict(row);task=mem.task(d['task']);d['stale']=task['stale'] or task['state'] in ('done','dismissed') or d['input_hash']!=task['input_hash'] or d['task_hash']!=task_hash(task);return d
+    d=dict(row);task=mem.task(d['task']);d['stale']=task['stale'] or task['state'] in ('done',)+RETIRED or d['input_hash']!=task['input_hash'] or d['task_hash']!=task_hash(task);return d
 
 
 def drafts(store,tid=None):
@@ -151,7 +153,7 @@ def drafts(store,tid=None):
 
 def handoff(store,tid,path):
     mem=Memory(store);task=mem.task(tid)
-    if task['state'] in ('done','dismissed'):raise ValueError('Tamamlanmış veya kaldırılmış görev için paket oluşturulamaz')
+    if task['state'] in ('done',)+RETIRED:raise ValueError('Tamamlanmış veya kaldırılmış görev için paket oluşturulamaz')
     if task['stale']:raise ValueError('Eski kaynağa dayanan görev dışa aktarılamaz; yeniden analiz edin')
     prepared=[d for d in drafts(store,tid) if not d['stale']]
     record={k:task[k] for k in ('title','owner','due_text','meeting_title')};record['evidence']=task['payload']['evidence'];record['exported_at']=now();record['analysis_version']=task['analysis'];record['source_hash']=task['input_hash'];record['task_hash']=task_hash(task)

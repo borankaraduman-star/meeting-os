@@ -95,3 +95,24 @@ class TurkishSearchTests(unittest.TestCase):
             s.status(mid,'complete')
             hits=Memory(s).search('Eğitim modülleri kaç günde tamamlanıyor',limit=12)
             self.assertEqual(hits[0]['id'],target);s.close()
+
+
+class SearchRankingTests(unittest.TestCase):
+    """Two segments with the same score are not equally useful, and the speaker filter has to mean a person."""
+    def test_more_of_the_asked_words_and_the_shorter_segment_win_a_tie(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'m.sqlite';s=Store(db);mid=s.create_meeting('Eğitim',{})
+            one=s.add_segment(mid,Segment(0,1,'modül eğitim','system','K1'))
+            s.add_segment(mid,Segment(1,2,'modül modül ve başka bir sürü kelime daha burada duruyor','system','K1'))
+            s.status(mid,'complete')
+            hits=Memory(s).search('modül eğitim')
+            self.assertEqual(hits[0]['id'],one);self.assertEqual(hits[0]['hits'],2);s.close()
+    def test_the_speaker_filter_folds_spellings_and_knows_the_microphone_owner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'m.sqlite';s=Store(db);mid=s.create_meeting('Eğitim',{})
+            mine=s.add_segment(mid,Segment(0,1,'raporu ben yazacağım','mic','Boran',flags=['cloud_transcript']))
+            s.add_segment(mid,Segment(1,2,'raporu İlker yazsın','system','S1',speaker_name='İlker'))
+            s.status(mid,'complete');mem=Memory(s)
+            self.assertEqual([h['id'] for h in mem.search('rapor',speaker='boran')],[mine])   # the mic label is a person
+            self.assertEqual(len(mem.search('rapor',speaker='Ilker')),1)                      # İ/I is not a different person
+            self.assertEqual(mem.search('rapor',speaker='Kimse'),[]);s.close()

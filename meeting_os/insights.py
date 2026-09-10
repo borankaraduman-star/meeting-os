@@ -2,6 +2,8 @@
 lines they all print the same way. No model call and no writes — these only read what is already stored."""
 from datetime import datetime, timezone
 
+from .intelligence import REVERSED_NOTE
+
 
 def latest_analyses(store, memory):
     """(meeting, its newest analysis) for every meeting that has one, newest meeting first."""
@@ -18,20 +20,40 @@ def first_evidence(item):
 
 def payload_items(store, memory, key):
     """One flat list of `key` items (decisions, questions, risks…) from every meeting's latest analysis,
-    newest meeting first, each with its meeting and its first source."""
-    return [{'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'text': i.get('text') or '', 'evidence': first_evidence(i), 'superseded': bool(i.get('superseded'))}
+    newest meeting first, each with its meeting, its first source, whether the meeting itself reversed it,
+    and whether the analysis it came from is older than the transcript (`stale`) — a report that hides that
+    presents a stale sentence as today's truth."""
+    return [{'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'text': i.get('text') or '', 'evidence': first_evidence(i),
+             'superseded': bool(i.get('superseded')), 'note': i.get('note') or (REVERSED_NOTE if i.get('superseded') else None),
+             'stale': bool(latest.get('stale'))}
             for m, latest in latest_analyses(store, memory) for i in (latest.get('payload') or {}).get(key, [])]
 
 
-def build_masker(store, meetings=None, glossary=None):
-    """A NameMasker over the speaker names of `meetings` (the whole archive by default), in order of first
-    appearance. Only the name column is read: the segments themselves are never loaded to work out who spoke."""
+def stale_meetings(items):
+    """How many distinct meetings in `items` are showing an out-of-date analysis."""
+    return len({i['meeting'] for i in items if i.get('stale')})
+
+
+def build_masker(store, meetings=None, glossary=None, owner=None):
+    """A NameMasker over the people of `meetings` (the whole archive by default), in order of first appearance.
+    Only the name columns are read: the segments themselves are never loaded to work out who spoke.
+
+    A microphone row of a cloud meeting has no `speaker_name` — its label sits in the `speaker` column — so
+    building the masker from `speaker_name` alone left the user's own name in plain text in every masked
+    export. The mic label and the settings owner are people like anyone else."""
     from .share import NameMasker, name_groups
     order = {m['id']: n for n, m in enumerate(meetings if meetings is not None else store.meetings())}
-    rows = store.db.execute("SELECT meeting,speaker_name,MIN(CASE WHEN source='chatgpt_manual' THEN id ELSE start END) AS pos,MIN(id) AS sid"
-                            " FROM segments WHERE speaker_name IS NOT NULL AND speaker_name<>'' GROUP BY meeting,speaker_name")
-    named = sorted((r for r in rows if r['meeting'] in order), key=lambda r: (order[r['meeting']], r['pos'], r['sid']))
-    return NameMasker(name_groups([{'speaker_name': r['speaker_name']} for r in named], glossary))
+    rows = list(store.db.execute("SELECT meeting,speaker_name AS name,source,speaker,MIN(CASE WHEN source='chatgpt_manual' THEN id ELSE start END) AS pos,MIN(id) AS sid"
+                                 " FROM segments WHERE speaker_name IS NOT NULL AND speaker_name<>'' GROUP BY meeting,speaker_name"))
+    rows += list(store.db.execute("SELECT meeting,NULL AS name,source,speaker,MIN(start) AS pos,MIN(id) AS sid"
+                                  " FROM segments WHERE source='mic' AND (speaker_name IS NULL OR speaker_name='') GROUP BY meeting,speaker"))
+    people = sorted((r for r in rows if r['meeting'] in order), key=lambda r: (order[r['meeting']], r['pos'] if r['pos'] is not None else 0, r['sid']))
+    from .intelligence import row_person
+    if owner is None:
+        from .reports import store_owner
+        owner = store_owner(store)
+    names = [{'speaker_name': row_person({'speaker_name': r['name'], 'source': r['source'], 'speaker': r['speaker']}, owner)} for r in people]
+    return NameMasker(name_groups(names + [{'speaker_name': owner}], glossary))
 
 
 def local_day(created):

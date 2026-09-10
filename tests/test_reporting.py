@@ -353,3 +353,106 @@ class SimilarityScreeningTests(unittest.TestCase):
    self.assertEqual(similarity_index(texts,floor),
                     {(i,j):_similarity_reference(a,b) for i,a in enumerate(texts) for j,b in enumerate(texts)
                      if i!=j and _similarity_reference(a,b)>=floor})
+
+
+def reversed_seed(db, title='Sprint planı', created=None):
+ """Bir toplantı: kendi içinde geri alınmış bir karar ve onu iptal eden karar."""
+ s=Store(db);mid=s.create_meeting(title,{})
+ if created:
+  with s.db:s.db.execute('UPDATE meetings SET created=? WHERE id=?',(created,mid))
+ sid=s.add_segment(mid,Segment(0,60,'E-posta doğrulama eklenecek. Sonra: karar iptal edildi.','system','S0',speaker_name='Boran'))
+ s.status(mid,'complete');mem=Memory(s)
+ payload={'summary':[],'risks':[],'questions':[{'text':'Rapor ne zaman?','evidence':[{'segment_id':sid,'quote':'E-posta','start':0,'speaker':'İpek'}]}],'actions':[],
+          'decisions':[{'text':'E-posta doğrulama eklenecek','superseded':True,'note':'geri alındı','needs_review':True,
+                        'evidence':[{'segment_id':sid,'quote':'E-posta doğrulama eklenecek','start':0,'speaker':'Boran'}]},
+                       {'text':'E-posta doğrulama adımı eklenmeyecek','evidence':[{'segment_id':sid,'quote':'karar iptal edildi','start':0,'speaker':'Boran'}]}]}
+ mem.save_analysis(mid,mem.current_hash(mid),'test-model',payload);s.close()
+ return mid,sid
+
+
+class ReversedDecisionTests(unittest.TestCase):
+ """Dropping a reversed decision made the log claim the reversal never happened; showing it as live was worse."""
+ def test_the_log_keeps_it_marked_and_counts_only_the_live_ones(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';reversed_seed(db)
+   log=decision_log(Store(db))
+   self.assertEqual((log['total'],log['live'],log['superseded']),(2,1,1))
+   self.assertEqual([d['superseded'] for d in log['decisions']],[True,False])
+   text=render_decision_log(log)
+   self.assertIn('## E-posta doğrulama eklenecek (geri alındı)',text);self.assertIn('1 geri alındı',text)
+ def test_digest_share_and_scorecard_agree_that_it_no_longer_stands(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   from meeting_os.share import prepare_share
+   db=Path(tmp)/'db';mid,_=reversed_seed(db)
+   d=build_digest(Store(db))
+   self.assertEqual((len(d['decisions']),d['live_decisions'],d['superseded_decisions']),(2,1,1))
+   self.assertIn('- E-posta doğrulama eklenecek (geri alındı)',render_digest(d))
+   s=Store(db);self.assertIn('(geri alındı)',prepare_share(s,mid)['text'])
+   card=build_scorecard(s)['meetings'][0]
+   self.assertEqual((card['counts']['decisions'],card['superseded_decisions']),(1,1));s.close()
+
+
+class StaleAnalysisReportTests(unittest.TestCase):
+ def test_a_report_says_how_many_meetings_show_an_out_of_date_analysis(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';mid,sid=reversed_seed(db)
+   self.assertEqual(decision_log(Store(db))['stale_meetings'],0)
+   s=Store(db);s.correct_text(mid,sid,'Metin değişti; e-posta doğrulama eklenecek.');s.close()
+   log=decision_log(Store(db))
+   self.assertEqual(log['stale_meetings'],1);self.assertTrue(all(d['stale'] for d in log['decisions']))
+   self.assertIn('1 toplantının analizi güncel değil',render_decision_log(log))
+   radar=question_radar(Store(db))
+   self.assertEqual(radar['stale_meetings'],1);self.assertTrue(radar['groups'][0]['stale'])
+
+
+class ScorecardCostTests(unittest.TestCase):
+ def test_an_analysed_meeting_with_no_recorded_call_reports_an_unknown_cost(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';carded(db,'Sprint planı',datetime.now(timezone.utc).isoformat())
+   card=build_scorecard(Store(db))
+   self.assertIsNone(card['meetings'][0]['analysis_cost'])
+   self.assertFalse(card['meetings'][0]['analysis_cost_known']);self.assertFalse(card['period']['analysis_cost_known'])
+   self.assertFalse(card['empty'])
+ def test_an_empty_window_says_so_instead_of_drawing_zeros(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';carded(db,'Geçen ay',(datetime.now(timezone.utc)-timedelta(days=40)).isoformat())
+   card=build_scorecard(Store(db))
+   self.assertTrue(card['empty']);self.assertEqual(card['period']['meetings'],0);self.assertTrue(card['period']['analysis_cost_known'])
+ def test_the_microphone_owner_is_one_of_the_top_speakers(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Bulut toplantısı',{})
+   s.add_segment(mid,Segment(0,60,'Ben raporu çıkaracağım.','mic','Boran',flags=['cloud_transcript']))   # cloud mic row: the label is in `speaker`, speaker_name is NULL
+   s.add_segment(mid,Segment(60,90,'Tamam.','system','Konuşmacı 2',flags=['cloud_transcript','cloud_diarization']))
+   s.status(mid,'complete');s.close()
+   period=build_scorecard(Store(db))['period']
+   self.assertEqual([p['name'] for p in period['speakers']],['Boran'])   # the unnamed cloud cluster is not a person yet
+
+
+class ReviewDebtWindowTests(unittest.TestCase):
+ def test_the_window_is_seven_local_calendar_days_like_the_karne(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   from datetime import datetime as dt, time as tm
+   db=Path(tmp)/'db';today=dt.now(timezone.utc).astimezone().date()
+   at=lambda day:dt.combine(day,tm(12,0)).astimezone().astimezone(timezone.utc).isoformat()
+   carded(db,'Altı gün önce',at(today-timedelta(days=6)))
+   carded(db,'Yedi gün önce',at(today-timedelta(days=7)))
+   self.assertEqual(review_debt(Store(db))['meetings'],1)     # the karne's window: today and the six days before it
+   self.assertEqual(review_debt(Store(db),days=8)['meetings'],2)
+
+
+class BriefNameMatchTests(unittest.TestCase):
+ def test_a_name_inside_another_name_is_not_the_same_person(self):
+  from meeting_os.brief import build_brief,same_person
+  self.assertTrue(same_person('Ayşe','ayşe yılmaz'));self.assertTrue(same_person('İlker','Ilker'))
+  self.assertFalse(same_person('Ali','Salih'));self.assertFalse(same_person('Ali','Alican'))
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Sprint',{})
+   s.add_segment(mid,Segment(0,10,'Salih raporu yazacak.','system','S0',speaker_name='Salih'));s.status(mid,'complete')
+   mem=Memory(s)
+   with mem.db:
+    mem.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated)"
+                   " VALUES('t1',?,NULL,'h','Raporu yaz','Salih','cuma','open','{}',0,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",(mid,))
+   s.close()
+   brief=build_brief(Store(db),'Haftalık',['Ali'])
+   self.assertEqual((brief['people'][0]['owed'],brief['people'][0]['meetings']),([],0))
+   self.assertEqual(len(build_brief(Store(db),'Haftalık',['Salih'])['people'][0]['owed']),1)

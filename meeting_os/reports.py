@@ -89,6 +89,17 @@ def settings_owner(data_dir):
     return name.strip() if isinstance(name, str) and name.strip() else DEFAULT_USER_NAME
 
 
+def store_owner(store):
+    """The settings owner of the folder this database lives in, or ''. The read-only reports are handed a
+    store and nothing else, but they still have to know whose microphone rows those are — the mic label is
+    a person's name, and masking or a "mine" filter that misses it leaks or loses exactly one person: the user.
+    Never raises: an unreadable settings file means no owner, which every caller already has to handle."""
+    try:
+        path = getattr(store, 'path', None)
+        return settings_owner(Path(path).parent) if path else DEFAULT_USER_NAME
+    except Exception: return DEFAULT_USER_NAME
+
+
 def owner_rename_targets(old, new):
     """Which mic labels a change of `user_name` to `new` should relabel. The previous name when there was one;
     the labels a database carries when its owner never typed a name (the 'Ben' fallback, the old 'Boran'
@@ -102,18 +113,20 @@ def owner_rename_targets(old, new):
 
 
 def rename_owner_segments(store, old, new):
-    """Relabel the mic rows the previous owner name left behind, across every meeting. Returns the counts, or
-    None when there is nothing to do. Analyses of the touched meetings go stale on their own: the speaker
-    string is part of the transcript fingerprint, and owner attribution is exactly what an analysis reads."""
+    """Relabel the mic rows the previous owner name left behind, across every meeting, and move the tasks that
+    were written from those rows onto the new name. Returns the counts, or None when there is nothing to do.
+    Analyses of the touched meetings go stale on their own: the speaker string is part of the transcript
+    fingerprint, and owner attribution is exactly what an analysis reads."""
     if store is None: return None
-    segments = 0; renamed = []; touched = set()
+    segments = 0; tasks = 0; renamed = []; touched = set()
     for target in owner_rename_targets(old, new):
         try: result = store.rename_mic_owner(target, new)
         except Exception: continue   # a settings write must never fail on the relabel
+        tasks += result.get('tasks') or 0
         if result['segments']:
             touched.update(result.get('meeting_ids') or []); segments += result['segments']; renamed.append(target)
     meetings = len(touched)
-    return {'meetings': meetings, 'segments': segments, 'renamed_from': renamed} if segments else None
+    return {'meetings': meetings, 'segments': segments, 'tasks': tasks, 'renamed_from': renamed} if segments or tasks else None
 
 
 def host_name():
@@ -338,6 +351,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         payload = json.loads(analysis['payload'])
         spend = store.analysis_cost_totals(mid)
         analysis_summary = {'model': analysis['model'], 'counts': {k: len(payload.get(k, [])) for k in ('summary', 'decisions', 'risks', 'questions', 'actions')},
+                            'superseded_decisions': sum(1 for d in payload.get('decisions', []) if d.get('superseded')),
                             'coverage': payload.get('coverage'), 'dropped_quotes': payload.get('dropped_quotes'), 'dropped_items': payload.get('dropped_items'),
                             'cost_usd': spend['cost'], 'calls': spend['calls'], 'cost_estimated': spend['estimated'], 'created': analysis['created']}
     duration = round(max((r['end'] for r in rows), default=0.0), 1)

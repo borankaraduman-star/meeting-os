@@ -69,8 +69,9 @@ def similarity_index(texts, floor):
 
 def related_tasks(store, mid, threshold=0.5):
     memory = Memory(store)
-    mine = [t for t in memory.actions(meeting=mid)]
-    others = [t for t in memory.actions() if t['meeting'] != mid]
+    live = lambda t: t.get('state') != 'superseded'   # a row a newer analysis of its own meeting left behind is not a suggestion
+    mine = [t for t in memory.actions(meeting=mid) if live(t)]
+    others = [t for t in memory.actions() if t['meeting'] != mid and live(t)]
     prepared = [prepare(o['title']) for o in others]
     sm = difflib.SequenceMatcher(None)
     out = []

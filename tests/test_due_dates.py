@@ -34,6 +34,7 @@ class DueDateBridgeTests(unittest.TestCase):
         from meeting_os.desktop import dispatch
         with tempfile.TemporaryDirectory() as tmp:
             db=Path(tmp)/'m.sqlite'; s=Store(db); mid=s.create_meeting('Sprint',{}); s.status(mid,'complete')
+            with s.db: s.db.execute("UPDATE meetings SET created='2026-09-09T12:00:00+00:00' WHERE id=?",(mid,))   # "yarın" is counted from the day of the MEETING
             mem=Memory(s)
             with mem.db: mem.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated) VALUES('t1',?,NULL,'h','Rapor','Ayşe','yarın','open','{}',0,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",(mid,))
             s.close()
@@ -43,3 +44,30 @@ class DueDateBridgeTests(unittest.TestCase):
             r=dispatch({'action':'intelligence','meeting':mid},db)
             self.assertEqual(r['tasks'][0]['payload']['due_date'],'2026-09-10'); self.assertEqual(r['due_suggestions'],[])
             self.assertEqual(dispatch({'action':'task_set_due','task':'t1','due_date':None},db),{'due_date':None})
+
+
+class MeetingDayAnchorTests(unittest.TestCase):
+    """The task row's `created` is the moment the ANALYSIS was saved, in UTC. A meeting recorded just after
+    midnight local time was analysed on the previous UTC day, and every "yarın" came out one day early."""
+    def test_the_anchor_is_the_meetings_local_day(self):
+        from datetime import datetime, timedelta, timezone
+        from meeting_os.insights import local_day
+        created = '2026-09-13T21:30:00+00:00'   # 14 Eylül 00:30 in Istanbul
+        day = local_day(created)
+        tasks = [{'id': 'a', 'meeting': 'm', 'title': 'Rapor', 'due_text': 'yarın', 'created': created, 'state': 'open', 'payload': {}}]
+        out = suggestions_for_tasks(tasks, {'m': day})
+        self.assertEqual(out[0]['anchor'], day.isoformat())
+        self.assertEqual(out[0]['suggested'], (day + timedelta(days=1)).isoformat())
+        utc_day = datetime.fromisoformat(created).astimezone(timezone.utc).date()
+        if day != utc_day:   # only provable where the Mac is not on UTC; the anchor above is checked either way
+            self.assertNotEqual(out[0]['suggested'], (utc_day + timedelta(days=1)).isoformat())
+
+    def test_without_an_anchor_the_local_day_of_the_task_is_used(self):
+        from meeting_os.insights import local_day
+        created = '2026-09-09T10:00:00+00:00'
+        tasks = [{'id': 'a', 'meeting': 'm', 'title': 'Rapor', 'due_text': 'bugün', 'created': created, 'state': 'open', 'payload': {}}]
+        self.assertEqual(suggestions_for_tasks(tasks)[0]['suggested'], local_day(created).isoformat())
+
+    def test_a_retired_task_gets_no_proposal(self):
+        tasks = [{'id': 'a', 'title': 'Rapor', 'due_text': 'yarın', 'created': '2026-09-09T10:00:00+00:00', 'state': 'superseded', 'payload': {}}]
+        self.assertEqual(suggestions_for_tasks(tasks), [])
