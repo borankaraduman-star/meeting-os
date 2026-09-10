@@ -48,7 +48,7 @@ enum SetupStatus {
         let mic=AVCaptureDevice.authorizationStatus(for:.audio)
         out.append(SetupCheck(id:"mic",title:"Mikrofon",state:mic == .authorized ? .ok : (mic == .notDetermined ? .unknown : .missing),hint:mic == .authorized ? "izin verildi" : "Sistem Ayarları → Gizlilik ve Güvenlik → Mikrofon"))
         let screen=CGPreflightScreenCaptureAccess()
-        out.append(SetupCheck(id:"screen",title:"Ekran kaydı (toplantı sesi)",state:screen ? .ok : .missing,hint:screen ? "izin verildi" : "Sistem Ayarları → Gizlilik ve Güvenlik → Ekran Kaydı; sistem sesi bu izinle alınır"))
+        out.append(SetupCheck(id:"screen",title:"Ekran kaydı (toplantı sesi)",state:screen ? .ok : .missing,hint:screen ? "izin verildi · yalnız karşı tarafın sesi için (macOS sistem sesini bu izne bağlar); ekran görüntüsü alınmaz, saklanmaz" : "Karşı tarafın sesi (Zoom’dan hoparlöre giden ses) macOS’ta yalnız bu izinle alınabilir; ekran görüntüsü alınmaz, saklanmaz · Sistem Ayarları → Gizlilik ve Güvenlik → Ekran Kaydı"))
         let cal=EKEventStore.authorizationStatus(for:.event)
         let calOK:Bool = { if #available(macOS 14,*) { return cal == .fullAccess }; return cal == .authorized }()
         out.append(SetupCheck(id:"calendar",title:"Takvim (isteğe bağlı)",state:calOK ? .ok : (calendarWanted ? .missing : .optional),hint:calOK ? "izin verildi" : (calendarWanted ? "Ayar açık ama izin yok: Sistem Ayarları → Takvimler" : "Ayarlarda açılırsa istenir")))
