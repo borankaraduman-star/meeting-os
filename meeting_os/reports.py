@@ -343,7 +343,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         speakers = {f'S{i}': {**sp, 'name': None, 'suggested': None} for i, sp in enumerate(speakers.values(), 1)}
     from .review import review_queue
     from .quality import identity_report
-    queue = review_queue(store, mid)
+    queue = review_queue(store, mid, data_dir)
     kinds = {}
     for item in queue['items']: kinds[item['kind']] = kinds.get(item['kind'], 0) + 1
     analysis = store.db.execute('SELECT model,payload,created FROM analyses WHERE meeting=? ORDER BY id DESC LIMIT 1', (mid,)).fetchone()

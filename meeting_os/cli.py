@@ -153,6 +153,7 @@ def parser():
     rd=sub.add_parser('review-debt',help='Review queue of every meeting recorded in the last N days, worst first'); rd.add_argument('--days',type=int,default=7)
     sh=sub.add_parser('share',help='Share preview of one meeting as Markdown; names can be masked, decisions-only mode'); sh.add_argument('--meeting',required=True); sh.add_argument('--mask-names',action='store_true'); sh.add_argument('--only-decisions',action='store_true'); sh.add_argument('--no-transcript',action='store_true'); sh.add_argument('--no-summary',action='store_true'); sh.add_argument('--include-segments',help='Comma-separated segment ids'); sh.add_argument('--exclude-segments',help='Comma-separated segment ids'); sh.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
+    wd=sub.add_parser('words',help='Öğretilen kelimeler: bir kez düzelt, benzer yazımlar da düzelsin'); wd.add_argument('action',choices=['teach','forget','list']); wd.add_argument('original',nargs='?'); wd.add_argument('replacement',nargs='?'); wd.add_argument('--meeting')
     rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir, user_name, team_dir, share_glossary, audio_retention_days')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
     dc=sub.add_parser('document',help='Meeting → PRD / bug report / customer request / Claude Code prompt'); dc.add_argument('--meeting',required=True); dc.add_argument('--kind',choices=['prd','bug','customer','claude'],default='prd'); dc.add_argument('--output',type=Path); dc.add_argument('--openrouter-model',default='openai/gpt-4.1-mini')
@@ -252,8 +253,8 @@ def main(supervised=False):
             elif args.command=='openrouter-finalize':
                 from .cloud_finalize import finalize_capture
                 result=finalize_capture(store,args.meeting,DATA_DIR,consent=args.allow_upload,model=args.model)
-                from .correction_memory import apply_rules   # learned fixes land before the summary reads the text
-                try: result['auto_corrections']=apply_rules(store,args.meeting)
+                from .correction_memory import apply_rules   # learned and taught fixes land before the summary reads the text
+                try: result['auto_corrections']=apply_rules(store,args.meeting,data_dir=DATA_DIR)
                 except Exception as exc: result['auto_corrections']={'error':str(exc)}
                 if args.output:args.output.write_text(json.dumps(result,ensure_ascii=False))
                 output(result)
@@ -331,6 +332,15 @@ def main(supervised=False):
                             try: G.apply_suggestion(store,args.meeting,sg['segment_id'],sg['original'],sg['replacement']);applied+=1
                             except ValueError: pass
                     output({'suggestions':suggestions,'applied':applied})
+            elif args.command=='words':
+                from . import correction_memory as CM
+                if args.action=='list': output({'rules':CM.word_rules(store)})
+                elif args.action=='teach':
+                    if not (args.meeting and args.original and args.replacement): raise ValueError('words teach --meeting <toplantı> <yanlış> <doğru>')
+                    output(CM.teach(store,args.meeting,args.original,args.replacement,DATA_DIR))
+                else:
+                    if not args.original: raise ValueError('words forget <kelime>')
+                    output(CM.forget(store,args.original,DATA_DIR))
             elif args.command=='document':
                 from .documents import build_document
                 from .openrouter import OpenRouterClient,validate_analysis_model
@@ -373,7 +383,7 @@ def main(supervised=False):
                 output(build_scorecard(store,start=args.date_from,end=args.date_to))
             elif args.command=='review-debt':
                 from .review import review_debt
-                output(review_debt(store,args.days))
+                output(review_debt(store,args.days,DATA_DIR))
             elif args.command=='share':
                 from .share import prepare_share
                 from . import glossary as G

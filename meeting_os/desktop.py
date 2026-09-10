@@ -471,7 +471,7 @@ def dispatch(request, db=None):
             return build_scorecard(store,start=request.get('from'),end=request.get('to'))
         if action=='review_debt':
             from .review import review_debt
-            return review_debt(store,request.get('days',7))
+            return review_debt(store,request.get('days',7),DATA_DIR if db is None else Path(db).parent)
         if action in ('share_preview','share_export'):
             from .share import prepare_share
             from . import glossary as G
@@ -485,9 +485,18 @@ def dispatch(request, db=None):
         if action=='quality_report':
             from .quality import report
             return report(store)
+        if action in ('learn_word','word_apply','word_dismiss','word_rules','forget_word'):
+            # Teaching a word is the text half of "adlandır ve öğren": one correction, remembered, applied to
+            # every near-miss spelling from now on — and reversible word by word.
+            from . import correction_memory as CM
+            base=DATA_DIR if db is None else Path(db).parent
+            if action=='word_rules': return {'rules':CM.word_rules(store)}
+            if action=='word_dismiss': return CM.dismiss_word(store,request['meeting'],request['original'])
+            if action=='forget_word': return CM.forget(store,request['original'],base)
+            return CM.teach(store,request['meeting'],request['original'],request['replacement'],base)
         if action in ('correction_rules','apply_learned_corrections','revert_auto_correction','accept_rule','reject_rule'):
             from . import correction_memory as CM
-            if action=='apply_learned_corrections': return CM.apply_rules(store,request['meeting'])
+            if action=='apply_learned_corrections': return CM.apply_rules(store,request['meeting'],data_dir=DATA_DIR if db is None else Path(db).parent)
             if action=='revert_auto_correction': return CM.revert(store,request['meeting'],int(request['segment']))
             if action=='accept_rule': CM.accept_rule(store,request['original']); return {'ok':True}
             if action=='reject_rule': CM.reject_rule(store,request['original']); return {'ok':True}
@@ -496,7 +505,7 @@ def dispatch(request, db=None):
             return {'rules':rules,'glossary_proposals':CM.glossary_proposals(rules,load_glossary(DATA_DIR,ROOT))}
         if action=='review_queue':
             from .review import review_queue
-            return review_queue(store,request['meeting'])
+            return review_queue(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='delete_meeting':
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='retry_candidates':

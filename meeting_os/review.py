@@ -4,7 +4,7 @@ from .insights import first_evidence
 from .memory import Memory, RETIRED
 
 
-def review_queue(store, mid):
+def review_queue(store, mid, data_dir=None):
     rows=store.segments(mid)
     items=[]
     seen_clusters=set()
@@ -45,6 +45,15 @@ def review_queue(store, mid):
         items.append({'segment_id':row['id'],'start':row['start'],'speaker':row.get('speaker_name') or row.get('speaker'),'text':row['text'][:120],'kind':'glossary','severity':2,
                       'reason':f"Sözlük: “{sg['original']}” muhtemelen “{sg['replacement']}”"+(f" · {sg['reason']}" if sg.get('reason') else (' · yerel eşleme, model doğrulamadı' if sg.get('source')=='local' else '')),
                       'original':sg['original'],'replacement':sg['replacement'],'verified':sg.get('source')=='llm'})
+    from .correction_memory import word_candidates
+    # A wrong word the model wrote confidently reads like a right one. The only thing that can tell them apart
+    # is the list of words this team actually uses: what the user has taught, and the vocabulary.
+    for word in word_candidates(store,mid,data_dir):
+        row=by_id.get(word['segment_id'])
+        if not row: continue
+        items.append({'segment_id':row['id'],'start':row['start'],'speaker':row.get('speaker_name') or row.get('speaker'),'text':(row.get('text') or '')[:120],'kind':'word','severity':2,
+                      'reason':f"Kelime: “{word['original']}” muhtemelen “{word['replacement']}” · "+('öğretilen kelime' if word['source']=='taught' else 'sözlük terimi'),
+                      'original':word['original'],'replacement':word['replacement'],'count':word['count']})
     memory=Memory(store)
     for task in memory.actions(meeting=mid):
         if task.get('state') in ('done',)+RETIRED: continue
@@ -55,7 +64,7 @@ def review_queue(store, mid):
     return {'items':items,'count':len(items)}
 
 
-def review_debt(store, days=7):
+def review_debt(store, days=7, data_dir=None):
     """Haftalık gözden geçirme borcu: pencerede kaydedilen tamamlanmış toplantıların Kontrol kuyrukları tek listede,
     önce en ağır madde, sonra en yeni toplantı. Read-only.
 
@@ -74,7 +83,7 @@ def review_debt(store, days=7):
         meetings.append(row)
     items=[];counts={}
     for row in meetings:
-        for item in review_queue(store,row['id'])['items']:
+        for item in review_queue(store,row['id'],data_dir)['items']:
             items.append({**item,'meeting':row['id'],'meeting_title':row['title'],'created':row['created']})
             counts[item['kind']]=counts.get(item['kind'],0)+1
     items.sort(key=lambda i:i['start'] if i['start'] is not None else 1e9)
