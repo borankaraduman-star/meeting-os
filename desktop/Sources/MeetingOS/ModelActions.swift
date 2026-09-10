@@ -89,7 +89,9 @@ extension Model {
         guard !recording, recordProcess==nil, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
         lastHeartbeat=Date()
         Task {
-            _=try? await request(["action":"heartbeat","app":["version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "","bridge":BridgeStats.shared.snapshot]])
+            // P0-3: the bundle's own CFBundleShortVersionString under `app.version` is what the Python side prefers;
+            // no `commit` is sent, so the bridge falls back to the checkout's git hash for that.
+            _=try? await request(["action":"heartbeat","app":["version":UpdateInfo.appVersion,"bridge":BridgeStats.shared.snapshot]])
             if !recording, recordProcess==nil, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
                 if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
@@ -157,7 +159,7 @@ extension Model {
         var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
         let settings=await UNUserNotificationCenter.current().notificationSettings()
         checks.append(SetupStatus.notificationCheck(settings))
-        if let r=try? await request(["action":"setup_status"]) { checks+=SetupStatus.serviceChecks(r) }
+        if let r=try? await request(["action":"setup_status"]) { checks+=SetupStatus.serviceChecks(r,repo:runtime.repo,divergedNotice:update?.divergedNotice ?? "") }
         setupChecks=checks
     }
 

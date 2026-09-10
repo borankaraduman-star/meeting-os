@@ -4,11 +4,25 @@ import Foundation
 /// itself runs in scripts/update.sh after the app quits, then relaunches the rebuilt, re-signed app.
 struct UpdateInfo:Equatable {
     let available:Bool; let behind:Int; let subjects:[String]; let error:String; let local:String; let remote:String; let dirty:Bool
+    /// A branch that carries commits GitHub has never seen cannot be fast-forwarded, so `scripts/update.sh`
+    /// refuses and this Mac would otherwise sit on "güncel" forever while the setup card said "N değişiklik geride".
+    /// `hint` is the bridge's own sentence when it has one; `ahead` is how many local commits caused it.
+    let diverged:Bool; let ahead:Int; let hint:String
     static func parse(_ d:[String:Any])->UpdateInfo {
-        UpdateInfo(available:d["available"] as? Bool ?? false,behind:d["behind"] as? Int ?? 0,subjects:d["subjects"] as? [String] ?? [],error:d["error"] as? String ?? "",local:d["local"] as? String ?? "",remote:d["remote"] as? String ?? "",dirty:d["dirty"] as? Bool ?? false)
+        UpdateInfo(available:d["available"] as? Bool ?? false,behind:d["behind"] as? Int ?? 0,subjects:d["subjects"] as? [String] ?? [],error:d["error"] as? String ?? "",local:d["local"] as? String ?? "",remote:d["remote"] as? String ?? "",dirty:d["dirty"] as? Bool ?? false,diverged:d["diverged"] as? Bool ?? false,ahead:d["ahead"] as? Int ?? 0,hint:d["hint"] as? String ?? "")
     }
+    /// The one sentence every screen uses for a diverged branch, so the sidebar, Ayarlar and the setup card agree.
+    static let divergedMessage="Dal ayrışmış · yeni sürüm kurulamıyor · Boran’a bildirin"
+    static func divergedText(ahead:Int,hint:String)->String {
+        if !hint.isEmpty { return hint }
+        return divergedMessage + (ahead>0 ? " · \(ahead) yerel değişiklik ileride" : "")
+    }
+    var divergedNotice:String { diverged ? Self.divergedText(ahead:ahead,hint:hint) : "" }
+    /// Whether the "Güncelle ve yeniden başlat" button may appear: a diverged branch cannot be updated at all.
+    var canUpdate:Bool { available && !diverged }
     var headline:String {
         if !error.isEmpty { return error }
+        if diverged { return divergedNotice }
         if available { return "Yeni sürüm hazır · \(behind) değişiklik" + (subjects.first.map { " · " + $0 } ?? "") }
         if dirty { return "Yerel değişiklikler var; otomatik güncelleme kapalı" }
         return "Güncel (\(local))"
@@ -20,11 +34,37 @@ struct UpdateInfo:Equatable {
         let prefix=name.isEmpty ? "Sürüm" : "Sürüm \(name)"
         guard let info else { return prefix+" · kontrol edilmedi" }
         if !info.error.isEmpty { return prefix+" · "+info.error }
+        if info.diverged { return prefix+" · "+info.divergedNotice }
         if info.available { return prefix+" · yeni sürüm hazır" }
         if info.dirty { return prefix+" · yerel değişiklik var" }
         return prefix+" · güncel"
     }
     static var appVersion:String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
+}
+
+/// What `update-status.json` (written by scripts/update.sh, read back through the `update_status` bridge call)
+/// should say in the "Son durum" line. A `running` state is normally silent — the app was quitting when it was
+/// written — but a `running` older than half an hour means the updater died between two steps and nobody would
+/// ever be told: the rebuild has to be finished by hand.
+enum UpdateStatusLine {
+    static let stallSeconds:TimeInterval=30*60
+    static let stalledMessage="Güncelleme yarıda kalmış olabilir · sh scripts/update.sh"
+    /// scripts/update.sh writes `date '+%Y-%m-%d %H:%M:%S'`: local time, no zone.
+    static func parseTime(_ raw:String)->Date? {
+        let f=DateFormatter(); f.dateFormat="yyyy-MM-dd HH:mm:ss"; f.locale=Locale(identifier:"en_US_POSIX"); f.timeZone=TimeZone.current
+        return f.date(from:raw)
+    }
+    /// nil = say nothing. `failed` is also worth a notification; the caller decides that from the state.
+    static func line(state:String,message:String,time:String,now:Date=Date())->String? {
+        switch state {
+        case "done": return "Güncelleme tamam · "+message
+        case "failed": return "Güncelleme başarısız · "+message
+        case "running":
+            guard let started=parseTime(time), now.timeIntervalSince(started) >= stallSeconds else { return nil }
+            return stalledMessage
+        default: return nil
+        }
+    }
 }
 
 struct ReportSettings:Equatable {
