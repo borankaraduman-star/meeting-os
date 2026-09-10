@@ -62,6 +62,16 @@ def capture_state(metadata, include_signal=False):
 _TIGHTENED=False   # the hourly heartbeat action tightens the personal file modes once per bridge run
 
 
+def share_profiles(store,db):
+    """Publish this Mac's voice profiles into the team folder and read back the teammates' — after every naming,
+    rename and deletion, so the person somebody just named is known on the other Macs at their next meeting.
+    Best effort: an unmounted share must never turn a successful naming into an error on screen."""
+    try:
+        from .team_knowledge import sync
+        return sync(store,DATA_DIR if db is None else Path(db).parent,words=False)
+    except Exception: return None   # every failure here is somebody else's disk; the local naming is already saved
+
+
 # Statuses whose display still depends on the capture folder and the job owner.
 UNSETTLED=('processing','provisional','incomplete','failed')
 SNAPSHOT_LIMIT=300          # newest first; the sidebar never shows more, the open meeting is always included
@@ -339,12 +349,14 @@ def dispatch(request, db=None):
             # Q9: naming one voice changes what the others can be (a new person exists, a rejected sample is gone),
             # so the meeting's still-unnamed clusters are re-scored right away. Both paths: correcting a wrong
             # automatic name also drops samples and adds a rejection.
+            share_profiles(store,db)
             return {**result,**store.resuggest(request['meeting'])}
         if action=='undo_correction': return store.undo_correction(request['meeting'])
         if action=='label_segment':
             # One piece of a named cluster belongs to someone else: only that piece changes, nobody is convicted,
             # the piece feeds the named person's profile when it is clean enough; unnamed clusters are re-scored.
             result=store.correct_segment_only(request['meeting'],int(request['segment']),request['name'])
+            share_profiles(store,db)
             return {**result,**store.resuggest(request['meeting'])}
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}
@@ -353,12 +365,25 @@ def dispatch(request, db=None):
         if action=='enroll':
             if request.get('confirmed_clean') is not True: raise ValueError('Listen and confirm a clean single-speaker sample first')
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
+            share_profiles(store,db)
             return {'saved':True}
-        if action=='delete_profile': store.delete_profile(request['name']); return {'deleted':True}
+        if action=='delete_profile':
+            # Deleting a person takes their team samples with them (they are rows under the same name) and blocks
+            # the name, or the hourly pull would hand the profile the user just deleted straight back.
+            from .team_knowledge import block_profile
+            store.delete_profile(request['name']); block_profile(store,request['name']); share_profiles(store,db)
+            return {'deleted':True}
         if action=='profile_samples': return {'name':request['name'],'samples':store.profile_samples(request['name'])}
         if action=='clean_candidates': return {'name':request['name'],'candidates':store.clean_candidates(request['name'],int(request.get('limit',8)))}
         if action=='delete_sample': store.delete_sample(request['sample']); return {'deleted':True}
-        if action=='rename_profile': return store.rename_profile(request['name'],request['new_name'])
+        if action=='rename_profile':
+            result=store.rename_profile(request['name'],request['new_name']); share_profiles(store,db)
+            return result
+        if action in ('team_sync','team_word_toggle'):
+            from . import team_knowledge as TK
+            base=DATA_DIR if db is None else Path(db).parent
+            if action=='team_word_toggle': return TK.team_word_toggle(store,request['original'],request['host'],request.get('enabled') is not False)
+            return TK.sync(store,base)   # app launch: what the team learned since this Mac was last open
         if action=='explain_identity':
             from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid
             bars={'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD}   # the app writes its sentence against these, so both branches carry them
@@ -487,7 +512,9 @@ def dispatch(request, db=None):
             # that exact spelling from now on — near-misses are Kontrol suggestions — and reversible word by word.
             from . import correction_memory as CM
             base=DATA_DIR if db is None else Path(db).parent
-            if action=='word_rules': return {'rules':CM.word_rules(store)}
+            if action=='word_rules':
+                from .team_knowledge import team_summary
+                return {'rules':CM.word_rules(store),'team':team_summary(store)}
             if action=='word_dismiss': return CM.dismiss_word(store,request['meeting'],request['original'])
             if action=='forget_word': return CM.forget(store,request['original'],base)
             return CM.teach(store,request['meeting'],request['original'],request['replacement'],base)
@@ -532,11 +559,15 @@ def dispatch(request, db=None):
             from .audio_archive import archive_all
             from .reports import audio_retention_warning,load_settings
             data=DATA_DIR if db is None else Path(db).parent
-            arch=archive_all(store); days=int(load_settings(data).get('audio_retention_days') or 0)
+            arch=archive_all(store); settings=load_settings(data); days=int(settings.get('audio_retention_days') or 0)
+            # Hourly, idle, on the slow bridge: the one place a team sync can take a second on a network folder
+            # without the ten-second watchdog killing it. Launch does its own; a teach publishes straight away.
+            from .team_knowledge import sync as team_sync
+            team=team_sync(store,data,settings=settings)
             cleaned=storage_cleanup(store,data,days=days,dry_run=False) if days>0 else {'meetings':[],'bytes':0}
             # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
             return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
-                    'retention_warning':audio_retention_warning(store,days)}
+                    'retention_warning':audio_retention_warning(store,days),'team':team}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='probe':

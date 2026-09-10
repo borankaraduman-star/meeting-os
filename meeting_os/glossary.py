@@ -110,10 +110,18 @@ def vocabulary_path(data_dir, repo_root=None):
     return data
 
 
-def load(data_dir, repo_root=None, with_counts=False):
+def _plain(term):
+    return {'term': term, 'expansion': None, 'category': 'diğer', 'aliases': [], 'mishearings': [], 'context': None, 'confidence': None, 'source_count': None}
+
+
+def load(data_dir, repo_root=None, with_counts=False, store=None):
     """Entries from the local and iCloud-shared glossary.jsonl, then vocabulary.txt terms not already present.
     Deduplicated, capped. with_counts also returns how many of the kept entries came from a glossary file, so
-    the summary does not have to read the same files a second time to find out."""
+    the summary does not have to read the same files a second time to find out.
+
+    With a `store`, the words the TEAM taught join the spelling hint too (`team_knowledge.hint_terms`). They are
+    appended here and never written into `vocabulary.txt`: the file on this disk is the user's own list, not a
+    copy of everybody else's, and a teammate's word must not survive on it after they forget it."""
     entries = []; seen = set()
     for path in sources(data_dir):
         if not path.is_file(): continue
@@ -125,7 +133,12 @@ def load(data_dir, repo_root=None, with_counts=False):
     if vocab.is_file():
         for line in vocab.read_text(encoding='utf-8').splitlines():
             term = _clean(line.split('#')[0])
-            if term and term.casefold() not in seen: seen.add(term.casefold()); entries.append({'term': term, 'expansion': None, 'category': 'diğer', 'aliases': [], 'mishearings': [], 'context': None, 'confidence': None, 'source_count': None})
+            if term and term.casefold() not in seen: seen.add(term.casefold()); entries.append(_plain(term))
+    if store is not None:
+        from .team_knowledge import hint_terms
+        for term in hint_terms(store):
+            term = _clean(term)
+            if term and term.casefold() not in seen: seen.add(term.casefold()); entries.append(_plain(term))
     entries = entries[:MAX_TERMS]
     return (entries, min(from_file, len(entries))) if with_counts else entries
 

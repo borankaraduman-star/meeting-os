@@ -13,9 +13,15 @@ enum MeetingLabel {
 
 struct VoiceSample:Identifiable, Equatable {
     let id:Int; let seconds:Double; let kind:String; let meetingTitle:String; let model:String
-    /// The card above says "N otomatik, M elle"; a row must use the same two words, not the storage `kind`.
-    var origin:String { kind=="otomatik" ? "otomatik" : "elle" }
-    init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; kind=d["kind"] as? String ?? ""; meetingTitle=MeetingLabel.title(d["meeting_title"]); model=d["model"] as? String ?? "" }
+    /// Team samples only: the Mac that enrolled this voice. They carry no meeting at all — the shared file has a
+    /// name, a model and a vector, and never says which meeting the person was heard in.
+    let host:String
+    var isTeam:Bool { kind=="ekip" }
+    /// The card above says "N otomatik, M elle"; a row must use the same words, not the storage `kind`.
+    var origin:String { isTeam ? "ekipten (\(host))" : (kind=="otomatik" ? "otomatik" : "elle") }
+    /// A team sample has no meeting to name, so the row says where it came from instead of "bilinmeyen toplantı".
+    var where_:String { isTeam ? "ekip klasörü" : meetingTitle }
+    init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; kind=d["kind"] as? String ?? ""; meetingTitle=MeetingLabel.title(d["meeting_title"]); model=d["model"] as? String ?? ""; host=d["host"] as? String ?? "" }
 }
 
 struct IdentityCandidate:Identifiable, Equatable {
@@ -69,10 +75,13 @@ struct IdentityExplanation:Equatable {
 /// and when this voice was last heard. Comes from `store.profile_health()` via the `maintenance` action.
 struct ProfileHealth:Equatable {
     let name:String; let model:String; let samples:Int; let autoSamples:Int; let seconds:Double; let rejections:Int
+    /// Samples a teammate's Mac enrolled and this one imported through the team folder.
+    let teamSamples:Int
     let weakestFit:Double?; let weakestSample:Int?; let weak:Bool; let lastMeetingTitle:String
     init(_ d:[String:Any]) {
         name=d["name"] as? String ?? ""; model=d["model"] as? String ?? ""; samples=d["samples"] as? Int ?? 0
         autoSamples=d["auto_samples"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; rejections=d["rejections"] as? Int ?? 0
+        teamSamples=d["team_samples"] as? Int ?? 0
         weakestFit=d["weakest_fit"] as? Double; weakestSample=d["weakest_sample"] as? Int; weak=d["weak"] as? Bool ?? false
         lastMeetingTitle=d["last_meeting_title"] as? String ?? ""
     }
@@ -80,7 +89,7 @@ struct ProfileHealth:Equatable {
     var fitHelp:String { weakestFit.map { "En zayıf örnek benzerliği "+String(format:"%.2f",$0).replacingOccurrences(of:".",with:",") } ?? "" }
     /// One line under the name; everything a person needs before deciding to add or drop a sample.
     var line:String {
-        var parts=["\(samples) örnek (\(autoSamples) otomatik, \(max(0,samples-autoSamples)) elle)"]
+        var parts=["\(samples) örnek (\(autoSamples) otomatik, \(max(0,samples-autoSamples-teamSamples)) elle"+(teamSamples>0 ? ", \(teamSamples) ekipten" : "")+")"]
         parts.append(seconds>=60 ? "\(Int(seconds/60)) dk ses" : "\(Int(seconds)) sn ses")
         if weak { parts.append("bir örnek diğerlerine benzemiyor") }
         if rejections>0 { parts.append("\(rejections) ret") }
@@ -153,7 +162,7 @@ struct ProfileMaintenanceRow:View {
                 }
                 ForEach(samples) { s in
                     HStack {
-                        Text("\(s.origin) · \(s.meetingTitle) · \(String(format:"%.0f",s.seconds)) sn").font(.caption).help(s.origin=="otomatik" ? "Bu örneği uygulama kendiliğinden kaydetti" : "Bu örneği siz adlandırırken kaydettiniz")
+                        Text("\(s.origin) · \(s.where_) · \(String(format:"%.0f",s.seconds)) sn").font(.caption).help(s.isTeam ? "Bu ses vektörü ekip klasöründen geldi; ses kaydı ve toplantı bilgisi paylaşılmaz" : (s.origin=="otomatik" ? "Bu örneği uygulama kendiliğinden kaydetti" : "Bu örneği siz adlandırırken kaydettiniz"))
                         Spacer()
                         Button("Örneği sil",role:.destructive) { Task { await model.deleteSample(s.id); samples=await model.loadSamples(profile.name); await model.loadMaintenance() } }.controlSize(.small)
                     }

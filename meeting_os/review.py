@@ -62,7 +62,7 @@ def review_queue(store, mid, data_dir=None):
         row=by_id.get(word['segment_id'])
         if not row: continue
         items.append({'segment_id':row['id'],'start':row['start'],'speaker':row_label(row,owner),'text':(row.get('text') or '')[:120],'kind':'word','severity':2,
-                      'reason':f"Kelime: “{word['original']}” muhtemelen “{word['replacement']}” · "+('öğretilen kelime' if word['source']=='taught' else 'sözlük terimi'),
+                      'reason':f"Kelime: “{word['original']}” muhtemelen “{word['replacement']}” · "+({'taught':'öğretilen kelime','team':'ekipten gelen kelime'}.get(word['source'],'sözlük terimi')),
                       'original':word['original'],'replacement':word['replacement'],'count':word['count']})
     memory=Memory(store)
     for task in memory.actions(meeting=mid):

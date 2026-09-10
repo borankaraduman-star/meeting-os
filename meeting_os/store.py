@@ -473,12 +473,14 @@ class Store:
         for r in self.db.execute('SELECT id,model,duration,provenance FROM samples WHERE name=? AND deleted_by IS NULL ORDER BY id', (name,)):
             prov = r['provenance'] or ''
             parts = prov.split(':')
-            kind = 'otomatik' if prov.startswith('auto:') else ('küme' if ':speaker:' in prov else ('bölüm' if len(parts) == 2 and parts[1].isdigit() else 'elle'))
-            mid = parts[1] if parts[0] == 'auto' and len(parts) > 1 else (parts[0] if parts and kind in ('küme', 'bölüm') else None)
+            team = prov.startswith('team:')   # `team:<host>:<hash>`: a teammate's Mac enrolled this voice, not ours
+            kind = 'ekip' if team else ('otomatik' if prov.startswith('auto:') else ('küme' if ':speaker:' in prov else ('bölüm' if len(parts) == 2 and parts[1].isdigit() else 'elle')))
+            mid = None if team else (parts[1] if parts[0] == 'auto' and len(parts) > 1 else (parts[0] if parts and kind in ('küme', 'bölüm') else None))
             title = titles.get(mid) if mid else None
             gone = bool(mid) and title is None   # the sample outlived its meeting: nothing to open, but say why
             out.append({'id': r['id'], 'model': r['model'], 'seconds': round(float(r['duration'] or 0), 1), 'kind': kind,
-                        'meeting': None if gone else mid, 'meeting_title': self.DELETED_MEETING if gone else title, 'provenance': prov})
+                        'meeting': None if gone else mid, 'meeting_title': self.DELETED_MEETING if gone else title, 'provenance': prov,
+                        'host': parts[1] if team and len(parts) > 1 else None})
         return out
     WEAK_FIT = 0.60   # a sample this far from its person's centroid is probably another voice or a bad recording
     def profile_health(self):
@@ -504,6 +506,7 @@ class Store:
             last = heard.get(name) or {}
             out.append({'name': name, 'model': model, 'samples': len(xs), 'seconds': round(sum(d for _, _, d, _ in xs), 1),
                         'auto_samples': sum(1 for _, _, _, p in xs if p.startswith('auto:')), 'rejections': rejected.get(name, 0),
+                        'team_samples': sum(1 for _, _, _, p in xs if p.startswith('team:')),   # enrolled on a teammate's Mac, imported here
                         'weakest_fit': round(weakest[1], 3) if weakest else None, 'weakest_sample': weakest[0] if weakest else None,
                         'weak': bool(weakest and weakest[1] < self.WEAK_FIT),
                         'last_meeting': last.get('meeting'), 'last_meeting_title': last.get('title'), 'last_heard': last.get('created')})
