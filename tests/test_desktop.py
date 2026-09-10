@@ -536,3 +536,19 @@ class CloudRetryQueueTests(unittest.TestCase):
             self.assertEqual(len(dispatch({'action':'retry_candidates'},db)['candidates']),1)
             with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
                 self.assertEqual(dispatch({'action':'retry_candidates'},db),{'candidates':[],'blocked':[],'low_priority':True})
+
+class CommandLineFallbackTests(unittest.TestCase):
+    """The app hands user-typed values over the environment instead of argv: a question can start with '-' or
+    hold a newline, and on macOS every process can read another process's command line."""
+    def _parse(self,env,argv):
+        import os
+        from unittest.mock import patch
+        from meeting_os.cli import parser
+        with patch.dict(os.environ,env,clear=False): return parser().parse_args(argv)   # the default is read per call
+    def test_the_question_comes_from_the_environment_when_argv_has_none(self):
+        self.assertEqual(self._parse({'MEETING_OS_QUESTION':'Karar ne oldu?'},['ask']).question,'Karar ne oldu?')
+        self.assertEqual(self._parse({'MEETING_OS_QUESTION':'Karar ne oldu?'},['ask','Baska soru']).question,'Baska soru')   # argv still wins
+        self.assertIsNone(self._parse({},['ask']).question)
+    def test_the_import_audio_path_comes_from_the_environment_and_stays_a_path(self):
+        self.assertEqual(self._parse({'MEETING_OS_AUDIO_PATH':'/tmp/kayit.wav'},['openrouter-import']).audio,Path('/tmp/kayit.wav'))
+        self.assertIsNone(self._parse({},['openrouter-import']).audio)

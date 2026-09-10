@@ -132,7 +132,7 @@ def parser():
     e=sub.add_parser('enroll'); e.add_argument('meeting'); e.add_argument('segment',type=int); e.add_argument('name'); e.add_argument('--confirmed-clean',action='store_true',required=True,help='Confirm listening to the segment: one speaker, no overlap/echo, >=6s speech (the app asks for 6; the store accepts 3)')
     profiles=sub.add_parser('profiles'); profiles.add_argument('--delete')
     b=sub.add_parser('benchmark'); b.add_argument('manifest',type=Path); b.add_argument('--output',type=Path,required=True)
-    a=sub.add_parser('openrouter-import'); a.add_argument('audio',type=Path,nargs='?'); a.add_argument('--title',default=os.environ.get('MEETING_OS_TITLE') or 'OpenRouter toplantısı'); a.add_argument('--resume'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--no-local',action='store_true',help='Cloud-only: provider diarization, no local models'); a.add_argument('--output',type=Path)
+    a=sub.add_parser('openrouter-import'); a.add_argument('audio',type=Path,nargs='?',default=os.environ.get('MEETING_OS_AUDIO_PATH')); a.add_argument('--title',default=os.environ.get('MEETING_OS_TITLE') or 'OpenRouter toplantısı'); a.add_argument('--resume'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--no-local',action='store_true',help='Cloud-only: provider diarization, no local models'); a.add_argument('--output',type=Path)
     a=sub.add_parser('openrouter-finalize',help='Transcribe a finished recording through OpenRouter only; no local models'); a.add_argument('meeting'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--output',type=Path)
     a=sub.add_parser('analyze'); a.add_argument('meeting'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model',help='Cloud analysis via OpenRouter; no local model is loaded')
     a=sub.add_parser('actions'); a.add_argument('--owner'); a.add_argument('--meeting')
@@ -140,7 +140,9 @@ def parser():
     a=sub.add_parser('prepare'); a.add_argument('task'); a.add_argument('--force',action='store_true'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     a=sub.add_parser('handoff'); a.add_argument('task'); a.add_argument('path',type=Path)
     a=sub.add_parser('search'); a.add_argument('query'); a.add_argument('--speaker')
-    a=sub.add_parser('ask'); a.add_argument('question'); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
+    # The app passes the question in the environment: a question typed into the sidebar can start with '-' or
+    # carry a newline, and argv is visible to every process on the Mac.
+    a=sub.add_parser('ask'); a.add_argument('question',nargs='?',default=os.environ.get('MEETING_OS_QUESTION')); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
     q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
     dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); dg.add_argument('--output',type=Path)
@@ -215,7 +217,9 @@ def main(supervised=False):
                     llm=OpenRouterClient().analysis(validate_analysis_model(cloud_llm),consent=True)
                 if args.command=='analyze':result=assistant.analyze(store,args.meeting,llm=llm,force=args.force)
                 elif args.command=='prepare':result=assistant.prepare(store,args.task,llm=llm,force=args.force)
-                elif args.command=='ask':result=assistant.ask(store,args.question,llm=llm)
+                elif args.command=='ask':
+                    if not (args.question or '').strip():raise ValueError('Soru boş olamaz')
+                    result=assistant.ask(store,args.question,llm=llm)
                 elif args.command=='handoff':result=assistant.handoff(store,args.task,args.path)
                 elif args.command=='actions':result=Memory(store).actions(args.owner,args.meeting)
                 elif args.command=='action-update':result=Memory(store).update_action(args.task,{k:getattr(args,k) for k in ('state','title','owner','due_text') if getattr(args,k) is not None})
