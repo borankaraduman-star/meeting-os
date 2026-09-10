@@ -72,7 +72,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; wordFix=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { guard search != oldValue else { return }; focusedSegment=nil; pendingEvidence=nil; scheduleSearchRebuild() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { willSet { noteNavChange() } didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; wordFix=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { willSet { noteNavChange() } didSet { guard search != oldValue else { return }; focusedSegment=nil; pendingEvidence=nil; scheduleSearchRebuild() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · ⌃⌥R ile kayıt başlat"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -86,11 +86,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// The word the user clicked in the transcript, if any: it moves on a click and on nothing else, so the
     /// paragraph views can take it as a plain parameter without a per-poll redraw.
     @Published var wordFix:WordFix?
-    @Published var tab="transcript" { didSet { if tab != "transcript" { pendingEvidence=nil } } }; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
+    @Published var tab="transcript" { willSet { noteNavChange() } didSet { if tab != "transcript" { pendingEvidence=nil } } }; @Published var analysis:[String:Any]?; @Published var actions:[ActionItem]=[]; @Published var drafts:[DraftItem]=[]
     @Published var memoryQuery=""; @Published var hits:[Evidence]=[]; @Published var answer=""; @Published var answerEvidence:[Evidence]=[]
     let runtime:Runtime; let dataDir=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS")
-    @Published var focusedSegment:Int? { didSet { rebuildBlocks() } }
-    @Published var pendingEvidence:Evidence?
+    @Published var focusedSegment:Int? { willSet { noteNavChange() } didSet { rebuildBlocks() } }
+    @Published var pendingEvidence:Evidence? { willSet { noteNavChange() } }
     var recordingNavigation=RecordingNavigation()
     var progressURL:URL?;var jobStarted:Date?
     var resourceStopMessage=""
@@ -672,9 +672,95 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Evidence / review navigation: scroll the reading view to the paragraph and flash it, keeping context around it.
     @Published var revealTarget:Int?; @Published var revealToken=0; @Published var highlighted:Int?
     func reveal(segment id:Int) {
-        tab="transcript"; search=""; focusedSegment=nil; revealTarget=id; revealToken+=1; highlighted=id
+        // Every "Bölüme git", every name card and every resolved piece of evidence lands here, so this is
+        // the one place a jump into the transcript has to remember where it came from.
+        if navEvidenceInFlight { navEvidenceInFlight=false } else { pushNavForJump() }
+        tab="transcript"; search=""; focusedSegment=nil; flashReveal(segment:id)
+    }
+    /// Scroll to a paragraph and flash it. Split out of `reveal` so going back can restore a focused
+    /// segment without clearing the filter that focused it in the first place.
+    func flashReveal(segment id:Int) {
+        revealTarget=id; revealToken+=1; highlighted=id
         let token=revealToken
         DispatchQueue.main.asyncAfter(deadline:.now()+2.5) { [weak self] in if self?.revealToken==token { self?.highlighted=nil } }
+    }
+
+    // MARK: Back navigation
+    /// Where the user was before each programmatic jump. Pushed by jumps only — a sidebar click, a tab
+    /// click and typing in the search field are the user driving the UI, and leave nothing behind.
+    /// Never persisted, so every launch starts with no way back and no stale meeting ids.
+    @Published private(set) var backStack:[NavPoint]=[]
+    /// State before the first mutation of the current run-loop turn; a jump usually writes three or four
+    /// properties in a row, and all of them belong to one navigation.
+    var navBefore:NavPoint?
+    var navPushedThisBatch=false
+    var navRestoring=false          // goBack is writing: nothing it touches is a new jump
+    var navEvidenceInFlight=false   // the point was pushed when an evidence jump started; its later reveal must not push again
+    /// A meeting switch whose jump may still be coming (the week view reveals its paragraph ~1.2 s later).
+    /// Remembered, never pushed: on its own, a meeting switch is a sidebar click.
+    var navCandidate:(point:NavPoint,at:Date)?
+
+    var currentNavPoint:NavPoint { NavPoint(meeting:selected,tab:tab,focusedSegment:focusedSegment,search:search) }
+
+    /// Called from willSet on everything a NavPoint reads: snapshot the turn's starting point, then judge
+    /// the whole turn once it has finished. Nothing is published here, so a keystroke costs one closure.
+    func noteNavChange() {
+        guard navBefore==nil else { return }
+        navBefore=currentNavPoint
+        DispatchQueue.main.async { [weak self] in self?.commitNavBatch() }
+    }
+
+    /// Classify a finished turn. Only a jump — a cross-meeting result being opened, or evidence on its way
+    /// to the transcript — leaves a point behind; the rest of the UI stays out of the history.
+    func commitNavBatch() {
+        guard let before=navBefore else { return }
+        navBefore=nil
+        let pushed=navPushedThisBatch; navPushedThisBatch=false
+        if navEvidenceInFlight && pendingEvidence==nil { navEvidenceInFlight=false }   // resolved, or given up on, without a reveal
+        guard !navRestoring else { navCandidate=nil; return }
+        let now=currentNavPoint
+        guard before != now else { return }
+        if pushed { if before.meeting != now.meeting { navCandidate=nil }; return }
+        // An evidence jump lands in two steps: the transcript opens now, its paragraph is revealed once the
+        // rows arrive. Push the departure point here and let that second step pass.
+        if pendingEvidence != nil { pushNav(before); navEvidenceInFlight=true; navCandidate=nil; return }
+        if before.meeting != now.meeting {
+            if before.tab != now.tab { pushNav(before); navCandidate=nil }   // a result opening another meeting on a tab of its own
+            else { navCandidate=(before,Date()) }
+        }
+        // Same meeting, only a tab or the search field changed: the user is already where they meant to be.
+    }
+
+    func pushNav(_ point:NavPoint) { backStack=NavHistory.pushed(backStack,point) }
+
+    /// Remember where the user is standing, immediately before a programmatic jump moves them.
+    func pushNavForJump() {
+        guard !navRestoring, !navPushedThisBatch else { return }
+        var point=navBefore ?? currentNavPoint
+        if navBefore==nil, let candidate=navCandidate, Date().timeIntervalSince(candidate.at)<NavHistory.candidateWindow { point=candidate.point }
+        navCandidate=nil
+        pushNav(point)
+        navPushedThisBatch=true
+        if navBefore==nil { navBefore=currentNavPoint; DispatchQueue.main.async { [weak self] in self?.commitNavBatch() } }
+    }
+
+    /// Wrap a programmatic jump: the place being left is pushed, then the jump runs.
+    func navigate(_ jump:()->Void) { pushNavForJump(); jump() }
+
+    /// Undo the last jump: the meeting, the tab, the search text and the focused paragraph as they were.
+    /// Order matters — `selected` clears the search and the focus, and `search` clears the focus again.
+    func goBack() {
+        let (point,rest)=NavHistory.popped(backStack)
+        guard let p=point else { return }
+        backStack=rest
+        navRestoring=true; navCandidate=nil
+        // A meeting deleted since the jump is no longer somewhere to go back to; the rest of the point still is.
+        if let meeting=p.meeting, meeting != selected, meetings.contains(where:{ $0.id==meeting }) { selected=meeting }
+        tab=p.tab
+        if search != p.search { search=p.search }
+        focusedSegment=p.focusedSegment
+        if let segment=p.focusedSegment { flashReveal(segment:segment) }
+        DispatchQueue.main.async { [weak self] in self?.navRestoring=false }
     }
     /// Paragraph that contains a segment (evidence may point at a non-lead row of a block).
     func blockId(containing id:Int)->Int? { blocks.first { $0.rows.contains { $0.id==id } || $0.asides.contains { $0.id==id } }?.id }
@@ -982,6 +1068,8 @@ func statusLabel(_ status:String)->String {
                 Button("Toplantıyı sil…") { if let meeting=model.meeting { model.deleteCandidate=meeting } }.keyboardShortcut(.delete,modifiers:.command).disabled(model.meeting==nil || model.recording || model.meeting?.recoveryState=="active" || model.editRow != nil || model.showSettings || model.showShare || model.showOpenRouter || model.wordFix != nil)   // ⌘⌫ stays "delete to line start" inside any text field
             }
             CommandMenu("Git") {
+                Button("Geri") { model.goBack() }.keyboardShortcut("[",modifiers:.command).disabled(model.backStack.isEmpty)
+                Divider()
                 Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)
                 Button("Hafızada ara") { model.focusMemorySearch() }.keyboardShortcut("f",modifiers:[.command,.shift])
                 Divider()

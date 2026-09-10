@@ -311,3 +311,53 @@ struct WordRule:Identifiable, Equatable {
     var sourceLabel:String { source=="taught" ? "öğretildi" : "öğrenildi" }
     var line:String { "“\(original)” → “\(replacement)” · \(sourceLabel) · \(meetings) toplantı" }
 }
+
+/// One place in the app a jump can send the user back to: which meeting was open, which tab, what the
+/// transcript was filtered down to. Cheap to copy and compared by value, so a jump that changes nothing
+/// leaves nothing behind.
+struct NavPoint:Equatable {
+    var meeting:String?
+    var tab:String
+    var focusedSegment:Int?
+    var search:String
+}
+
+/// Back-stack arithmetic, kept pure so the interesting part (what is pushed, what is dropped) is testable
+/// without a Model, a window or a run loop.
+enum NavHistory {
+    /// A back button is a way out of the last few jumps, not a session history.
+    static let cap=20
+    /// How long a meeting switch waits for the jump that belongs to it: the week view opens a meeting and
+    /// reveals its paragraph ~1.2 s later, and both are one navigation to the user.
+    static let candidateWindow:TimeInterval=3
+
+    static func pushed(_ stack:[NavPoint],_ point:NavPoint)->[NavPoint] {
+        if stack.last==point { return stack }   // one entry per place, however the jump was spelled
+        var next=stack
+        next.append(point)
+        if next.count>cap { next.removeFirst(next.count-cap) }
+        return next
+    }
+
+    static func popped(_ stack:[NavPoint])->(point:NavPoint?,rest:[NavPoint]) {
+        var rest=stack
+        let point=rest.popLast()
+        return (point,rest)
+    }
+}
+
+/// Only visible when a jump left somewhere to go back to: an always-present arrow that does nothing most
+/// of the time would be worse than no arrow at all.
+struct BackButton:View {
+    @ObservedObject var model:Model
+    var body:some View {
+        if !model.backStack.isEmpty {
+            Button { model.goBack() } label: { Label("Geri",systemImage:"chevron.left").font(.callout) }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .help("Geri (⌘[)")
+                .accessibilityIdentifier("backButton")
+                .accessibilityLabel("Geri")
+        }
+    }
+}
