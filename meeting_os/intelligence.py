@@ -133,7 +133,8 @@ def validate_record(record,rows):
             if claim_stems and quote_stems and not (claim_stems&quote_stems):
                 if key=='actions': dropped_items+=1;continue
                 rescued=True   # summary/decision wording can drift; keep it but ask for a look
-            clean={field:text.strip(),'evidence':evidence,'needs_review':any(uncertain(r) for r in selected) or rescued}
+            flagged=any(uncertain(r) for r in selected) or rescued   # a stitched quote, or a row the pipeline itself doubted
+            clean={field:text.strip(),'evidence':evidence,'needs_review':flagged}
             if key=='actions':
                 owner=item.get('owner');due=item.get('due_text');quotes=' '.join(e['quote'] for e in evidence)
                 owner=canonical_owner(owner,rows)   # "Deniz'in", "deniz bey" and "Deniz" are one person before anything is verified
@@ -145,7 +146,12 @@ def validate_record(record,rows):
                     if len({r['speaker_name'] for r in first})==1:owner=first[0]['speaker_name']
                 if any('speaker_ambiguous' in r.get('flags',[]) for r in selected):owner=None
                 due=due.strip() if isinstance(due,str) and due.strip() and due in quotes else None
-                clean.update(owner=owner,due_text=due,needs_review=True)
+                # Marking every single task for review marked none of them: the badge said nothing and people
+                # stopped reading it. A task is flagged when its own evidence is doubtful (a rescued quote, an
+                # uncertain row) or when the model named an owner the evidence did not support — the abstention
+                # the comment above promises. A clean, quoted, owned task is not a question for the user.
+                abstained=bool((item.get('owner') or '').strip()) and not owner
+                clean.update(owner=owner,due_text=due,needs_review=flagged or abstained)
             result[key].append(clean)
     if total_items and dropped_items==total_items: raise ValueError('Analiz gerçek kaynak alıntısıyla eşleşmiyor')   # whole batch unusable → caller retries once
     result['dropped_quotes']=dropped;result['dropped_items']=dropped_items
@@ -270,6 +276,10 @@ def merge_records(records):
                 if index is None:out[key].append(item)
                 else:out[key][index]=absorb(out[key][index],item)
     out['decisions']=drop_superseded(out['decisions'])
+    # What the model produced and validation refused, summed over every chunk. Kept in the saved payload so the
+    # report and the app can say "3 alıntı doğrulanamadı" instead of quietly showing a shorter list.
+    out['dropped_quotes']=sum(int(r.get('dropped_quotes') or 0) for r in records)
+    out['dropped_items']=sum(int(r.get('dropped_items') or 0) for r in records)
     return out
 
 def chunks(rows,llm,budget=2800):

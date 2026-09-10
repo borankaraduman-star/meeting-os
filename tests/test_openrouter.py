@@ -150,3 +150,78 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(self.requests,[])
 
 if __name__=='__main__':unittest.main()
+
+
+class AnalysisUsageTests(unittest.TestCase):
+    """Analysis money used to be invisible: the chat response's usage block was read and thrown away, so the
+    cost report could only ever show transcription. Every chat call is now metered."""
+    RESPONSE = {'choices':[{'finish_reason':'stop','message':{'content':'{"summary":[]}'}}]}
+    client = OpenRouterTests.client
+
+    def test_the_request_asks_for_the_charge_and_the_response_is_recorded(self):
+        from meeting_os.openrouter import analysis_usage_recorder
+        client=self.client({**self.RESPONSE,'usage':{'prompt_tokens':1200,'completion_tokens':300,'cost':0.00042}})
+        seen=[]
+        with analysis_usage_recorder(lambda model,usage: seen.append((model,usage))):
+            client.analysis('openai/gpt-4.1-mini',consent=True).complete('s','u')
+        body=json.loads(self.requests[0][0].data)
+        self.assertEqual(body['usage'],{'include':True})   # without this OpenRouter sends no cost at all
+        self.assertEqual(seen,[('openai/gpt-4.1-mini',{'model':'openai/gpt-4.1-mini','prompt_tokens':1200,'completion_tokens':300,'cost':0.00042,'estimated':False})])
+
+    def test_a_provider_that_sends_no_cost_is_estimated_from_the_price_table_and_marked(self):
+        from meeting_os.openrouter import analysis_usage_recorder, estimate_analysis_cost
+        client=self.client({**self.RESPONSE,'usage':{'prompt_tokens':1_000_000,'completion_tokens':1_000_000}})
+        seen=[]
+        with analysis_usage_recorder(lambda model,usage: seen.append(usage)):
+            client.analysis('openai/gpt-4.1-mini',consent=True).complete('s','u')
+        self.assertEqual((seen[0]['cost'],seen[0]['estimated']),(2.0,True))   # $0.40/M in + $1.60/M out
+        self.assertEqual(estimate_analysis_cost('openai/gpt-4.1-mini',500_000,0),0.2)
+        self.assertIsNone(estimate_analysis_cost('someone/unpriced',10,10))   # no invented zero
+
+    def test_junk_usage_and_a_missing_sink_never_break_an_analysis(self):
+        from meeting_os.openrouter import analysis_usage_recorder, chat_usage
+        for junk in (None,'lots',{'prompt_tokens':-4,'completion_tokens':float('nan'),'cost':True},[]):
+            self.assertEqual(chat_usage('someone/unpriced',junk),{'model':'someone/unpriced','prompt_tokens':0,'completion_tokens':0,'cost':0.0,'estimated':False})
+        client=self.client({**self.RESPONSE,'usage':{'cost':0.1}})
+        self.assertEqual(client.analysis('openai/gpt-4.1-mini',consent=True).complete('s','u'),'{"summary":[]}')   # no recorder installed
+        def explode(model,usage): raise RuntimeError('disk full')
+        with analysis_usage_recorder(explode):
+            self.assertEqual(self.client({**self.RESPONSE,'usage':{'cost':0.1}}).analysis('openai/gpt-4.1-mini',consent=True).complete('s','u'),'{"summary":[]}')
+
+    def test_the_store_and_the_cost_report_add_the_calls_up(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('Sprint',{})
+            self.assertEqual(s.analysis_usage(),[])   # no table until something was analysed
+            self.assertEqual(s.analysis_cost_totals(),{'cost':0.0,'calls':0,'estimated':False})
+            s.record_analysis_usage(mid,'openai/gpt-4.1-mini',{'prompt_tokens':1000,'completion_tokens':200,'cost':0.004,'estimated':False})
+            s.record_analysis_usage(mid,'openai/gpt-4.1-mini',{'prompt_tokens':900,'completion_tokens':100,'cost':0.003,'estimated':True})
+            self.assertEqual(s.analysis_cost_totals(mid),{'cost':0.007,'calls':2,'estimated':True})
+            s.close()
+            report=dispatch({'action':'cost_report'},db)
+            self.assertEqual((report['analysis_cost'],report['analysis_calls'],report['analysis_estimated']),(0.007,2,True))
+            s=Store(db)
+            self.assertEqual(s.analysis_cost_totals(),{'cost':0.007,'calls':2,'estimated':True})
+            s.delete_meeting(mid)   # a deleted meeting takes its bookkeeping with it
+            self.assertEqual(s.analysis_usage(),[]);s.close()
+
+    def test_an_analysis_records_its_calls_against_the_meeting(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.types import Segment
+        from meeting_os import assistant
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('Sprint',{})
+            sid=s.add_segment(mid,Segment(0,8,'Ben PRD taslağını yarın hazırlayacağım.','mic','Ben'));s.status(mid,'complete')
+            payload=json.dumps({'summary':[{'text':'PRD taslağı hazırlanacak.','evidence':[{'segment_id':sid,'quote':'PRD taslağını yarın hazırlayacağım'}]}],
+                                'decisions':[],'risks':[],'questions':[],'actions':[]},ensure_ascii=False)
+            client=self.client({'choices':[{'finish_reason':'stop','message':{'content':payload}}],'usage':{'prompt_tokens':800,'completion_tokens':120,'cost':0.0009}})
+            assistant.analyze(s,mid,client.analysis('openai/gpt-4.1-mini',consent=True))
+            rows=s.analysis_usage(mid)
+            self.assertEqual([(r['meeting'],r['model'],r['prompt_tokens'],r['completion_tokens'],r['cost'],r['estimated']) for r in rows],
+                             [(mid,'openai/gpt-4.1-mini',800,120,0.0009,0)])
+            s.close()

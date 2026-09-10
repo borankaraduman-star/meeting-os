@@ -289,8 +289,11 @@ def dispatch(request, db=None):
             meetings=everything[:limit]
             if selected and not any(m['id']==selected for m in meetings):
                 meetings=meetings+[m for m in everything[limit:] if m['id']==selected]   # the open meeting is never dropped
+            # Every row counts. The old filter (system rows, or a non-empty speaker_name) dropped cloud microphone
+            # rows, whose speaker_name is NULL: a meeting where only the user spoke and the room was silent showed
+            # "Konuşma bulunmadı" and a grey dot over a full transcript, and every mixed meeting undercounted people.
             stats={r[0]:{'segments':r[1],'seconds':float(r[2] or 0),'speakers':r[3],'names':sorted({n for n in (r[4] or '').split('\x1f') if n})} for r in store.db.execute(
-                "SELECT meeting,count(*),max(end),count(DISTINCT coalesce(nullif(speaker_name,''),speaker)),group_concat(DISTINCT speaker_name) FROM segments WHERE source='system' OR speaker_name<>'' GROUP BY meeting")}
+                "SELECT meeting,count(*),max(end),count(DISTINCT coalesce(nullif(speaker_name,''),speaker)),group_concat(DISTINCT speaker_name) FROM segments GROUP BY meeting")}
             for v in stats.values(): v['names']=sorted({n.strip() for n in ','.join(v['names']).split(',') if n.strip()})
             for m in meetings:
                 m['stats']=stats.get(m['id'],{'segments':0,'seconds':0.0,'speakers':0})
@@ -361,11 +364,20 @@ def dispatch(request, db=None):
             if action=='update_check': return updater.check(ROOT)
             if action=='update_start': return updater.start(ROOT,DATA_DIR)
             return updater.status(DATA_DIR)
+        if action=='rename_mic_owner':
+            # The Mac's owner corrected their own name: every microphone row in every meeting follows.
+            return store.rename_mic_owner(request.get('old'),request.get('new'))
         if action in ('report_settings','report_settings_set','report_write','reports_summary','heartbeat'):
             from . import reports
             base=DATA_DIR if db is None else Path(db).parent
             if action=='report_settings': return reports.load_settings(base)
-            if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
+            if action=='report_settings_set':
+                changes=request.get('changes') or {}
+                before=(reports.load_settings(base).get('user_name') or '').strip()
+                saved=reports.save_settings(base,changes)
+                # A name typed after the first meeting was already recorded has to reach that meeting too.
+                renamed=reports.rename_owner_segments(store,before,saved.get('user_name')) if (saved.get('user_name') or '').strip()!=before else None
+                return {**saved,'renamed_meetings':(renamed or {}).get('meetings',0),'renamed_segments':(renamed or {}).get('segments',0)}
             if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
             if action=='heartbeat':
@@ -539,13 +551,29 @@ def dispatch(request, db=None):
             return {'api_key':has_key,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
                     'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder)}
         if action=='cost_report':
-            # Real OpenRouter transcription charges per piece (analysis calls are not metered by the provider response).
+            # Real OpenRouter charges: transcription per audio piece, analysis per chat completion.
             from datetime import datetime,timezone
-            rows=store.db.execute("SELECT m.id,m.title,m.created,sum(json_extract(c.usage,'$.cost')),sum(json_extract(c.usage,'$.seconds')),count(json_extract(c.usage,'$.cost')) FROM meetings m JOIN cloud_chunks c ON c.meeting=m.id GROUP BY m.id ORDER BY m.created DESC").fetchall()
+            # cloud_chunks only exists once a cloud transcription happened; analysis alone must still report.
+            rows=store.db.execute("SELECT m.id,m.title,m.created,sum(json_extract(c.usage,'$.cost')),sum(json_extract(c.usage,'$.seconds')),count(json_extract(c.usage,'$.cost')) FROM meetings m JOIN cloud_chunks c ON c.meeting=m.id GROUP BY m.id ORDER BY m.created DESC").fetchall() \
+                if store.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cloud_chunks'").fetchone() else []
             month=datetime.now(timezone.utc).strftime('%Y-%m')
-            def bucket(rs): return {'usd':round(sum(float(r[3] or 0) for r in rs),4),'meetings':len(rs),'minutes':round(sum(float(r[4] or 0) for r in rs)/60,1)}
+            analysis=store.analysis_usage()
+            per_meeting={}
+            for u in analysis:
+                slot=per_meeting.setdefault(u['meeting'],{'cost':0.0,'calls':0,'estimated':False})
+                slot['cost']+=float(u['cost'] or 0);slot['calls']+=1;slot['estimated']=slot['estimated'] or bool(u['estimated'])
+            def bucket(rs):
+                ids={r[0] for r in rs};mine=[u for u in analysis if u['meeting'] in ids]
+                return {'usd':round(sum(float(r[3] or 0) for r in rs),4),'meetings':len(rs),'minutes':round(sum(float(r[4] or 0) for r in rs)/60,1),
+                        'analysis_usd':round(sum(float(u['cost'] or 0) for u in mine),4),'analysis_calls':len(mine)}
             this=[r for r in rows if (r[2] or '').startswith(month)]
-            return {'month':{'label':month,**bucket(this)},'all':bucket(rows),'recent':[{'meeting':r[0],'title':r[1],'usd':round(float(r[3] or 0),4),'minutes':round(float(r[4] or 0)/60,1)} for r in rows[:5]]}
+            slot=lambda mid: per_meeting.get(mid) or {'cost':0.0,'calls':0,'estimated':False}
+            return {'month':{'label':month,**bucket(this)},'all':bucket(rows),
+                    # Whole-database analysis totals, including meetings that were analysed but never transcribed in the cloud.
+                    'analysis_cost':round(sum(float(u['cost'] or 0) for u in analysis),4),'analysis_calls':len(analysis),
+                    'analysis_estimated':any(u['estimated'] for u in analysis),
+                    'recent':[{'meeting':r[0],'title':r[1],'usd':round(float(r[3] or 0),4),'minutes':round(float(r[4] or 0)/60,1),
+                               'analysis_cost':round(slot(r[0])['cost'],4),'analysis_calls':slot(r[0])['calls'],'analysis_estimated':slot(r[0])['estimated']} for r in rows[:5]]}
         if action=='meeting_context':
             # Calendar event that was live when the recording started: title + attendee names (read-only hints).
             cal=request.get('calendar') or {}

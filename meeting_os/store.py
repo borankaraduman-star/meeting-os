@@ -438,7 +438,7 @@ class Store:
                 for t in ('retry_segments','retry_workspaces'):
                     if t in tables: self.db.execute(f'DELETE FROM {t} WHERE attempt IN (SELECT id FROM retry_attempts WHERE meeting=?)',(mid,))
                 self.db.execute('DELETE FROM retry_attempts WHERE meeting=?',(mid,))
-            for t in ('analyses','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','segments'):
+            for t in ('analyses','analysis_usage','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','segments'):
                 if t in tables: self.db.execute(f'DELETE FROM {t} WHERE meeting=?',(mid,))
             self.db.execute('DELETE FROM meetings WHERE id=?',(mid,))
         removed, kept = self._remove_retry_workspaces(workspaces)
@@ -498,6 +498,66 @@ class Store:
         with self.db:
             cur = self.db.execute('DELETE FROM samples WHERE id=?', (int(sample_id),))
             if not cur.rowcount: raise ValueError('Örnek bulunamadı')
+    ANALYSIS_USAGE_DDL = ("CREATE TABLE IF NOT EXISTS analysis_usage(id INTEGER PRIMARY KEY, meeting TEXT, created TEXT, model TEXT,"
+                          " prompt_tokens INTEGER, completion_tokens INTEGER, cost REAL, estimated INTEGER)")
+    def _ensure_analysis_usage(self):
+        """Created on the first analysis call, like cloud_chunks: an install that never analysed anything
+        carries no empty table, and an older database gains it without a schema version bump."""
+        self.db.execute(self.ANALYSIS_USAGE_DDL)
+        self.db.execute('CREATE INDEX IF NOT EXISTS analysis_usage_meeting ON analysis_usage(meeting,id)')
+    def record_analysis_usage(self, meeting, model, usage):
+        """One chat completion's tokens and money. The provider's own `cost` is recorded when it sends one;
+        otherwise the caller's price-table estimate is recorded with estimated=1, so the number shown to the
+        user is never silently a guess. Never raises into an analysis."""
+        try:
+            self._ensure_analysis_usage()
+            with self.db:
+                self.db.execute('INSERT INTO analysis_usage(meeting,created,model,prompt_tokens,completion_tokens,cost,estimated) VALUES(?,?,?,?,?,?,?)',
+                    (meeting, datetime.now(timezone.utc).isoformat(), model, int(usage.get('prompt_tokens') or 0), int(usage.get('completion_tokens') or 0),
+                     float(usage.get('cost') or 0.0), 1 if usage.get('estimated') else 0))
+        except Exception: return None
+        return True
+    def analysis_usage(self, meeting=None):
+        """Every recorded analysis call, newest first, or [] when nothing was ever analysed through the cloud."""
+        if not self.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='analysis_usage'").fetchone(): return []
+        sql = 'SELECT meeting,created,model,prompt_tokens,completion_tokens,cost,estimated FROM analysis_usage'
+        args = ()
+        if meeting is not None: sql += ' WHERE meeting=?'; args = (meeting,)
+        return [dict(r) for r in self.db.execute(sql + ' ORDER BY id DESC', args)]
+    def analysis_cost_totals(self, meeting=None):
+        """{'cost': usd, 'calls': n, 'estimated': bool} — `estimated` is true when any call in the sum was."""
+        rows = self.analysis_usage(meeting)
+        return {'cost': round(sum(float(r['cost'] or 0) for r in rows), 6), 'calls': len(rows), 'estimated': any(r['estimated'] for r in rows)}
+    def rename_mic_owner(self, old, new):
+        """The Mac's owner typed their name (or corrected it): every microphone row that carried the old label
+        gets the new one, in every meeting. The label lives in three places that have to agree — the `speaker`
+        column, the `speaker` field of the stored JSON payload, and the identity block a naming settled — so a
+        report, a talk-share card and the "Bana ait" filter cannot disagree about who spoke.
+
+        Only source='mic' rows: the microphone is this Mac, never a diarized cluster of the other side.
+        Returns {'meetings': n, 'segments': m}. The analyses of the touched meetings become stale by
+        themselves, because the speaker string is part of the transcript fingerprint."""
+        old = (old or '').strip(); new = (new or '').strip()
+        if not new: raise ValueError('Yeni isim boş olamaz')
+        if not old or old == new: return {'meetings': 0, 'segments': 0}
+        rows = self.db.execute("SELECT id,meeting,payload,speaker_name FROM segments WHERE source='mic' AND speaker=?", (old,)).fetchall()
+        if not rows: return {'meetings': 0, 'segments': 0}
+        meetings = {r['meeting'] for r in rows}
+        with self.db:
+            self.db.execute("UPDATE segments SET speaker=? WHERE source='mic' AND speaker=?", (new, old))
+            self.db.execute("UPDATE segments SET speaker_name=? WHERE source='mic' AND speaker_name=?", (new, old))
+            for r in rows:
+                try: payload = json.loads(r['payload'] or '{}')
+                except ValueError: continue
+                if not isinstance(payload, dict): continue
+                if payload.get('speaker') == old: payload['speaker'] = new
+                if payload.get('speaker_name') == old: payload['speaker_name'] = new
+                identity = (payload.get('metrics') or {}).get('identity')
+                if isinstance(identity, dict):
+                    for key in ('name', 'settled', 'suggested', 'candidate'):
+                        if identity.get(key) == old: identity[key] = new
+                self.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), r['id']))
+        return {'meetings': len(meetings), 'segments': len(rows)}
     def rename_profile(self, name, new_name):
         """Rename a person; renaming onto an existing person merges the samples. Segment names follow."""
         new_name = (new_name or '').strip()

@@ -27,7 +27,7 @@ class FakeClient:
 class CloudFinalizeTests(unittest.TestCase):
     def test_pieces_and_labels(self):
         self.assertEqual(pieces(2500,1200),[(0,1200),(1200,2400),(2400,2500)])
-        self.assertEqual(speaker_label('mic','3',0,False),'Boran');self.assertEqual(speaker_label('system','0',0,False),'Konuşmacı 1')
+        self.assertEqual(speaker_label('mic','3',0,False),'Ben');   # nobody's name until Settings has oneself.assertEqual(speaker_label('system','0',0,False),'Konuşmacı 1')
         self.assertEqual(speaker_label('system','1',2,True),'Konuşmacı 3-2');self.assertEqual(speaker_label('system',None,0,False),'Karşı taraf')
     def test_diarized_finalize_skips_silent_mic_and_resumes(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -112,6 +112,7 @@ class WaitingTests(unittest.TestCase):
  def test_waiting_bridge_and_cli(self):
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'db';week(db)
+   (Path(tmp)/'settings.json').write_text(json.dumps({'user_name':'Boran'}),encoding='utf-8')   # the board needs to know whose Mac this is
    r=dispatch({'action':'waiting_board'},db)
    self.assertEqual(r['total'],3);self.assertEqual(len(r['people']),2);self.assertIn('reminder_text',r['people'][0])
    out=Path(tmp)/'bekleyen.md';dispatch({'action':'waiting_board','path':str(out)},db)
@@ -293,6 +294,7 @@ class BriefTests(unittest.TestCase):
                 mem.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated) VALUES('t1',?,NULL,'h','Raporu gönder','Ayşe','cuma','open','{}',0,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",(mid,))
                 mem.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated) VALUES('t2',?,NULL,'h','Bütçeyi sor','Boran',NULL,'open','{}',0,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",(mid,))
             s.close()
+            (Path(tmp)/'settings.json').write_text(json.dumps({'user_name':'Boran'}),encoding='utf-8')   # "Benim açık görevlerim" needs a name to filter by
             r=dispatch({'action':'brief','title':'Haftalık','attendees':['Ayşe Yılmaz','Yeni Kişi']},db)
             self.assertEqual((r['people'],r['owed'],r['questions']),(2,1,1))
             self.assertIn('## Ayşe Yılmaz · son görüşme: Sprint',r['text']); self.assertIn('- Raporu gönder · cuma',r['text']); self.assertIn('Bütçe onayı kimde?',r['text'])

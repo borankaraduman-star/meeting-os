@@ -26,6 +26,56 @@ ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on 
     {'id':'google/gemini-2.5-flash','name':'Gemini 2.5 Flash','pricing':'$0.30/M giriş, $2.50/M çıkış'},
 )
 ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
+# USD per million tokens (input, output), read off the model pages on 9 Sep 2026 — the same numbers the
+# `pricing` strings above show the user. Only a fallback: OpenRouter returns the real charge in `usage.cost`
+# when the request asks for it, and an estimate made from this table is always marked `estimated`.
+ANALYSIS_PRICES = {'openai/gpt-4.1-mini': (0.40, 1.60), 'openai/gpt-4o-mini': (0.15, 0.60), 'google/gemini-2.5-flash': (0.30, 2.50)}
+
+
+def estimate_analysis_cost(model, prompt_tokens, completion_tokens):
+    """USD from the price table, or None for a model we have no price for (never a made-up zero)."""
+    price = ANALYSIS_PRICES.get(model)
+    if price is None: return None
+    return round((float(prompt_tokens or 0)*price[0] + float(completion_tokens or 0)*price[1])/1_000_000, 6)
+
+
+_USAGE_SINK = None   # set for the length of one analysis by assistant.analyze; see analysis_usage_recorder
+
+
+def analysis_usage_recorder(sink):
+    """Context manager that routes every chat completion's usage to `sink(model, usage)` while it is open.
+
+    A chat call happens deep inside intelligence.analyze_rows, which knows nothing about a meeting or a
+    database; the meeting id lives one level up in assistant.analyze. Rather than thread a store through
+    four call signatures that have no other use for it, the analysis brackets its own calls here."""
+    import contextlib
+    @contextlib.contextmanager
+    def scope():
+        global _USAGE_SINK
+        previous = _USAGE_SINK; _USAGE_SINK = sink
+        try: yield
+        finally: _USAGE_SINK = previous
+    return scope()
+
+
+def _number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0: return None
+    return value
+
+
+def chat_usage(model, raw):
+    """The billable part of a chat completion response: {'prompt_tokens','completion_tokens','cost','estimated'}.
+    Anything the provider did not send, or sent as nonsense, is dropped rather than guessed at."""
+    usage = raw if isinstance(raw, dict) else {}
+    prompt = _number(usage.get('prompt_tokens'))
+    completion = _number(usage.get('completion_tokens'))
+    cost = _number(usage.get('cost'))
+    estimated = False
+    if cost is None:
+        cost = estimate_analysis_cost(model, prompt, completion)
+        estimated = cost is not None
+    return {'model': model, 'prompt_tokens': int(prompt or 0), 'completion_tokens': int(completion or 0),
+            'cost': float(cost or 0.0), 'estimated': estimated}
 
 def validate_analysis_model(model):
     if model not in {m['id'] for m in ANALYSIS_MODELS}:
@@ -225,7 +275,11 @@ class OpenRouterLLM:
         payload={'model':self.model_id,'messages':[{'role':'system','content':system},{'role':'user','content':user}],
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
+        payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
         result=self.client._post('chat/completions',payload)
+        if _USAGE_SINK is not None:
+            try: _USAGE_SINK(self.model_id,chat_usage(self.model_id,result.get('usage')))
+            except Exception: pass   # bookkeeping must never lose a completed, paid-for analysis
         try:
             choice=result['choices'][0]
             text=choice['message']['content']

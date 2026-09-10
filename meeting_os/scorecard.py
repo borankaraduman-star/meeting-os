@@ -52,14 +52,27 @@ def meeting_costs(store):
     return {r[0]: round(float(r[1] or 0), 4) for r in store.db.execute("SELECT meeting,sum(json_extract(usage,'$.cost')) FROM cloud_chunks GROUP BY meeting")}
 
 
-def meeting_scorecard(store, memory, m, cost=0.0):
+def analysis_costs(store):
+    """What each meeting's analysis calls cost. Empty until something was analysed through the cloud."""
+    rows = store.analysis_usage()
+    out = {}
+    for u in rows:
+        slot = out.setdefault(u['meeting'], {'cost': 0.0, 'calls': 0, 'estimated': False})
+        slot['cost'] += float(u['cost'] or 0); slot['calls'] += 1; slot['estimated'] = slot['estimated'] or bool(u['estimated'])
+    for slot in out.values(): slot['cost'] = round(slot['cost'], 4)
+    return out
+
+
+def meeting_scorecard(store, memory, m, cost=0.0, analysis=None):
     rows = store.display_segments(m['id'])
     seconds = max((r['end'] for r in rows if r.get('end') is not None), default=0)
     latest = memory.latest(m['id'])
     payload = (latest or {}).get('payload') or {}
     return {'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'seconds': round(seconds, 1), 'minutes': round(seconds / 60, 1),
             'speakers': talk_share(rows), 'counts': {k: len(payload.get(k, [])) for k in ('decisions', 'actions', 'questions', 'risks')},
-            'analyzed': latest is not None, 'stale': bool(latest and latest.get('stale')), 'cost': cost}
+            'analyzed': latest is not None, 'stale': bool(latest and latest.get('stale')), 'cost': cost,
+            'analysis_cost': (analysis or {}).get('cost', 0.0), 'analysis_calls': (analysis or {}).get('calls', 0),
+            'analysis_estimated': bool((analysis or {}).get('estimated'))}
 
 
 def period_range(start=None, end=None):
@@ -73,10 +86,10 @@ def period_range(start=None, end=None):
 def build_scorecard(store, start=None, end=None):
     first, last = period_range(start, end)
     memory = Memory(store)
-    money = meeting_costs(store)
+    money = meeting_costs(store); analysis = analysis_costs(store)
     inside = lambda created: (lambda d: d is not None and first <= d <= last)(local_day(created))
     meetings = [m for m in store.meetings() if m['status'] == 'complete' and inside(m['created'])]   # newest first
-    cards = [meeting_scorecard(store, memory, m, money.get(m['id'], 0.0)) for m in meetings]
+    cards = [meeting_scorecard(store, memory, m, money.get(m['id'], 0.0), analysis.get(m['id'])) for m in meetings]
     ids = {c['meeting'] for c in cards}
     people = {}
     for c in cards:
@@ -90,5 +103,6 @@ def build_scorecard(store, start=None, end=None):
     period = {'from': first.isoformat(), 'to': last.isoformat(), 'meetings': len(cards), 'seconds': round(seconds, 1), 'hours': round(seconds / 3600, 2),
               'decisions': sum(c['counts']['decisions'] for c in cards), 'questions': sum(c['counts']['questions'] for c in cards),
               'risks': sum(c['counts']['risks'] for c in cards), 'tasks': sum(1 for t in memory.actions() if t.get('meeting') in ids),
-              'cost': round(sum(c['cost'] for c in cards), 4), 'speakers': top}
+              'cost': round(sum(c['cost'] for c in cards), 4), 'analysis_cost': round(sum(c['analysis_cost'] for c in cards), 4),
+              'analysis_estimated': any(c['analysis_estimated'] for c in cards), 'speakers': top}
     return {'period': period, 'meetings': cards}
