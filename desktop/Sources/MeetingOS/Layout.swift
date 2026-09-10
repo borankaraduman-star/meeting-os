@@ -163,10 +163,10 @@ struct DetailView:View {
         VStack(alignment:.leading,spacing:0) {
             DetailHeader(model:model)
             if let meeting=model.meeting, model.restoredMeeting==meeting.id, RelaunchRestore.restorableStates.contains(meeting.status) {
-                HStack(spacing:10) {
+                HStack(alignment:.top,spacing:10) {
                     Image(systemName:"arrow.counterclockwise.circle.fill").foregroundStyle(MeetingStyle.accent)
-                    Text(RelaunchRestore.headline(meeting)).font(.callout.weight(.semibold)).lineLimit(1)
-                    Spacer()
+                    Text(RelaunchRestore.headline(meeting)).font(.callout.weight(.semibold)).lineLimit(2).fixedSize(horizontal:false,vertical:true)
+                    Spacer(minLength:8)
                     Button { model.restoredMeeting=nil } label: { Image(systemName:"xmark.circle.fill").foregroundStyle(.secondary) }
                         .buttonStyle(.plain).accessibilityLabel("Kurtarma bildirimini kapat")
                 }.padding(.horizontal,24).padding(.bottom,8).accessibilityIdentifier("relaunchRestoreBanner")
@@ -175,7 +175,7 @@ struct DetailView:View {
                 RecoveryBanner(model:model,meeting:meeting)
             }
             if model.meeting?.metadata["text_only"] as? Bool == true {
-                Text(model.meeting?.metadata["imported_from"] as? String == "chatgpt_manual" ? "ChatGPT’den elle aktarılan metin · Ses kaydı ve doğrulanmış ses profili içermez" : "Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).padding(.horizontal,24).padding(.bottom,8)
+                Text(model.meeting?.metadata["imported_from"] as? String == "chatgpt_manual" ? "ChatGPT’den elle aktarılan metin · Ses kaydı ve doğrulanmış ses profili içermez" : "Kurgu metin örneği · Ses kaydı değildir").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,24).padding(.bottom,8)
             }
             if let meeting=model.meeting,meeting.metadata["engine"] as? String=="openrouter" {
                 HStack {
@@ -188,13 +188,13 @@ struct DetailView:View {
                 TranscriptSearchBar(model:model).padding(.horizontal,24).padding(.bottom,12)
             }
             if model.tab=="transcript", model.pendingEvidence != nil {
-                HStack { ProgressView().controlSize(.small);Text("Kaynak bölümü bekleniyor…").font(.callout);Spacer();Button("Vazgeç") { model.pendingEvidence=nil } }
+                HStack { ProgressView().controlSize(.small);Text("Kaynak bölümü bekleniyor…").font(.callout).fixedSize(horizontal:false,vertical:true);Spacer(minLength:8);Button("Vazgeç") { model.pendingEvidence=nil } }
                     .padding(.horizontal,24).padding(.bottom,12)
             }
             Divider()
             if !model.error.isEmpty { ErrorBanner(model:model) }
             if let ready=model.pendingReady, let m=model.meetings.first(where:{ $0.id==ready }) {
-                HStack(spacing:10) { Image(systemName:"checkmark.circle.fill").foregroundStyle(MeetingStyle.accent); Text("Toplantı hazır · \(m.title)").font(.callout); Spacer(); Button("Aç") { model.selected=ready; model.pendingReady=nil }.controlSize(.small).accessibilityIdentifier("openReady"); Button { model.pendingReady=nil } label: { Image(systemName:"xmark") }.buttonStyle(.plain).foregroundStyle(.secondary) }
+                HStack(spacing:10) { Image(systemName:"checkmark.circle.fill").foregroundStyle(MeetingStyle.accent); Text("Toplantı hazır · \(m.title)").font(.callout).lineLimit(2).fixedSize(horizontal:false,vertical:true); Spacer(minLength:8); Button("Aç") { model.selected=ready; model.pendingReady=nil }.controlSize(.small).accessibilityIdentifier("openReady"); Button { model.pendingReady=nil } label: { Image(systemName:"xmark") }.buttonStyle(.plain).foregroundStyle(.secondary) }
                     .padding(.horizontal,24).padding(.vertical,8).background(MeetingStyle.accent.opacity(0.08))
             }
             Group {
@@ -209,7 +209,7 @@ struct DetailView:View {
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
             Divider()
             if let e=model.meeting?.metadata["identity_error"] as? String, !e.isEmpty {
-                HStack { Label(e,systemImage:"exclamationmark.triangle").foregroundStyle(.orange); Spacer() }.font(.caption).padding(.horizontal,12).padding(.vertical,6)
+                HStack(alignment:.top) { Label(e,systemImage:"exclamationmark.triangle").foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true); Spacer(minLength:0) }.font(.caption).padding(.horizontal,12).padding(.vertical,6)
             }
         }
         .background(MeetingStyle.canvas)
@@ -270,8 +270,8 @@ struct RecoveryBanner:View {
     var body:some View {
         HStack(alignment:.top) {
             Text(canRetry ? "Kurtarma aynı toplantıyı günceller; işlem bitene kadar önceki metin korunur." : (meeting.displayStatus == "not_started" ? "Ses alınamadı. macOS izinlerini kontrol edip yeni kayıt başlatın." : "İşlem sürüyor veya durumu doğrulanamıyor. Kayıt değiştirilmedi."))
-                .font(.caption)
-            Spacer()
+                .font(.caption).fixedSize(horizontal:false,vertical:true)
+            Spacer(minLength:8)
             if CloudTranscription.canFinalize(meeting:meeting,busy:model.busy) {
                 Button("Bulutta yazıya çevir") { model.finalizeWithOpenRouter(meeting.id,model:model.cloudModel) }
                     .buttonStyle(.borderedProminent).accessibilityIdentifier("cloudFinalizeButton")

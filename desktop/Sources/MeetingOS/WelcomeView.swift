@@ -19,7 +19,7 @@ struct WelcomeView:View {
                     .onSubmit { Task { await model.saveUserName() } }
                     .onDisappear { Task { await model.saveUserName() } }   // first run: the name is asked once, saved when the view goes away
                     .onChange(of:model.userNameFocusToken) { _,_ in nameFocused=true }
-                Text("Mikrofon kaydınız bu adla etiketlenir; sonradan Ayarlar → Genel’den değişir.").font(.caption).foregroundStyle(.secondary)
+                Text("Mikrofon kaydınız bu adla etiketlenir; sonradan Ayarlar → Genel’den değişir.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             }
             if !model.hasUserName {
                 Label("Kayıt başlamadan önce bu alan dolu olmalı.",systemImage:"info.circle").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("welcomeNameRequired")
@@ -33,9 +33,11 @@ struct WelcomeView:View {
                 Button { model.beginRecording() } label: { Label("Yeni kayıt",systemImage:"record.circle") }.buttonStyle(.borderedProminent).disabled(!model.recording && model.recordProcess != nil)
                 Button("Kurulum durumunu aç") { Task { await model.settings() } }
             }
-            Text("İzinler eksikse Kurulum durumu kartı gösterir ve tek tıkla ister.").font(.caption).foregroundStyle(.secondary)
+            Text("İzinler eksikse Kurulum durumu kartı gösterir ve tek tıkla ister.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             Text("Her toplantıdan sonra sayısal bir teşhis raporu (süre, puan, maliyet, model adı) varsayılan olarak iCloud’daki ekip klasörüne yazılır; konuşma metni girmez. Kapatmak için: Ayarlar → Sistem → Gelişmiş.").font(.caption).foregroundStyle(.secondary).frame(maxWidth:640,alignment:.leading).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("welcomeReportsNotice")
-        }.padding(32).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading).accessibilityIdentifier("welcome")
+        // A form, not a notice: the column is centred in the window but stays top-aligned and left-read,
+        // because vertical centring would move the name field under the caret as the steps grow.
+        }.padding(32).readingColumn(700).frame(maxHeight:.infinity,alignment:.top).accessibilityIdentifier("welcome")
     }
     func step(_ n:String,_ title:String,_ text:String)->some View {
         HStack(alignment:.top,spacing:12) {

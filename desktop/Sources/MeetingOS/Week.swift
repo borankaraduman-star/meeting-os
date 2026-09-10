@@ -41,7 +41,9 @@ struct DecisionLogView:View {
                 Button("Markdown…") { Task { await m.exportDecisions(query:m.memoryQuery) } }.disabled(m.decisions.isEmpty).accessibilityIdentifier("exportDecisions")
             }
             if !m.decisions.isEmpty { Text(AuditText.sourceLine(staleMeetings:m.decisionStaleMeetings)).font(.caption).foregroundStyle(m.decisionStaleMeetings>0 ? Color.orange : Color.secondary).accessibilityIdentifier("decisionSourceLine") }
-            if m.decisions.isEmpty { ContentUnavailableView("Karar bulunamadı",systemImage:"checkmark.seal",description:Text("Özet çıkarılmış toplantıların kararları burada tek listede görünür.")) }
+            if m.decisions.isEmpty {
+                CenteredNotice(icon:"checkmark.seal",title:"Karar bulunamadı",detail:"Özet çıkarılmış toplantıların kararları burada tek listede görünür.").inlineNoticeArea()
+            }
             ForEach(m.decisions) { d in
                 VStack(alignment:.leading,spacing:6) {
                     HStack(spacing:8) { Text(d.title).font(.caption.weight(.medium)).lineLimit(1); Text(MeetingDates.label(d.created)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -63,9 +65,11 @@ struct WaitingView:View {
     @ObservedObject var m:Model
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            HStack { Text("Başkalarının verdiği sözler, kişiye göre. Sahibi belirsiz görevler burada değil, Kontrol’de.").font(.callout).foregroundStyle(.secondary); Spacer(); Button("Yenile") { Task { await m.loadWaiting() } }.controlSize(.small) }
+            HStack { Text("Başkalarının verdiği sözler, kişiye göre. Sahibi belirsiz görevler burada değil, Kontrol’de.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true); Spacer(); Button("Yenile") { Task { await m.loadWaiting() } }.controlSize(.small) }
             if !m.waiting.isEmpty { Text(AuditText.sourceLine(staleMeetings:m.waitingStaleMeetings)).font(.caption).foregroundStyle(m.waitingStaleMeetings>0 ? Color.orange : Color.secondary).accessibilityIdentifier("waitingSourceLine") }
-            if m.waiting.isEmpty { ContentUnavailableView("Kimseden bir şey beklemiyorsunuz",systemImage:"person.2",description:Text("Sahibi başkası olan açık görev yok.")) }
+            if m.waiting.isEmpty {
+                CenteredNotice(icon:"person.2",title:"Kimseden bir şey beklemiyorsunuz",detail:"Sahibi başkası olan açık görev yok.").inlineNoticeArea()
+            }
             ForEach(m.waiting) { p in
                 VStack(alignment:.leading,spacing:8) {
                     HStack { Text(p.id).font(.headline); Text("\(p.items.count) söz").font(.caption).foregroundStyle(.secondary); Spacer()
@@ -90,7 +94,7 @@ struct ReviewDebtView:View {
         VStack(alignment:.leading,spacing:8) {
             HStack(spacing:8) {
                 Image(systemName:"calendar.badge.exclamationmark").foregroundStyle(MeetingStyle.accent)
-                Text(m.debt.isEmpty ? "Son 7 günde bekleyen kontrol maddesi yok" : "Son 7 gün · \(m.debt.count) madde: "+m.debtSummary).font(.callout)
+                Text(m.debt.isEmpty ? "Son 7 günde bekleyen kontrol maddesi yok" : "Son 7 gün · \(m.debt.count) madde: "+m.debtSummary).font(.callout).fixedSize(horizontal:false,vertical:true)
                 Spacer()
                 if !m.debt.isEmpty { Button(expanded ? "Gizle" : "Tümünü göster") { expanded.toggle() }.controlSize(.small).accessibilityIdentifier("toggleDebt") }
                 Button("Yenile") { Task { await m.loadReviewDebt() } }.controlSize(.small)
@@ -146,9 +150,11 @@ struct QuestionRadarView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             HStack { Spacer(); Text("\(m.questions.count) soru grubu").font(.caption).foregroundStyle(.secondary) }
-            Text("Toplantılarda açık kalan sorular; birden çok toplantıda tekrar edenler üstte. “olası cevap” yalnız ipucudur, kontrol edin.").font(.callout).foregroundStyle(.secondary)
+            Text("Toplantılarda açık kalan sorular; birden çok toplantıda tekrar edenler üstte. “olası cevap” yalnız ipucudur, kontrol edin.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if !m.questions.isEmpty { Text(AuditText.sourceLine(staleMeetings:m.questionStaleMeetings)).font(.caption).foregroundStyle(m.questionStaleMeetings>0 ? Color.orange : Color.secondary).accessibilityIdentifier("questionSourceLine") }
-            if m.questions.isEmpty { ContentUnavailableView("Cevapsız soru yok",systemImage:"questionmark.circle",description:Text("Özet çıkarılmış toplantıların açık soruları burada toplanır.")) }
+            if m.questions.isEmpty {
+                CenteredNotice(icon:"questionmark.circle",title:"Cevapsız soru yok",detail:"Özet çıkarılmış toplantıların açık soruları burada toplanır.").inlineNoticeArea()
+            }
             ForEach(m.questions) { q in
                 VStack(alignment:.leading,spacing:6) {
                     HStack(spacing:8) {
@@ -177,7 +183,8 @@ struct ScorecardView:View {
         VStack(alignment:.leading,spacing:12) {
             HStack { Text("Son 7 gün").font(.headline); Spacer(); Button("Yenile") { Task { await m.loadPeriodScorecard() } }.controlSize(.small).accessibilityIdentifier("refreshScorecard") }
             if isEmptyWindow {
-                ContentUnavailableView("Bu aralıkta kayıtlı toplantı yok",systemImage:"calendar",description:Text("Kayıt aldığınızda karne kendiliğinden dolar."))
+                CenteredNotice(icon:"calendar",title:"Bu aralıkta kayıtlı toplantı yok",detail:"Kayıt aldığınızda karne kendiliğinden dolar.")
+                    .inlineNoticeArea()
                     .accessibilityIdentifier("scorecardEmpty")
             } else if let p=m.scorePeriod {
                 LazyVGrid(columns:[GridItem(.adaptive(minimum:150),spacing:12)],spacing:12) {
