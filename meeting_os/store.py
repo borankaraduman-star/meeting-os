@@ -94,13 +94,54 @@ class Store:
         if not rows: raise ValueError('Speaker not found in meeting')
         created=datetime.now(timezone.utc).isoformat()
         with self.db:
-            previous=self._reject_previous(mid, speaker, rows, name, created)
-            feedback=self._record_feedback(rows, name)
+            previous=self._previous_label(rows)
+            self._reject_previous(mid, speaker, rows, name, created)
+            feedback=self._with_sample(self._record_feedback(rows, name), None)   # `correct` stores no voice sample
+            self._settle_identity(mid, rows, name)
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?', (name, mid, speaker))
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)', (mid, speaker, name, created, previous, feedback))
     @staticmethod
     def naming_mark(mid, speaker, created=''):
         return f'{mid}:speaker:{speaker}'+(f'@{created}' if created else '')
+    @staticmethod
+    def _mark_patterns(mid, speaker):
+        """(LIKE pattern, legacy exact) for every naming mark this cluster has ever written. A bare prefix match
+        let "Konuşmacı 1" claim "Konuşmacı 10"'s rows, and `_`/`%` in a typed label are LIKE wildcards."""
+        legacy=f'{mid}:speaker:{speaker}'
+        return legacy.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'@%', legacy
+    @staticmethod
+    def _previous_label(rows):
+        """The label undo has to put back. Read from the rows rather than from what the naming rejected: retyping
+        "Ayşe" as "Ayse" rejects nobody, and undo then blanked a label the user had never removed."""
+        return next((r['speaker_name'] for r in rows if r.get('speaker_name')), None)
+    @staticmethod
+    def _with_sample(feedback, sample_id):
+        """The correction row remembers the exact sample this naming stored (None when it stored none). Undo used
+        to delete by (name, provenance), which also destroyed the sample an EARLIER naming had left there."""
+        data=json.loads(feedback) if feedback else {}
+        data['sample_id']=sample_id
+        return json.dumps(data)
+    def _clear_own_verdicts(self, mid, speaker, name):
+        """Naming this cluster X takes back what THIS cluster said against X earlier (must run inside the caller's
+        transaction): the rejection it filed and the samples it hid. A rejection outranks any score, so without
+        this "Ali → Veli → Ali" left Ali vetoed for that voice for good."""
+        like,legacy=self._mark_patterns(mid, speaker); key=fold_name(name)
+        for r in self.db.execute("SELECT id,name FROM rejections WHERE provenance LIKE ? ESCAPE '\\' OR provenance=?",(like,legacy)).fetchall():
+            if fold_name(r['name'])==key: self.db.execute('DELETE FROM rejections WHERE id=?',(r['id'],))
+        for r in self.db.execute("SELECT id,name FROM samples WHERE deleted_by IS NOT NULL AND (deleted_by LIKE ? ESCAPE '\\' OR deleted_by=?)",(like,legacy)).fetchall():
+            if fold_name(r['name'])!=key: continue
+            self.db.execute("""UPDATE samples SET deleted_by=NULL WHERE id=? AND NOT EXISTS(
+                SELECT 1 FROM samples live WHERE live.name=samples.name AND live.model IS samples.model
+                  AND live.provenance=samples.provenance AND live.deleted_by IS NULL)""",(r['id'],))
+    def _settle_identity(self, mid, rows, name):
+        """Mark this cluster's automatic verdict as judged (must run inside the caller's transaction). The guess
+        and its scores stay readable — the scorecard and the weekly learning series are built from them — but
+        `settled` stops ONE model mistake from being convicted again on every later rename of the same cluster."""
+        for r in rows:
+            identity=(r.get('metrics') or {}).get('identity')
+            if not identity or identity.get('settled')==name: continue
+            identity['settled']=name
+            self.db.execute('UPDATE segments SET payload=? WHERE id=? AND meeting=?',(json.dumps(r,ensure_ascii=False),r['id'],mid))
     REJECT_SIMILARITY = 0.90   # a voice this close to one the user said is "not X" can never be X again
     def _previous_names(self, rows):
         """What the app called this cluster before the user corrected it: a confirmed name, an automatic match or an unconfirmed suggestion."""
@@ -122,15 +163,17 @@ class Store:
         hides the samples that cluster fed into that person and remembers the voice as rejected for them.
         Names are compared folded, so writing "Ayse" over the suggestion "Ayşe" confirms the person rather
         than convicting them; the samples are soft-deleted so undo can hand them back intact."""
+        self._clear_own_verdicts(mid, speaker, name)   # first: naming this cluster X un-does what it said about X before
         wrong=[n for n in self._previous_names(rows) if fold_name(n)!=fold_name(name)]
         if not wrong: return None
         clusters={(r.get('metrics') or {}).get('cluster') for r in rows} - {None}
-        provenances=[f'auto:{mid}:{c}' for c in clusters]+[f'{mid}:speaker:{speaker}']
+        like,legacy=self._mark_patterns(mid, speaker)
+        provenances=[f'auto:{mid}:{c}' for c in clusters]+[legacy]
         vector,model=self._cluster_vector(rows)
         mark=self.naming_mark(mid, speaker, created)   # unique per naming: undoing the second naming must not unwind the first
         for prev in wrong:
             self.db.executemany('UPDATE samples SET deleted_by=? WHERE name=? AND provenance=? AND deleted_by IS NULL',[(mark,prev,p) for p in provenances])
-            if vector is not None and not self.db.execute('SELECT 1 FROM rejections WHERE name=? AND provenance LIKE ?',(prev,f'{mid}:speaker:{speaker}%')).fetchone():
+            if vector is not None and not self.db.execute("SELECT 1 FROM rejections WHERE name=? AND (provenance LIKE ? ESCAPE '\\' OR provenance=?)",(prev,like,legacy)).fetchone():
                 self.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',(prev,model,json.dumps(vector),mark,created or datetime.now(timezone.utc).isoformat()))
         return wrong[0]
     # --- Q5: per-person evidence. Only automation is judged here; a name the user typed into an empty cluster says
@@ -140,8 +183,11 @@ class Store:
     def _feedback(self, identities, name):
         """(confirmed, wrong) for one naming: the suggestion the user accepted, and the automatic name he overruled."""
         key=fold_name(name)   # folding only decides what is NOT a rejection; a confirmation must be the exact suggested spelling
-        confirmed=next((i['suggested'] for i in identities if i and i.get('suggested')==name),None)
-        wrong=sorted({(i or {}).get('name') for i in identities if (i or {}).get('name') and fold_name(i['name'])!=key})
+        # A cluster the user has already named was judged then; renaming it again says nothing new about the
+        # model, and re-counting drove `wrong` to the cap off a single automatic mistake.
+        identities=[i for i in identities if i and not i.get('settled')]
+        confirmed=next((i['suggested'] for i in identities if i.get('suggested')==name),None)
+        wrong=sorted({i.get('name') for i in identities if i.get('name') and fold_name(i['name'])!=key})
         return confirmed,(wrong[0] if wrong else None)
     def _bump(self, name, column, delta):
         """Move one evidence counter (must run inside the caller's transaction). Counters never go negative."""
@@ -158,8 +204,8 @@ class Store:
         """Migration only: replay the existing cluster corrections into the counters, cheaply (no vectors read)."""
         with self.db:
             for row in self.db.execute("SELECT id,meeting,speaker,name FROM corrections WHERE speaker NOT LIKE 'segment:%' ORDER BY id"):
-                identities=[{'name':r[0],'suggested':r[1]} for r in self.db.execute(
-                    "SELECT json_extract(payload,'$.metrics.identity.name'),json_extract(payload,'$.metrics.identity.suggested') FROM segments WHERE meeting=? AND speaker=?",(row['meeting'],row['speaker']))]
+                identities=[{'name':r[0],'suggested':r[1],'settled':r[2]} for r in self.db.execute(
+                    "SELECT json_extract(payload,'$.metrics.identity.name'),json_extract(payload,'$.metrics.identity.suggested'),json_extract(payload,'$.metrics.identity.settled') FROM segments WHERE meeting=? AND speaker=?",(row['meeting'],row['speaker']))]
                 confirmed,wrong=self._feedback(identities,row['name'])
                 if not confirmed and not wrong: continue
                 self.db.execute('UPDATE corrections SET feedback=? WHERE id=?',(json.dumps({'confirmed':confirmed,'wrong':wrong}),row['id']))
@@ -256,15 +302,17 @@ class Store:
         provenance=f'{mid}:speaker:{speaker}'
         created=datetime.now(timezone.utc).isoformat()
         with self.db:
-            previous=self._reject_previous(mid, speaker, rows, name, created)
+            previous=self._previous_label(rows)
+            self._reject_previous(mid, speaker, rows, name, created)
             feedback=self._record_feedback(rows, name)
+            self._settle_identity(mid, rows, name)
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,speaker,name,created,previous,feedback))
+            sample=None
             if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
-                self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance))
-                return {'labeled':len(rows),'profile_saved':True,'seconds':duration}
-        return {'labeled':len(rows),'profile_saved':False,'seconds':duration}
+                sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance)).lastrowid
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,speaker,name,created,previous,self._with_sample(feedback,sample)))
+        return {'labeled':len(rows),'profile_saved':sample is not None,'seconds':duration}
     def undo_correction(self, mid):
         """Take back the newest cluster naming of a meeting: labels return to what they were, the sample and the
         rejection that naming created disappear, the samples it hid come back, and the correction row is removed
@@ -278,7 +326,9 @@ class Store:
         with self.db:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(previous,mid,speaker))
             mark=self.naming_mark(mid, speaker, row['created'] or '')
-            self.db.execute('DELETE FROM samples WHERE name=? AND provenance=?',(name,f'{mid}:speaker:{speaker}'))
+            if 'sample_id' in feedback:
+                if feedback['sample_id'] is not None: self.db.execute('DELETE FROM samples WHERE id=?',(feedback['sample_id'],))
+            else: self.db.execute('DELETE FROM samples WHERE name=? AND provenance=?',(name,f'{mid}:speaker:{speaker}'))   # rows written before the id was recorded
             self.db.execute("""UPDATE samples SET deleted_by=NULL WHERE deleted_by=? AND NOT EXISTS(
                 SELECT 1 FROM samples live WHERE live.name=samples.name AND live.model IS samples.model
                   AND live.provenance=samples.provenance AND live.deleted_by IS NULL)""",(mark,))
