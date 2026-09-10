@@ -332,5 +332,10 @@ class OpenRouterLLM:
             choice=result['choices'][0]
             text=choice['message']['content']
             if choice['finish_reason']!='stop' or not isinstance(text,str) or not text.strip():raise ValueError()
-        except (KeyError,IndexError,TypeError,ValueError):raise OpenRouterError('Analiz yanıtı tamamlanmadı veya geçersiz; kısmi analiz kaydedilmedi.') from None
+        except (KeyError,IndexError,TypeError,ValueError):
+            # Why, in the job log only: the finish reason and the size of what came back, never the content.
+            try: choice=result['choices'][0]; why=f"finish={choice.get('finish_reason')!r} chars={len(choice.get('message',{}).get('content') or '')} model={self.model_id}"
+            except Exception: why='no choices'
+            print(f'Meeting OS: Analiz yanıtı geçersiz ({why})',file=__import__('sys').stderr,flush=True)
+            raise OpenRouterError('Analiz yanıtı tamamlanmadı veya geçersiz; kısmi analiz kaydedilmedi.') from None
         return text
