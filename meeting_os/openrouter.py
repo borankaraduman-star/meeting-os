@@ -24,12 +24,25 @@ ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on 
     {'id':'openai/gpt-4.1-mini','name':'GPT-4.1 mini','pricing':'$0.40/M giriş, $1.60/M çıkış; 40 dk toplantı ≈ 3 cent, 2 saatlik toplantı ≈ $0,08'},
     {'id':'openai/gpt-4o-mini','name':'GPT-4o mini','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'google/gemini-2.5-flash','name':'Gemini 2.5 Flash','pricing':'$0.30/M giriş, $2.50/M çıkış'},
+    # Added 10 Sep 2026 for a head-to-head benchmark (Boran: "analizde neden GPT?"); prices read off OpenRouter that day.
+    {'id':'anthropic/claude-haiku-4.5','name':'Claude Haiku 4.5','pricing':'$1.00/M giriş, $5.00/M çıkış'},
+    {'id':'anthropic/claude-sonnet-5','name':'Claude Sonnet 5','pricing':'$2.00/M giriş, $10.00/M çıkış'},
+    {'id':'google/gemini-3-flash-preview','name':'Gemini 3 Flash (önizleme)','pricing':'$0.50/M giriş, $3.00/M çıkış'},
+    {'id':'deepseek/deepseek-v3.2','name':'DeepSeek V3.2','pricing':'$0.27/M giriş, $0.40/M çıkış'},
+    {'id':'openai/gpt-5-nano','name':'GPT-5 nano','pricing':'$0.05/M giriş, $0.40/M çıkış'},
+    {'id':'openai/gpt-5.6-luna','name':'GPT-5.6 luna','pricing':'$0.20/M giriş, $1.20/M çıkış'},
+    {'id':'qwen/qwen3-235b-a22b-2507','name':'Qwen3 235B','pricing':'$0.22/M giriş, $0.88/M çıkış'},
+    {'id':'mistralai/mistral-small-2603','name':'Mistral Small','pricing':'$0.15/M giriş, $0.60/M çıkış'},
+    {'id':'z-ai/glm-5.3-flash','name':'GLM 5.3 Flash','pricing':'$0.15/M giriş, $0.50/M çıkış'},
 )
 ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
 # USD per million tokens (input, output), read off the model pages on 9 Sep 2026 — the same numbers the
 # `pricing` strings above show the user. Only a fallback: OpenRouter returns the real charge in `usage.cost`
 # when the request asks for it, and an estimate made from this table is always marked `estimated`.
-ANALYSIS_PRICES = {'openai/gpt-4.1-mini': (0.40, 1.60), 'openai/gpt-4o-mini': (0.15, 0.60), 'google/gemini-2.5-flash': (0.30, 2.50)}
+ANALYSIS_PRICES = {'openai/gpt-4.1-mini': (0.40, 1.60), 'openai/gpt-4o-mini': (0.15, 0.60), 'google/gemini-2.5-flash': (0.30, 2.50),
+                   'anthropic/claude-haiku-4.5': (1.00, 5.00), 'anthropic/claude-sonnet-5': (2.00, 10.00), 'google/gemini-3-flash-preview': (0.50, 3.00),
+                   'deepseek/deepseek-v3.2': (0.27, 0.40), 'openai/gpt-5-nano': (0.05, 0.40), 'openai/gpt-5.6-luna': (0.20, 1.20), 'qwen/qwen3-235b-a22b-2507': (0.22, 0.88),
+                   'mistralai/mistral-small-2603': (0.15, 0.60), 'z-ai/glm-5.3-flash': (0.15, 0.50)}
 
 
 def estimate_analysis_cost(model, prompt_tokens, completion_tokens):
@@ -225,7 +238,8 @@ class OpenRouterClient:
                 except Exception: detail=''
                 detail=re.sub(r'\s+',' ',detail)[:220]
             if detail: print(f'OpenRouter sağlayıcı ayrıntısı (HTTP {exc.code}): {detail}',file=__import__('sys').stderr,flush=True)  # log only; the user-facing message stays free of provider/request echoes
-            raise cloud_error_class(exc.code)(http_error_message(exc.code)) from None
+            error=cloud_error_class(exc.code)(http_error_message(exc.code)); error.code=exc.code   # the status stays readable to callers that adapt the request
+            raise error from None
         except (OSError, TimeoutError):
             raise CloudUnavailable('OpenRouter bağlantısı tamamlanamadı. Ücret oluşmuş olabilir; tamamlanan parçalar korunuyor.') from None
         if len(raw)>self.MAX_RESPONSE_BYTES: raise OpenRouterError('OpenRouter yanıtı boyut sınırını aştı.')
@@ -279,7 +293,14 @@ class OpenRouterLLM:
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
         payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
-        result=self.client._post('chat/completions',payload)
+        try: result=self.client._post('chat/completions',payload)
+        except OpenRouterError as exc:
+            # Reasoning-family endpoints (GPT-5, Claude Sonnet 5) accept no `temperature`; with require_parameters
+            # OpenRouter answers 404 "no endpoints found that can handle the requested parameters". One retry without
+            # it (10 Sep 2026 benchmark) — the strict schema keeps the output deterministic enough.
+            if getattr(exc,'code',None)!=404 or 'temperature' not in payload: raise
+            payload.pop('temperature')
+            result=self.client._post('chat/completions',payload)
         sink=_USAGE_SINK.get()
         if sink is not None:
             try:
