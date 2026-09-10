@@ -117,7 +117,7 @@ struct TranscriptBlockView:View, Equatable {
     /// Rename this speaker's whole cluster from the paragraph header: saved profiles, calendar attendees, or the full editor.
     var speakerMenu:some View {
         Menu {
-            let known=Array(Set(profiles)).sorted()
+            let known=NameFold.unique(profiles.sorted())
             if !known.isEmpty { Section("Ses profilleri") { ForEach(known,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
             if !attendees.isEmpty { Section("Takvim katılımcıları") { ForEach(attendees,id:\.self) { n in Button(n) { Task { await model.nameSpeaker(block.lead.speaker,n) } } } } }
             Button("Yeni isim…") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }

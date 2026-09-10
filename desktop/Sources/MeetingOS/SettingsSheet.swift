@@ -5,6 +5,8 @@ struct SettingsSheet:View {
     @ObservedObject var model:Model
     @AppStorage("settingsSection") private var section="genel"
     @State private var advanced=false
+    /// A refused recording sends the caret here; the sheet opens on Genel and the field takes focus.
+    @FocusState private var nameFocused:Bool
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
@@ -79,7 +81,8 @@ struct SettingsSheet:View {
                             SmallMetric(value:String(format:"$%.2f",month["usd"] as? Double ?? 0),label:"Bu ay · \(month["meetings"] as? Int ?? 0) toplantı, \(Int(month["minutes"] as? Double ?? 0)) dk",icon:"cloud")
                             SmallMetric(value:String(format:"$%.2f",all["usd"] as? Double ?? 0),label:"Toplam · \(all["meetings"] as? Int ?? 0) toplantı, \(Int(all["minutes"] as? Double ?? 0)) dk",icon:"sum")
                         }
-                        Text("OpenRouter’ın bildirdiği transkript ücretleri (≈ $0.10/saat MAI-Transcribe 2). Özet/görev analizi ve yankı olarak atlanan parçalar dahil değildir.").font(.caption2).foregroundStyle(.secondary)
+                        SmallMetric(value:String(format:"$%.2f",cost["analysis_cost"] as? Double ?? 0),label:"Analiz · \(cost["analysis_calls"] as? Int ?? 0) çağrı"+((cost["analysis_estimated"] as? Bool)==true ? " (tahmini)" : ""),icon:"text.badge.checkmark").accessibilityIdentifier("analysisCost")
+                        Text("OpenRouter’ın bildirdiği transkript ücretleri (≈ $0.10/saat MAI-Transcribe 2) ve özet/görev analizi çağrıları"+((cost["analysis_estimated"] as? Bool)==true ? " (analiz tutarı model fiyatından tahmin edilir)" : "")+". Yankı olarak atlanan parçalar ücretlendirilmez.").font(.caption2).foregroundStyle(.secondary)
                     }
                 }
                 Text("Güncelleme ve raporlar").font(.headline)
@@ -130,13 +133,17 @@ struct SettingsSheet:View {
                 if group=="genel" {
                 Text("Sizin adınız").font(.headline)
                 HStack(spacing:10) {
-                    TextField("Adınız",text:$model.reportSettings.userName)
+                    TextField("Adınızı yazın",text:$model.reportSettings.userName)
                         .textFieldStyle(.roundedBorder).frame(width:220)
+                        .focused($nameFocused)
                         .accessibilityIdentifier("userNameField")
-                        .onSubmit { Task { await model.saveReportSettings() } }
-                        .onDisappear { Task { await model.saveReportSettings() } }   // saved once when the field goes away, not on every keystroke
-                    Text("Mikrofon kaydı bu adla etiketlenir; “Bana ait” filtresi bu adı kullanır.").font(.caption2).foregroundStyle(.secondary)
+                        .onSubmit { Task { await model.saveUserName() } }
+                        .onDisappear { Task { await model.saveUserName() } }   // saved once when the field goes away, not on every keystroke
+                        .onChange(of:model.userNameFocusToken) { _,_ in nameFocused=true }
+                        .onAppear { if !model.hasUserName { nameFocused=true } }   // the sheet a refused recording opened arrives after the token was bumped
+                    Text("Mikrofon kaydı bu adla etiketlenir; “Bana ait” filtresi bu adı kullanır. Adı değiştirince önceki toplantılardaki kendi sesiniz de yeni adla etiketlenir.").font(.caption2).foregroundStyle(.secondary)
                 }
+                if !model.hasUserName { Label(Model.nameRequiredMessage,systemImage:"exclamationmark.circle").font(.caption).foregroundStyle(.orange).accessibilityIdentifier("userNameMissing") }
                 Text("Görünüm").font(.headline)
                 HStack(spacing:10) {
                     Picker("Tema",selection:$model.appearance) { Text("Sistem").tag("system"); Text("Açık").tag("light"); Text("Koyu").tag("dark") }.pickerStyle(.segmented).frame(width:220).accessibilityIdentifier("appearancePicker")
