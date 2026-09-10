@@ -356,9 +356,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             if selected==nil && !recording { selected=meetings.first?.id }
             if ZoomWatch.shouldScan(tick:pollTick,autoRecord:zoomAutoRecord,zoomRunning:lastZoomState.running) { lastZoomState=await ZoomWatch.stateAsync() }   // the window-list walk runs off the main actor; only the running-app list is read here
             let zoomState=lastZoomState; let zoomNow=zoomState.open
-            if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
+            if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord && !zoomState.sharing { ZoomNotifier.notifyIfNeeded() }   // never a banner onto a screen that is being shared
             if !zoomNow { ZoomNotifier.reset(); nameRefusalNotified=false }
             if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
+            if screenSharing != zoomState.sharing { screenSharing=zoomState.sharing }
+            updateRecorderPanel()
+            applyWindowPrivacy()
             applyLivePriority(zoomOpen:zoomState.strict || recordProcess != nil)   // any live recording (Zoom, Meet, in person) gets the same protection
             heartbeatIfDue()
             updateBlockedHint()
@@ -371,7 +374,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             case nil: break
             }
             if recording, let started=recordStartedAt { let s=Int(Date().timeIntervalSince(started)); let t=String(format:"%02d:%02d",s/60,s%60); if recorder.elapsedText != t { recorder.elapsedText=t } }
-            if !recording && !zoomMeetingOpen && !queuedNotifications.isEmpty { for (t,b) in queuedNotifications { deliver(t,b) }; queuedNotifications.removeAll() }   // meeting-safe mode: notifications wait
+            if DiscreetMode.mayNotify(recording:recording,meetingOpen:zoomMeetingOpen,sharing:screenSharing), !queuedNotifications.isEmpty { for (t,b) in queuedNotifications { deliver(t,b) }; queuedNotifications.removeAll() }   // meeting-safe mode: notifications wait
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
             if wanted==selected {
@@ -445,7 +448,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; recorder.lowDiskNotice=diskNotice ?? ""; continuitySeen=nil; sleptAt=nil; activity=diskNotice ?? "Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
+        recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; recorder.lowDiskNotice=diskNotice ?? ""; continuitySeen=nil; sleptAt=nil; activity=diskNotice ?? "Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); updateRecorderPanel()
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
         if title.isEmpty, diskNotice==nil, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
@@ -637,7 +640,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     var finalizeQueue:[String]=[]
     /// A meeting that finished while the user was reading another one; the status line offers to open it.
     @Published var pendingReady:String?
-    var lastZoomState:(open:Bool,strict:Bool,running:Bool)=(false,false,false)
+    var lastZoomState:(open:Bool,strict:Bool,sharing:Bool,running:Bool)=(false,false,false,false)
     /// Talk shares depend on rows only; computed once per row change instead of in the Özet body every poll.
     @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
@@ -774,7 +777,27 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Hands-free Zoom: start when a meeting window has been open ~10 s, stop an auto-started recording 60 s after it closes.
     @Published var zoomAutoRecord=UserDefaults.standard.object(forKey:"zoomAutoRecord") as? Bool ?? false { didSet { UserDefaults.standard.set(zoomAutoRecord,forKey:"zoomAutoRecord") } }
     var zoomAuto=ZoomAutoRecord()
-    @Published var showRecorderPanel=UserDefaults.standard.object(forKey:"showRecorderPanel") as? Bool ?? true { didSet { UserDefaults.standard.set(showRecorderPanel,forKey:"showRecorderPanel"); if !showRecorderPanel { RecorderPanel.hide() } else if recording { RecorderPanel.show(model:self) } } }
+    @Published var showRecorderPanel=UserDefaults.standard.object(forKey:"showRecorderPanel") as? Bool ?? true { didSet { UserDefaults.standard.set(showRecorderPanel,forKey:"showRecorderPanel"); updateRecorderPanel() } }
+    /// Göze batma. Default ON: while recording the menu bar item is indistinguishable from an idle one, the
+    /// floating panel leaves the screen for as long as the user is sharing it, and the app's own windows are
+    /// excluded from screen capture. Stored under `DiscreetMode.key`, so `@AppStorage("discreetMode")` reads the
+    /// same value anywhere a view wants it without the Model.
+    @Published var discreetMode=DiscreetMode.enabled { didSet { UserDefaults.standard.set(discreetMode,forKey:DiscreetMode.key); applyWindowPrivacy(); updateRecorderPanel() } }
+    /// The user is presenting right now (Zoom share toolbar / "screen sharing" window). Drives the panel only —
+    /// the recording itself is untouched, and ⌃⌥R / ⌃⌥M keep working with nothing on screen.
+    @Published var screenSharing=false
+    /// The one place that decides whether the floating panel is on screen. Called on every poll, so the panel
+    /// leaves within a tick of the share starting and comes back within a tick of it ending.
+    func updateRecorderPanel() {
+        if DiscreetMode.panelVisible(recording:recording,panelEnabled:showRecorderPanel,discreet:discreetMode,sharing:screenSharing) { RecorderPanel.show(model:self) } else { RecorderPanel.hide() }
+    }
+    /// Keeps the app's real windows out of the capture stream while discreet mode is on. The floating panel is
+    /// left alone: it sets `.none` for itself and must never be turned back on. Windows are created and recreated
+    /// over a session (the main window, sheets), so this is re-applied rather than set once at launch.
+    func applyWindowPrivacy() {
+        let want=DiscreetMode.windowSharingType(discreet:discreetMode)
+        for w in NSApp.windows where !(w is NSPanel) { if w.sharingType != want { w.sharingType=want } }
+    }
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
     @Published var explanation:IdentityExplanation?
     @Published var continuity=Continuity()
@@ -786,7 +809,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Finished work reaches the user even when Zoom or another app is in front.
     /// Meeting-safe: nothing pops while recording or while a Zoom meeting is on screen; it is delivered afterwards, silently.
     func notifyDone(_ title:String,_ body:String) {
-        if recording || zoomMeetingOpen { queuedNotifications.append((title,body)); return }
+        if !DiscreetMode.mayNotify(recording:recording,meetingOpen:zoomMeetingOpen,sharing:screenSharing) { queuedNotifications.append((title,body)); return }
         deliver(title,body)
     }
     private func deliver(_ title:String,_ body:String) {
@@ -836,7 +859,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         guard let mid=selected else { return }
         explanation=(try? await request(["action":"explain_identity","meeting":mid,"speaker":row.speaker])).map(IdentityExplanation.parse)
     }
-    func showMainWindow() { NSApp.activate(ignoringOtherApps:true); NSApp.windows.first(where:{ $0.title=="Meeting OS" })?.makeKeyAndOrderFront(nil) }
+    func showMainWindow() { NSApp.activate(ignoringOtherApps:true); NSApp.windows.first(where:{ $0.title=="Meeting OS" })?.makeKeyAndOrderFront(nil); applyWindowPrivacy() }
     /// Global hot key dispatch (⌃⌥R / ⌃⌥M) — same guards as the buttons.
     func hotkey(_ id:UInt32) {
         if id==GlobalHotkeys.record {
@@ -1041,6 +1064,7 @@ func statusLabel(_ status:String)->String {
     func applicationDidFinishLaunching(_ notification:Notification) {
         UNUserNotificationCenter.current().delegate=self
         if UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { ZoomNotifier.register() }
+        Self.model?.applyWindowPrivacy()   // the main window exists by now; the poll keeps it that way
     }
     nonisolated func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping ()->Void) {
         let action=response.actionIdentifier
@@ -1105,6 +1129,9 @@ struct MenuBarLabel:View {
     @ObservedObject var model:Model
     @ObservedObject var recorder:RecorderState
     var body:some View {
-        if model.recording { Label(recorder.elapsedText,systemImage:"record.circle.fill") } else { Image(systemName:model.zoomMeetingOpen ? "video.badge.waveform" : "waveform") }
+        // Discreet mode draws the idle glyph while recording: no red dot, no elapsed time, no animation, so the
+        // menu bar looks the same recorded and not. "Kayıt sürüyor" lives in the menu behind it (QuickMenu).
+        let look=DiscreetMode.menuBar(recording:model.recording,discreet:model.discreetMode,zoomOpen:model.zoomMeetingOpen,elapsed:recorder.elapsedText)
+        if let text=look.text { Label(text,systemImage:look.glyph) } else { Image(systemName:look.glyph) }
     }
 }

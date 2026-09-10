@@ -159,6 +159,8 @@ struct SettingsSheet:View {
                 Toggle("Zoom toplantısı açılınca bildirim gönder (kayıt yokken, 20 dakikada en fazla bir)",isOn:$model.zoomNotify)
                 Toggle("Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat, pencere kapandıktan 5 dk sonra ve mikrofon serbestse bitir (elle başlatılan kayıtlara dokunmaz)",isOn:$model.zoomAutoRecord)
                 Toggle("Kayıt sırasında her pencerenin üstünde küçük kayıt paneli göster (süre, an işaretleri, bitir)",isOn:$model.showRecorderPanel)
+                Toggle("Göze batma: kayıt sırasında menü çubuğunda sade simge, ekran paylaşımında panel gizli",isOn:$model.discreetMode).accessibilityIdentifier("discreetModeToggle")
+                Text("Açıkken kayıt menü çubuğunda hiç belli olmaz, ekranınızı paylaşırken yüzen panel ekrandan kalkar ve uygulama pencereleri paylaşılan görüntüde görünmez. ⌃⌥R ve ⌃⌥M çalışmaya devam eder; “kayıt sürüyor” yazısı menü çubuğu menüsünde durur.").font(.caption2).foregroundStyle(.secondary)
                 Toggle("Kayıt başlarken takvimdeki toplantının adını başlık yap, katılımcılarını adlandırmada öner (takvim yalnız okunur)",isOn:$model.useCalendar)
                 }
                 HStack {

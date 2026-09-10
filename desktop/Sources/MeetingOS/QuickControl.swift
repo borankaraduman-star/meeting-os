@@ -5,52 +5,68 @@ import Carbon.HIToolbox
 /// Zoom detection from the window list: cheap enough for the two-second refresh, no permissions needed.
 enum ZoomWatch {
     static let bundle="us.zoom.xos"
+    /// Window names Zoom uses while the local user is presenting: the green "you are screen sharing" strip and
+    /// the floating share toolbar it leaves behind when the meeting window is minimised. Matched case- and
+    /// locale-insensitively, in English and Turkish. The bare word "share" is deliberately not on this list —
+    /// it also matches the share *picker*, and `classify` already counts that as a meeting window.
+    static let sharingNames=["screen sharing","screen share","sharing screen","share toolbar","share statusbar","sharing toolbar","ekran paylaş","paylaşım araç"]
     /// One window's verdict: a real meeting window (or the share toolbar Zoom leaves when the meeting window is
-    /// minimised for screen sharing), or only the "Zoom Workplace" home window.
-    static func classify(_ w:[String:Any])->(meeting:Bool,home:Bool) {
-        guard (w["kCGWindowOwnerName"] as? String ?? "").lowercased().contains("zoom") else { return (false,false) }
+    /// minimised for screen sharing), only the "Zoom Workplace" home window, or evidence that the local user is
+    /// presenting right now. A sharing window is always a meeting window too.
+    static func classify(_ w:[String:Any])->(meeting:Bool,home:Bool,sharing:Bool) {
+        guard (w["kCGWindowOwnerName"] as? String ?? "").lowercased().contains("zoom") else { return (false,false,false) }
         let name=(w["kCGWindowName"] as? String ?? "")
-        if name.localizedCaseInsensitiveContains("Zoom Meeting") || name.localizedCaseInsensitiveContains("Toplantı") || name.localizedCaseInsensitiveContains("share") || name.localizedCaseInsensitiveContains("Paylaş") { return (true,false) }
-        return (false,(w["kCGWindowLayer"] as? Int ?? 0)==0 && name.localizedCaseInsensitiveContains("Zoom Workplace"))
+        if sharingNames.contains(where:{ name.localizedCaseInsensitiveContains($0) }) { return (true,false,true) }
+        if name.localizedCaseInsensitiveContains("Zoom Meeting") || name.localizedCaseInsensitiveContains("Toplantı") || name.localizedCaseInsensitiveContains("share") || name.localizedCaseInsensitiveContains("Paylaş") { return (true,false,false) }
+        return (false,(w["kCGWindowLayer"] as? Int ?? 0)==0 && name.localizedCaseInsensitiveContains("Zoom Workplace"),false)
     }
     /// `strict` ignores the "Zoom Workplace" home window: hands-free recording must only follow a real meeting window.
     static func meetingOpen(windows:[[String:Any]],runningBundles:Set<String>,strict:Bool=false)->Bool {
         guard runningBundles.contains(bundle) else { return false }
         return windows.contains { let c=classify($0); return c.meeting || (!strict && c.home) }
     }
-    /// Both flags from one walk of the window list: it can hold hundreds of entries and this runs on the main actor.
-    static func flags(windows:[[String:Any]],runningBundles:Set<String>)->(open:Bool,strict:Bool) {
-        guard runningBundles.contains(bundle) else { return (false,false) }
-        var home=false
-        for w in windows { let c=classify(w); if c.meeting { return (true,true) }; if c.home { home=true } }
-        return (home,false)
+    /// All three flags from one walk of the window list: it can hold hundreds of entries, so it is walked once.
+    /// `sharing` cannot short-circuit on the first meeting window the way this used to — the share strip may sit
+    /// anywhere in the list — so the loop stops only once both verdicts are settled.
+    static func flags(windows:[[String:Any]],runningBundles:Set<String>)->(open:Bool,strict:Bool,sharing:Bool) {
+        guard runningBundles.contains(bundle) else { return (false,false,false) }
+        var home=false, meeting=false, sharing=false
+        for w in windows {
+            let c=classify(w)
+            if c.meeting { meeting=true }
+            if c.home { home=true }
+            if c.sharing { sharing=true }
+            if meeting && sharing { break }
+        }
+        return (meeting || home,meeting,sharing)
     }
     static func current(strict:Bool=false)->Bool { let st=state(); return st.strict || (!strict && st.open) }
     /// The same reading, with the expensive half off the main actor. The window list can hold hundreds of
     /// entries and was walked on the main thread every two seconds for the whole of a Zoom recording — the one
     /// stretch where the main thread also owns the transcript's layout. Only the running-app list stays here;
     /// the walk hops to a utility queue and comes back as two Bools, so stop detection keeps its cadence.
-    @MainActor static func stateAsync() async -> (open:Bool,strict:Bool,running:Bool) {
+    @MainActor static func stateAsync() async -> (open:Bool,strict:Bool,sharing:Bool,running:Bool) {
         let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        guard running.contains(bundle) else { return (false,false,false) }
-        let f:(open:Bool,strict:Bool) = await withCheckedContinuation { cont in
+        guard running.contains(bundle) else { return (false,false,false,false) }
+        let f:(open:Bool,strict:Bool,sharing:Bool) = await withCheckedContinuation { cont in
             DispatchQueue.global(qos:.utility).async {
                 let list=(CGWindowListCopyWindowInfo([.optionAll,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []   // all Spaces: a full-screen Keynote must not hide the meeting
                 cont.resume(returning:flags(windows:list,runningBundles:running))
             }
         }
-        return (f.open,f.strict,true)
+        return (f.open,f.strict,f.sharing,true)
     }
     /// Scan cadence. Every sixth second is enough for the menu bar and the Zoom reminder; hands-free recording is
     /// the one caller that must see a meeting window open or close quickly, and only while Zoom is running.
     static func shouldScan(tick:Int,autoRecord:Bool,zoomRunning:Bool)->Bool { (autoRecord && zoomRunning) || tick%3==0 }
-    /// One window-list read per scan: `open` for reminders and the menu bar, `strict` for hands-free recording.
-    static func state()->(open:Bool,strict:Bool,running:Bool) {
+    /// One window-list read per scan: `open` for reminders and the menu bar, `strict` for hands-free recording,
+    /// `sharing` for discreet mode.
+    static func state()->(open:Bool,strict:Bool,sharing:Bool,running:Bool) {
         let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
-        guard running.contains(bundle) else { return (false,false,false) }
+        guard running.contains(bundle) else { return (false,false,false,false) }
         let list=(CGWindowListCopyWindowInfo([.optionAll,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []   // all Spaces: a full-screen Keynote must not hide the meeting
         let f=flags(windows:list,runningBundles:running)
-        return (f.open,f.strict,true)
+        return (f.open,f.strict,f.sharing,true)
     }
 }
 
