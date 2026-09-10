@@ -187,7 +187,7 @@ def _targets(rules):
     understands Turkish apostrophe suffixes; multi-word originals stay on the plain pattern path."""
     out = []
     for r in rules:
-        if r.get('source') != 'taught' or ' ' in r['original'].strip(): continue
+        if r.get('source') not in ('taught', 'team') or ' ' in r['original'].strip(): continue
         out.append({'rule': r, 'original': _fold(r['original']), 'replacement': _fold(r['replacement'])})
     return out
 
@@ -240,11 +240,17 @@ def taught_rules(store):
 
 
 def all_rules(store):
-    """Taught rules first; a learned rule for a word the user has already taught is redundant and dropped."""
+    """What actually rewrites text, in order of authority: what this Mac was taught by hand, then what the team
+    taught (`team_knowledge`, exact spelling only, the same as a taught rule), then what the app inferred from
+    repeated edits. A rule for a word an earlier group already covers is redundant and dropped — a teammate's
+    spelling never overrules the one the user typed on this Mac."""
+    from .team_knowledge import applied_team_rules
     taught = taught_rules(store)
     keys = {_fold(r['original']) for r in taught}
+    team = [r for r in applied_team_rules(store) if _fold(r['original']) not in keys]
+    keys |= {_fold(r['original']) for r in team}
     learned = [{**r, 'source': 'learned'} for r in learned_rules(store) if _fold(r['original']) not in keys]
-    return taught + learned
+    return taught + team + learned
 
 
 def _variants(ch):
@@ -405,6 +411,17 @@ def _apply_now(store, mid, rule, protected):
     return {'segments': segments, 'fixes': fixes}
 
 
+def share_words(store, data_dir):
+    """Push what this Mac now knows into the team folder and read back what the others know. Best effort on
+    purpose: an unmounted share, a folder nobody picked, a teammate's half-written file — none of that may turn
+    a teach the user just did into an error on screen. The next pass publishes the same thing again."""
+    if not data_dir: return None
+    try:
+        from .team_knowledge import sync
+        return sync(store, data_dir, profiles=False)
+    except Exception: return None   # every failure here is somebody else's disk; the local rule is already saved
+
+
 def teach(store, mid, original, replacement, data_dir=None):
     """One correction is a rule. Speaker naming works this way — you say who it is once — and a misheard word
     deserves the same: the rule is stored immediately, every occurrence in this meeting is fixed now, and the
@@ -439,6 +456,7 @@ def teach(store, mid, original, replacement, data_dir=None):
             'source': 'taught', 'vocabulary_added': bool(vocabulary_added or added)}
     protected = _protected(all_rules(store), data_dir, allow=[original])
     result = _apply_now(store, mid, rule, protected) if mid else {'segments': 0, 'fixes': 0}
+    share_words(store, data_dir)   # the team folder is one knowledge base: what this Mac just learned belongs in it
     return {'rule': rule, 'segments': result['segments'], 'fixes': result['fixes'], 'vocabulary_added': added}
 
 
@@ -491,16 +509,28 @@ def forget(store, original, data_dir=None):
     for mid in sorted(meetings):
         r = untaught_revert(store, mid, original)
         reverted += r['reverted']; skipped += r['skipped']
+    share_words(store, data_dir)   # the word is no longer taught here, so this Mac's line leaves the shared file
     return {**result, 'meetings': len(meetings), 'segments': reverted, 'kept': skipped}
 
 
 def word_rules(store):
-    """Every word rule behind the automatic fixes, taught ones first — what Ayarlar → Sesler ve sözlük lists."""
+    """Every word rule behind the automatic fixes, taught ones first — what Ayarlar → Sesler ve sözlük lists.
+
+    A team row is listed even when it is not the rule that runs: when two Macs taught the same word differently
+    the loser still has to be visible, with the Mac it came from, or "why is it writing Ayşen?" has no answer on
+    screen. `active` says which one rewrites text and `enabled` whether the user switched this row off here."""
+    from .team_knowledge import team_rules
+    taught = taught_rules(store)
+    team = team_rules(store)
+    covered = {_fold(r['original']) for r in taught} | {_fold(r['original']) for r in team if r['active']}
+    learned = [{**r, 'source': 'learned'} for r in learned_rules(store) if _fold(r['original']) not in covered]
     out = []
-    for r in all_rules(store):
-        out.append({'original': r['original'], 'replacement': r['replacement'], 'source': r.get('source', 'learned'),
-                    'count': r.get('count', 1), 'meetings': r.get('meetings', 0), 'created': r.get('created'),
-                    'vocabulary_added': bool(r.get('vocabulary_added'))})
+    for r in taught + team + learned:
+        row = {'original': r['original'], 'replacement': r['replacement'], 'source': r.get('source', 'learned'),
+               'count': r.get('count', 1), 'meetings': r.get('meetings', 0), 'created': r.get('created'),
+               'vocabulary_added': bool(r.get('vocabulary_added'))}
+        if row['source'] == 'team': row.update({'host': r['host'], 'enabled': r['enabled'], 'active': r['active']})
+        out.append(row)
     return out
 
 
@@ -546,15 +576,16 @@ def word_candidates(store, mid, data_dir=None, limit=REVIEW_LIMIT):
     model was confident about looks exactly like a right one until you compare it with the list of words this
     team actually uses. It is deliberately narrow — one letter, six letters of context for a vocabulary term —
     because it is the only place a near-miss is raised at all now, and a list nobody reads flags nothing."""
+    from .team_knowledge import applied_team_rules
     targets = []
     seen = set()
-    for r in taught_rules(store):
+    for r in taught_rules(store) + applied_team_rules(store):
         # Both sides of the rule: the model writes the wrong spelling again, and it also writes near-misses of
         # the right one. Either way the suggestion is the spelling the user asked for.
         for spelling in (r['replacement'], r['original']):
             folded = _fold(spelling)
             if ' ' in folded or len(folded) < MIN_FUZZY or folded in seen: continue
-            seen.add(folded); targets.append((folded, r['replacement'], 'taught'))
+            seen.add(folded); targets.append((folded, r['replacement'], r.get('source', 'taught')))
     for term in vocabulary_terms(data_dir):
         folded = _fold(term)
         if ' ' in folded or len(folded) < VOCABULARY_MIN or folded in seen: continue

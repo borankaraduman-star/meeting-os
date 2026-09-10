@@ -76,8 +76,12 @@ struct ReportSettings:Equatable {
     /// Shared team folder (empty = off): the glossary is merged into it and reports are written there instead
     /// of the personal folder. A path the backend cannot see is refused, so the field reverts after saving.
     var teamDir:String=""; var shareGlossary:Bool=true
+    /// The team folder is one knowledge base: taught words and voice profiles go both ways by default. The way
+    /// out of a single item is per row (a team word can be switched off, a person's team samples deleted); these
+    /// two switch the whole exchange off for this Mac, in both directions.
+    var shareWords:Bool=true; var shareProfiles:Bool=true
     static func parse(_ d:[String:Any])->ReportSettings {
-        ReportSettings(shareReports:d["share_reports"] as? Bool ?? true,shareText:d["share_text"] as? Bool ?? false,autoUpdate:d["auto_update"] as? Bool ?? false,reportDir:d["report_dir"] as? String ?? "",audioRetentionDays:d["audio_retention_days"] as? Int ?? 30,autoRetry:d["auto_retry"] as? Bool ?? true,userName:d["user_name"] as? String ?? "",teamDir:d["team_dir"] as? String ?? "",shareGlossary:d["share_glossary"] as? Bool ?? true)
+        ReportSettings(shareReports:d["share_reports"] as? Bool ?? true,shareText:d["share_text"] as? Bool ?? false,autoUpdate:d["auto_update"] as? Bool ?? false,reportDir:d["report_dir"] as? String ?? "",audioRetentionDays:d["audio_retention_days"] as? Int ?? 30,autoRetry:d["auto_retry"] as? Bool ?? true,userName:d["user_name"] as? String ?? "",teamDir:d["team_dir"] as? String ?? "",shareGlossary:d["share_glossary"] as? Bool ?? true,shareWords:d["share_words"] as? Bool ?? true,shareProfiles:d["share_profiles"] as? Bool ?? true)
     }
-    var changes:[String:Any] { ["share_reports":shareReports,"share_text":shareText,"auto_update":autoUpdate,"report_dir":reportDir,"audio_retention_days":audioRetentionDays,"auto_retry":autoRetry,"user_name":userName,"team_dir":teamDir,"share_glossary":shareGlossary] }
+    var changes:[String:Any] { ["share_reports":shareReports,"share_text":shareText,"auto_update":autoUpdate,"report_dir":reportDir,"audio_retention_days":audioRetentionDays,"auto_retry":autoRetry,"user_name":userName,"team_dir":teamDir,"share_glossary":shareGlossary,"share_words":shareWords,"share_profiles":shareProfiles] }
 }

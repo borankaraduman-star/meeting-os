@@ -794,7 +794,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
         try:
             from .glossary import load as load_glossary, stt_hint, candidates as glossary_candidates
-            glossary=load_glossary(data_dir,Path(__file__).resolve().parents[1])
+            glossary=load_glossary(data_dir,Path(__file__).resolve().parents[1],store=store)   # the hint carries the team's taught spellings too
             from .reports import settings_owner
             transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None,owner=settings_owner(data_dir))
             metadata['echo_segments']=flag_echo(store,mid)

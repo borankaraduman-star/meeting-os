@@ -52,7 +52,11 @@ def load_settings(data_dir):
     # auto_retry: when OpenRouter was down, pick the meeting up again while the Mac is idle. On by default —
     # a meeting the cloud refused is otherwise a meeting the user has to remember.
     defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30, 'auto_retry': True,
-                'user_name': DEFAULT_USER_NAME, 'user_name_confirmed': False, 'team_dir': '', 'share_glossary': True}
+                'user_name': DEFAULT_USER_NAME, 'user_name_confirmed': False, 'team_dir': '', 'share_glossary': True,
+                # The team folder is one knowledge base, so both halves of it are on by default: a taught word and
+                # a named voice are worth the same to everybody, and the way out is per row (a team word can be
+                # switched off, a person's team samples deleted) rather than a switch nobody finds.
+                'share_words': True, 'share_profiles': True}
     merged = {**defaults, **{k: v for k, v in data.items() if k in defaults}}
     # 1.2.42 and earlier wrote the old default 'Boran' into settings.json on any settings save, so a teammate's file
     # can carry a stranger's name nobody typed. Only a name saved through save_settings (confirmed) counts.
@@ -63,7 +67,7 @@ def load_settings(data_dir):
 def save_settings(data_dir, changes):
     current = load_settings(data_dir)
     for key, value in (changes or {}).items():
-        if key in ('share_reports', 'share_text', 'auto_update', 'auto_retry', 'share_glossary') and isinstance(value, bool): current[key] = value
+        if key in ('share_reports', 'share_text', 'auto_update', 'auto_retry', 'share_glossary', 'share_words', 'share_profiles') and isinstance(value, bool): current[key] = value
         elif key == 'audio_retention_days' and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
         # An empty name is stored, not dropped: "" means nobody, and the mic rows keep the neutral 'Ben' label.
@@ -484,7 +488,21 @@ def build_heartbeat(store, data_dir, *, app=None):
         'errors': _errors(data/'last-job.log', limit=5),
         'cloud_blocked': store.db.execute("SELECT count(*) FROM meetings WHERE status!='complete' AND json_extract(metadata,'$.cloud_error.kind') IN ('auth','credit')").fetchone()[0],
         'probe': daily_probe(data),
+        # What this Mac takes from the shared knowledge base and what it puts back in. Counts only: no name, no word.
+        **_team_counts(store),
     }
+
+
+def _team_counts(store):
+    """`team_profiles`/`team_words` (what this Mac imported) and `shared_profiles`/`shared_words` (what it
+    publishes). Never raises: the heartbeat is observability, and a database with no team tables is normal."""
+    try:
+        from .team_knowledge import team_summary
+        summary = team_summary(store)
+        return {'team_profiles': summary['profiles'], 'team_words': summary['words'],
+                'shared_profiles': summary['shared_profiles'], 'shared_words': summary['shared_words']}
+    except Exception:
+        return {}
 
 
 PROBE_CACHE = 'probe-last.json'   # kept in step with TIGHTEN_FILES above
@@ -569,7 +587,9 @@ def summarize(report_dir, limit=30):
                                     'memory_pressure': beat.get('memory_pressure'), 'meetings': beat.get('meetings'), 'app_version': beat.get('app_version'),
                                     'repo_version': beat.get('repo_version'), 'commit': beat.get('commit'),
                                     'update_status': beat.get('update_status'), 'signing_partition': beat.get('signing_partition'),
-                                    'probe': beat.get('probe'), 'cloud_blocked': beat.get('cloud_blocked'), 'errors': len(beat.get('errors') or [])}
+                                    'probe': beat.get('probe'), 'cloud_blocked': beat.get('cloud_blocked'), 'errors': len(beat.get('errors') or []),
+                                    'team_profiles': beat.get('team_profiles'), 'team_words': beat.get('team_words'),
+                                    'shared_profiles': beat.get('shared_profiles'), 'shared_words': beat.get('shared_words')}
     for path in sorted(root.glob('*/'+RECORDING_HEARTBEAT_FILE)):   # a Mac that is in a meeting right now says so
         beat = read_recording_heartbeat(path)
         if not beat: continue

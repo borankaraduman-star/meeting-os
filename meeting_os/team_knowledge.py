@@ -1,0 +1,386 @@
+"""Team-shared knowledge: the words this team taught and the voices it named, in the folder every Mac reads.
+
+The glossary was already shared (`glossary.shared_path`, `glossary.merge_into`). The two things that were not
+are the words a person taught by hand (`taught_words`) and the voice profiles they enrolled (`samples`): they
+stayed on the Mac that learned them, so three people using this app corrected the same word three times and
+named the same colleague three times. The team folder is one knowledge base: every Mac writes what it learned
+into it and reads back what the others learned.
+
+Two files, both JSON Lines, both under the same shared root the glossary uses — `team_dir` when the user picked
+a team folder, otherwise the iCloud `MeetingOS-Shared` folder, and iCloud only for the REAL data folder so that
+tests and private copies never touch it:
+
+    team-words.jsonl        one line per (host, taught word): original, replacement, host, created, updated
+    profiles/<host>.jsonl   one line per published voice sample: name, model, vector, duration, created, host
+
+Neither file ever carries audio, transcript text, meeting ids or meeting titles. A vector is a unit embedding:
+it tells one voice from another, it does not play back and it cannot be turned into speech.
+
+Conflicts. Words are keyed by (host, folded original), so two Macs never overwrite each other's line and a
+publish never drops a teammate's. When two hosts teach the same word differently the local Mac's own rule wins;
+between two teammates the newest one wins. Both are still listed in Ayarlar → Sesler ve sözlük with the Mac
+that taught them, and either can be switched off row by row (`team_words.enabled`) without changing what the
+other Mac shares. A voice sample is keyed by its own content hash, so importing the same file twice adds
+nothing, and a local sample is never overwritten — the per-person cap is filled by this Mac's own samples first.
+"""
+import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .correction_memory import _fold, taught_rules
+from .glossary import ICLOUD, SHARED_DIR, REAL_DATA_DIR
+from .reports import host_name, publish, team_dir, SHARED_DIR_MODE
+from .store import fold_name, unit
+
+WORDS_FILE = 'team-words.jsonl'
+PROFILES_DIR = 'profiles'
+MAX_WORDS = 2000          # a whole team's taught vocabulary; past this the file is somebody's export, not a habit
+PROFILE_CAP = 8           # samples per person, the same bound `add_sample_if_new` keeps locally
+MIN_DURATION = 3.0        # `store.enroll` refuses anything shorter, so publishing it would only create dead lines
+VECTOR_DIGITS = 6         # rounded so the same sample hashes the same on every Mac and the file stays small
+NAME_LIMIT = 80
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def shared_root(settings, data_dir=None):
+    """Where the team's shared files live, or None. Same resolution as the shared glossary: the team folder the
+    user picked, otherwise iCloud Drive — and iCloud only when this really is the app's data folder, so a test
+    or a private copy of the database never writes into the user's own iCloud."""
+    team = team_dir(settings)
+    if team: return team
+    if data_dir is None: return None
+    try: is_real = Path(data_dir).resolve() == REAL_DATA_DIR.resolve()
+    except OSError: is_real = False
+    return SHARED_DIR if is_real and ICLOUD.is_dir() else None
+
+
+def words_path(settings, data_dir=None):
+    root = shared_root(settings, data_dir)
+    return root / WORDS_FILE if root else None
+
+
+def profiles_dir(settings, data_dir=None):
+    root = shared_root(settings, data_dir)
+    return root / PROFILES_DIR if root else None
+
+
+def profile_path(settings, data_dir=None, host=None):
+    directory = profiles_dir(settings, data_dir)
+    return directory / f'{host or host_name()}.jsonl' if directory else None
+
+
+def _write(path, lines, root=None):
+    """Atomic, teammate-readable write. The file lands through a temp file + rename, so a teammate reading at that
+    moment never sees half a file, and at mode 0644, so they can open it at all. A folder this module CREATES
+    (`profiles/`) is made listable too — the bridge runs under umask 077, which would otherwise leave it 0700 and
+    no teammate could list it. The team folder the user picked is never chmod'ed: its permissions are theirs."""
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    if root is None or path.parent != Path(root):
+        try: path.parent.chmod(SHARED_DIR_MODE)
+        except OSError: pass   # a network volume or a synced folder may refuse; sharing still works
+    publish(path, ''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in lines), shared=True)
+    return path
+
+
+def _clean(value, limit=120):
+    return value.strip()[:limit] if isinstance(value, str) and value.strip() else None
+
+
+# ---------------------------------------------------------------- words
+
+def parse_word(line):
+    """One line of team-words.jsonl, or None. Everything an outsider to this Mac writes goes through here."""
+    try: d = json.loads(line)
+    except ValueError: return None
+    if not isinstance(d, dict): return None
+    original = _clean(d.get('original')); replacement = _clean(d.get('replacement')); host = _clean(d.get('host'), 64)
+    if not original or not replacement or not host: return None
+    return {'original': original, 'replacement': replacement, 'host': host,
+            'created': _clean(d.get('created'), 40) or '', 'updated': _clean(d.get('updated'), 40) or ''}
+
+
+def read_words(path):
+    path = Path(path)
+    if not path.is_file(): return []
+    out = []; seen = set()
+    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+        e = parse_word(line)
+        if not e: continue
+        key = (e['host'], _fold(e['original']))
+        if key in seen: continue
+        seen.add(key); out.append(e)
+    return out[:MAX_WORDS]
+
+
+def _ensure_words(store):
+    store.db.execute('CREATE TABLE IF NOT EXISTS team_words(host TEXT, folded TEXT, original TEXT, replacement TEXT,'
+                     ' created TEXT, updated TEXT, enabled INTEGER DEFAULT 1, PRIMARY KEY(host,folded))')
+
+
+def publish_words(store, settings, data_dir=None):
+    """Write this Mac's taught words into the shared file. Every other host's line is read back first and kept
+    exactly as it was: a publish here must never delete what a teammate taught. A word this Mac has forgotten is
+    simply no longer among its taught rules, so the same pass takes its own line out."""
+    path = words_path(settings, data_dir)
+    if path is None or settings.get('share_words') is False: return {'published': 0, 'path': None}
+    host = host_name()
+    others = []; mine = {}
+    for e in read_words(path):
+        if e['host'] == host: mine[_fold(e['original'])] = e
+        else: others.append(e)
+    now = _now(); lines = []
+    for r in taught_rules(store):
+        key = _fold(r['original']); previous = mine.get(key)
+        # `updated` only moves when the rule actually changed: an hourly publish that rewrites every timestamp
+        # would make the file look new to every teammate on every pass.
+        changed = previous is None or previous['replacement'] != r['replacement']
+        lines.append({'original': r['original'], 'replacement': r['replacement'], 'host': host,
+                      'created': (previous or {}).get('created') or r.get('created') or now,
+                      'updated': now if changed else previous['updated']})
+    entries = (lines + others)[:MAX_WORDS]
+    # Nothing changed → nothing is written: an hourly publish that rewrites an unchanged file wakes every
+    # teammate's sync client for no reason. Order is not content here, so the comparison is by key.
+    if _by_key(read_words(path)) == _by_key(entries): return {'published': len(lines), 'path': str(path), 'unchanged': True}
+    _write(path, entries, root=shared_root(settings, data_dir))
+    return {'published': len(lines), 'path': str(path), 'total': len(entries)}
+
+
+def _by_key(entries):
+    return {(e['host'], _fold(e['original'])): (e['replacement'], e['created'], e['updated']) for e in entries}
+
+
+def pull_words(store, settings, data_dir=None):
+    """Import the other Macs' taught words into `team_words`. A row the user switched off stays off, and a word a
+    teammate has forgotten (their line is gone) is dropped here too — their file is the truth about their words."""
+    path = words_path(settings, data_dir)
+    if path is None or settings.get('share_words') is False or not path.is_file(): return {'imported': 0, 'hosts': 0}
+    host = host_name()
+    entries = [e for e in read_words(path) if e['host'] != host]
+    _ensure_words(store)
+    existing = {(r['host'], r['folded']): r for r in store.db.execute('SELECT * FROM team_words')}
+    seen = set(); imported = 0
+    with store.db:
+        for e in entries:
+            key = (e['host'], _fold(e['original'])); seen.add(key)
+            previous = existing.get(key)
+            enabled = 1 if previous is None else (previous['enabled'] if previous['enabled'] is not None else 1)
+            if previous and previous['replacement'] == e['replacement'] and previous['original'] == e['original']: continue
+            store.db.execute('INSERT OR REPLACE INTO team_words(host,folded,original,replacement,created,updated,enabled) VALUES(?,?,?,?,?,?,?)',
+                             (e['host'], key[1], e['original'], e['replacement'], e['created'] or _now(), e['updated'] or _now(), enabled))
+            imported += 1
+        # One file holds every host's words, so a word that is not in it is a word nobody shares any more —
+        # that is how a teammate's `forget` reaches this Mac. A file that is missing entirely deletes nothing
+        # (the branch above returns before this), so an unmounted share never wipes what the team taught.
+        for key in existing:
+            if key not in seen and key[0] != host: store.db.execute('DELETE FROM team_words WHERE host=? AND folded=?', key)
+    return {'imported': imported, 'hosts': len({e['host'] for e in entries})}
+
+
+def team_rules(store):
+    """Every team word this Mac knows about, including the ones it is not applying. `active` says which rule is
+    the one that actually rewrites text: a word this Mac taught itself always wins, and between two teammates the
+    newest one does. The loser is still listed — otherwise "why is it writing Ayşen?" has no answer on screen."""
+    _ensure_words(store)
+    local = {_fold(r['original']) for r in taught_rules(store)}
+    rows = []
+    for r in store.db.execute('SELECT * FROM team_words ORDER BY original,host'):
+        rows.append({'original': r['original'], 'replacement': r['replacement'], 'source': 'team', 'host': r['host'],
+                     'folded': r['folded'], 'created': r['created'], 'updated': r['updated'],
+                     'enabled': bool(r['enabled'] if r['enabled'] is not None else 1), 'count': 1, 'meetings': 0,
+                     'vocabulary_added': False, 'active': False})
+    best = {}
+    for r in rows:
+        if not r['enabled'] or r['folded'] in local: continue
+        current = best.get(r['folded'])
+        if current is None or (r['updated'] or '') > (current['updated'] or ''): best[r['folded']] = r
+    for r in best.values(): r['active'] = True
+    return rows
+
+
+def applied_team_rules(store):
+    """The team words that rewrite text on this Mac — exact spelling only, like every taught rule."""
+    return [r for r in team_rules(store) if r['active']]
+
+
+def team_word_toggle(store, original, host, enabled=True):
+    """Switch one teammate's word off (or back on) for this Mac only. Their file is not touched: the user is
+    saying "not here", not "unteach it for everyone"."""
+    original = (original or '').strip(); host = (host or '').strip()
+    if not original or not host: raise ValueError('Kelime ve Mac adı gerekli')
+    _ensure_words(store)
+    with store.db:
+        cur = store.db.execute('UPDATE team_words SET enabled=? WHERE host=? AND folded=?', (1 if enabled else 0, host, _fold(original)))
+    if not cur.rowcount: raise ValueError('Ekip kelimesi bulunamadı')
+    return {'original': original, 'host': host, 'enabled': bool(enabled)}
+
+
+def hint_terms(store):
+    """The right spellings the team taught, for the ASR hint list. Appended to the hint at load time and never
+    written into `vocabulary.txt`: the file on this disk is the user's own list, not a copy of everyone else's."""
+    try: return [r['replacement'] for r in applied_team_rules(store)]
+    except Exception: return []
+
+
+# ---------------------------------------------------------------- profiles
+
+def _vector(values):
+    return [round(v, VECTOR_DIGITS) for v in unit(values)]
+
+
+def sample_hash(name, model, vector):
+    """A voice sample's identity: who, which embedding model, and the rounded vector itself. Same sample, same
+    hash on every Mac — that is what makes importing the same file twice add nothing."""
+    body = f"{name}\n{model}\n" + ','.join(f'{v:.6f}' for v in vector)
+    return hashlib.sha256(body.encode('utf-8')).hexdigest()[:16]
+
+
+def parse_profile(line):
+    try: d = json.loads(line)
+    except ValueError: return None
+    if not isinstance(d, dict): return None
+    name = _clean(d.get('name'), NAME_LIMIT); model = _clean(d.get('model'), 120); host = _clean(d.get('host'), 64)
+    vector = d.get('vector'); duration = d.get('duration')
+    if not name or not model or not isinstance(vector, list) or len(vector) < 8: return None
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vector): return None
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < MIN_DURATION: return None
+    return {'name': name, 'model': model, 'vector': [float(v) for v in vector], 'duration': float(duration),
+            'created': _clean(d.get('created'), 40) or '', 'host': host or ''}
+
+
+def read_profiles(path):
+    path = Path(path)
+    if not path.is_file(): return []
+    out = []
+    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+        e = parse_profile(line)
+        if e: out.append(e)
+    return out
+
+
+def publish_profiles(store, settings, data_dir=None):
+    """Publish the voice samples this Mac made: a name, an embedding model, a unit vector and how many seconds of
+    speech it came from. Never the audio, never the meeting it was cut from, never a title — a teammate gets the
+    fingerprint that recognises the person and nothing that says where they were heard.
+
+    Samples that arrived FROM the team (`provenance` starting with `team:`) are not re-published: every Mac
+    publishes only what it learned itself, so a person's line has one owner and cannot echo around the folder."""
+    if settings.get('share_profiles') is False: return {'published': 0, 'path': None}
+    path = profile_path(settings, data_dir)
+    if path is None: return {'published': 0, 'path': None}
+    created = {sample_hash(e['name'], e['model'], e['vector']): e['created'] for e in read_profiles(path)}
+    host = host_name(); now = _now()
+    people = {}
+    for r in store.db.execute('SELECT name,model,vector,duration,provenance FROM samples WHERE deleted_by IS NULL ORDER BY id'):
+        if (r['provenance'] or '').startswith('team:'): continue
+        name = (r['name'] or '').strip(); duration = float(r['duration'] or 0)
+        if not name or duration < MIN_DURATION: continue
+        try: vector = _vector(json.loads(r['vector']))
+        except (ValueError, TypeError, ZeroDivisionError): continue
+        people.setdefault((name, r['model']), []).append({'name': name, 'model': r['model'], 'vector': vector,
+                                                          'duration': round(duration, 1), 'host': host})
+    lines = []
+    for group in people.values():
+        # The longest samples are the ones worth sharing: a teammate gets the clearest version of this voice.
+        for e in sorted(group, key=lambda e: -e['duration'])[:PROFILE_CAP]:
+            digest = sample_hash(e['name'], e['model'], e['vector'])
+            lines.append({**e, 'created': created.get(digest) or now})
+    if read_profiles(path) == lines: return {'published': len(lines), 'path': str(path), 'unchanged': True}
+    _write(path, lines, root=shared_root(settings, data_dir))
+    return {'published': len(lines), 'path': str(path), 'people': len(people)}
+
+
+def _ensure_blocks(store):
+    store.db.execute('CREATE TABLE IF NOT EXISTS team_profile_blocks(name TEXT PRIMARY KEY, created TEXT)')
+
+
+def blocked_profiles(store):
+    """Folded names whose team samples this Mac has thrown away. Deleting a person has to survive the next pull,
+    or the profile the user just deleted comes back an hour later."""
+    _ensure_blocks(store)
+    return {fold_name(r[0]) for r in store.db.execute('SELECT name FROM team_profile_blocks')}
+
+
+def block_profile(store, name):
+    name = (name or '').strip()
+    if not name: return {'blocked': False}
+    _ensure_blocks(store)
+    with store.db: store.db.execute('INSERT OR REPLACE INTO team_profile_blocks VALUES(?,?)', (name, _now()))
+    return {'blocked': True, 'name': name}
+
+
+def unblock_profile(store, name):
+    """Let the team's samples of this person in again; the next pull re-imports them."""
+    _ensure_blocks(store)
+    key = fold_name((name or '').strip())
+    with store.db:
+        for r in store.db.execute('SELECT name FROM team_profile_blocks').fetchall():
+            if fold_name(r[0]) == key: store.db.execute('DELETE FROM team_profile_blocks WHERE name=?', (r[0],))
+    return {'blocked': False, 'name': name}
+
+
+def pull_profiles(store, settings, data_dir=None):
+    """Import the other Macs' voice samples. Idempotent by content hash, capped per person like any self-fed
+    profile, and it never overwrites a local sample: `add_sample_if_new` only ever inserts, and the cap is filled
+    by this Mac's own samples first. A name the user rejected here, or a profile they deleted, is skipped —
+    the local Mac's own corrections outrank anything the folder says."""
+    if settings.get('share_profiles') is False: return {'imported': 0, 'hosts': 0, 'skipped': 0}
+    directory = profiles_dir(settings, data_dir)
+    if directory is None or not directory.is_dir(): return {'imported': 0, 'hosts': 0, 'skipped': 0}
+    host = host_name()
+    blocked = blocked_profiles(store)
+    rejected = {fold_name(r[0]) for r in store.db.execute('SELECT DISTINCT name FROM rejections')}
+    imported = skipped = hosts = 0
+    for path in sorted(directory.glob('*.jsonl')):
+        if path.stem == host: continue
+        hosts += 1
+        for e in read_profiles(path):
+            key = fold_name(e['name'])
+            if key in blocked or key in rejected: skipped += 1; continue
+            provenance = f"team:{e['host'] or path.stem}:{sample_hash(e['name'], e['model'], e['vector'])}"
+            try:
+                if store.add_sample_if_new(e['name'], e['vector'], e['model'], e['duration'], provenance, cap=PROFILE_CAP): imported += 1
+                else: skipped += 1
+            except ValueError: skipped += 1   # a line this Mac's `enroll` refuses is one line, not a failed import
+    return {'imported': imported, 'hosts': hosts, 'skipped': skipped}
+
+
+def team_summary(store):
+    """How much of what this Mac knows came from the team, and how much of it this Mac contributes back.
+
+    Both directions in one place: Ayarlar shows the incoming half ("ekipten 3 profil, 5 kelime") so a shared
+    correction is visible as somebody else's work rather than magic, and the heartbeat carries both halves so
+    the shared folder can say what each Mac is putting in."""
+    _ensure_words(store)
+    words = store.db.execute('SELECT count(*) FROM team_words WHERE enabled=1').fetchone()[0]
+    rows = store.db.execute("SELECT name FROM samples WHERE deleted_by IS NULL AND provenance LIKE 'team:%'").fetchall()
+    people = {fold_name(r[0]) for r in rows}
+    shared_words = len(taught_rules(store))
+    shared_profiles = store.db.execute("SELECT count(*) FROM samples WHERE deleted_by IS NULL AND (provenance IS NULL OR provenance NOT LIKE 'team:%')").fetchone()[0]
+    parts = []
+    if people: parts.append(f'{len(people)} profil')
+    if words: parts.append(f'{words} kelime')
+    return {'profiles': len(rows), 'people': len(people), 'words': words,
+            'shared_profiles': shared_profiles, 'shared_words': shared_words,
+            'line': ('ekipten ' + ', '.join(parts)) if parts else ''}
+
+
+# ---------------------------------------------------------------- one call for the app
+
+def sync(store, data_dir, words=True, profiles=True, settings=None):
+    """Publish what this Mac learned, then read back what the others did — in that order, and pulling right after
+    publishing, so two people correcting the same meeting at the same time converge inside one pass instead of
+    waiting an hour. Never raises: a share on an unmounted folder must not fail the teach the user just did."""
+    from .reports import load_settings
+    if settings is None: settings = load_settings(data_dir)
+    out = {}
+    if words:
+        try: out['words'] = {**publish_words(store, settings, data_dir), **pull_words(store, settings, data_dir)}
+        except (OSError, ValueError) as exc: out['words_error'] = type(exc).__name__
+    if profiles:
+        try: out['profiles'] = {**publish_profiles(store, settings, data_dir), **pull_profiles(store, settings, data_dir)}
+        except (OSError, ValueError) as exc: out['profiles_error'] = type(exc).__name__
+    return out

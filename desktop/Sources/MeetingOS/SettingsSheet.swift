@@ -71,7 +71,14 @@ struct SettingsSheet:View {
                 Toggle("Sözlüğü ekip klasörüyle paylaş (yerel sözlük her zaman öncelikli)",isOn:$model.reportSettings.shareGlossary)
                     .onChange(of:model.reportSettings.shareGlossary) { _ in Task { await model.saveReportSettings() } }
                     .disabled(model.reportSettings.teamDir.isEmpty)
-                Text("Ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçin: sözlük ekipçe birleşir ve teşhis raporları kişisel klasör yerine oraya yazılır. Ses, transkript ve ses profilleri bu klasöre girmez.").font(.caption2).foregroundStyle(.secondary)
+                Toggle("Öğretilen kelimeleri ekiple paylaş (ekip klasörü)",isOn:$model.reportSettings.shareWords)
+                    .onChange(of:model.reportSettings.shareWords) { _ in Task { await model.saveReportSettings() } }
+                    .disabled(model.reportSettings.teamDir.isEmpty).accessibilityIdentifier("shareWordsToggle")
+                Toggle("Ses profillerimi ekiple paylaş (kişi adı + ses vektörü; ses kaydı değil)",isOn:$model.reportSettings.shareProfiles)
+                    .onChange(of:model.reportSettings.shareProfiles) { _ in Task { await model.saveReportSettings() } }
+                    .disabled(model.reportSettings.teamDir.isEmpty).accessibilityIdentifier("shareProfilesToggle")
+                Text("Kapalıyken yalnız bu Mac tanır. Açınca ekip klasörüne yazılır; ekip arkadaşları bu kişileri ilk toplantıda tanır.").font(.caption2).foregroundStyle(.secondary)
+                Text("Ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçin: ekip klasörü ortak bilgi tabanıdır — sözlük, öğretilen kelimeler ve ses profilleri (kişi adı + ses vektörü) ekipçe birikir, teşhis raporları da kişisel klasör yerine oraya yazılır. Ses kaydı, transkript, toplantı adı ve toplantı numarası bu klasöre hiç girmez.").font(.caption2).foregroundStyle(.secondary)
                 }
                 if group=="sistem" {
                 if let cost=model.cost, let month=cost["month"] as? [String:Any], let all=cost["all"] as? [String:Any] {
@@ -195,21 +202,42 @@ struct LearnedWordsSection:View {
     @ObservedObject var model:Model
     var body:some View {
         VStack(alignment:.leading,spacing:6) {
-            HStack { Text("Öğrenilen kelimeler").font(.headline); Spacer(); Button("Yenile") { Task { await model.loadWordRules() } }.controlSize(.small).accessibilityIdentifier("refreshWordRules") }
+            HStack {
+                Text("Öğrenilen kelimeler").font(.headline)
+                if !model.teamSummary.isEmpty {
+                    Text(model.teamSummary).font(.caption2).foregroundStyle(.secondary)
+                        .help("Ekip klasöründen gelen ses profilleri ve kelimeler; her biri tek tek kapatılabilir").accessibilityIdentifier("teamSummary")
+                }
+                Spacer(); Button("Yenile") { Task { await model.loadWordRules() } }.controlSize(.small).accessibilityIdentifier("refreshWordRules")
+            }
             if model.wordRules.isEmpty {
                 Text("Henüz öğrenilen kelime yok. Düzelt penceresinde bir kelimeyi düzeltin.").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("wordRulesEmpty")
             } else {
                 VStack(alignment:.leading,spacing:4) {
                     ForEach(model.wordRules) { rule in
                         HStack(spacing:8) {
-                            Text(rule.line).font(.caption).lineLimit(1).truncationMode(.middle)
+                            Text(rule.line).font(.caption).lineLimit(1).truncationMode(.middle).foregroundStyle(rule.isTeam && !rule.active ? .secondary : .primary)
+                            if rule.isTeam {
+                                // Whose word this is, said on the row: a spelling that arrived from another Mac is
+                                // not something the user typed here, and "Unut" would be the wrong verb for it.
+                                Text(rule.host).font(.caption2).padding(.horizontal,6).padding(.vertical,1)
+                                    .background(Capsule().fill(Color.secondary.opacity(0.15))).foregroundStyle(.secondary)
+                                    .help("Bu kelimeyi ekip klasöründe \(rule.host) adlı Mac öğretti").accessibilityIdentifier("teamWordHost-\(rule.host)-\(rule.original)")
+                                if !rule.teamNote.isEmpty { Text(rule.teamNote).font(.caption2).foregroundStyle(.secondary) }
+                            }
                             Spacer()
-                            Button("Unut") { Task { await model.forgetWord(rule.original) } }.controlSize(.mini).help("Bu kelime bir daha kendiliğinden düzeltilmez").accessibilityIdentifier("forgetWord-\(rule.original)")
+                            if rule.isTeam {
+                                Button(rule.enabled ? "Kapat" : "Aç") { Task { await model.toggleTeamWord(rule,enabled:!rule.enabled) } }.controlSize(.mini)
+                                    .help(rule.enabled ? "Bu kelime bu Mac’te kendiliğinden düzeltilmesin; ekip klasöründeki hâline dokunulmaz" : "Bu kelime bu Mac’te yeniden uygulansın")
+                                    .accessibilityIdentifier("toggleTeamWord-\(rule.host)-\(rule.original)")
+                            } else {
+                                Button("Unut") { Task { await model.forgetWord(rule.original) } }.controlSize(.mini).help("Bu kelime bir daha kendiliğinden düzeltilmez").accessibilityIdentifier("forgetWord-\(rule.original)")
+                            }
                         }
                     }
                 }.padding(12).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("wordRulesList")
             }
-            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda aynı yazım kendiliğinden düzeltilir, yakın yazımlar Kontrol'e öneri olarak gelir. “Unut” kuralı kaldırır.").font(.caption2).foregroundStyle(.secondary)
+            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda aynı yazım kendiliğinden düzeltilir, yakın yazımlar Kontrol'e öneri olarak gelir. “Unut” kuralı kaldırır. Ekip klasörü açıksa ekip arkadaşlarınızın öğrettiği kelimeler de burada, öğreten Mac’in adıyla listelenir; “Kapat” onu yalnız bu Mac’te susturur, ekip klasöründeki hâline dokunmaz.").font(.caption2).foregroundStyle(.secondary)
         }.task { if model.wordRules.isEmpty { await model.loadWordRules() } }
     }
 }

@@ -134,6 +134,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Words the user has taught (Düzelt → "Kelime düzelt") plus the ones the app learned from repeated
     /// edits. Loaded on demand from Ayarlar → Sesler ve sözlük; never part of the two-second poll.
     @Published var wordRules:[WordRule]=[]
+    /// "ekipten 3 profil, 5 kelime" — how much of what this Mac knows arrived from the team folder. Empty when
+    /// nothing did, so a Mac working alone never reads a line about a team it does not have.
+    @Published var teamSummary=""
     @Published var scorecard=""
     @Published var markerCount=0
     /// ⌘M while recording: append one line to markers.jsonl in the capture folder; nothing else changes.
@@ -348,6 +351,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             // something to file the voice against.
             if settingsLoaded, !namePromptedOnLaunch, !hasUserName, !meetings.isEmpty {
                 namePromptedOnLaunch=true; activity=Model.nameRequiredMessage; promptForUserName()
+            }
+            // The team folder is read once at launch: what a teammate taught or named while this Mac was closed
+            // is in place before the first meeting, not an hour later when the housekeeping pass runs.
+            if settingsLoaded, !teamSyncedOnLaunch, !recording, job==nil {
+                teamSyncedOnLaunch=true; Task { await syncTeamKnowledge() }
             }
             if !restoredOnLaunch {
                 restoredOnLaunch=true
@@ -863,6 +871,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     var settingsLoaded=false
     /// Asked once per launch, from the poll, when there are meetings but still no owner name.
     var namePromptedOnLaunch=false
+    /// The team folder is pulled once per launch, from the poll, as soon as the settings are known.
+    var teamSyncedOnLaunch=false
     /// The owner name has to be known before the first ⌃⌥R, not six hours later when the update poll runs.
     /// Called from `init`'s first task and again by every update check.
     func loadReportSettings() async {

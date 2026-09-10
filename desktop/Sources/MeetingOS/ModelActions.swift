@@ -227,6 +227,7 @@ extension Model {
     func loadWordRules() async {
         guard let r=try? await request(["action":"word_rules"]) else { return }
         wordRules=(r["rules"] as? [[String:Any]] ?? []).map(WordRule.init)
+        teamSummary=(r["team"] as? [String:Any])?["line"] as? String ?? ""
     }
     func forgetWord(_ original:String) async {
         guard !original.isEmpty else { return }
@@ -240,6 +241,23 @@ extension Model {
             await loadWordRules()
             if segments>0 { await refresh() } }
         catch { self.error=error.localizedDescription }
+    }
+    /// A teammate's word, off (or back on) on this Mac only. Their shared file is not touched: the user is
+    /// saying "not here", not "unteach it for everyone" — so there is a way back, unlike Unut.
+    func toggleTeamWord(_ rule:WordRule,enabled:Bool) async {
+        guard !rule.original.isEmpty, !rule.host.isEmpty else { return }
+        do { _=try await request(["action":"team_word_toggle","original":rule.original,"host":rule.host,"enabled":enabled])
+            activity=enabled ? "“\(rule.original)” yeniden açıldı · \(rule.host)" : "“\(rule.original)” bu Mac’te kapatıldı · \(rule.host) paylaşmaya devam ediyor"
+            await loadWordRules() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// Once per launch: publish what this Mac learned into the team folder and read back what the others learned
+    /// while it was closed. Quiet — nothing on screen unless it actually brought something in.
+    func syncTeamKnowledge() async {
+        guard let r=try? await requestSlow(["action":"team_sync"]) else { return }
+        let words=(r["words"] as? [String:Any])?["imported"] as? Int ?? 0
+        let people=(r["profiles"] as? [String:Any])?["imported"] as? Int ?? 0
+        if words+people>0 { activity="Ekip klasöründen alındı · \(words) kelime, \(people) ses örneği"; await loadWordRules(); await loadMaintenance() }
     }
     func rejectRule(_ original:String) async {
         guard !original.isEmpty else { return }
@@ -301,15 +319,23 @@ extension Model {
 /// One learned word: what the user (or the app, after repeated edits) decided the right spelling is.
 struct WordRule:Identifiable, Equatable {
     let original:String; let replacement:String; let source:String; let count:Int; let meetings:Int; let created:String; let vocabularyAdded:Bool
-    var id:String { original }
+    /// Team rows only: the Mac that taught the word, whether this Mac applies it, and whether the user
+    /// switched it off here. Two Macs can teach the same word, so the host is part of the identity.
+    let host:String; let enabled:Bool; let active:Bool
+    var id:String { source+":"+host+":"+original }
     init(_ d:[String:Any]) {
         original=d["original"] as? String ?? ""; replacement=d["replacement"] as? String ?? ""
         source=d["source"] as? String ?? ""; count=d["count"] as? Int ?? 0; meetings=d["meetings"] as? Int ?? 0
         created=d["created"] as? String ?? ""; vocabularyAdded=d["vocabulary_added"] as? Bool ?? false
+        host=d["host"] as? String ?? ""; enabled=d["enabled"] as? Bool ?? true; active=d["active"] as? Bool ?? true
     }
-    /// "taught" is a word the user corrected by hand; "learned" is one the app inferred from repeats.
-    var sourceLabel:String { source=="taught" ? "öğretildi" : "öğrenildi" }
-    var line:String { "“\(original)” → “\(replacement)” · \(sourceLabel) · \(meetings) toplantı" }
+    var isTeam:Bool { source=="team" }
+    /// "taught" is a word the user corrected by hand; "learned" is one the app inferred from repeats;
+    /// "team" is one a teammate taught on their Mac and shared through the team folder.
+    var sourceLabel:String { source=="taught" ? "öğretildi" : (isTeam ? "ekipten" : "öğrenildi") }
+    var line:String { isTeam ? "“\(original)” → “\(replacement)” · ekipten" : "“\(original)” → “\(replacement)” · \(sourceLabel) · \(meetings) toplantı" }
+    /// Why a team row is listed but not applied: switched off here, or beaten by this Mac's own word.
+    var teamNote:String { !isTeam ? "" : (!enabled ? "bu Mac’te kapalı" : (active ? "" : "bu Mac’in kendi yazımı öncelikli")) }
 }
 
 /// One place in the app a jump can send the user back to: which meeting was open, which tab, what the
