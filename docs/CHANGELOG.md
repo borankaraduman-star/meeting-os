@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 54 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 55 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.50](#v1250) | 2026-09-10 23:55 | Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı |
 | [v1.2.49](#v1249) | 2026-09-10 23:20 | Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür |
 | [v1.2.48](#v1248) | 2026-09-10 22:50 | Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez |
 | [v1.2.47](#v1247) | 2026-09-10 21:40 | Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst |
@@ -74,6 +75,21 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1250"></a>
+### Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı
+
+2026-09-10 23:55 · yerel not · GitHub sürüm sayfası yok
+
+Tur 14 (ikinci görüşlerden kalan küçük maddeler):
+- Aynı toplantı içindeki kopya görevler: analizde birleştirilir; kalanlar "Bu toplantıda benzer görev" ile bağlanır ve "Aynı görev, eskisini kapat" çalışır.
+- "İsimleri maskele": sahibin adı yalnız gerçekten konuştuysa ve ortak Türkçe kelime olan adlar (Can, Su, Deniz…) yalnız büyük harfli kullanımda maskelenir; "Can sıkıntısı" bozulmaz.
+- Ayarlar maliyet kartı: bazı analizlerin kullanımı kayıtlı değilse "(kısmi)".
+- Kararlar başlığı "N karar · M geri alındı" (karneyle aynı sayım); bayat sayısı yalnız görünen satırlar için.
+- Geçmişe düşen vade önerisi "(geçmiş)" ile işaretli.
+- Gün sonu özetinde sorular mikrofon sahibini doğru tanır.
+- Ses saklama: en eski kaydın sesi silinmeden 3 gün önce Son durum satırında uyarı ("Sesi koru" ile saklanır); KULLANIM'da tam olarak neyin silindiği yazıldı (yalnız ses; transkript, özet, görevler, profiller kalır).
+- Kıyas betiği artık mikrofon sahibi yolunu da sınar (6/6, 12 çağrı ≈1,6 cent).
 
 <a id="v1249"></a>
 ### Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür
