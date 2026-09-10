@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 59 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 60 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.55](#v1255) | 2026-09-11 05:05 | Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural |
 | [v1.2.54](#v1254) | 2026-09-11 03:50 | Meeting OS 1.2.54 — 2 saatlik toplantı: kayıp yok, disk dürüst, arayüz tembel |
 | [v1.2.53](#v1253) | 2026-09-11 03:05 | Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin |
 | [v1.2.52](#v1252) | 2026-09-11 01:35 | Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor |
@@ -79,6 +80,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1255"></a>
+### Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural
+
+2026-09-11 05:05 · yerel not · GitHub sürüm sayfası yok
+
+Tur 17 (sadelik/tutarlılık denetimi) → uygulandı.
+- README/OPENROUTER/V1_USAGE'deki 8 yanlış cümle düzeltildi (disk eşikleri, Zoom 5 dk, bulut yanıt, düğme/sekme adları, kimlik eşikleri, bulut akışı).
+- Kurulum kartı dal ayrışmasını ve git kontrol hatasını artık gerçekten gösteriyor ("kontrol edilemedi"); kayıt günlüğü okunamadığında kayıt "sağlıklı" sayılmıyor; kimlik eşikleri Swift'te kopya değil, köprüden.
+- Görev sahibi kanıt kapısı diğer yerlerle aynı ad katlamasını kullanıyor (Gokhan/Gökhan artık sahipsiz kalmıyor); dışa aktarım reddedilen/emekli görevleri geri getirmiyor ve Türkçe durum yazıyor; konuşmacı etiketleri her yerde mikrofon sahibini doğru gösteriyor.
+- Testler: hiçbir test gerçek kayıt cihazını ya da veri klasörünü kullanmıyor; `MEETING_OS_TEST_IGNORE_PRESSURE=1` ile tam paket meşgul Mac'te de yeşil (769 test).
+- Ölü kod: çağrılmayan 3 köprü eylemi, 4 Swift sembolü, 10 gereksiz import, bir ölü ortam değişkeni kaldırıldı; 14 yetim belge `docs/archive/`; ad katlaması, durum etiketleri, ayar kaydetme sarmalayıcısı tek yerde; analiz kullanım kaydı ContextVar.
+- `verify-capture.py` `MEETING_OS_CAPTURE_BIN` ile imzasız yardımcıyı da sınar.
 
 <a id="v1254"></a>
 ### Meeting OS 1.2.54 — 2 saatlik toplantı: kayıp yok, disk dürüst, arayüz tembel

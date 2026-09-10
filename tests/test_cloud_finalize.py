@@ -124,10 +124,10 @@ class IdentityTests(unittest.TestCase):
         from unittest.mock import patch
         from meeting_os.resources import check_pressure, MemoryPressureError
         from meeting_os.final_identity import FinalEmbedder
-        with patch('subprocess.check_output',return_value=b'2'):
+        with patch.dict('os.environ',{'MEETING_OS_TEST_IGNORE_PRESSURE':''}),patch('subprocess.check_output',return_value=b'2'):
             with self.assertRaises(MemoryPressureError):check_pressure()
             check_pressure(allow_warning=True)
-        with patch('subprocess.check_output',return_value=b'4'):
+        with patch.dict('os.environ',{'MEETING_OS_TEST_IGNORE_PRESSURE':''}),patch('subprocess.check_output',return_value=b'4'):
             with self.assertRaises(MemoryPressureError):check_pressure(allow_warning=True)
         with patch('meeting_os.final_identity.run_guarded') as rg, patch('meeting_os.final_identity._signature',return_value='s'), patch('meeting_os.final_identity._hash_file',return_value=('s','d'*16)), patch('meeting_os.final_identity.sf.info') as info, patch('meeting_os.final_identity.validate_vectors',return_value=[[0.0,1.0]]):
             info.return_value.samplerate=16000;info.return_value.channels=1;info.return_value.subtype='FLOAT';info.return_value.frames=16000*5
@@ -163,7 +163,7 @@ class MergeEchoTests(unittest.TestCase):
         from meeting_os.resources import MemoryPressureError
         with tempfile.TemporaryDirectory() as tmp:
             f=Path(tmp)/'w.pt';f.write_bytes(b'x'*10)
-            with patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):
+            with patch.dict('os.environ',{'MEETING_OS_TEST_IGNORE_PRESSURE':''}),patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):
                 with self.assertRaises(MemoryPressureError):_hash_file(f)
                 self.assertEqual(len(_hash_file(f,allow_warning=True)[1]),64)
 

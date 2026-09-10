@@ -10,7 +10,7 @@ run_soak = runpy.run_path(str(Path(__file__).resolve().parents[1]/'scripts/captu
 
 class FailureReasonTests(unittest.TestCase):
     def test_pressure_admission_reports_reason_without_spawning(self):
-        with tempfile.TemporaryDirectory() as tmp, patch('meeting_os.resources.subprocess.check_output',return_value='2'),patch('meeting_os.resources.sys.platform','darwin'),patch('meeting_os.supervisor.subprocess.Popen') as spawn:
+        with tempfile.TemporaryDirectory() as tmp, patch.dict('os.environ',{'MEETING_OS_TEST_IGNORE_PRESSURE':''}), patch('meeting_os.resources.subprocess.check_output',return_value='2'),patch('meeting_os.resources.sys.platform','darwin'),patch('meeting_os.supervisor.subprocess.Popen') as spawn:
             report=run_soak(Path(tmp)/'run',5,'/unused')
             self.assertEqual(report['error_code'],'memory_pressure')
             spawn.assert_not_called()
@@ -63,5 +63,5 @@ class FailureReasonTests(unittest.TestCase):
         self.assertEqual(report['error_code'],'validation_failed')
 
     def test_unreadable_pressure_is_not_reported_as_observed_pressure(self):
-        with patch.object(resources.sys,'platform','darwin'),patch.object(resources.subprocess,'check_output',side_effect=OSError('private path')):
+        with patch.dict('os.environ',{'MEETING_OS_TEST_IGNORE_PRESSURE':''}),patch.object(resources.sys,'platform','darwin'),patch.object(resources.subprocess,'check_output',side_effect=OSError('private path')):
             with self.assertRaises(resources.ResourceProbeError):resources.check_pressure()

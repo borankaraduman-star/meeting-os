@@ -19,5 +19,5 @@ class ResourceTests(unittest.TestCase):
             self.assertIn(Path(a.model).name,('mlx-turbo','ggml-large-v3-turbo-q5_0.bin'))
     def test_pressure_blocks_before_model_load(self):
         from meeting_os.resources import check_pressure
-        with patch('meeting_os.resources.sys.platform','darwin'),patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):
+        with patch.dict('os.environ',{'MEETING_OS_TEST_IGNORE_PRESSURE':''}),patch('meeting_os.resources.sys.platform','darwin'),patch('meeting_os.resources.subprocess.check_output',return_value=b'2'):
             with self.assertRaisesRegex(RuntimeError,'bellek baskısı'):check_pressure()
