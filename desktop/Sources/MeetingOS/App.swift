@@ -180,20 +180,25 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             catch { self.error=error.localizedDescription; break }
         }
         // The last call's counts describe the meeting after every confirmation, which is what the user now sees.
-        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"+adaptationNote(last); canUndoNaming=true }
+        if !named.isEmpty { activity="Onaylandı · "+named.joined(separator:", ")+" · profiller güncellendi"+adaptationNote(last); canUndoNaming=true; undoBatch=named.count }
         await refresh(); await loadReview(); refreshSummaryIfNamesDone()
     }
     /// ⌘Z after a naming: labels, the learned sample and the rejection all go back. Only the newest naming of the open meeting.
-    @Published var canUndoNaming=false
+    @Published var canUndoNaming=false { didSet { if canUndoNaming { undoBatch=1 } } }   // one naming unless the caller raises it right after
+    /// How many namings the last confirmation made: "Tümünü onayla" names N voices, so ⌘Z must undo N.
+    var undoBatch=1
     @Published var probeLines:[String]=[]
     @Published var maintenance:[String:Any]?
     func undoNaming() async {
         guard let mid=selected, canUndoNaming, !busy else { return }
-        do { let r=try await request(["action":"undo_correction","meeting":mid]); canUndoNaming=false
-            let name=r["name"] as? String ?? ""; let prev=r["previous"] as? String
-            activity="Geri alındı · “\(name)”"+(prev.map { " yeniden “\($0)”" } ?? " isimsiz")+" · öğrenilen örnek silindi"
-            await refresh(); await loadReview() }
-        catch { self.error=error.localizedDescription }
+        var results:[[String:Any]]=[]
+        for _ in 0..<max(1,undoBatch) {
+            do { results.append(try await request(["action":"undo_correction","meeting":mid])) }
+            catch { if results.isEmpty { self.error=error.localizedDescription; return }; break }   // a half-undone batch stays undone; the offer is spent either way
+        }
+        canUndoNaming=false; undoBatch=1
+        activity=UndoNaming.message(results)
+        await refresh(); await loadReview()
     }
     /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
     func refreshSummaryIfNamesDone() {
