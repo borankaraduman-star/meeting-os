@@ -746,8 +746,14 @@ class JobPriorityTests(unittest.TestCase):
             self.assertEqual(CF.upload_workers(),CF.UPLOAD_WORKERS)
             Path(tmp,'low.flag').write_text('');self.assertEqual(CF.upload_workers(),1)   # flag dropped mid-job
         with patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1'}):
+            os.environ.pop('MEETING_OS_LOW_PRIORITY_FLAG',None)
+            # Low priority alone is the idle retry queue: nothing is on screen, so two uploaders, not one.
+            self.assertEqual(CF.upload_workers(),CF.LOW_PRIORITY_WORKERS)
+            self.assertEqual((CF.job_usage(0)['low_priority'],CF.job_usage(0)['upload_workers']),(True,CF.LOW_PRIORITY_WORKERS))
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{'MEETING_OS_LOW_PRIORITY':'1','MEETING_OS_LOW_PRIORITY_FLAG':tmp+'/low.flag'}):
+            self.assertEqual(CF.upload_workers(),CF.LOW_PRIORITY_WORKERS)
+            Path(tmp,'low.flag').write_text('')   # a meeting is on screen right now: one at a time
             self.assertEqual(CF.upload_workers(),1)
-            self.assertEqual((CF.job_usage(0)['low_priority'],CF.job_usage(0)['upload_workers']),(True,1))
 
 
 class CloudFailureTests(unittest.TestCase):

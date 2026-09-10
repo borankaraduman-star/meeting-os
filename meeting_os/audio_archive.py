@@ -17,14 +17,18 @@ def archive_file(src, dst=None):
     if src.suffix.lower() != '.wav': return src, 0
     dst = Path(dst) if dst else src.with_suffix('.flac')
     tmp = dst.with_name(dst.name + '.tmp')
-    with sf.SoundFile(src) as f:
-        if f.channels != 1 or f.samplerate != 16000: raise ValueError('Yalnız 16 kHz mono birleştirilmiş ses arşivlenir')
-        with sf.SoundFile(tmp, 'w', samplerate=f.samplerate, channels=1, format='FLAC', subtype='PCM_16') as out:
-            while True:
-                block = f.read(BLOCK, dtype='float32')
-                if len(block) == 0: break
-                out.write(np.clip(block, -1.0, 1.0))
-        frames = f.frames
+    try:
+        with sf.SoundFile(src) as f:
+            if f.channels != 1 or f.samplerate != 16000: raise ValueError('Yalnız 16 kHz mono birleştirilmiş ses arşivlenir')
+            with sf.SoundFile(tmp, 'w', samplerate=f.samplerate, channels=1, format='FLAC', subtype='PCM_16') as out:
+                while True:
+                    block = f.read(BLOCK, dtype='float32')
+                    if len(block) == 0: break
+                    out.write(np.clip(block, -1.0, 1.0))
+            frames = f.frames
+    except BaseException:   # a full disk or a kill left a recording-sized `.flac.tmp` that nothing swept
+        tmp.unlink(missing_ok=True)
+        raise
     with sf.SoundFile(tmp) as check:
         if check.frames != frames: tmp.unlink(missing_ok=True); raise ValueError('FLAC doğrulaması başarısız')
     before = src.stat().st_size

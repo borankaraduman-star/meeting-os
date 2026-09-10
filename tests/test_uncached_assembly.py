@@ -51,7 +51,9 @@ class UncachedAssemblyTests(unittest.TestCase):
             self.assertEqual(counts,{'source_fds':12,'destination_fds':2})
             self.assertEqual(len(descriptors),14)
             markers = [json.loads(line)['uncached_assembly_applied'] for line in telemetry.getvalue().splitlines()]
-            self.assertEqual(markers,[{'source_fds':1,'destination_fds':0},{'source_fds':3,'destination_fds':1}])
+            # Disk is now reserved for every source before the first byte is written, so all six chunk headers
+            # are read before the first assembled file is created.
+            self.assertEqual(markers,[{'source_fds':1,'destination_fds':0},{'source_fds':6,'destination_fds':1}])
             for source,path in result.items():
                 actual,rate = sf.read(path,dtype='float32')
                 self.assertEqual(rate,16000)

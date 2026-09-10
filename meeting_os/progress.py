@@ -5,7 +5,7 @@ from contextvars import ContextVar
 
 stage_observer = ContextVar("meeting_os_stage_observer", default=None)
 
-def emit(stage,current=0,total=0,source=''):
+def emit(stage,current=0,total=0,source='',**extra):
     observer=stage_observer.get()
     if observer is not None:
         try:observer(stage)
@@ -14,6 +14,7 @@ def emit(stage,current=0,total=0,source=''):
     if not target:return
     path=Path(target); temp=path.with_name(path.name+'.tmp')
     event={'stage':stage,'current':current,'total':total,'source':source,'updated_at':time.time()}
+    event.update(extra)   # optional weights (uploaded_seconds/total_seconds); older readers ignore what they do not know
     try:
         path.parent.mkdir(parents=True,exist_ok=True)
         temp.write_text(json.dumps(event));temp.replace(path)

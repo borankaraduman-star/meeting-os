@@ -79,7 +79,8 @@ def install_uncached_assembly():
                 if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid():
                     raise ValueError('Invalid retry WAV')
                 sources[path.name] = (info.st_dev, info.st_ino)
-                destinations.add(source+'-full.wav')
+                # Assembly writes `<source>-full.wav.tmp` and renames it into place only when it is whole.
+                destinations.add(source+'-full.wav');destinations.add(source+'-full.wav.tmp')
                 if len(sources) > MAX_CHUNKS:
                     raise ValueError('Retry chunk limit')
 

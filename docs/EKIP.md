@@ -78,7 +78,7 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 
 ## Maliyet
 
-Yazıya çevirme ≈ **$0,10/saat** (MAI-Transcribe 2). Özet/görev analizi **her çalıştığında ≈1–3 cent** (40–60 dakikalık bir toplantı, `openai/gpt-4.1-mini`). Analiz bir toplantıda birden çok kez çalışabilir: transkript değişirse (isim verme, metin düzeltme) özet bayatlar ve yenilenirken analiz **yeniden ücretlendirilir**. Ödemeyi kendi OpenRouter hesabınız yapar; sessiz ve yankı olan parçalar hiç yüklenmez. Gerçek harcama — yazıya çevirme **ve** analiz ayrı ayrı: Ayarlar → Sistem → **Bulut maliyeti**.
+Yazıya çevirme ≈ **$0,10/saat** (MAI-Transcribe 2). Özet/görev analizi **her çalıştığında ≈3–4 cent** (40–60 dakikalık bir toplantı, `openai/gpt-4.1-mini`; iki saatlik bir toplantı ≈ $0,08). Analiz bir toplantıda birden çok kez çalışabilir: transkript değişirse (isim verme, metin düzeltme) özet bayatlar ve yenilenirken analiz **yeniden ücretlendirilir**. Ödemeyi kendi OpenRouter hesabınız yapar; sessiz ve yankı olan parçalar hiç yüklenmez. Gerçek harcama — yazıya çevirme **ve** analiz ayrı ayrı: Ayarlar → Sistem → **Bulut maliyeti**.
 
 ## Ekip klasörü (isteğe bağlı)
 
