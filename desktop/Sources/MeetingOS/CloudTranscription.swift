@@ -7,7 +7,7 @@ enum CloudTranscription {
     static let modelKey="cloudTranscriptionModel"
     static let defaultModel="microsoft/mai-transcribe-2"
     static func recordArguments(mode:String,directory:String,title:String,receipt:String)->[String] {
-        var args=["record",directory,"--seconds","14400","--title",title,"--output",receipt]
+        var args=["record",directory,"--seconds","14400","--output",receipt]   // the title travels in MEETING_OS_TITLE: argv is readable by every user on the Mac
         // `--cloud` only marks intent on the meeting: if the app is quit before finalize ever runs, the idle
         // queue can still tell this recording was meant for OpenRouter. It loads and uploads nothing itself.
         if mode != "openrouter" { args.insert("--live",at:2) } else { args.insert("--cloud",at:2) }   // live local preview only in local mode
@@ -19,7 +19,7 @@ enum CloudTranscription {
         return args
     }
     static func importArguments(path:String,title:String,model:String,output:String)->[String] {
-        ["openrouter-import","--no-local","--allow-upload","--model",model,"--title",title,"--output",output,path]
+        ["openrouter-import","--no-local","--allow-upload","--model",model,"--output",output,path]
     }
     /// Meetings created by the cloud-only path resume through finalize; older Sherpa-based imports keep their own resume.
     static func resumeArguments(meeting:Meeting,model:String,output:String)->[String] {
