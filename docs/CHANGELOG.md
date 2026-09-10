@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 74 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 75 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.70](#v1270) | 2026-09-11 02:45 | v1.2.70 — Daha geniş özet: konu başına madde, toplantı uzunluğuna göre |
 | [v1.2.69](#v1269) | 2026-09-11 01:45 | v1.2.69 — Analiz modeli: DeepSeek V3.2 (ölçüldü); CLI veri klasörü tuzağı |
 | [v1.2.68](#v1268) | 2026-09-11 00:15 | v1.2.68 — Terminalsiz ekibe katılım; ekip kimliği ve silme yayılımı; görev birleştirme güvenliği |
 | [v1.2.67](#v1267) | 2026-09-10 23:10 | v1.2.67 — Ekip bulutu: sıfır kurulumlu ortak bilgi tabanı; her düzeltme öğrenir |
@@ -94,6 +95,17 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1270"></a>
+### v1.2.70 — Daha geniş özet: konu başına madde, toplantı uzunluğuna göre
+
+2026-09-11 02:45 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "özetler daha geniş olabilir; şu an çok çok özet oluyor ve bir şeyleri kaçırıyor gibi." Gerçek veri: 41 dakikalık, 335 bölümlük toplantı → 3 madde (parçalar 27 madde üretmişti, birleştirme 5'e indiriyordu).
+
+- **Özet hedefi toplantı uzunluğuyla büyür:** yaklaşık 4 dakikada bir madde, en az 6, en çok 24 (41 dk → 10, 2 saat → 24). Parça başına da "2–5 madde" yerine "her ayrı konuya bir madde (4–10), sayı/ad/yer gibi somutlarla, konuları tek maddede eritmeden". Birleştirme yalnız aynı konudaki notları kaynaştırır. Şema özet için 12 maddeye izin verir (diğer listeler 8).
+- **Ayrıntılı özet anahtarı:** birden fazla parçadan gelen bütün maddeler (`section_summaries`) zaten saklanıyordu; Özet sekmesinde "Ayrıntılı özet (N madde)" anahtarı onları gösterir, tercih hatırlanır. Eski analizlerde de hemen çalışır; yeni hedefli özet için "Özeti güncelle".
+- Testler: Python 907, Swift 235. Canlı: 41 dakikalık toplantı DeepSeek V3.2 ile yeniden analiz edilip madde sayısı ve parça süreleri ölçülecek (sürüm notunun altına eklenir).
 
 <a id="v1269"></a>
 ### v1.2.69 — Analiz modeli: DeepSeek V3.2 (ölçüldü); CLI veri klasörü tuzağı

@@ -111,6 +111,14 @@ struct AnalysisView:View {
     /// and a meeting change wipes it (`.task(id:)` below).
     @State private var expanded:Set<String>=[]
     @AppStorage("summaryTalkShareOpen") private var showTalkShare=true   // who spoke how much is worth seeing at a glance; folding it is the user's choice and is remembered
+    /// Boran, 11 Sep 2026: "özetler çok çok özet, bir şeyleri kaçırıyor" — the per-chunk bullets a long meeting was
+    /// condensed from are kept in `section_summaries`; this switch shows them instead of the condensed list.
+    @AppStorage("summaryDetailed") private var detailed=false
+    func summaryItems(_ payload:[String:Any])->[[String:Any]] {
+        let short=payload["summary"] as? [[String:Any]] ?? []
+        let long=payload["section_summaries"] as? [[String:Any]] ?? []
+        return detailed && long.count>short.count ? long:short
+    }
     let categories=[("summary","Özet"),("decisions","Kararlar"),("risks","Riskler"),("questions","Açık sorular")]
     var stale:Bool { m.analysis?["stale"] as? Bool == true }
     var body:some View { ScrollView { VStack(alignment:.leading,spacing:16) {
@@ -135,8 +143,13 @@ struct AnalysisView:View {
                 .accessibilityIdentifier("talkShareDisclosure")
         }
         if let payload=m.analysis?["payload"] as? [String:Any] {
+            let long=(payload["section_summaries"] as? [[String:Any]] ?? []).count, short=(payload["summary"] as? [[String:Any]] ?? []).count
+            if long>short {
+                Toggle(isOn:$detailed) { Text(detailed ? "Ayrıntılı özet (\(long) madde) · kısa özet için kapatın":"Ayrıntılı özet (\(long) madde)").font(.callout) }
+                    .toggleStyle(.switch).controlSize(.small).accessibilityIdentifier("summaryDetailedToggle")
+            }
             ForEach(categories,id:\.0) { key,label in
-                SummarySection(m:m,section:key,label:label,items:(payload[key] as? [[String:Any]] ?? []).map(Insight.init),expanded:$expanded).padding(.top,6)
+                SummarySection(m:m,section:key,label:label,items:(key=="summary" ? summaryItems(payload):(payload[key] as? [[String:Any]] ?? [])).map(Insight.init),expanded:$expanded).padding(.top,6)
             }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout).foregroundStyle(.secondary).padding(.top,6)
         } else {
