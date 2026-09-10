@@ -1,11 +1,21 @@
 import SwiftUI
 import UserNotifications
 
+/// A sample can outlive the meeting it was cut from: the bridge then sends "toplantı silindi" (and older
+/// bridges send nothing at all). Either way a row must never print a bare " · · 12 sn".
+enum MeetingLabel {
+    static let unknown="bilinmeyen toplantı"
+    static func title(_ raw:Any?)->String {
+        let t=(raw as? String ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+        return t.isEmpty ? unknown : t
+    }
+}
+
 struct VoiceSample:Identifiable, Equatable {
     let id:Int; let seconds:Double; let kind:String; let meetingTitle:String; let model:String
     /// The card above says "N otomatik, M elle"; a row must use the same two words, not the storage `kind`.
     var origin:String { kind=="otomatik" ? "otomatik" : "elle" }
-    init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; kind=d["kind"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "bilinmeyen toplantı"; model=d["model"] as? String ?? "" }
+    init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; seconds=d["seconds"] as? Double ?? 0; kind=d["kind"] as? String ?? ""; meetingTitle=MeetingLabel.title(d["meeting_title"]); model=d["model"] as? String ?? "" }
 }
 
 struct IdentityCandidate:Identifiable, Equatable {
@@ -80,7 +90,7 @@ struct ProfileHealth:Equatable {
 struct CleanCandidate:Identifiable, Equatable {
     let id:Int; let meeting:String; let meetingTitle:String; let start:Double; let seconds:Double; let source:String; let text:String
     init(_ d:[String:Any]) {
-        id=d["id"] as? Int ?? 0; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "bilinmeyen toplantı"
+        id=d["id"] as? Int ?? 0; meeting=d["meeting"] as? String ?? ""; meetingTitle=MeetingLabel.title(d["meeting_title"])
         start=d["start"] as? Double ?? 0; seconds=d["seconds"] as? Double ?? 0; source=d["source"] as? String ?? ""; text=d["text"] as? String ?? ""
     }
 }

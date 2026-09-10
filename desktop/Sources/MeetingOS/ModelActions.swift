@@ -44,7 +44,10 @@ extension Model {
 
     func loadDecisions(query:String) async {
         guard !recording else { return }
-        if let r=try? await request(["action":"decision_log","query":query,"limit":200]) { decisions=(r["decisions"] as? [[String:Any]] ?? []).enumerated().map { DecisionEntry($0.element,index:$0.offset) } }
+        if let r=try? await request(["action":"decision_log","query":query,"limit":200]) {
+            decisions=(r["decisions"] as? [[String:Any]] ?? []).enumerated().map { DecisionEntry($0.element,index:$0.offset) }
+            decisionStaleMeetings=r["stale_meetings"] as? Int ?? Set(decisions.filter { $0.stale }.map { $0.meeting }).count
+        }
     }
 
     func exportDecisions(query:String) async {
@@ -55,7 +58,10 @@ extension Model {
 
     func loadWaiting() async {
         guard !recording else { return }
-        if let r=try? await request(["action":"waiting_board"]) { waiting=(r["people"] as? [[String:Any]] ?? []).map(WaitingPerson.init) }
+        if let r=try? await request(["action":"waiting_board"]) {
+            waiting=(r["people"] as? [[String:Any]] ?? []).map(WaitingPerson.init)
+            waitingStaleMeetings=r["stale_meetings"] as? Int ?? Set(waiting.flatMap { $0.items }.filter { $0.stale }.map { $0.meeting }).count
+        }
     }
 
     func loadReviewDebt() async {
@@ -70,7 +76,10 @@ extension Model {
 
     func loadQuestions(query:String) async {
         guard !recording else { return }
-        if let r=try? await request(["action":"question_radar","query":query,"limit":100]) { questions=(r["groups"] as? [[String:Any]] ?? []).enumerated().map { QuestionGroup($0.element,index:$0.offset) } }
+        if let r=try? await request(["action":"question_radar","query":query,"limit":100]) {
+            questions=(r["groups"] as? [[String:Any]] ?? []).enumerated().map { QuestionGroup($0.element,index:$0.offset) }
+            questionStaleMeetings=r["stale_meetings"] as? Int ?? questions.filter { $0.stale }.count
+        }
     }
 
     func loadPeriodScorecard() async {
