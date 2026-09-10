@@ -273,8 +273,10 @@ def dispatch(request, db=None):
         memory=Memory(store)
         if action=='intelligence':
             from .due_dates import suggestions_for_tasks
+            from .insights import local_day
             tasks=[{**t,'route':route(t['title'])} for t in memory.actions()]
-            return {'analysis':memory.latest(request.get('meeting','')),'tasks':tasks,'drafts':drafts(store),'due_suggestions':suggestions_for_tasks(tasks)}
+            anchors={m['id']:local_day(m['created']) for m in store.meetings()}   # "yarın" counts from the day the meeting happened, not from the UTC day its analysis was saved
+            return {'analysis':memory.latest(request.get('meeting','')),'tasks':tasks,'drafts':drafts(store),'due_suggestions':suggestions_for_tasks(tasks,anchors)}
         if action=='task_set_due':return {'due_date':memory.set_due_date(request['task'],request.get('due_date'))}
         if action=='draft_update':return edit_draft(store,request['draft'],request['text'])
         if action=='action_update':return memory.update_action(request['task'],request['changes'])
@@ -624,10 +626,11 @@ def dispatch(request, db=None):
             for key,label in [('summary','Özet'),('decisions','Kararlar'),('risks','Riskler'),('questions','Açık sorular')]:
                 lines+=['\n## '+label]
                 for item in current['payload'].get(key,[]):
-                    lines+=['- '+item['text']]
+                    lines+=['- '+item['text']+(' ('+(item.get('note') or 'geri alındı')+')' if item.get('superseded') else '')]
                     lines+=['  - Kaynak #'+str(e['segment_id'])+' ('+timestamp(e['start'],'.')+'): '+e['quote'] for e in item['evidence']]
             lines+=['\n## Görevler']
             for t in memory.actions(meeting=request['meeting']):
+                if t['state']=='superseded': continue   # a task a newer analysis of this meeting no longer states
                 lines+=['- '+t['title']+' | '+(t['owner'] or 'Belirsiz')+' | '+(t['due_text'] or 'Tarih yok')+' | '+t['state']+(' | GÜNCEL DEĞİL' if t['stale'] else '')]
             Path(request['path']).write_text('\n'.join(lines),encoding='utf-8');return {'path':request['path']}
         if action=='export':

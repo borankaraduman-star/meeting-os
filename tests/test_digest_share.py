@@ -41,7 +41,7 @@ class DigestTests(unittest.TestCase):
    self.assertEqual([q['text'] for q in d['questions']],['Rapor ne zaman?']);self.assertEqual([x['text'] for x in d['decisions']],['Önce iOS çıkacak'])
    self.assertEqual((d['meetings'][0]['seconds'],d['meetings'][0]['speakers'],d['meetings'][0]['analyzed']),(125,2,True));self.assertFalse(d['meetings'][1]['analyzed'])
    text=render_digest(d)
-   for needle in ('## Verdiğin sözler','## Senden beklenen cevaplar','## Değişen/alınan kararlar','## Bugünkü toplantılar','Raporu çıkarmak · yarın · açık  (Sprint planı)','Kaynak #%d: “raporu ben çıkaracağım”'%sid,'Rapor ne zaman?','Önce iOS çıkacak','Sprint planı · 2 dk · 2 konuşmacı · analiz hazır','Analizsiz · 1 dk altı · 1 konuşmacı · analiz yok'):
+   for needle in ('## Verdiğin sözler','## Cevapsız sorular','## Değişen/alınan kararlar','## Bugünkü toplantılar','Raporu çıkarmak · yarın · açık  (Sprint planı)','Kaynak #%d: “raporu ben çıkaracağım”'%sid,'Rapor ne zaman?','Önce iOS çıkacak','Sprint planı · 2 dk · 2 konuşmacı · analiz hazır','Analizsiz · 1 dk altı · 1 konuşmacı · analiz yok'):
     self.assertIn(needle,text)
    self.assertNotIn('Tasarımı bitirmek',text);self.assertNotIn('Eski toplantı',text)
    other=build_digest(Store(db),day=(now-timedelta(days=3)).astimezone().date().isoformat())
@@ -117,3 +117,51 @@ class ShareTests(unittest.TestCase):
    self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout)['segments'],0);self.assertIn('## Kararlar',out.read_text());self.assertNotIn('Boran',out.read_text())
    r=subprocess.run([sys.executable,'-m','meeting_os','--db',str(db),'digest','--output',str(out)],capture_output=True,text=True)
    self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout)['tasks'],1);self.assertIn('## Verdiğin sözler',out.read_text())
+
+class OwnNameMaskingTests(unittest.TestCase):
+ """A cloud microphone row keeps its label in `speaker`; a mask built from speaker_name published the one
+ name the user most wanted hidden — their own."""
+ def cloud(self,tmp):
+  db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('Boran ile sprint',{})
+  sid=s.add_segment(mid,Segment(0,10,'Boran raporu yarın çıkaracak.','mic','Boran',flags=['cloud_transcript']))
+  s.add_segment(mid,Segment(10,20,'Tamam Boran.','system','Konuşmacı 2',flags=['cloud_transcript','cloud_diarization']))
+  s.status(mid,'complete');mem=Memory(s)
+  mem.save_analysis(mid,mem.current_hash(mid),'test-model',{'summary':[],'risks':[],'questions':[],'decisions':[],
+   'actions':[{'title':'Raporu çıkarmak','owner':'Boran','due_text':'yarın','evidence':[{'segment_id':sid,'quote':'Boran raporu yarın çıkaracak.','start':0,'speaker':'Boran'}]}]})
+  s.close();return db,mid
+ def test_share_masks_the_microphone_owner(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db,mid=self.cloud(tmp)
+   s=Store(db);text=prepare_share(s,mid,mask_names=True)['text'];s.close()
+   self.assertNotIn('Boran',text);self.assertIn('Kişi A',text)
+ def test_the_settings_owner_is_masked_even_when_the_rows_say_ben(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   from meeting_os import reports
+   db,mid=self.cloud(tmp)
+   s=Store(db)
+   with s.db:s.db.execute("UPDATE segments SET speaker='Ben' WHERE source='mic'")
+   s.close()
+   reports.save_settings(Path(tmp),{'user_name':'Boran'})
+   s=Store(db);text=prepare_share(s,mid,mask_names=True)['text'];s.close()
+   self.assertNotIn('Boran',text)
+ def test_the_digest_mask_covers_the_microphone_owner_too(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db,mid=self.cloud(tmp)
+   masked=build_digest(Store(db),owner='Boran',mask_names=True)
+   self.assertNotIn('Boran',render_digest(masked))
+
+class UnansweredQuestionOrderTests(unittest.TestCase):
+ def test_questions_asked_by_someone_else_come_first_and_the_section_is_honest(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Sprint',{})
+   sid=s.add_segment(mid,Segment(0,10,'Rapor ne zaman? Bütçe kimde?','system','S0',speaker_name='İpek'));s.status(mid,'complete')
+   mem=Memory(s)
+   mem.save_analysis(mid,mem.current_hash(mid),'test-model',{'summary':[],'risks':[],'decisions':[],'actions':[],
+    'questions':[{'text':'Kendi sorum','evidence':[{'segment_id':sid,'quote':'Rapor ne zaman','start':0,'speaker':'Boran'}]},
+                 {'text':'Bana sorulan','evidence':[{'segment_id':sid,'quote':'Bütçe kimde','start':5,'speaker':'İpek'}]}]})
+   s.close()
+   d=build_digest(Store(db),owner='Boran')
+   self.assertEqual([q['text'] for q in d['questions']],['Bana sorulan','Kendi sorum'])
+   self.assertEqual([q['for_me'] for q in d['questions']],[True,False])
+   text=render_digest(d)
+   self.assertIn('## Cevapsız sorular',text);self.assertNotIn('Senden beklenen cevaplar',text)

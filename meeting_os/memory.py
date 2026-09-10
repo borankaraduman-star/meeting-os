@@ -7,11 +7,38 @@ from .metrics import normalize
 STOPWORDS={'ve','bir','bu','şu','o','ne','kaç','mi','mı','mu','mü','ile','için','de','da','ki','ama','veya','ya','gibi','çok','daha','en','var','yok','mi','nasıl','neden','hangi','kim','nerede','zaman','olan','oldu','olduğu','söylendi','söyledi','söylemiş','dedi','diye','ise','hakkında','bana','bize','şey'}
 
 
+RETIRED=('dismissed','superseded')   # a task the user removed by hand, or one a newer analysis of the same meeting left behind
+
 def owner_key(name):
     """Loose match for a person's name: case, İ/I/ı and diacritics do not separate "İlker", "Ilker" and "ilker".
     `metrics.normalize` keeps ı and i apart (right for word error rates, wrong for a name typed two ways)."""
     from .store import fold_name
     return fold_name(name or '').replace('ı','i')
+
+def rename_task_owners(db,old,new,meeting=None,segments=None):
+    """Move the tasks of a person whose label just changed onto the new spelling. Returns how many moved.
+
+    Renaming a speaker used to relabel the transcript only: the tasks kept the old label, so "Bana ait"
+    and the waiting board went on answering with a name that no longer exists anywhere in the meeting.
+    Only rows the user has never edited by hand are touched — a hand-typed owner outranks any rename —
+    and matching is `owner_key`, so 'Ilker'/'İlker' is one person. `meeting` limits it to one meeting
+    (a diarized cluster is local to its meeting); `segments` limits it further to tasks whose evidence
+    comes only from those segment ids (one pinned piece of a cluster)."""
+    old=(old or '').strip();new=(new or '').strip();key=owner_key(old)
+    if not key or not new or key==owner_key(new):return 0
+    if not db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'").fetchone():return 0
+    sql='SELECT id,owner,payload FROM tasks WHERE user_edited=0 AND owner IS NOT NULL';args=()
+    if meeting is not None:sql+=' AND meeting=?';args=(meeting,)
+    moved=0
+    for row in db.execute(sql,args).fetchall():
+        if owner_key(row['owner'])!=key:continue
+        if segments is not None:
+            try:evidence=(json.loads(row['payload'] or '{}') or {}).get('evidence') or []
+            except ValueError:continue
+            ids={e.get('segment_id') for e in evidence if isinstance(e,dict)}
+            if not ids or not ids<=set(segments):continue
+        db.execute('UPDATE tasks SET owner=?,updated=? WHERE id=?',(new,now(),row['id']));moved+=1
+    return moved
 
 def query_terms(query,limit=12):
     """Content words of a question, without Turkish function words; short tokens are kept only when nothing else remains."""
@@ -31,13 +58,21 @@ def _stem_match(term,word):
         common+=1
     return 0.8 if common>=max(4,-(-shorter*6//10)) else 0.0
 
-def match_score(terms,text):
+def score_and_hits(terms,text):
+    """(score, how many of the asked terms appear at all). The score is exactly what it always was — the hit
+    count is only a tie-break, so among equally scored segments the one that covers two of the asked words
+    beats the one that says a single word twice. No pair that was ordered before is reordered by it."""
     words=normalize(text).split()
-    if not words:return 0.0
-    total=0.0
+    if not words:return 0.0,0
+    total=0.0;hits=0
     for term in terms:
-        total+=max((_stem_match(term,w) for w in words),default=0.0)
-    return total
+        best=max((_stem_match(term,w) for w in words),default=0.0)
+        total+=best
+        if best:hits+=1
+    return total,hits
+
+def match_score(terms,text):
+    return score_and_hits(terms,text)[0]
 
 def now():return datetime.now(timezone.utc).isoformat()
 class Memory:
@@ -84,6 +119,11 @@ class Memory:
                 tid=hashlib.sha256(stable.encode()).hexdigest()[:20]
                 self.db.execute('''INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,created,updated) VALUES(?,?,?,?,?,?,?,'open',?,?,?)
                 ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=excluded.payload,title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
+            # A task id is the hash of its title and its quotes, so a re-analysis that words the same commitment
+            # differently writes a NEW row and the old one stayed open forever: the same promise counted twice in
+            # the digest and the karne. What this analysis did not restate is retired, never deleted — a task the
+            # user touched (edited, closed, dismissed) is theirs and survives.
+            self.db.execute("UPDATE tasks SET state='superseded',updated=? WHERE meeting=? AND analysis IS NOT NULL AND analysis<? AND user_edited=0 AND state IN ('open','in_progress')",(now(),mid,aid))
         return self.latest(mid)
     def set_due_date(self,tid,due_date):
         """Store an approved calendar date (ISO, or None to clear) inside the task payload; due_text stays as the source said it."""
@@ -119,14 +159,23 @@ class Memory:
             self.db.execute('UPDATE tasks SET '+','.join(k+'=?' for k in changes)+',user_edited=1,updated=? WHERE id=?',(*changes.values(),now(),tid))
             self.db.execute('INSERT INTO task_edits(task,previous,replacement,created) VALUES(?,?,?,?)',(tid,json.dumps(old,ensure_ascii=False),json.dumps(changes,ensure_ascii=False),now()))
         return self.task(tid)
-    def search(self,query,limit=20,speaker=None):
+    def search(self,query,limit=20,speaker=None,owner=None):
+        """Segments that answer `query`, best first. `speaker` filters by person the way every other report does
+        (`owner_key`, and a microphone row is its label's owner), not by exact spelling of `speaker_name`.
+        Ties are broken by how many of the asked words appear and then by the shorter segment: two segments
+        with the same score are not equally useful, and the short one is the one a person can read."""
+        from .intelligence import row_person
         tokens=query_terms(query)
         if not tokens:return []
-        rows=self.db.execute("SELECT segments.id,meeting,meetings.title AS meeting_title,start,end,speaker,speaker_name,json_extract(payload,'$.text') AS text FROM segments JOIN meetings ON meetings.id=segments.meeting WHERE meetings.status='complete' ORDER BY meetings.created DESC,start")
+        if owner is None:
+            from .reports import store_owner
+            owner=store_owner(self.store)
+        rows=self.db.execute("SELECT segments.id,meeting,meetings.title AS meeting_title,start,end,source,speaker,speaker_name,json_extract(payload,'$.text') AS text FROM segments JOIN meetings ON meetings.id=segments.meeting WHERE meetings.status='complete' ORDER BY meetings.created DESC,start")
+        wanted=owner_key(speaker or '')
         found=[]
         for r in rows:
             d=dict(r)
-            if speaker and normalize(d['speaker_name'] or '')!=normalize(speaker):continue
-            score=match_score(tokens,d['text'] or '')
-            if score:d['score']=score;found.append(d)
-        return sorted(found,key=lambda x:x['score'],reverse=True)[:min(max(1,limit),50)]
+            if wanted and owner_key(row_person(d,owner) or '')!=wanted:continue
+            score,hits=score_and_hits(tokens,d['text'] or '')
+            if score:d['score']=score;d['hits']=hits;found.append(d)
+        return sorted(found,key=lambda x:(-x['score'],-x['hits'],len(x['text'] or ''),x['id']))[:min(max(1,limit),50)]

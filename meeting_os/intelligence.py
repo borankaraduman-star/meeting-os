@@ -99,6 +99,27 @@ def _locate_span(quote,text,min_ratio=0.8):
     return best[1] if best[0]>=min_ratio else None
 
 
+MIC_PLACEHOLDERS={'mic','ben','unknown'}
+CLUSTER_LABEL=re.compile(r'^(?:\w+ )?s\d+$|^konuşmacı \d+$|^geçici|^isimsiz|^karşı taraf$')
+
+def row_person(row,owner=None):
+    """Who a transcript row belongs to, or None. One rule for every place that matches a person.
+
+    A named row answers for itself. A microphone row usually has no `speaker_name` at all — the cloud
+    finaliser writes the label into the `speaker` column (cloud_finalize.speaker_label) — and that label
+    IS the owner of this Mac: their name once Settings knows it, the 'Ben' placeholder until then. In
+    the placeholder case only the caller can say who that is, which is why `owner` (reports.settings_owner)
+    is passed in; without it the row belongs to nobody rather than to a guess. Any other source is a
+    diarized cluster of the other side and never becomes a person here."""
+    name=(row.get('speaker_name') or '').strip()
+    if name:return name
+    if (row.get('source') or '')!='mic':return None
+    label=(row.get('speaker') or '').strip();settings=(owner or '').strip() or None
+    folded=normalize(label)
+    if not folded or folded in MIC_PLACEHOLDERS or CLUSTER_LABEL.match(folded):return settings
+    return label
+
+
 UNCERTAIN_FLAGS={'speaker_ambiguous','low_asr_confidence','possible_non_speech','repetition','provisional','possible_echo','short_context_diarization'}
 
 def uncertain(row):
@@ -106,7 +127,7 @@ def uncertain(row):
     return bool(UNCERTAIN_FLAGS.intersection(row.get('flags') or []))
 
 
-def validate_record(record,rows):
+def validate_record(record,rows,mic_owner=None):
     by_id={r['id']:r for r in rows};result={key:[] for key in CATEGORIES};dropped=0;dropped_items=0;total_items=0
     for key in CATEGORIES:
         values=record.get(key,[])
@@ -137,13 +158,14 @@ def validate_record(record,rows):
             clean={field:text.strip(),'evidence':evidence,'needs_review':flagged}
             if key=='actions':
                 owner=item.get('owner');due=item.get('due_text');quotes=' '.join(e['quote'] for e in evidence)
-                owner=canonical_owner(owner,rows)   # "Deniz'in", "deniz bey" and "Deniz" are one person before anything is verified
-                if owner and not (re.search(r'(?<!\w)'+re.escape(normalize(owner))+r'(?!\w)',normalize(quotes)) or any(normalize(r.get('speaker_name') or '')==normalize(owner) and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim)|i will|i ll)\b',normalize(r['text'])) for r in selected)):owner=None
+                owner=canonical_owner(owner,rows,mic_owner)   # "Deniz'in", "deniz bey" and "Deniz" are one person before anything is verified
+                if owner and not (re.search(r'(?<!\w)'+re.escape(normalize(owner))+r'(?!\w)',normalize(quotes)) or any(normalize(row_person(r,mic_owner) or '')==normalize(owner) and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim)|i will|i ll)\b',normalize(r['text'])) for r in selected)):owner=None
                 if not owner and not (item.get('owner') or '').strip():
                     # Only when the model left owner EMPTY (a wrong name it invented stays abstained + reviewed):
                     # "Ben … paylaşacağım" from a named speaker is that person's commitment.
-                    first=[r for r in selected if r.get('speaker_name') and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim))\b',normalize(r['text']))]
-                    if len({r['speaker_name'] for r in first})==1:owner=first[0]['speaker_name']
+                    first=[r for r in selected if row_person(r,mic_owner) and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim))\b',normalize(r['text']))]
+                    names={row_person(r,mic_owner) for r in first}
+                    if len(names)==1:owner=row_person(first[0],mic_owner)
                 if any('speaker_ambiguous' in r.get('flags',[]) for r in selected):owner=None
                 due=due.strip() if isinstance(due,str) and due.strip() and due in quotes else None
                 # Marking every single task for review marked none of them: the badge said nothing and people
@@ -179,7 +201,7 @@ def _name_key(text):
     return normalize(text).replace('ı','i')
 
 FIRST_PERSON={'ben','bana','bende','benim','beni','biz','bizim','bize','bizi','kendim','me','i','myself','we','us'}
-def canonical_owner(owner,rows):
+def canonical_owner(owner,rows,mic_owner=None):
     """One spelling per person. Drops the case suffix ("Deniz'in"), honorifics and parenthetical
     notes, then snaps onto the transcript's own speaker name so a person's tasks group together.
     Not an identity decision: an unrecognised name is returned cleaned, and the caller still has to
@@ -197,7 +219,7 @@ def canonical_owner(owner,rows):
         key=match(cleaned)
         hits=[]
         for row in rows:
-            name=row.get('speaker_name')
+            name=row_person(row,mic_owner)   # the mic label is a person too: cloud rows keep it in `speaker`
             if name and match(name)==key and name not in hits:hits.append(name)
         if len(hits)==1:return hits[0]
         if len(hits)>1:break   # "Ilker" and "İlker" both speak: never guess between two people
@@ -245,6 +267,7 @@ def absorb(kept,item):
     return merged
 
 
+REVERSED_NOTE='geri alındı'   # what every reader (log, digest, brief, share) prints next to a decision the meeting itself reversed
 REVERSAL=re.compile(r'iptal(?!\s*(?:edilmey|edilmed|olmay|değil))|geri al(?!ınmay)|vazgeç(?!ilmey|ilmed)|yapılmayacak|yapmayacağ|ertelen(?!mey|med)|askıya|geçersiz|kaldırıld|rafa',re.I)
 
 def drop_superseded(items):
@@ -265,7 +288,7 @@ def drop_superseded(items):
             if len(mine&theirs)>=need:dead[a]=b
     out=[]
     for index,item in enumerate(items):
-        if index in dead: item=dict(item);item['superseded']=True;item['needs_review']=True
+        if index in dead: item=dict(item);item['superseded']=True;item['note']=REVERSED_NOTE;item['needs_review']=True
         out.append(item)
     return out
 
@@ -285,22 +308,22 @@ def merge_records(records):
     out['dropped_items']=sum(int(r.get('dropped_items') or 0) for r in records)
     return out
 
-def chunks(rows,llm,budget=2800):
+def chunks(rows,llm,budget=2800,owner=None):
     current=[];used=0
     for row in rows:
         # Split long edited segments while retaining source IDs and exact quote origin.
         text=row['text']
         pieces=[text[i:i+2400] for i in range(0,len(text),2400)] or ['']
         for piece in pieces:
-            item={'segment_id':row['id'],'speaker':row.get('speaker_name'),'text':piece,'uncertain':uncertain(row)}
+            item={'segment_id':row['id'],'speaker':row_person(row,owner),'text':piece,'uncertain':uncertain(row)}
             n=llm.count(json.dumps(item,ensure_ascii=False))
             if current and used+n>budget:yield current;current=[];used=0
             current.append(item);used+=n
     if current:yield current
 
-def analyze_rows(rows,llm,progress=None,glossary=None):
+def analyze_rows(rows,llm,progress=None,glossary=None,owner=None):
     if not rows:return {key:[] for key in CATEGORIES}
-    outputs=[];batches=list(chunks(rows,llm))
+    outputs=[];batches=list(chunks(rows,llm,owner=owner))
     for i,batch in enumerate(batches):
         if progress:progress(i,len(batches))
         prompt=json.dumps(({'glossary':glossary} if glossary else {})|{'transcript':batch},ensure_ascii=False)   # glossary: expand abbreviations in output text, still untrusted data
@@ -311,7 +334,7 @@ def analyze_rows(rows,llm,progress=None,glossary=None):
                 parsed=parse_json(raw)
                 if not all(key in parsed for key in CATEGORIES):raise ValueError('Analiz kategorileri eksik')
                 allowed={b['segment_id'] for b in batch}
-                item=validate_record(parsed,[r for r in rows if r['id'] in allowed]);outputs.append(item);break
+                item=validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner);outputs.append(item);break
             except (ValueError,TypeError,KeyError,json.JSONDecodeError) as exc:error=exc
         else:raise ValueError('Analiz doğrulanamadı; kaynak transkript korunuyor: '+str(error))
     result=merge_records(outputs)

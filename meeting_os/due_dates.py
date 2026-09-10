@@ -5,6 +5,10 @@ and an expression that is not clearly a date yields None rather than a guess."""
 import calendar, re
 from datetime import date, timedelta
 
+from .memory import RETIRED
+
+RETIRED_OR_DONE = ('done',) + RETIRED
+
 DAYS = {'pazartesi': 0, 'salı': 1, 'sali': 1, 'çarşamba': 2, 'carsamba': 2, 'perşembe': 3, 'persembe': 3, 'cuma': 4, 'cumartesi': 5, 'pazar': 6}
 MONTHS = {'ocak': 1, 'şubat': 2, 'subat': 2, 'mart': 3, 'nisan': 4, 'mayıs': 5, 'mayis': 5, 'haziran': 6, 'temmuz': 7, 'ağustos': 8, 'agustos': 8, 'eylül': 9, 'eylul': 9, 'ekim': 10, 'kasım': 11, 'kasim': 11, 'aralık': 12, 'aralik': 12}
 NUMBER_WORDS = {'bir': 1, 'iki': 2, 'üç': 3, 'uc': 3, 'dört': 4, 'dort': 4, 'beş': 5, 'bes': 5, 'altı': 6, 'alti': 6, 'yedi': 7, 'sekiz': 8, 'dokuz': 9, 'on': 10, 'on beş': 15, 'yirmi': 20}
@@ -66,14 +70,21 @@ def suggest_due(text, anchor):
     return None
 
 
-def suggestions_for_tasks(tasks):
-    """tasks: iterable of dicts with 'id', 'due_text', 'created' (ISO), optional payload.due_date. Returns proposals for tasks without a confirmed date."""
+def suggestions_for_tasks(tasks, anchors=None):
+    """tasks: iterable of dicts with 'id', 'due_text', 'created' (ISO), optional 'meeting' and payload.due_date.
+    Returns proposals for tasks without a confirmed date.
+
+    `anchors` maps a meeting id to that meeting's local calendar day, and that is what "yarın" is counted from:
+    the day the words were spoken. The task row's own `created` is the moment the ANALYSIS was saved, in UTC —
+    a meeting recorded at 00:30 local was analysed on the previous UTC day, and every relative date came out
+    one day early. Without an anchor the local day of `created` is the closest honest fallback."""
+    from .insights import local_day
     out = []
     for t in tasks:
         payload = t.get('payload') or {}
-        if not t.get('due_text') or payload.get('due_date') or t.get('state') in ('done', 'dismissed'): continue
-        try: anchor = date.fromisoformat((t.get('created') or '')[:10])
-        except ValueError: continue
+        if not t.get('due_text') or payload.get('due_date') or t.get('state') in RETIRED_OR_DONE: continue
+        anchor = (anchors or {}).get(t.get('meeting')) or local_day(t.get('created'))
+        if anchor is None: continue
         d = suggest_due(t['due_text'], anchor)
         if d: out.append({'task': t['id'], 'title': t.get('title'), 'due_text': t['due_text'], 'suggested': d.isoformat(), 'anchor': anchor.isoformat()})
     return out

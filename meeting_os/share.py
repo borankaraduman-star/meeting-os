@@ -2,9 +2,10 @@
 Read-only — stored segments, names and analyses are never changed; masking happens in the rendered text only."""
 import re
 from datetime import datetime, timezone
-from .memory import Memory
+from .intelligence import REVERSED_NOTE
+from .memory import Memory, RETIRED
 
-STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı'}
+STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı', 'superseded': 'yenilendi'}
 _TURKISH = dict.fromkeys('iİıI', 'iİıI')   # STT output mixes dotted/dotless forms; for redaction, matching all four is the safe side
 
 
@@ -68,11 +69,17 @@ def clock(seconds):
     s = int(seconds); return f'{s // 60:02d}:{s % 60:02d}'
 
 
-def name_groups(rows, glossary):
-    """Speaker names in order of first appearance, then glossary people (term with its aliases)."""
+def name_groups(rows, glossary, owner=None):
+    """People in order of first appearance, then glossary people (term with its aliases).
+
+    `speaker_name` alone is not the list of people: a microphone row keeps its label in the `speaker`
+    column (that label is the owner of this Mac), so a mask built from names only published the one name
+    the user most wanted hidden — their own. `owner` is the settings name, added even when this meeting
+    happens to be all cloud rows labelled "Ben"."""
+    from .intelligence import row_person
     groups = []; seen = set()
-    for r in rows:
-        name = (r.get('speaker_name') or '').strip()
+    for r in list(rows) + [{'speaker_name': owner}]:
+        name = (row_person(r, owner) or '').strip()
         if name and name.casefold() not in seen: seen.add(name.casefold()); groups.append([name])
     for e in glossary or []:
         if e.get('category') != 'kişi': continue
@@ -82,7 +89,7 @@ def name_groups(rows, glossary):
     return groups
 
 
-def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, mask_names=False, only_decisions=False, kinds=('transcript', 'summary'), glossary=None):
+def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, mask_names=False, only_decisions=False, kinds=('transcript', 'summary'), glossary=None, owner=None):
     meeting = store.db.execute('SELECT * FROM meetings WHERE id=?', (mid,)).fetchone()
     if not meeting: raise ValueError('Toplantı bulunamadı')
     all_rows = store.display_segments(mid)
@@ -90,9 +97,12 @@ def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, m
     exclude = {int(i) for i in (exclude_segments or [])}
     rows = [r for r in all_rows if (include is None or r['id'] in include) and r['id'] not in exclude]
     memory = Memory(store)
+    if owner is None:
+        from .reports import store_owner
+        owner = store_owner(store)   # the mic label is a person: masking has to cover the user's own name
     latest = memory.latest(mid)
     payload = (latest or {}).get('payload') or {}
-    masker = NameMasker(name_groups(all_rows, glossary)) if mask_names else None
+    masker = NameMasker(name_groups(all_rows, glossary, owner)) if mask_names else None
     m = (lambda t: masker.mask(t)) if masker else (lambda t: t)
     kinds = tuple(kinds or ())
     with_transcript = 'transcript' in kinds and not only_decisions
@@ -109,7 +119,7 @@ def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, m
         lines += ['## Kararlar']
         decisions = payload.get('decisions', [])
         if not decisions: lines.append('- Kayıtlı karar yok.')
-        for d in decisions: lines += [f"- {m(d.get('text', ''))}"] + cite(d)
+        for d in decisions: lines += [f"- {m(d.get('text', ''))}" + (f" ({d.get('note') or REVERSED_NOTE})" if d.get('superseded') else '')] + cite(d)
         lines.append('')
     if with_summary:
         lines += ['## Özet']
@@ -117,7 +127,7 @@ def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, m
         if not summary: lines.append('- Özet yok.')
         for s in summary: lines += [f"- {m(s.get('text', ''))}"] + cite(s)
         lines += ['', '## Görevler']
-        tasks = [t for t in memory.actions(meeting=mid) if t.get('state') != 'dismissed']
+        tasks = [t for t in memory.actions(meeting=mid) if t.get('state') not in RETIRED]
         if not tasks: lines.append('- Kayıtlı görev yok.')
         for t in tasks:
             lines.append(f"- {m(t['title'])} · {m(t.get('owner') or 'sahibi belirsiz')} · {t.get('due_text') or 'tarih yok'} · {STATE_LABELS.get(t.get('state'), t.get('state'))}" + (' · GÜNCEL DEĞİL' if t.get('stale') else ''))

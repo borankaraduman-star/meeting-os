@@ -98,6 +98,7 @@ class Store:
             feedback=self._with_sample(self._record_feedback(rows, name), None)   # `correct` stores no voice sample
             self._settle_identity(mid, rows, name)
             self._set_cluster_name(mid, speaker, name)
+            self._move_task_owners(previous, name, mid)   # the tasks of this meeting follow the label they were written from
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)', (mid, speaker, name, created, previous, feedback))
     @staticmethod
     def naming_mark(mid, speaker, created=''):
@@ -252,6 +253,12 @@ class Store:
             self.db.execute(f"UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=? AND id NOT IN ({','.join('?'*len(pinned))})",(name,mid,speaker,*pinned))
         else:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
+    def _move_task_owners(self, previous, name, mid, segments=None):
+        """A renamed speaker takes their tasks with them (memory.rename_task_owners); a hand-edited owner stays.
+        Runs inside the caller's transaction and does nothing when this meeting was never analysed."""
+        from .memory import rename_task_owners
+        return rename_task_owners(self.db, previous, name, mid, segments)
+
     def correct_segment_only(self, mid, sid, name):
         """One piece of a cluster belongs to someone else (Boran, 10 Sep 2026: "sadece o parça yanlış"). The rest of
         the cluster keeps its name, nobody is convicted and no rejection is filed — the cluster as a whole was right.
@@ -274,6 +281,7 @@ class Store:
             if previous and fold_name(previous)!=fold_name(name):
                 self.db.execute('UPDATE samples SET deleted_by=? WHERE provenance=? AND name=? AND deleted_by IS NULL',(mark,provenance,previous))
             hidden=[r['id'] for r in self.db.execute('SELECT id FROM samples WHERE deleted_by=?',(mark,))]
+            self._move_task_owners(previous, name, mid, segments={sid})   # only a task whose whole evidence is THIS piece changes hands
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,f'segment:{sid}',name,created,previous,json.dumps({'pin':True,'sample_id':sample,'hidden':hidden})))
         return {'labeled':1,'profile_saved':sample is not None,'seconds':duration,'previous':previous}
     def correct_segment(self, mid, sid, name):
@@ -353,6 +361,7 @@ class Store:
             feedback=self._record_feedback(rows, name)
             self._settle_identity(mid, rows, name)
             self._set_cluster_name(mid, speaker, name)
+            self._move_task_owners(previous, name, mid)
             sample=None
             if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
@@ -450,16 +459,24 @@ class Store:
         return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples WHERE deleted_by IS NULL GROUP BY name,model')]
     def delete_profile(self, name):
         with self.db: self.db.execute('DELETE FROM samples WHERE name=?', (name,)); self.db.execute('DELETE FROM rejections WHERE name=?', (name,)); self.db.execute('DELETE FROM profile_stats WHERE name=?', (name,))
+    DELETED_MEETING = 'toplantı silindi'
+
     def profile_samples(self, name):
-        """Every stored voice sample of a person with where it came from, for the maintenance screen."""
+        """Every stored voice sample of a person with where it came from, for the maintenance screen.
+
+        A sample whose meeting has since been deleted keeps its provenance and says so: an empty title read as
+        "hand-enrolled" on the maintenance screen, and a sample nobody could place was never pruned."""
         titles = {r['id']: r['title'] for r in self.db.execute('SELECT id,title FROM meetings')}
         out = []
         for r in self.db.execute('SELECT id,model,duration,provenance FROM samples WHERE name=? AND deleted_by IS NULL ORDER BY id', (name,)):
             prov = r['provenance'] or ''
             parts = prov.split(':')
-            mid = parts[1] if parts[0] == 'auto' and len(parts) > 1 else (parts[0] if parts and parts[0] in titles else None)
             kind = 'otomatik' if prov.startswith('auto:') else ('küme' if ':speaker:' in prov else ('bölüm' if len(parts) == 2 and parts[1].isdigit() else 'elle'))
-            out.append({'id': r['id'], 'model': r['model'], 'seconds': round(float(r['duration'] or 0), 1), 'kind': kind, 'meeting': mid, 'meeting_title': titles.get(mid), 'provenance': prov})
+            mid = parts[1] if parts[0] == 'auto' and len(parts) > 1 else (parts[0] if parts and kind in ('küme', 'bölüm') else None)
+            title = titles.get(mid) if mid else None
+            gone = bool(mid) and title is None   # the sample outlived its meeting: nothing to open, but say why
+            out.append({'id': r['id'], 'model': r['model'], 'seconds': round(float(r['duration'] or 0), 1), 'kind': kind,
+                        'meeting': None if gone else mid, 'meeting_title': self.DELETED_MEETING if gone else title, 'provenance': prov})
         return out
     WEAK_FIT = 0.60   # a sample this far from its person's centroid is probably another voice or a bad recording
     def profile_health(self):
@@ -539,9 +556,9 @@ class Store:
         themselves, because the speaker string is part of the transcript fingerprint."""
         old = (old or '').strip(); new = (new or '').strip()
         if not new: raise ValueError('Yeni isim boş olamaz')
-        if not old or old == new: return {'meetings': 0, 'segments': 0, 'meeting_ids': []}
+        if not old or old == new: return {'meetings': 0, 'segments': 0, 'tasks': 0, 'meeting_ids': []}
         rows = self.db.execute("SELECT id,meeting,payload,speaker_name FROM segments WHERE source='mic' AND speaker=?", (old,)).fetchall()
-        if not rows: return {'meetings': 0, 'segments': 0, 'meeting_ids': []}
+        if not rows: return {'meetings': 0, 'segments': 0, 'tasks': 0, 'meeting_ids': []}
         meetings = {r['meeting'] for r in rows}
         with self.db:
             self.db.execute("UPDATE segments SET speaker=? WHERE source='mic' AND speaker=?", (new, old))
@@ -557,7 +574,8 @@ class Store:
                     for key in ('name', 'settled', 'suggested', 'candidate'):
                         if identity.get(key) == old: identity[key] = new
                 self.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), r['id']))
-        return {'meetings': len(meetings), 'segments': len(rows), 'meeting_ids': sorted(meetings)}
+            tasks = self._move_task_owners(old, new, None)   # the owner's own tasks carry the old label in every meeting
+        return {'meetings': len(meetings), 'segments': len(rows), 'tasks': tasks, 'meeting_ids': sorted(meetings)}
     def rename_profile(self, name, new_name):
         """Rename a person; renaming onto an existing person merges the samples. Segment names follow."""
         new_name = (new_name or '').strip()

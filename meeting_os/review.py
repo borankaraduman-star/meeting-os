@@ -1,7 +1,7 @@
 """Critical review queue: the few places a person should listen to instead of reading a whole transcript."""
 import json
 from .insights import first_evidence
-from .memory import Memory
+from .memory import Memory, RETIRED
 
 
 def review_queue(store, mid):
@@ -47,7 +47,7 @@ def review_queue(store, mid):
                       'original':sg['original'],'replacement':sg['replacement'],'verified':sg.get('source')=='llm'})
     memory=Memory(store)
     for task in memory.actions(meeting=mid):
-        if task.get('state') in ('done','dismissed'): continue
+        if task.get('state') in ('done',)+RETIRED: continue
         if not task.get('owner'):
             seg=(first_evidence(task.get('payload') or {}) or {}).get('segment_id')
             items.append({'segment_id':seg,'start':None,'speaker':None,'text':task['title'][:120],'kind':'task_owner','severity':2,'reason':'Görev sahibi belirsiz; kaynağı dinleyip sahibini yazın','task':task['id']})
@@ -57,16 +57,20 @@ def review_queue(store, mid):
 
 def review_debt(store, days=7):
     """Haftalık gözden geçirme borcu: pencerede kaydedilen tamamlanmış toplantıların Kontrol kuyrukları tek listede,
-    önce en ağır madde, sonra en yeni toplantı. Read-only."""
+    önce en ağır madde, sonra en yeni toplantı. Read-only.
+
+    The window is `days` local CALENDAR days ending today — the same seven days the karne means by "Son 7 gün".
+    A rolling 168 hours put this morning's meeting and last Wednesday's in different weeks depending on the hour
+    the user happened to open the tab, and the two screens disagreed about the same period."""
     from datetime import datetime,timedelta,timezone
-    cutoff=datetime.now(timezone.utc)-timedelta(days=max(1,int(days)))
+    from .insights import local_day
+    today=datetime.now(timezone.utc).astimezone().date()
+    first=today-timedelta(days=max(1,int(days))-1)
     meetings=[]
     for row in store.meetings():
         if row['status']!='complete': continue
-        try: created=datetime.fromisoformat(row['created'] or '')
-        except ValueError: continue
-        if created.tzinfo is None: created=created.replace(tzinfo=timezone.utc)
-        if created<cutoff: continue
+        day=local_day(row['created'])
+        if day is None or not (first<=day<=today): continue
         meetings.append(row)
     items=[];counts={}
     for row in meetings:

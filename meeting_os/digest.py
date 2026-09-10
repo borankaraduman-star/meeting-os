@@ -3,11 +3,12 @@ decisions, risks and the tasks opened/closed in the period, with sources. Draft 
 nothing stored is changed; masking happens in the rendered text only."""
 from datetime import date, datetime, timezone
 from .insights import build_masker, local_day, prepared_header, source_line
-from .memory import Memory
+from .memory import Memory, RETIRED
 from .metrics import normalize
+from .intelligence import REVERSED_NOTE
 from .memory import owner_key
 
-STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı'}
+STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı', 'superseded': 'yenilendi'}
 
 
 def parse_day(day):
@@ -53,13 +54,15 @@ def build_digest(store, day=None, owner=None, start=None, end=None, mask_names=F
     titles = {m['id']: m['title'] for m in meetings}
     owner = (owner or '').strip(); wanted = owner_key(owner)
     period = [t for t in memory.actions() if t.get('meeting') in titles]
-    tasks = [t for t in period if wanted and owner_key(t.get('owner') or '') == wanted and t.get('state') != 'dismissed']
+    tasks = [t for t in period if wanted and owner_key(t.get('owner') or '') == wanted and t.get('state') not in RETIRED]
     lines = []; questions = []; decisions = []; risks = []; groups = []
     for m in meetings:
         line, latest = meeting_line(store, memory, m)
         lines.append(line)
         payload = (latest or {}).get('payload') or {}
-        pick = lambda key: [{'meeting': m['id'], 'title': m['title'], 'text': i.get('text'), 'evidence': i.get('evidence', [])} for i in payload.get(key, [])]
+        pick = lambda key: [{'meeting': m['id'], 'title': m['title'], 'text': i.get('text'), 'evidence': i.get('evidence', []),
+                             'superseded': bool(i.get('superseded')), 'note': i.get('note') or (REVERSED_NOTE if i.get('superseded') else None),
+                             'asked_by': ((i.get('evidence') or [{}])[0] or {}).get('speaker')} for i in payload.get(key, [])]
         qs, ds, rs = pick('questions'), pick('decisions'), pick('risks')
         questions += qs; decisions += ds; risks += rs
         own = [t for t in period if t.get('meeting') == m['id']]
@@ -67,8 +70,14 @@ def build_digest(store, day=None, owner=None, start=None, end=None, mask_names=F
                        'closed': [t for t in own if t.get('state') in ('done', 'dismissed') and inside(t.get('updated'))],
                        'open': [t for t in own if t.get('state') in ('open', 'in_progress')]})
     groups.reverse()   # newest meeting first; the per-day lists keep their chronological order
+    # "Cevapsız sorular" is the whole list, not a to-do: a question the user asked themselves is still open,
+    # it is simply not one somebody is waiting on them for. Those come first, everything else keeps its order.
+    for q in questions: q['for_me'] = bool(wanted and q.get('asked_by') and owner_key(q['asked_by']) != wanted)
+    questions.sort(key=lambda q: not q['for_me'])
+    live = [d for d in decisions if not d.get('superseded')]
     digest = {'day': last.isoformat(), 'from': first.isoformat(), 'to': last.isoformat(), 'range': first != last, 'owner': owner,
-              'meetings': lines, 'tasks': tasks, 'questions': questions, 'decisions': decisions, 'risks': risks, 'groups': groups, 'masked_names': 0}
+              'meetings': lines, 'tasks': tasks, 'questions': questions, 'decisions': decisions, 'risks': risks, 'groups': groups, 'masked_names': 0,
+              'live_decisions': len(live), 'superseded_decisions': len(decisions) - len(live)}
     if mask_names: mask_digest(store, digest, meetings, glossary)
     return digest
 
@@ -82,6 +91,9 @@ def mask_digest(store, digest, meetings, glossary=None):
     def task(t):
         t['title'] = mask(t.get('title') or ''); t['owner'] = mask(t.get('owner') or '') or None
         t['meeting_title'] = mask(t.get('meeting_title') or '')
+        payload = t.get('payload') or {}   # the task's own source quote is printed under it and was going out unmasked
+        if payload.get('evidence'):
+            t['payload'] = {**payload, 'evidence': [{**e, 'quote': mask(e.get('quote') or '')} if isinstance(e, dict) else e for e in payload['evidence']]}
     for key in ('questions', 'decisions', 'risks'):
         for i in digest[key]: item(i)
     for t in digest['tasks']: task(t)
@@ -111,7 +123,7 @@ def render_groups(digest):
             lines.append(f'**{label}**')
             if not g[key]: lines.append(f'- {empty}')
             for i in g[key]:
-                lines.append(f"- {i['text']}")
+                lines.append(f"- {i['text']}" + (f" ({i.get('note') or REVERSED_NOTE})" if i.get('superseded') else ''))
                 for e in (i.get('evidence') or [])[:1]: lines.append(source_line(e))
         lines.append('**Bu dönemde kapanan görevler**')
         if not g['closed']: lines.append('- Bu dönemde kapanan görev yok.')
@@ -135,7 +147,7 @@ def render_digest(digest):
         title = t.get('meeting_title') or ''
         lines.append(f"- {t['title']} · {t.get('due_text') or 'tarih yok'} · {STATE_LABELS.get(t.get('state'), t.get('state'))}" + (' · GÜNCEL DEĞİL' if t.get('stale') else '') + f'  ({title})')
         for e in (t.get('payload') or {}).get('evidence', [])[:1]: lines.append(source_line(e))
-    lines += ['', '## Senden beklenen cevaplar']
+    lines += ['', '## Cevapsız sorular']
     if not digest['questions']: lines.append('- Kayıtlı açık soru yok.')
     for q in digest['questions']:
         lines.append(f"- {q['text']}  ({q['title']})")
@@ -143,7 +155,7 @@ def render_digest(digest):
     lines += ['', '## Değişen/alınan kararlar']
     if not digest['decisions']: lines.append('- Kayıtlı karar yok.')
     for d in digest['decisions']:
-        lines.append(f"- {d['text']}  ({d['title']})")
+        lines.append(f"- {d['text']}" + (f" ({d.get('note') or REVERSED_NOTE})" if d.get('superseded') else '') + f"  ({d['title']})")
         for e in d['evidence'][:1]: lines.append(source_line(e))
     if ranged: lines += render_groups(digest)
     lines += ['', '## Dönemdeki toplantılar' if ranged else '## Bugünkü toplantılar']

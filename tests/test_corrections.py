@@ -518,3 +518,59 @@ class SegmentOnlyCorrectionTests(unittest.TestCase):
         db.correct(mid,'system:S1','Ayşe Yılmaz')
         self.assertEqual({r['speaker_name'] for r in db.segments(mid)},{'Ayşe Yılmaz'})
         db.close(); tmp.cleanup()
+
+
+class TaskOwnerRenameTests(unittest.TestCase):
+    """A rename used to relabel the transcript only: the tasks kept a name that no longer appeared anywhere in
+    the meeting, so "Bana ait" and the waiting board answered with a person who no longer existed."""
+    def _task(self, db, mid, tid, owner, *, user_edited=0, segments=(1,)):
+        from meeting_os.memory import Memory
+        Memory(db)   # creates the tasks table on this connection
+        payload = json.dumps({'evidence': [{'segment_id': s, 'quote': 'q'} for s in segments]})
+        with db.db:
+            db.db.execute("INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,user_edited,created,updated)"
+                          " VALUES(?,?,NULL,'h','İş',?,NULL,'open',?,?,'2026-09-09T10:00:00+00:00','2026-09-09T10:00:00+00:00')",
+                          (tid, mid, owner, payload, user_edited))
+
+    def _owners(self, db):
+        return {r[0]: r[1] for r in db.db.execute('SELECT id,owner FROM tasks')}
+
+    def test_a_cluster_rename_moves_the_tasks_of_that_meeting_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Store(Path(tmp) / 'db'); mid = db.create_meeting('t'); other = db.create_meeting('başka')
+            db.add_segment(mid, Segment(0, 12, 'uzun konuşma', 'system', 'system:S1', metrics={'cluster': '0:S1'}, flags=['cloud_diarization']))
+            db.correct(mid, 'system:S1', 'Ayşe')
+            self._task(db, mid, 'here', 'ayşe'); self._task(db, mid, 'edited', 'Ayşe', user_edited=1); self._task(db, other, 'elsewhere', 'Ayşe')
+            db.correct(mid, 'system:S1', 'Ali')
+            self.assertEqual(self._owners(db), {'here': 'Ali', 'edited': 'Ayşe', 'elsewhere': 'Ayşe'})
+            db.close()
+
+    def test_renaming_the_mic_owner_moves_their_tasks_in_every_meeting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Store(Path(tmp) / 'db'); a = db.create_meeting('a'); b = db.create_meeting('b')
+            for mid in (a, b): db.add_segment(mid, Segment(0, 5, 'ben yaparım', 'mic', 'Ben'))
+            self._task(db, a, 'ta', 'Ben'); self._task(db, b, 'tb', 'ben'); self._task(db, b, 'other', 'İpek')
+            result = db.rename_mic_owner('Ben', 'Boran')
+            self.assertEqual((result['segments'], result['tasks']), (2, 2))
+            self.assertEqual(self._owners(db), {'ta': 'Boran', 'tb': 'Boran', 'other': 'İpek'})
+            db.close()
+
+    def test_a_pinned_piece_moves_only_the_task_whose_evidence_is_that_piece(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Store(Path(tmp) / 'db'); mid = db.create_meeting('t')
+            ids = [db.add_segment(mid, Segment(i * 10, i * 10 + 8, f'söz {i}', 'system', 'system:S1', metrics={'cluster': '0:S1'}, flags=['cloud_diarization'])) for i in range(2)]
+            db.correct(mid, 'system:S1', 'Ayşe')
+            self._task(db, mid, 'pinned', 'Ayşe', segments=(ids[1],)); self._task(db, mid, 'wider', 'Ayşe', segments=ids)
+            db.correct_segment_only(mid, ids[1], 'Ali')
+            self.assertEqual(self._owners(db), {'pinned': 'Ali', 'wider': 'Ayşe'})
+            db.close()
+
+    def test_a_sample_whose_meeting_was_deleted_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Store(Path(tmp) / 'db'); mid = db.create_meeting('Silinecek')
+            db.enroll('Ali', [1.0, 0.0], 'm', 12, f'{mid}:speaker:system:S1'); db.enroll('Ali', [0.0, 1.0], 'm', 12, 'manual')
+            self.assertEqual([s['meeting_title'] for s in db.profile_samples('Ali')], ['Silinecek', None])
+            db.delete_meeting(mid)
+            sample = db.profile_samples('Ali')[0]
+            self.assertEqual((sample['meeting_title'], sample['meeting']), ('toplantı silindi', None))
+            db.close()

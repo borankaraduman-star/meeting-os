@@ -234,3 +234,71 @@ class PronounOwnerTests(unittest.TestCase):
         rows=[{'speaker_name':'Ayşe'},{'speaker_name':None}]
         self.assertIsNone(canonical_owner('Ben',rows)); self.assertIsNone(canonical_owner('bizim',rows))
         self.assertEqual(canonical_owner('Ayşe',rows),'Ayşe')
+
+
+class MicOwnerTests(unittest.TestCase):
+    """A cloud microphone row has no speaker_name at all: cloud_finalize writes the label into `speaker`.
+    Reading only speaker_name left every commitment the user made on their own mic without an owner."""
+    MIC = [{'id': 1, 'start': 0., 'end': 6., 'source': 'mic', 'speaker': 'Boran', 'speaker_name': None,
+            'text': 'Yarın raporu paylaşacağım.', 'flags': []}]
+
+    def action(self, owner=None):
+        return blank(actions=[{'title': 'Raporu paylaş', 'owner': owner, 'due_text': 'Yarın',
+                               'evidence': [{'segment_id': 1, 'quote': 'Yarın raporu paylaşacağım.'}]}])
+
+    def test_a_first_person_commitment_on_the_mic_row_belongs_to_the_mic_label(self):
+        r = validate_record(self.action(), self.MIC)
+        self.assertEqual(r['actions'][0]['owner'], 'Boran')
+
+    def test_a_named_owner_verifies_against_the_mic_label(self):
+        r = validate_record(self.action('Boran'), self.MIC)
+        self.assertEqual(r['actions'][0]['owner'], 'Boran'); self.assertFalse(r['actions'][0]['needs_review'])
+
+    def test_the_placeholder_label_owns_nothing_until_settings_names_it(self):
+        rows = [{**self.MIC[0], 'speaker': 'Ben'}]
+        self.assertIsNone(validate_record(self.action(), rows)['actions'][0]['owner'])
+        self.assertEqual(validate_record(self.action(), rows, mic_owner='İpek')['actions'][0]['owner'], 'İpek')
+
+    def test_row_person_names_only_people(self):
+        from meeting_os.intelligence import row_person
+        self.assertEqual(row_person({'source': 'system', 'speaker': 'S0', 'speaker_name': 'Ece'}), 'Ece')   # unchanged
+        self.assertIsNone(row_person({'source': 'system', 'speaker': 'Karşı taraf', 'speaker_name': None}))
+        self.assertIsNone(row_person({'source': 'mic', 'speaker': 'mic:S0', 'speaker_name': None}))
+        self.assertEqual(row_person({'source': 'mic', 'speaker': 'mic:S0', 'speaker_name': None}, 'Boran'), 'Boran')
+        self.assertEqual(row_person({'source': 'mic', 'speaker': 'Ben', 'speaker_name': 'Deniz'}, 'Boran'), 'Deniz')
+
+
+class RetiredTaskTests(unittest.TestCase):
+    """A task id is the hash of its wording and its quotes: a re-analysis that says the same commitment in other
+    words wrote a second row and the first stayed open forever."""
+    def _meeting(self, tmp):
+        s = Store(Path(tmp) / 'db'); mid = s.create_meeting('Sprint')
+        sid = s.add_segment(mid, Segment(0, 8, ROWS[0]['text'], 'mic', 'mic:S0', 'Boran')); s.status(mid, 'complete')
+        return s, mid, sid
+
+    def _save(self, s, mem, mid, title):
+        rows = s.display_segments(mid); d = record(); sid = rows[0]['id']
+        for key in ('summary', 'actions'):
+            for item in d[key]: item['evidence'][0]['segment_id'] = sid
+        d['actions'][0]['title'] = title
+        mem.save_analysis(mid, fingerprint(rows), 'test', validate_record(d, rows))
+
+    def test_a_task_the_newer_analysis_no_longer_states_is_retired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s, mid, _ = self._meeting(tmp); mem = Memory(s)
+            self._save(s, mem, mid, 'PRD taslağını hazırla')
+            old = mem.actions()[0]['id']
+            self._save(s, mem, mid, 'PRD taslağını bitir ve paylaş')
+            states = {t['id']: t['state'] for t in mem.actions()}
+            self.assertEqual(states.pop(old), 'superseded')
+            self.assertEqual(sorted(states.values()), ['open'])   # exactly one live task, not two
+            s.close()
+
+    def test_a_task_the_user_touched_survives_the_next_analysis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s, mid, _ = self._meeting(tmp); mem = Memory(s)
+            self._save(s, mem, mid, 'PRD taslağını hazırla')
+            old = mem.actions()[0]['id']; mem.update_action(old, {'state': 'in_progress'})
+            self._save(s, mem, mid, 'PRD taslağını bitir ve paylaş')
+            self.assertEqual({t['id']: t['state'] for t in mem.actions()}[old], 'in_progress')
+            s.close()
