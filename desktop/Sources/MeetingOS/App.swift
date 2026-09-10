@@ -174,7 +174,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             scorecard+="\nÖğrenme · bu hafta sesleri kendiliğinden tanıma \(pct(last))\(prev)\(edits)"
         }
     }
-    @Published var analysisModel=UserDefaults.standard.string(forKey:"cloudAnalysisModel") ?? "openai/gpt-4.1-mini" { didSet { UserDefaults.standard.set(analysisModel,forKey:"cloudAnalysisModel") } }
+    @Published var analysisModel=AnalysisModelDefault.current() { didSet { UserDefaults.standard.set(analysisModel,forKey:"cloudAnalysisModel") } }
     /// analyze/prepare/ask run through OpenRouter whenever transcription does; the local Qwen path stays for local mode.
     var cloudAnalysisArguments:[String] { transcriptionMode=="openrouter" ? ["--openrouter-model",analysisModel] : [] }
     /// One line under the title: when, how long, who, what still needs a look. Built from data already loaded.

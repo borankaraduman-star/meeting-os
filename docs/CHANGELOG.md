@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 73 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 74 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.69](#v1269) | 2026-09-11 01:45 | v1.2.69 — Analiz modeli: DeepSeek V3.2 (ölçüldü); CLI veri klasörü tuzağı |
 | [v1.2.68](#v1268) | 2026-09-11 00:15 | v1.2.68 — Terminalsiz ekibe katılım; ekip kimliği ve silme yayılımı; görev birleştirme güvenliği |
 | [v1.2.67](#v1267) | 2026-09-10 23:10 | v1.2.67 — Ekip bulutu: sıfır kurulumlu ortak bilgi tabanı; her düzeltme öğrenir |
 | [v1.2.66](#v1266) | 2026-09-10 22:21 | Meeting OS 1.2.66 — "Ekip klasörü" satırı: paylaşım nereye gidiyor, gitmiyorsa neden |
@@ -93,6 +94,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1269"></a>
+### v1.2.69 — Analiz modeli: DeepSeek V3.2 (ölçüldü); CLI veri klasörü tuzağı
+
+2026-09-11 01:45 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "analiz modelinde neden GPT? DeepSeek vs ile de kıyasla, en sağlam ve en ekonomik model."
+
+- **14 model aynı düzenekte** (10 kurgu senaryo, finalistler 3 koşu; tablo ve karar `docs/BENCHMARK.md`, ham veri `build/benchmark-models-2026-09-11.json`). **DeepSeek V3.2: 30/30**, sıfır eksik görev, sıfır sızıntı, 2 saatlik toplantı ≈ 2 cent (gpt-4.1-mini: 26/30, bir sızıntı, ≈ 3,4 cent). Elenenler ve nedenleri belgede (GLM hız sınırı, Mistral tutarsız, DeepSeek V4 ailesi yavaş/pahalı/429, Gemini 3 alıntı bozuyor, Sonnet 5 10 kat pahalı).
+- **Varsayılan analiz modeli `deepseek/deepseek-v3.2`.** Eski varsayılanı hiç değiştirmemiş Mac'ler bir kez otomatik geçer; elle başka model seçmiş olanlar kalır (`AnalysisModelDefault`). Ayarlar → Sistem'den gpt-4.1-mini, Claude Haiku/Sonnet, Gemini, GPT-5 seçilebilir. Sohbet zaman aşımı 90 → 240 sn (DeepSeek parça başına ≈26 sn).
+- Düşünen modeller (GPT-5, Sonnet 5) için istemci `temperature`'ı düşürüp düşük düşünme çabası ve geniş bütçeyle bir kez yeniden dener; Anthropic uçları için şema `anyOf`.
+- **CLI veri klasörü** artık `--db` ile verilen veritabanının klasörüdür: testler ve özel kopyalar gerçek klasöre nabız/ayar yazmaz (1.2.68 öncesi bir test gerçek aynayı erkenden taşımıştı).
+- Testler: Python 906, Swift 235. Canlı doğrulanmadı: DeepSeek ile gerçek 2 saatlik toplantı analizi (parça süresi/zaman aşımı), Ayarlar'daki model listesi görünümü.
 
 <a id="v1268"></a>
 ### v1.2.68 — Terminalsiz ekibe katılım; ekip kimliği ve silme yayılımı; görev birleştirme güvenliği

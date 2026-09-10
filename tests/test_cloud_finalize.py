@@ -365,7 +365,7 @@ class EchoSkipTests(unittest.TestCase):
 class CloudAnalysisWiringTests(unittest.TestCase):
     def test_models_and_token_estimate(self):
         from meeting_os.openrouter import validate_analysis_model, OpenRouterError, OpenRouterClient, ANALYSIS_DEFAULT_MODEL
-        self.assertEqual(validate_analysis_model(ANALYSIS_DEFAULT_MODEL),'openai/gpt-4.1-mini')
+        self.assertEqual(validate_analysis_model(ANALYSIS_DEFAULT_MODEL),'deepseek/deepseek-v3.2')
         with self.assertRaises(OpenRouterError):validate_analysis_model('openai/gpt-4o')
         llm=OpenRouterClient(api_key='k',transport=lambda r,timeout:None).analysis('openai/gpt-4.1-mini',consent=True)
         self.assertEqual(llm.count('a'*300),100);self.assertEqual(llm.model_id,'openai/gpt-4.1-mini')

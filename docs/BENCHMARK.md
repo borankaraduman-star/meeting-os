@@ -166,3 +166,42 @@ Bu vaka henüz bulutta koşulmadı; yukarıdaki tabloya satır eklenmedi. Sözle
 bulut olmadan `tests/test_mic_owner_fixture.py` ile korunuyor: aynı fixture, aynı
 `fixture_rows` + `validate_record`/`merge_records` yolu, elle yazılmış bir model
 kaydı (ağ yok) ve fixture'ın kendi `check_fixture_analysis` kapıları.
+
+
+## Analiz modeli kıyası — 11 Eylül 2026 (Boran: "neden GPT? DeepSeek vs ile de kıyasla, en sağlam ve en ekonomik")
+
+Aynı düzenek (`scripts/benchmark-analysis-cloud.py`, 10 kurgu senaryo: cancel, handover, injection, reversal, sprint,
+glossary_injection, mic_owner, negation, conditional, due_conflict), her satır bir koşu; `scripts/benchmark-compare-models.py`
+ile üretildi. "two_hour_usd" 60k giriş + 6k çıkış token üzerinden tahmin.
+
+| model | cases | passed | checks | verified | verbatim | leaks | missing_tasks | missing_decisions | duplicates | turkish_issues | errors | mean_seconds | spend_usd | two_hour_usd |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| z-ai/glm-5.3-flash | 10 | 10 | 50/50 | 1.0 | 1.0 | 0 | 0 | 0 | 0 | 0 | 0 | 42.1 |  | 0.012 |
+| deepseek/deepseek-v3.2 | 10 | 10 | 50/50 | 1.0 | 1.0 | 0 | 0 | 0 | 1 | 0 | 0 | 25.6 |  | 0.019 |
+| deepseek/deepseek-v3.2 | 10 | 10 | 50/50 | 1.0 | 1.0 | 0 | 0 | 0 | 1 | 0 | 0 | 26.0 |  | 0.019 |
+| deepseek/deepseek-v3.2 | 10 | 10 | 50/50 | 1.0 | 1.0 | 0 | 0 | 0 | 2 | 0 | 0 | 27.7 |  | 0.019 |
+| mistralai/mistral-small-2603 | 10 | 10 | 50/50 | 1.0 | 0.973 | 0 | 0 | 0 | 1 | 0 | 0 | 5.0 |  | 0.013 |
+| anthropic/claude-sonnet-5 | 8 | 8 | 40/40 | 1.0 | 0.996 | 0 | 0 | 0 | 1 | 0 | 0 | 15.6 |  | 0.18 |
+| anthropic/claude-haiku-4.5 | 10 | 9 | 48/50 | 1.0 | 1.0 | 0 | 1 | 0 | 1 | 0 | 0 | 12.0 |  | 0.09 |
+| openai/gpt-4.1-mini | 10 | 9 | 49/50 | 1.0 | 0.991 | 0 | 1 | 0 | 0 | 0 | 0 | 9.4 | 0.02227 | 0.034 |
+| openai/gpt-4.1-mini | 10 | 9 | 46/50 | 1.0 | 0.989 | 1 | 0 | 0 | 0 | 0 | 0 | 8.4 | 0.02102 | 0.034 |
+| openai/gpt-5-nano | 9 | 8 | 44/45 | 1.0 | 1.0 | 0 | 1 | 0 | 1 | 0 | 0 | 18.1 |  | 0.005 |
+| openai/gpt-5.6-luna | 9 | 8 | 43/45 | 1.0 | 1.0 | 0 | 1 | 0 | 1 | 0 | 0 | 8.4 |  | 0.019 |
+| openai/gpt-4.1-mini | 10 | 8 | 48/50 | 1.0 | 0.996 | 0 | 2 | 0 | 0 | 0 | 0 | 8.9 | 0.02236 | 0.034 |
+| deepseek/deepseek-v4-flash | 10 | 8 | 44/50 | 1.0 | 0.949 | 0 | 2 | 0 | 1 | 0 | 0 | 156.8 |  | 0.006 |
+| mistralai/mistral-small-2603 | 10 | 8 | 45/50 | 0.992 | 0.965 | 0 | 3 | 0 | 1 | 0 | 0 | 5.0 |  | 0.013 |
+| z-ai/glm-5.3-flash | 10 | 4 | 20/20 | 1.0 | 0.991 | 0 | 0 | 0 | 0 | 0 | 6 | 12.4 |  | 0.012 |
+| deepseek/deepseek-v4.1-flash | 10 | 0 | 0/0 |  |  | 0 | 0 | 0 | 0 | 0 | 10 | 0.7 |  | 0.013 |
+| openai/gpt-4o-mini | 10 | 7 | 41/50 | 1.0 | 0.952 | 0 | 3 | 1 | 0 | 0 | 0 | 4.0 | 0.00669 | 0.013 |
+| deepseek/deepseek-v4-pro | 10 | 7 | 38/40 | 0.998 | 0.926 | 0 | 1 | 0 | 1 | 0 | 2 | 119.4 |  | 0.063 |
+
+Karar: **`deepseek/deepseek-v3.2` varsayılan** (30/30, sıfır eksik görev, sıfır sızıntı, 2 saatlik toplantı ≈ 2 cent;
+gpt-4.1-mini'nin yarısı). Bedeli hız: parça başına ≈26 sn (gpt-4.1-mini 9 sn); analiz toplantıdan sonra arka planda
+koştuğu için kabul edildi, sohbet zaman aşımı 90 → 240 sn. Elenenler: GLM 5.3 Flash (4 koşudan 3'ünde üst sağlayıcı 429),
+Mistral Small (koşudan koşuya 5/7 → 10/10 → 8/10, görev düşürüyor), DeepSeek V4 Flash (157 sn/senaryo) ve V4 Pro (119 sn,
+$0,063), DeepSeek V4.1 Flash (429), Gemini 3 Flash (alıntılar harfi harfine değil, 0/10), Sonnet 5 (8/8 ama $0,18),
+Haiku 4.5 (9/10, $0,09), gpt-5-nano (8/9, 1 sızıntı), GPT-5.6 luna (8/9), Qwen3 235B (3/7), gpt-4o-mini (7/10).
+Düşünen modeller için istemci `temperature`'ı düşürüp `reasoning.effort=low` ile bir kez yeniden dener; Anthropic
+uçları `enum` içinde `null` kabul etmediği için şema `anyOf` oldu. Gizlilik notu: analiz metni artık DeepSeek modelini
+barındıran sağlayıcıya gider; istek `data_collection: deny` ile yalnız veriyi saklamayan/eğitimde kullanmayan
+sağlayıcılara yönlendirilir (OpenRouter yönlendirme kuralı), gpt-4.1-mini'de de aynı kural geçerliydi.

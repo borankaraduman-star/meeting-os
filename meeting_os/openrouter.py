@@ -21,6 +21,7 @@ STT_MODELS = (
 )
 DIARIZATION_DEFAULT_MODEL = 'microsoft/mai-transcribe-2'
 ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on OpenRouter endpoints 2026-09-09
+    {'id':'deepseek/deepseek-v3.2','name':'DeepSeek V3.2 (varsayılan: 30/30 kıyas)','pricing':'$0.27/M giriş, $0.40/M çıkış; 2 saatlik toplantı ≈ 2 cent'},
     {'id':'openai/gpt-4.1-mini','name':'GPT-4.1 mini','pricing':'$0.40/M giriş, $1.60/M çıkış; 40 dk toplantı ≈ 3 cent, 2 saatlik toplantı ≈ $0,08'},
     {'id':'openai/gpt-4o-mini','name':'GPT-4o mini','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'google/gemini-2.5-flash','name':'Gemini 2.5 Flash','pricing':'$0.30/M giriş, $2.50/M çıkış'},
@@ -28,7 +29,6 @@ ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on 
     {'id':'anthropic/claude-haiku-4.5','name':'Claude Haiku 4.5','pricing':'$1.00/M giriş, $5.00/M çıkış'},
     {'id':'anthropic/claude-sonnet-5','name':'Claude Sonnet 5','pricing':'$2.00/M giriş, $10.00/M çıkış'},
     {'id':'google/gemini-3-flash-preview','name':'Gemini 3 Flash (önizleme)','pricing':'$0.50/M giriş, $3.00/M çıkış'},
-    {'id':'deepseek/deepseek-v3.2','name':'DeepSeek V3.2','pricing':'$0.27/M giriş, $0.40/M çıkış'},
     {'id':'openai/gpt-5-nano','name':'GPT-5 nano','pricing':'$0.05/M giriş, $0.40/M çıkış'},
     {'id':'openai/gpt-5.6-luna','name':'GPT-5.6 luna','pricing':'$0.20/M giriş, $1.20/M çıkış'},
     {'id':'qwen/qwen3-235b-a22b-2507','name':'Qwen3 235B','pricing':'$0.22/M giriş, $0.88/M çıkış'},
@@ -38,7 +38,12 @@ ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on 
     {'id':'deepseek/deepseek-v4.1-flash','name':'DeepSeek V4.1 Flash','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'deepseek/deepseek-v4-pro','name':'DeepSeek V4 Pro','pricing':'$0.87/M giriş, $1.74/M çıkış'},
 )
-ANALYSIS_DEFAULT_MODEL = 'openai/gpt-4.1-mini'
+# 10–11 Sep 2026 head-to-head (scripts/benchmark-analysis-cloud.py, 10 fictional cases, 3 runs): DeepSeek V3.2 30/30 with no
+# dropped task and no leak; gpt-4.1-mini 26/30 (one leak); Mistral Small 18/20; GLM 5.3 Flash rate-limited upstream in 3
+# of 4 runs; Gemini 3 Flash broke quotes; Sonnet 5 ten times the price. DeepSeek is slower (≈26 s vs 9 s a chunk) — the
+# analysis runs after the meeting, so a 2-hour meeting costs ≈3 minutes instead of 1, for half the money.
+ANALYSIS_DEFAULT_MODEL = 'deepseek/deepseek-v3.2'
+CHAT_TIMEOUT = 240   # a real 2-hour chunk on a slower model; 90 s was sized for gpt-4.1-mini and would cut DeepSeek mid-answer
 # USD per million tokens (input, output), read off the model pages on 9 Sep 2026 — the same numbers the
 # `pricing` strings above show the user. Only a fallback: OpenRouter returns the real charge in `usage.cost`
 # when the request asks for it, and an estimate made from this table is always marked `estimated`.
@@ -303,7 +308,7 @@ class OpenRouterLLM:
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
         payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
-        try: result=self.client._post('chat/completions',payload)
+        try: result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
         except OpenRouterError as exc:
             # Reasoning-family endpoints (GPT-5, Claude Sonnet 5) accept no `temperature`; with require_parameters
             # OpenRouter answers 404 "no endpoints found that can handle the requested parameters". One retry as a
@@ -311,12 +316,12 @@ class OpenRouterLLM:
             # schema, not a puzzle) and room for the thinking tokens that otherwise eat the whole answer budget.
             if getattr(exc,'code',None)!=404 or 'temperature' not in payload: raise
             payload.pop('temperature'); payload['reasoning']={'effort':'low'}; payload['max_tokens']=max_tokens+6000
-            result=self.client._post('chat/completions',payload)
+            result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
         if self._starved(result) and 'reasoning' not in payload:
             # A thinking model that stopped for length with nothing to show: it spent the budget reasoning. Same
             # remedy, one retry; a second empty answer is an error like any other.
             payload.pop('temperature',None); payload['reasoning']={'effort':'low'}; payload['max_tokens']=max_tokens+6000
-            result=self.client._post('chat/completions',payload)
+            result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
         sink=_USAGE_SINK.get()
         if sink is not None:
             try:
