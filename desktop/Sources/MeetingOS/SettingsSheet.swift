@@ -111,6 +111,32 @@ struct SettingsSheet:View {
                     }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("setupStatus")
                 }
                 if group=="sistem" {
+                    VStack(alignment:.leading,spacing:8) {
+                        HStack { Text("Hatalar").font(.headline);Spacer();Button("Yenile") { Task { await model.loadErrors() } }.controlSize(.small) }
+                        Text(ErrorJournal.headline(counts:model.errorCounts,crashes:model.errorCrashes))
+                            .font(.caption).foregroundStyle(model.errorCrashes>0 ? Color.red : Color.secondary)
+                        if model.errorEntries.isEmpty {
+                            Text("Bu Mac’te kayıtlı hata yok. Bir şey ters gittiğinde buraya bir satır düşer.").font(.caption2).foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.errorEntries) { entry in
+                                VStack(alignment:.leading,spacing:1) {
+                                    HStack(spacing:6) {
+                                        Text(entry.kindLabel).font(.caption2.weight(.semibold)).foregroundStyle(entry.isCrash ? Color.red : Color.secondary)
+                                        Text(entry.timeLabel).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                                    }
+                                    Text(entry.message).font(.caption).lineLimit(2).truncationMode(.tail).textSelection(.enabled)
+                                }.frame(maxWidth:.infinity,alignment:.leading)
+                            }
+                        }
+                        HStack {
+                            Button("Tanılama raporunu dışa aktar") { Task { await model.exportDiagnostics() } }.controlSize(.small).accessibilityIdentifier("exportDiagnosticsButton")
+                            Button("Hata günlüğünü temizle") { Task { await model.clearErrors() } }.controlSize(.small).disabled(model.errorEntries.isEmpty).accessibilityIdentifier("clearErrorsButton")
+                        }
+                        Text("Günlük yalnız bu Mac’te durur (errors.jsonl, 0600): hata türü, kısa ileti ve sürüm. Toplantı metni ve ses hiç girmez. Tanılama raporu bu günlüğü de taşır; sorun bildirirken onu gönderin.").font(.caption2).foregroundStyle(.secondary)
+                    }.padding(14).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("errorJournal")
+                        .task { await model.loadErrors() }
+                }
+                if group=="sistem" {
                 DisclosureGroup("Gelişmiş",isExpanded:$advanced) {
                     VStack(alignment:.leading,spacing:10) {
                         if let storage=model.storage { StorageCleanupSection(model:model,storage:storage) }

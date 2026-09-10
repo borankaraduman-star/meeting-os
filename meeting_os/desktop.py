@@ -255,12 +255,30 @@ def delete_meeting(store, mid, data_dir):
     return {'deleted':True,'removed_folders':removed,'removed_reports':remove_meeting_report(mid,data_dir)}
 
 
+def data_folder(db):
+    """Where this bridge run keeps settings, receipts and the error journal: the real data folder for the
+    app, and the folder --db points at for tests and private copies."""
+    return DATA_DIR if db is None else Path(db).parent
+
+
 def dispatch(request, db=None):
     if request.get('action')=='diagnostics':
         from .diagnostics import collect,export_report
         path=Path(request['path'])
-        export_report(path,collect(path.parent,request.get('progress')))
+        export_report(path,collect(path.parent,request.get('progress'),data_folder(db)))
         return {'diagnostics_saved':True}
+    # The error journal answers without a database: a crash sweep must still work when the store is the
+    # thing that is broken, and `error_report` is called from the banner that a failed bridge call just set.
+    if request.get('action') in ('error_report','errors_list','errors_clear'):
+        from . import errors as E
+        action=request['action'];base=data_folder(db)
+        if action=='error_report':
+            entry=E.record(request.get('kind') or 'ui',request.get('message') or '',context=request.get('context'),data_dir=base)
+            return {'recorded':entry is not None}
+        if action=='errors_clear': return {'cleared':E.clear(base)}
+        E.sweep(base)   # crash reports and the updater's last verdict, watermarked: cheap enough to ride every read
+        limit=request.get('limit');limit=limit if type(limit) is int and 0<limit<=200 else 5
+        return {'errors':E.entries(base,limit=limit)[::-1],'summary':E.summary(base,limit=limit)}
     with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as store:
         action=request['action']
         if action=='openrouter_models':
@@ -373,7 +391,7 @@ def dispatch(request, db=None):
             return updater.status(DATA_DIR)
         if action in ('report_settings','report_settings_set','report_write','reports_summary','heartbeat'):
             from . import reports
-            base=DATA_DIR if db is None else Path(db).parent
+            base=data_folder(db)
             if action=='report_settings': return reports.load_settings(base)
             if action=='report_settings_set':
                 return reports.save_settings_with_rename(store,base,request.get('changes') or {})

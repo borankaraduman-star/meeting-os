@@ -101,6 +101,13 @@ def note_cloud_failure(store, mid, exc):
     meta['cloud_retry_attempt']=attempt
     meta['cloud_retry_after']=(now+timedelta(minutes=wait)).isoformat()
     with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),mid))
+    # The sidebar line is per meeting and the user clears it; the journal is what a second Mac reads next week.
+    # The data folder comes from the store, never from a default: a test store must not write to the real one.
+    try:
+        from .errors import record,meeting_key
+        record('cloud',f'{kind}: {message}',data_dir=Path(getattr(store,'path','')).parent,
+               context={'meeting':meeting_key(mid),'kind':kind,'attempt':attempt})
+    except Exception: pass
     return meta['cloud_error']
 
 

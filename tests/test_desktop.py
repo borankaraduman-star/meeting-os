@@ -475,8 +475,8 @@ class DesktopTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);output=root/'report.json';missing=root/'gone-progress.json'
    with patch('meeting_os.diagnostics.collect',wraps=collect) as collector:
-    dispatch({'action':'diagnostics','path':str(output),'progress':str(missing)})
-    collector.assert_called_once_with(root,str(missing))
+    dispatch({'action':'diagnostics','path':str(output),'progress':str(missing)},root/'unused-db')
+    collector.assert_called_once_with(root,str(missing),root)   # third argument: the data folder whose error journal the export carries
    self.assertEqual(json.loads(output.read_text())['progress']['stage'],'unknown')
 
 

@@ -62,6 +62,15 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             try:
                 with path.open('a') as out: out.write(line); out.flush(); os.fsync(out.fileno())
             except OSError: pass
+    def note_error(message):
+        """A capture fault into the local error journal. `errors` on the receipt belongs to one recording and
+        is wiped when a relaunch recovers; this is the line that is still there a week later. Only when the
+        capture folder belongs to a data folder — a private or test capture writes no journal at all."""
+        if data_dir is None: return
+        try:
+            from .errors import record,meeting_key
+            record('capture',message,data_dir=data_dir,context={'meeting':meeting_key(mid),'relaunches':relaunches})
+        except Exception: pass
     def reader(child,sentinel):
         nonlocal last_end,last_chunk_at
         try:
@@ -108,8 +117,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         except Exception: pass
         close_lifeline(guardian,lifeline); guardian=lifeline=None   # the outer cleanup must not close this pipe twice
     try: attach(None)
-    except Exception:
+    except Exception as exc:
         if store: store.status(mid,'failed')
+        note_error(f'Kayıt yardımcısı başlatılamadı: {type(exc).__name__}: {exc}')
         raise
     started=time.monotonic()
     print(json.dumps({'meeting':mid,'capture_dir':str(directory),'status':'capturing'},ensure_ascii=False),flush=True)
@@ -137,6 +147,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         now=time.time(); relaunched_at[:]=[t for t in relaunched_at if now-t < RELAUNCH_WINDOW_SECONDS]
         if len(relaunched_at) >= RELAUNCH_LIMIT:
             errors.append(f'Kayıt yardımcısı bir saat içinde {RELAUNCH_LIMIT} kez yeniden başlatıldı; ses korundu')
+            note_error(f'Kayıt yardımcısı bir saat içinde {RELAUNCH_LIMIT} kez yeniden başlatıldı ({why})')
             return False
         retire()
         relaunched_at.append(now); relaunches+=1
@@ -148,7 +159,8 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         if stopping: return False
         try: attach(offset)
         except Exception as exc:
-            errors.append('Kayıt yardımcısı yeniden başlatılamadı: '+str(exc)); return False
+            errors.append('Kayıt yardımcısı yeniden başlatılamadı: '+str(exc))
+            note_error(f'Kayıt yardımcısı yeniden başlatılamadı: {type(exc).__name__}: {exc}'); return False
         return True
     def beat():
         """Tiny, at most once a minute: proof to the owner (and the other Mac) that the recording is alive."""
@@ -222,7 +234,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             if store: store.status(mid,'canceled')
             outcome='canceled'
         else:
-            if code: errors.append(f'Capture exited {code}')
+            if code:
+                errors.append(f'Capture exited {code}')
+                note_error(f'Kayıt yardımcısı {code} koduyla çıktı · {captured[0]} parça alındı')
             # Audio on disk outranks a supervisor complaint. A recording that produced chunks is provisional and
             # finalizable whatever else went wrong, so it reaches the app as a receipt (with its errors) and a
             # zero exit; only a capture that produced nothing at all is a failure the user has to be told about.

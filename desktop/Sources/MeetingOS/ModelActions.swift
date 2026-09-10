@@ -96,12 +96,36 @@ extension Model {
 
     /// `recording` goes false the moment ⌃⌥R is pressed, but the helper keeps writing for another 15–30 s.
     /// Housekeeping must wait for the process to be gone, not for the flag — that drain is the recording.
+    /// Record one failure in the local error journal. Called by the `error` setter for everything the user is
+    /// shown, and directly (with a kind) by the places that know better — a job's exit code, a crash sweep.
+    /// Deliberately fire-and-forget and deliberately silent: a journal write that fails must not set the very
+    /// banner that would try to journal it again.
+    func report(_ message:String,kind:String="ui",context:[String:Any]=[:]) {
+        let text=String(message.prefix(300)).trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !text.isEmpty, errorThrottle.admit(text) else { return }
+        var fields=context; fields["app_version"]=UpdateInfo.appVersion
+        Task { _=try? await request(["action":"error_report","kind":kind,"message":text,"context":fields]) }
+    }
+    /// Read the journal back for Ayarlar → Sistem → Hatalar. The bridge sweeps crash reports and the updater's
+    /// last verdict on the way, so launch and the hourly beat need no separate call.
+    func loadErrors() async {
+        guard let r=try? await request(["action":"errors_list","limit":5]) else { return }
+        errorEntries=(r["errors"] as? [[String:Any]] ?? []).enumerated().map { ErrorEntry($0.element,index:$0.offset) }
+        let summary=r["summary"] as? [String:Any] ?? [:]
+        errorCounts=(summary["last_24h"] as? [String:Int]) ?? [:]
+        errorCrashes=summary["crashes_24h"] as? Int ?? 0
+    }
+    func clearErrors() async {
+        _=try? await request(["action":"errors_clear"])
+        await loadErrors(); activity="Hata günlüğü temizlendi"
+    }
     func heartbeatIfDue() {
         guard !recording, recordProcess==nil, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
         lastHeartbeat=Date()
         Task {
             // P0-3: the bundle's own CFBundleShortVersionString under `app.version` is what the Python side prefers;
             // no `commit` is sent, so the bridge falls back to the checkout's git hash for that.
+            await loadErrors()   // crash reports and update failures are swept before the heartbeat reports them
             _=try? await request(["action":"heartbeat","app":["version":UpdateInfo.appVersion,"bridge":BridgeStats.shared.snapshot]])
             // Not on the poll's bridge: the archive pass is seconds per meeting and the ten-second watchdog was
             // SIGTERMing it every hour, so a library that had fallen behind could never catch up.
@@ -281,7 +305,7 @@ extension Model {
         guard panel.runModal() == .OK, let url=panel.url else { return }
         var payload:[String:Any]=["action":"diagnostics","path":url.path]
         if let progress=progressURL { payload["progress"]=progress.path }
-        do { _=try await request(payload);activity="Tanılama raporu kaydedildi · Toplantı içeriği dahil değil" }
+        do { _=try await request(payload);activity="Tanılama raporu kaydedildi · Hata günlüğü dahil, toplantı içeriği değil" }
         catch { self.error=error.localizedDescription }
     }
 

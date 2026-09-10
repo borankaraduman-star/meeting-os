@@ -80,7 +80,8 @@ class DiagnosticsTests(unittest.TestCase):
         from meeting_os.cli import main
         with tempfile.TemporaryDirectory() as t:
             path=Path(t)/'keep.json';path.write_text('KEEP');errors=io.StringIO()
-            with patch('sys.argv',['meeting_os','diagnostics','--output',str(path)]),contextlib.redirect_stderr(errors):
+            # --db keeps the run inside the temp folder: a failed command now writes a line into that folder's error journal.
+            with patch('sys.argv',['meeting_os','--db',str(Path(t)/'meeting-os.sqlite'),'diagnostics','--output',str(path)]),contextlib.redirect_stderr(errors):
                 with self.assertRaises(SystemExit) as caught:main()
             self.assertEqual(caught.exception.code,1);self.assertNotIn('Traceback',errors.getvalue())
             self.assertEqual(path.read_text(),'KEEP')
