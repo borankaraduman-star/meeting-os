@@ -119,6 +119,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var meeting:Meeting? { meetings.first { $0.id==selected } }
     @Published var showEchoRows=false { didSet { rebuildBlocks() } }
     @Published var review:[ReviewItem]=[]
+    /// Words the user has taught (Düzelt → "Kelime düzelt") plus the ones the app learned from repeated
+    /// edits. Loaded on demand from Ayarlar → Sesler ve sözlük; never part of the two-second poll.
+    @Published var wordRules:[WordRule]=[]
     @Published var scorecard=""
     @Published var markerCount=0
     /// ⌘M while recording: append one line to markers.jsonl in the capture folder; nothing else changes.
