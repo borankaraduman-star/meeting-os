@@ -107,27 +107,39 @@ struct EvidenceView:View {
 }
 struct AnalysisView:View {
     @ObservedObject var m:Model
+    /// Which items show their evidence. It lives here, not on the Model: nothing else needs to know,
+    /// and a meeting change wipes it (`.task(id:)` below).
+    @State private var expanded:Set<String>=[]
+    @State private var showTalkShare=false
     let categories=[("summary","Özet"),("decisions","Kararlar"),("risks","Riskler"),("questions","Açık sorular")]
-    var body:some View { ScrollView { VStack(alignment:.leading,spacing:20) {
-        HStack { Text("Özet").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Button(m.analysis == nil ? "Özet ve görevleri hazırla":"Özeti güncelle") { m.analyzeMeeting() }.disabled(m.busy || m.meeting?.status != "complete").accessibilityIdentifier("analyzeButton") }
+    var stale:Bool { m.analysis?["stale"] as? Bool == true }
+    var body:some View { ScrollView { VStack(alignment:.leading,spacing:16) {
+        HStack(alignment:.firstTextBaseline) {
+            Text("Özet").font(.system(size:23,weight:.bold,design:.rounded))
+            Spacer()
+            Button(m.analysis == nil ? "Özet ve görevleri hazırla":"Özeti güncelle") { m.analyzeMeeting() }.disabled(m.busy || m.meeting?.status != "complete").accessibilityIdentifier("analyzeButton")
+        }
+        Text(SummaryUX.statsLine(segments:m.rows.count,openTasks:m.openTaskCount,hasSummary:m.analysis != nil,stale:stale)).font(.callout).foregroundStyle(.secondary).accessibilityIdentifier("summaryStats")
+        if stale { Label("Metin veya isimler değişti; bu özet güncel değil.",systemImage:"exclamationmark.triangle").font(.callout).foregroundStyle(.orange) }
         if m.summaryStale, m.meeting?.status=="complete" {
             HStack(spacing:8) {
-                Label("İsim değişti",systemImage:"person.crop.circle.badge.exclamationmark").font(.callout).foregroundStyle(.orange)
+                Image(systemName:"person.crop.circle.badge.exclamationmark").foregroundStyle(.orange)
+                Text("İsim değişti · yeni isimlerle özet ≈1–3 cent.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 Button("Özeti yenile") { m.analyzeMeeting() }.controlSize(.small).disabled(m.busy).accessibilityIdentifier("refreshStaleSummary")
-                Text("Bu isimlerle yeni bir özet çıkarılır (≈1–3 cent).").font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength:0)
-            }.padding(12).meetingCard().accessibilityIdentifier("summaryStaleCard")
+            }.padding(.vertical,9).padding(.horizontal,12).meetingCard().accessibilityIdentifier("summaryStaleCard")
         }
-        Text("Kararlar, açık noktalar ve sonraki adımlar. Her maddeyi kaynak konuşmayla birlikte gözden geçirin.").font(.callout).foregroundStyle(.secondary)
-        LazyVGrid(columns:[GridItem(.adaptive(minimum:170),spacing:12)],spacing:12) { SmallMetric(value:"\(m.rows.count)",label:"Konuşma bölümü",icon:"waveform");SmallMetric(value:"\(m.actions.filter { $0.meeting==m.selected && !$0.stale && !["done","dismissed"].contains($0.state) }.count)",label:"Açık görev",icon:"checklist");SmallMetric(value:m.analysis == nil ? "Bekliyor":m.analysis?["stale"] as? Bool == true ? "Güncelle":"Hazır",label:"Toplantı özeti",icon:"text.badge.checkmark") }
-        if m.analysis?["stale"] as? Bool == true { Label("Metin veya isimler değişti. Bu özet güncel değil; yeniden hazırlayın.",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
-        if m.shares.count>=2 { TalkShareView(shares:m.shares) }
+        if m.shares.count>=2 {
+            DisclosureGroup(isExpanded:$showTalkShare) { TalkShareBars(shares:m.shares).padding(.top,8) }
+            label:{ HStack(spacing:8) { Text("Konuşma payı").font(.subheadline.weight(.medium));Text("\(m.shares.count) konuşmacı").font(.caption).foregroundStyle(.secondary) }.contentShape(Rectangle()) }
+                .accessibilityIdentifier("talkShareDisclosure")
+        }
         if let payload=m.analysis?["payload"] as? [String:Any] {
-            ForEach(categories,id:\.0) { key,label in VStack(alignment:.leading,spacing:10) { Text(label).font(.headline);let items=(payload[key] as? [[String:Any]] ?? []).map(Insight.init)
-                if items.isEmpty { Text("Kayıtlarda açık bir madde bulunmadı.").foregroundStyle(.secondary) }
-                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled).strikethrough(item.superseded).foregroundStyle(item.superseded ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary));if item.superseded { Label("Toplantı içinde geri alındı; aşağıdaki karar geçerli.",systemImage:"arrow.uturn.backward").font(.caption).foregroundStyle(.secondary) } else if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };if key=="decisions", let prev=m.continuity.historyByDecision[item.text], !prev.isEmpty { VStack(alignment:.leading,spacing:3) { ForEach(prev) { p in Label("Önceki karar · \(p.meetingTitle): \(p.text)",systemImage:"clock.arrow.circlepath").font(.caption).foregroundStyle(.secondary) } } };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
-            } }
-            Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout)
+            ForEach(categories,id:\.0) { key,label in
+                SummarySection(m:m,section:key,label:label,items:(payload[key] as? [[String:Any]] ?? []).map(Insight.init),expanded:$expanded).padding(.top,6)
+            }
+            Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout).foregroundStyle(.secondary).padding(.top,6)
         } else { ContentUnavailableView("Henüz özet yok",systemImage:"text.bubble",description:Text(m.transcriptionMode=="openrouter" ? "Transkript hazır olunca özet, kararlar ve görevler OpenRouter’daki \(m.analysisModel) modeliyle çıkarılır; bu Mac’te model yüklenmez." : "Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }
-    }.padding(24).task(id:m.selected) { await m.loadContinuity() } } }
+    }.frame(maxWidth:760,alignment:.leading).padding(24).frame(maxWidth:.infinity,alignment:.leading)
+        .task(id:m.selected) { expanded=[];showTalkShare=false;await m.loadContinuity() } } }
 }

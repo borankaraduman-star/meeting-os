@@ -17,11 +17,12 @@ struct TalkShare: Identifiable, Equatable {
     var minutes:String { seconds>=60 ? String(format:"%d dk",Int(seconds/60)) : String(format:"%d sn",Int(seconds)) }
 }
 
-struct TalkShareView:View {
+/// The bars and the per-speaker legend, with no chrome of its own: Özet folds this into a disclosure,
+/// so a card around it would be a card inside the page's own rhythm.
+struct TalkShareBars:View {
     let shares:[TalkShare]
     var body:some View {
         VStack(alignment:.leading,spacing:10) {
-            HStack { Text("Konuşma payı").font(.headline);Spacer();Text("\(shares.count) konuşmacı").font(.caption).foregroundStyle(.secondary) }
             GeometryReader { geo in
                 HStack(spacing:2) {
                     ForEach(Array(shares.prefix(8).enumerated()),id:\.element.id) { i,s in
@@ -41,6 +42,6 @@ struct TalkShareView:View {
                 }
                 if shares.count>8 { Text("+\(shares.count-8) kısa konuşmacı").font(.caption).foregroundStyle(.secondary) }
             }
-        }.padding(18).meetingCard().accessibilityIdentifier("talkShare")
+        }.accessibilityIdentifier("talkShare")
     }
 }
