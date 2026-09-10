@@ -101,8 +101,14 @@ struct SidebarView:View {
                 ForEach(model.groupedMeetings,id:\.0) { group,items in
                     Section { ForEach(items) { meeting in
                         MeetingLibraryRow(meeting:meeting)
+                            .contentShape(Rectangle())   // the whole row answers a right-click, not just the text
                             .tag(meeting.id)
-                            .contextMenu { Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(model.busy || meeting.recoveryState=="active") }
+                            // Deleting is always offered (the confirmation and deleteMeeting's own guards decide); only a
+                            // meeting still being recorded/recovered is protected. `busy` used to grey this out for the
+                            // whole duration of any job, which read as "right-click does nothing".
+                            .contextMenu {
+                                Button("Toplantıyı sil…",role:.destructive) { model.deleteCandidate=meeting }.disabled(meeting.recoveryState=="active" || (model.recording && model.selected==meeting.id))
+                            }
                             .accessibilityIdentifier("meetingRow-\(meeting.id)")
                             .accessibilityLabel("\(meeting.title.isEmpty ? "Adsız toplantı" : meeting.title), \(meeting.sidebarDetail)")
                     } } header: { Text(group).font(.system(size:10,weight:.semibold)).tracking(1.2).foregroundStyle(.secondary) }
@@ -110,6 +116,7 @@ struct SidebarView:View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
+            .onDeleteCommand { if let meeting=model.meeting, meeting.recoveryState != "active", !model.recording { model.deleteCandidate=meeting } }   // ⌫ on the selected row
             .frame(maxHeight:.infinity)
             .accessibilityIdentifier("meetingLibraryList")
             .confirmationDialog("“\(model.deleteCandidate?.title ?? "")” silinsin mi?",isPresented:Binding(get:{ model.deleteCandidate != nil },set:{ if !$0 { model.deleteCandidate=nil } }),titleVisibility:.visible) {

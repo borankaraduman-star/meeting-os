@@ -570,7 +570,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         do { _=try await request(["action":"edit_text","meeting":mid,"segment":row.id,"text":editText]); editRow=nil; await refresh() } catch { self.error=error.localizedDescription }
     }
     func deleteMeeting(_ meeting:Meeting) async {
-        guard !busy else { return }
+        // A running job owns the database: say so instead of swallowing the click (the confirm dialog just closed).
+        guard !busy else { activity="Şu an bir işlem sürüyor · bitince “\(meeting.title.isEmpty ? "toplantı" : meeting.title)” silinebilir"; return }
         do {
             _=try await request(["action":"delete_meeting","meeting":meeting.id])
             if selected==meeting.id { selected=nil;rows=[] }
@@ -977,6 +978,9 @@ func statusLabel(_ status:String)->String {
     var body:some Scene {
         Window("Meeting OS",id:"main") { MeetingContent(m:model).preferredColorScheme(model.colorScheme).tint(MeetingStyle.accent).id(model.accentKey).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780).commands {
             CommandGroup(replacing:.undoRedo) { Button("Adlandırmayı geri al") { Task { await model.undoNaming() } }.keyboardShortcut("z",modifiers:.command).disabled(!model.canUndoNaming || model.busy) }
+            CommandMenu("Toplantı") {
+                Button("Toplantıyı sil…") { if let meeting=model.meeting { model.deleteCandidate=meeting } }.keyboardShortcut(.delete,modifiers:.command).disabled(model.meeting==nil || model.recording || model.meeting?.recoveryState=="active")
+            }
             CommandMenu("Git") {
                 Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)
                 Button("Hafızada ara") { model.focusMemorySearch() }.keyboardShortcut("f",modifiers:[.command,.shift])
