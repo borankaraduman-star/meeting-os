@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 72 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 73 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.68](#v1268) | 2026-09-11 00:15 | v1.2.68 — Terminalsiz ekibe katılım; ekip kimliği ve silme yayılımı; görev birleştirme güvenliği |
 | [v1.2.67](#v1267) | 2026-09-10 23:10 | v1.2.67 — Ekip bulutu: sıfır kurulumlu ortak bilgi tabanı; her düzeltme öğrenir |
 | [v1.2.66](#v1266) | 2026-09-10 22:21 | Meeting OS 1.2.66 — "Ekip klasörü" satırı: paylaşım nereye gidiyor, gitmiyorsa neden |
 | [v1.2.65](#v1265) | 2026-09-10 22:03 | Meeting OS 1.2.65 — ekipteki hata ve çökmeler tek yerde toplanır |
@@ -92,6 +93,24 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1268"></a>
+### v1.2.68 — Terminalsiz ekibe katılım; ekip kimliği ve silme yayılımı; görev birleştirme güvenliği
+
+2026-09-11 00:15 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "kullanacak insanlar terminal yazamaz; en basit insanın kullanabileceği hale getir." Bağımsız inceleme (Codex, `docs/reviews/2026-09-10-codex-astra.md`) P0 1–5 ve 8–10 bu sürümde kapandı.
+
+- **Davet bağlantısı / dosyası.** Ayarlar → Sesler ve sözlük → **Ekip** kartı: "Davet bağlantısını kopyala" (`meetingos://join?…`; istenirse OpenRouter anahtarı da içinde, ekip arkadaşı anahtar girmez), "Davet dosyasını kaydet…" (`.meetingos-invite`, çift tıklanınca uygulama açılır ve katılır), "Davet yapıştır…", "Şimdi eşitle". Karşılama ekranında anahtarı olmayan Mac önce "Davet bağlantısını yapıştırın" görür. Uygulama `meetingos` URL şemasını ve davet dosya türünü kaydeder (`CFBundleURLTypes`, `CFBundleDocumentTypes`). CLI: `team invite [--with-key]`, `team join <bağlantı|dosya|token>`.
+- **Paylaşım anahtarları etkin hedefe göre** (Codex P0 #1): bulut bağlıyken sözlük/kelime/profil anahtarları çalışır; kart ilk satırda hedefi söyler ("Ekip bulutu · 7df39b · 2 Mac · son eşitleme 23:40" / "Ekip klasörü · …" / "Kapalı"). Kurulum kartında bulut hatası eski başarıyı bastırır (P1 #8).
+- **Ekip kimliği yapışkan** (P0 #2): anahtardan ilk türetilen token `team.token` olarak kalıcı; anahtar değişince ekip değişmez. Ayna ve durum dosyası ekip başına (`team/<id>/`, `team-cloud-state-<id>.json`); başka ekibe geçince eski ekipten gelen profiller/kelimeler yumuşak silinir, yerel öğrenim kalır. Cihaz kimliği (`device.id`) başlıkta ve nabızda.
+- **Silme yayılır** (P0 #3): kaynak Mac bir ses örneğini silince/düzeltince alıcıdaki `team:` örneği de yumuşak silinir; yalnız dosya başarıyla okunmuşsa (ulaşılamayan klasör hiçbir şeyi silmez). `auto:` (otomatik tanıma) örnekleri ekibe yayımlanmaz.
+- **Yarım indirme "alındı" sayılmaz** (P0 #4): her host dosyası önce aynaya atomik yazılır, birleşik dosya diskten kurulur, `pulled` en son işaretlenir.
+- **Ret kapsamı** (P1 #9): "bu ses Ayşe değil" reddi yalnız o sese 0,90'dan yakın örnekleri engeller; Ayşe'nin temiz örnekleri gelir. Kişiyi tamamen engellemek ayrı ("engelle").
+- **Görevler** (P0 #5, P1 #10): aynı başlıklı ama farklı vadeli (ya da farklı sayılı) iki görev artık tek göreve düşmez; mikrofon çıkarımı bayrağı kaybolmuyor; alıntıda olumsuzlama/koşul/devir varsa görev "incele" işaretli gelir (düşürülmez). Üç yeni kıyas senaryosu (`negation`, `conditional`, `due_conflict`).
+- **Analiz modeli kıyası** (Boran: "neden GPT?"): 13 model aynı düzenekte; düşünen modeller için otomatik yeniden deneme (sıcaklıksız, düşük düşünme çabası, geniş bütçe); Anthropic uçları için şema `anyOf`. Karar ve tablo sonraki sürümde (`scripts/benchmark-compare-models.py`).
+- Adlandırma penceresinde isimler sese benzerliğe göre (1.2.67'de kodlandı, bu sürümde canlı denenmedi).
+- Testler: Python 906, Swift 234. Canlı doğrulanmadı: `meetingos://` bağlantısına tıklama, davet dosyası çift tık, Ekip kartı.
 
 <a id="v1267"></a>
 ### v1.2.67 — Ekip bulutu: sıfır kurulumlu ortak bilgi tabanı; her düzeltme öğrenir
