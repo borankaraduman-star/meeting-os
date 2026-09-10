@@ -42,7 +42,7 @@ enum CalendarContext {
         let predicate=store.predicateForEvents(withStart:now,end:now.addingTimeInterval(hours*3600),calendars:nil)
         let events=store.events(matching:predicate).filter { !$0.isAllDay && !($0.title ?? "").trimmingCharacters(in:.whitespaces).isEmpty }.sorted { $0.startDate<$1.startDate }
         guard let e=events.first else { return nil }
-        var seen=Set<String>(); let names=(e.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType != .resource && $0.participantType != .room }.compactMap { participantName($0) }.filter { seen.insert($0.lowercased()).inserted }
+        var seen=Set<String>(); let names=(e.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType != .resource && $0.participantType != .room }.compactMap { participantName($0) }.filter { seen.insert(NameFold.key($0)).inserted }
         return CalendarEvent(title:String((e.title ?? "").prefix(120)),attendees:Array(names.prefix(30)),start:e.startDate,end:e.endDate)
     }
     /// The event covering `now` (5 min grace on both ends); among overlaps the one that started most recently.
@@ -50,7 +50,7 @@ enum CalendarContext {
         let grace:TimeInterval=5*60
         let live=events.filter { !$0.title.trimmingCharacters(in:.whitespaces).isEmpty && $0.start<=now.addingTimeInterval(grace) && $0.end>=now.addingTimeInterval(-grace) }
         guard let best=live.max(by:{ $0.start<$1.start }) else { return nil }
-        var seen=Set<String>(); let names=best.attendees.filter { seen.insert($0.lowercased()).inserted }
+        var seen=Set<String>(); let names=best.attendees.filter { seen.insert(NameFold.key($0)).inserted }
         return CalendarEvent(title:String(best.title.trimmingCharacters(in:.whitespaces).prefix(120)),attendees:Array(names.prefix(30)),start:best.start,end:best.end)
     }
     static func participantName(_ p:EKParticipant)->String? {

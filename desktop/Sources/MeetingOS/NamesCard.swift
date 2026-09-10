@@ -11,7 +11,10 @@ struct NamesCard:View {
         return model.review.filter { ($0.kind=="suggested_name" || $0.kind=="unnamed_speaker") && !$0.speakerKey.isEmpty && seen.insert($0.speakerKey).inserted }
     }
     private var suggested:[ReviewItem] { pending.filter { !$0.suggested.isEmpty } }
-    private var choices:[String] { Array(NSOrderedSet(array:model.calendarAttendees+model.profiles.map(\.name))) as? [String] ?? [] }
+    private var choices:[String] { NameFold.unique(model.calendarAttendees+model.profiles.map(\.name)) }
+    /// The very first meeting: nothing to suggest, nobody to pick from a list. Say why, once, instead of
+    /// leaving a row of empty fields that looks like something failed.
+    private var firstMeeting:Bool { suggested.isEmpty && choices.isEmpty }
     var body:some View {
         let items=pending
         if !items.isEmpty, model.meeting?.status=="complete" {
@@ -23,7 +26,7 @@ struct NamesCard:View {
                     if suggested.count>1 { Button("Hepsini onayla (\(suggested.count))") { Task { await model.confirmAll(suggested) } }.buttonStyle(.borderedProminent).controlSize(.small).disabled(model.busy).accessibilityIdentifier("namesConfirmAll") }
                     Button("Kontrol") { model.tab="review" }.controlSize(.small).help("Şüpheli bölümlerin tam listesi")
                 }
-                Text("Bir kez adlandırın; ses profili kaydedilir ve sonraki toplantılarda kendiliğinden tanınır.").font(.caption).foregroundStyle(.secondary)
+                Text(firstMeeting ? "İlk toplantı: henüz ses profili yok. Adları bir kez yazın; sonraki toplantılarda bu sesler kendiliğinden tanınır." : "Bir kez adlandırın; ses profili kaydedilir ve sonraki toplantılarda kendiliğinden tanınır.").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier(firstMeeting ? "namesFirstMeeting" : "namesHint")
                 ForEach(items) { item in
                     HStack(spacing:8) {
                         Button { if let seg=item.segment { model.reveal(segment:seg) } } label: { Label(item.speaker.isEmpty ? item.speakerKey : item.speaker,systemImage:"text.quote").lineLimit(1) }.buttonStyle(.plain).foregroundStyle(.secondary).frame(width:150,alignment:.leading).help(item.text)

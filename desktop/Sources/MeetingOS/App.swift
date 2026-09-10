@@ -31,6 +31,7 @@ struct Row: Identifiable, Equatable {
     init(_ d:[String:Any]) { id=d["id"] as? Int ?? 0; start=d["start"] as? Double ?? 0; end=d["end"] as? Double ?? 0; text=d["text"] as? String ?? ""; speaker=d["speaker"] as? String ?? ""; name=d["speaker_name"] as? String ?? ""; source=d["source"] as? String ?? ""; flags=d["flags"] as? [String] ?? []; suggested=d["suggested"] as? String ?? "" }
     var label:String {
         if !name.isEmpty { return name }
+        if source=="mic", speaker=="Ben" { return "Ben (siz)" }   // the bridge's placeholder for this Mac's own voice: never a stranger's name
         if flags.contains("provisional") { return "Geçici konuşmacı" }
         if !suggested.isEmpty { return suggested+"?" }  // borderline voice match awaiting one-click confirmation
         if flags.contains("possible_echo") { return "Hoparlör yankısı" }  // microphone picked up the speakers; not the user talking
@@ -65,7 +66,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · ⌃⌥R ile kayıt başlat"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -203,11 +204,40 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         activity=UndoNaming.message(results)
         await refresh(); await loadReview()
     }
+    /// The Özet tab is out of date because a name changed, and nothing is being paid to fix it yet: the
+    /// tab shows one badge and one button. Set by "Yalnız bu bölüm", which must never buy an analysis by itself.
+    @Published var summaryStale=false
+    /// Naming five voices used to buy five analyses. The window folds a burst into one; a naming during the
+    /// window restarts it. Cancellation is the whole mechanism, so this is a Task and not a Timer.
+    var summaryRefreshTask:Task<Void,Never>?
+    /// The window fired while a job held the slot: run the analysis when that job ends instead of stacking one.
+    var pendingSummaryRefresh=false; var pendingSummaryMeeting=""
     /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
     func refreshSummaryIfNamesDone() {
-        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !busy, !recording, recordProcess==nil, !zoomMeetingOpen else { return }   // recordProcess: the helper still drains after `recording` goes false
+        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !recording, recordProcess==nil, !zoomMeetingOpen else { return }   // recordProcess: the helper still drains after `recording` goes false
         guard !review.contains(where:{ ($0.kind=="unnamed_speaker" || $0.kind=="suggested_name") && !$0.speakerKey.isEmpty }) else { return }
-        activity="İsimler tamam · özet isimlerle yenileniyor"; analyzeMeeting(mid)
+        scheduleSummaryRefresh(mid)
+    }
+    /// 20 seconds is long enough to hold a person naming the room one voice after another, short enough that
+    /// nobody waits for the summary. The status line says what will happen and roughly what it costs.
+    func scheduleSummaryRefresh(_ mid:String) {
+        summaryRefreshTask?.cancel()
+        activity="Özet 20 sn içinde isimlerle yenilenecek (≈1–3 cent)"
+        summaryRefreshTask=Task { [weak self] in
+            try? await Task.sleep(nanoseconds:20_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.summaryRefreshTask=nil
+            self.runScheduledSummaryRefresh(mid)
+        }
+    }
+    /// The window closed. Everything that made the refresh a good idea has to still hold; when it does not,
+    /// the Özet tab keeps the offer instead of spending on a meeting nobody is looking at.
+    func runScheduledSummaryRefresh(_ mid:String) {
+        guard selected==mid, meeting?.status=="complete" else { summaryStale=true; return }
+        guard analysis?["stale"] as? Bool == true else { summaryStale=false; return }
+        guard !recording, recordProcess==nil, !zoomMeetingOpen else { summaryStale=true; return }
+        if job != nil || busy { pendingSummaryRefresh=true; pendingSummaryMeeting=mid; summaryStale=true; activity="Özet, süren işlem bitince isimlerle yenilenecek"; return }
+        summaryStale=false; activity="İsimler tamam · özet isimlerle yenileniyor"; analyzeMeeting(mid)
     }
     var calendarAttendees:[String] { (meeting?.metadata["calendar"] as? [String:Any])?["attendees"] as? [String] ?? [] }
     @Published var readingMode=true
@@ -243,7 +273,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         if job != nil, let started=jobStarted {
             let elapsed=Int(Date().timeIntervalSince(started))
             let progress=progressURL.flatMap { try? Data(contentsOf:$0) }.flatMap { try? JSONDecoder().decode(JobProgress.self,from:$0) }
-            let line=(progress?.label ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"; if jobs.jobProgress != line { jobs.jobProgress=line }
+            let line=(progress?.line(elapsed:Double(elapsed)) ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"; if jobs.jobProgress != line { jobs.jobProgress=line }
         }
         guard !refreshing else { return }; refreshing=true
         let wanted=selected ?? ""
@@ -286,7 +316,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             updateBlockedHint()
             idleRetryIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {
-            case .start: if let line=LaunchOutcome.activity(started:start(),onStart:"Zoom toplantısı açıldı · kayıt kendiliğinden başladı",onRefusal:LaunchOutcome.recordBusy) { activity=line }
+            case .start: if let line=LaunchOutcome.activity(started:start(),onStart:"Zoom toplantısı açıldı · kayıt kendiliğinden başladı",onRefusal:startRefusal) { activity=line }
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
@@ -327,24 +357,31 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 Task { @MainActor in
                     guard let self=self else { return }
                     if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; try? FileManager.default.removeItem(at:progress) }
-                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; try? FileManager.default.removeItem(at:progress) }
+                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; JobSleepGuard.end(); try? FileManager.default.removeItem(at:progress) }
                     if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
                     // Quitting is not the moment to start an upload: the queued meetings keep their audio and the
                     // idle queue picks them up on the next launch. Popping here would begin a job we cannot finish.
                     if !isRecord, !self.requestedQuit, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
+                    if !isRecord, !self.requestedQuit, self.pendingSummaryRefresh { self.pendingSummaryRefresh=false; self.runScheduledSummaryRefresh(self.pendingSummaryMeeting) }   // a queued finalize took the slot back: this re-arms rather than stacks
                     if self.requestedQuit && self.job==nil && self.recordProcess==nil { NSApp.reply(toApplicationShouldTerminate:true) }
                 }
             }
             try p.run(); error=""
-            if isRecord { recordProcess=p; recordStartedAt=Date() } else { job=p; busy=true; jobBackgrounded=false }
+            if isRecord { recordProcess=p; recordStartedAt=Date() } else { job=p; busy=true; jobBackgrounded=false; JobSleepGuard.begin() }   // a Mac that idles to sleep mid-transcription wakes up to an unfinished meeting
             return true
-        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil }; return false }
+        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil; JobSleepGuard.end() }; return false }
     }
     /// Returns false when the previous helper is still draining: the caller must not claim a recording started.
     @discardableResult func start()->Bool {
+        startRefusal=nil
+        // The microphone track is filed under this Mac's owner. Recording without a name means a transcript
+        // full of "Ben" that nobody can attribute later, so the name is asked for once, here, and never guessed.
+        // The prompt itself belongs to the caller: hands-free Zoom re-evaluates every few seconds and must
+        // state the reason without reopening a sheet under the user's hands.
+        guard hasUserName else { startRefusal=Model.nameRequiredMessage; return false }
         stopPlayback()   // never play audio into the room during a recording
-        guard recordProcess==nil else { return false }
+        guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
         recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
@@ -440,7 +477,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do {
             let result=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":editName,"enroll":enroll])
             editRow=nil
-            if enroll { activity=((result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi")+adaptationNote(result) } else { activity="Konuşmacı yalnız bu toplantıda adlandırıldı"+adaptationNote(result) }
+            if enroll { activity=EnrollNotice.line(result)+adaptationNote(result) } else { activity="Konuşmacı yalnız bu toplantıda adlandırıldı"+adaptationNote(result) }
             canUndoNaming=true
             await refresh(); await loadReview(); refreshSummaryIfNamesDone()
         } catch { self.error=error.localizedDescription }
@@ -454,13 +491,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let r=try await request(["action":"label_segment","meeting":mid,"segment":target.id,"name":name])
             editRow=nil
             activity=(r["profile_saved"] as? Bool)==true ? "Yalnız bu bölüm “\(name)” oldu · ses profili bu bölümden öğrendi" : "Yalnız bu bölüm “\(name)” oldu · bölüm kısa ya da karışık olduğu için profil öğrenmedi"
-            await refresh(); await loadReview(); refreshSummaryIfNamesDone()
+            canUndoNaming=true
+            await refresh(); await loadReview()
+            // One pinned piece is not a reason to re-buy the summary: the Özet tab offers the refresh instead.
+            // Read the flag after the refresh, because it is the refresh that learns the analysis went stale.
+            if analysis?["stale"] as? Bool == true { summaryStale=true }
         } catch { self.error=error.localizedDescription }
     }
     /// One click turns a “Sol Üst?” suggestion into the cluster name and, when there is enough speech, a profile sample.
     func confirmSuggestion(_ row:Row) async {
         guard !row.suggested.isEmpty, let mid=selected, !busy else { return }
-        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":row.suggested,"enroll":true]); activity="“\(row.suggested)” onaylandı · profil güncellendi"; await refresh() }
+        do { _=try await request(["action":"label_speaker","meeting":mid,"speaker":row.speaker,"name":row.suggested,"enroll":true]); activity="“\(row.suggested)” onaylandı · profil güncellendi"; canUndoNaming=true; await refresh(); await loadReview(); refreshSummaryIfNamesDone() }
         catch { self.error=error.localizedDescription }
     }
     func saveText() async {
@@ -648,13 +689,54 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if age<3 { return }   // key repeat / double press right after start: ignore
                 if age<15 { if let armed=stopArmedAt, Date().timeIntervalSince(armed)<2 { stop() } else { stopArmedAt=Date(); activity="Bitirmek için ⌃⌥R’ye bir kez daha bas" }; return }
                 stop()
-            } else if let line=LaunchOutcome.activity(started:start(),onStart:LaunchOutcome.recordStarted,onRefusal:LaunchOutcome.recordBusy) { activity=line }
+            } else { beginRecording() }
         }
         else if id==GlobalHotkeys.mark, recording { markMoment("important") }
     }
     @Published var update:UpdateInfo?; @Published var updating=false; @Published var reportSettings=ReportSettings(shareReports:true,shareText:false,autoUpdate:false,reportDir:"")
-    /// The person this Mac belongs to (Ayarlar → Genel → Adınız); never a hard-coded name.
-    var userName:String { let n=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines); return n.isEmpty ? "Boran" : n }
+    /// The person this Mac belongs to (Ayarlar → Genel → Adınız); never a hard-coded name. Empty until they
+    /// type it, and an empty name matches nobody — better than filing a teammate's tasks under a stranger.
+    var userName:String { reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines) }
+    var hasUserName:Bool { !userName.isEmpty }
+    /// One calm line, in the two places a recording can start from.
+    static let nameRequiredMessage="Önce adınızı yazın: kayıtta sizin sesiniz bu adla etiketlenir · Ayarlar → Genel"
+    /// Why the last `start()` refused, so the caller does not paper over the reason with a different one.
+    var startRefusal:String?
+    /// Bumped when a refused recording (or the settings sheet) should put the caret in the name field.
+    @Published var userNameFocusToken=0
+    /// The name the bridge last confirmed: what the stored microphone rows still carry, and therefore the
+    /// `old` side of a rename. Kept apart from `reportSettings.userName`, which changes as the user types.
+    var storedUserName=""
+    /// Welcome ⏎ and Ayarlar → Genel both land here: write the setting, then re-label the microphone rows of
+    /// every past meeting that still carries the previous name (or "Ben", the placeholder used when there was none).
+    func saveUserName() async {
+        let previous=storedUserName.trimmingCharacters(in:.whitespacesAndNewlines)
+        let next=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines)
+        reportSettings.userName=next
+        await saveReportSettings()
+        guard !next.isEmpty, !NameFold.same(previous,next) else { return }
+        do {
+            let r=try await request(["action":"rename_mic_owner","old":previous.isEmpty ? "Ben" : previous,"new":next])
+            let touched=r["meetings"] as? Int ?? 0
+            activity=touched>0 ? "Adınız \(next) · önceki \(touched) toplantıdaki sesiniz yeniden etiketlendi" : "Adınız \(next) · kayıtlarda sesiniz bu adla etiketlenecek"
+            await refresh()
+        } catch { self.error=error.localizedDescription }
+    }
+    /// Open the field that is missing and put the caret in it: the welcome screen when there are no meetings
+    /// yet, Ayarlar → Genel otherwise.
+    func promptForUserName() {
+        if !meetings.isEmpty {
+            UserDefaults.standard.set("genel",forKey:"settingsSection")
+            if !showSettings { Task { await settings() } }
+        }
+        userNameFocusToken+=1
+    }
+    /// Every way into a recording goes through here, so the refusal reads the same from the button, the menu
+    /// bar, the notification and ⌃⌥R.
+    func beginRecording() {
+        if let line=LaunchOutcome.activity(started:start(),onStart:LaunchOutcome.recordStarted,onRefusal:startRefusal) { activity=line }
+        if startRefusal==Model.nameRequiredMessage { promptForUserName() }   // the caret goes where the answer has to be typed
+    }
     var lastUpdateCheck:Date?
     /// Called after the first snapshot and every six hours; a fetch, nothing more.
     func checkForUpdates(force:Bool=false) async {
@@ -664,7 +746,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             UserDefaults.standard.set(status["time"] as? String ?? "",forKey:"lastShownUpdate"); activity=(state=="done" ? "Güncelleme tamam · " : "Güncelleme başarısız · ")+msg
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
-        if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r) }
+        if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName }
         if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
@@ -676,7 +758,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
     }
     func saveReportSettings() async {
-        do { let r=try await request(["action":"report_settings_set","changes":reportSettings.changes]); reportSettings=ReportSettings.parse(r) } catch { self.error=error.localizedDescription }
+        do { let r=try await request(["action":"report_settings_set","changes":reportSettings.changes]); reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName } catch { self.error=error.localizedDescription }
     }
     func loadGlossarySummary() async {
         guard let r=try? await request(["action":"glossary_summary"]) else { return }
@@ -773,7 +855,7 @@ func statusLabel(_ status:String)->String {
     nonisolated func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping ()->Void) {
         let action=response.actionIdentifier
         Task { @MainActor in
-            if action==ZoomNotifier.startAction || action==UNNotificationDefaultActionIdentifier, let m=Self.model, !m.recording, !m.busy { m.start(); m.showMainWindow() }
+            if action==ZoomNotifier.startAction || action==UNNotificationDefaultActionIdentifier, let m=Self.model, !m.recording { m.beginRecording(); m.showMainWindow() }
             completionHandler()
         }
     }

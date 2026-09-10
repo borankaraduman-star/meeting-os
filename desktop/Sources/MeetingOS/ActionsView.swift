@@ -9,8 +9,9 @@ struct ActionsView:View {
     @AppStorage(ActionsFilter.key) var stored="mine"
     @State var edit:ActionItem?;@State var title="";@State var owner="";@State var due=""
     var filter:String { ActionsFilter.normalize(stored) }
-    /// "Bana ait" compares against the name in Ayarlar → Genel → Adınız, folded with Turkish rules (İ/ı).
-    func matches(_ item:ActionItem,_ f:String)->Bool { f=="all" || (f=="mine" ? item.owner.lowercased(with:Locale(identifier:"tr_TR"))==m.userName.lowercased(with:Locale(identifier:"tr_TR")) : item.meeting==m.selected) }
+    /// "Bana ait" compares against the name in Ayarlar → Genel → Adınız through the same fold the bridge uses
+    /// (store.fold_name): lowercasing alone left "Ayşe" and "Ayse" — and every unset name — as different people.
+    func matches(_ item:ActionItem,_ f:String)->Bool { f=="all" || (f=="mine" ? NameFold.same(item.owner,m.userName) : item.meeting==m.selected) }
     var visible:[ActionItem] { m.actions.filter { matches($0,filter) } }
     /// Open tasks behind each segment, so an empty "Bana ait" never hides the meeting's tasks.
     func count(_ f:String)->Int { m.actions.filter { matches($0,f) && !["done","dismissed"].contains($0.state) }.count }

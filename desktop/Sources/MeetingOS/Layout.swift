@@ -49,11 +49,13 @@ struct SidebarView:View {
                         .accessibilityLabel("Toplantı adı")
                 case .hidden: EmptyView()
                 }
-                Button(action:{ if model.recording { model.stop() } else { model.start() } }) {
+                Button(action:{ if model.recording { model.stop() } else { model.beginRecording() } }) {
                     Label(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind),systemImage:model.recording ? "stop.circle.fill":"mic.circle.fill").frame(maxWidth:.infinity)
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(model.recording ? .red:MeetingStyle.accent)
-                .disabled(model.busy && !model.recording)
+                // Recording has its own process slot: transcribing the last meeting must not stop the next one
+                // from being recorded. Only the previous helper still draining can refuse a start.
+                .disabled(!model.recording && model.recordProcess != nil)
                 .keyboardShortcut("r",modifiers:.command)   // ⌘R starts or ends the recording without touching the mouse
                 .help(model.recording ? "Kaydı bitir (⌃⌥R her yerden)" : "Yeni kayıt (⌃⌥R her yerden)")
                 .accessibilityIdentifier("recordButton")

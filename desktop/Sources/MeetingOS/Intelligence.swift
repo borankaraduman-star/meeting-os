@@ -41,7 +41,8 @@ extension Model {
     }
     func analyzeMeeting(_ mid:String?=nil) {
         guard let mid=mid ?? selected else { return }
-        let started=launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in guard let self else { return }; self.activity=ok ? "Toplantı hazır" : "Özet çıkarılamadı · Transkript duruyor"; if ok, !NSApp.isActive { let waiting=self.review.filter { $0.kind=="unnamed_speaker" || $0.kind=="suggested_name" }.count; self.notifyDone("Toplantı hazır",waiting>0 ? "\(waiting) isim bekliyor · aç ve onayla." : "Özet, kararlar ve görevler kaynaklarıyla hazır.") } }
+        summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false   // this run is the refresh a pending window was waiting for
+        let started=launch(["analyze",mid]+cloudAnalysisArguments) { [weak self] ok in guard let self else { return }; if ok { self.summaryStale=false }; self.activity=ok ? "Toplantı hazır" : "Özet çıkarılamadı · Transkript duruyor"; if ok, !NSApp.isActive { let waiting=self.review.filter { $0.kind=="unnamed_speaker" || $0.kind=="suggested_name" }.count; self.notifyDone("Toplantı hazır",waiting>0 ? "\(waiting) isim bekliyor · aç ve onayla." : "Özet, kararlar ve görevler kaynaklarıyla hazır.") } }
         if let line=LaunchOutcome.activity(started:started,onStart:"Özet hazırlanıyor…") { activity=line }   // a job already runs: the previous line still describes it
     }
     func resultMeeting(_ url:URL) -> String? {
@@ -106,6 +107,14 @@ struct AnalysisView:View {
     let categories=[("summary","Özet"),("decisions","Kararlar"),("risks","Riskler"),("questions","Açık sorular")]
     var body:some View { ScrollView { VStack(alignment:.leading,spacing:20) {
         HStack { Text("Özet").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Button(m.analysis == nil ? "Özet ve görevleri hazırla":"Özeti güncelle") { m.analyzeMeeting() }.disabled(m.busy || m.meeting?.status != "complete").accessibilityIdentifier("analyzeButton") }
+        if m.summaryStale, m.meeting?.status=="complete" {
+            HStack(spacing:8) {
+                Label("İsim değişti",systemImage:"person.crop.circle.badge.exclamationmark").font(.callout).foregroundStyle(.orange)
+                Button("Özeti yenile") { m.analyzeMeeting() }.controlSize(.small).disabled(m.busy).accessibilityIdentifier("refreshStaleSummary")
+                Text("Bu isimlerle yeni bir özet çıkarılır (≈1–3 cent).").font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength:0)
+            }.padding(12).meetingCard().accessibilityIdentifier("summaryStaleCard")
+        }
         Text("Kararlar, açık noktalar ve sonraki adımlar. Her maddeyi kaynak konuşmayla birlikte gözden geçirin.").font(.callout).foregroundStyle(.secondary)
         LazyVGrid(columns:[GridItem(.adaptive(minimum:170),spacing:12)],spacing:12) { SmallMetric(value:"\(m.rows.count)",label:"Konuşma bölümü",icon:"waveform");SmallMetric(value:"\(m.actions.filter { $0.meeting==m.selected && !$0.stale && !["done","dismissed"].contains($0.state) }.count)",label:"Açık görev",icon:"checklist");SmallMetric(value:m.analysis == nil ? "Bekliyor":m.analysis?["stale"] as? Bool == true ? "Güncelle":"Hazır",label:"Toplantı özeti",icon:"text.badge.checkmark") }
         if m.analysis?["stale"] as? Bool == true { Label("Metin veya isimler değişti. Bu özet güncel değil; yeniden hazırlayın.",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }

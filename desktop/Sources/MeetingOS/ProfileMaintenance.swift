@@ -126,7 +126,7 @@ struct ProfileMaintenanceRow:View {
     @State private var newName=""
     @State private var picking=false
     private var health:ProfileHealth? {
-        (model.maintenance?["profiles"] as? [[String:Any]] ?? []).map(ProfileHealth.init).first { $0.name==profile.name && $0.model==profile.model }
+        (model.maintenance?["profiles"] as? [[String:Any]] ?? []).map(ProfileHealth.init).first { NameFold.same($0.name,profile.name) && $0.model==profile.model }
     }
     var body:some View {
         DisclosureGroup(isExpanded:$expanded) {
