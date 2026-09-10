@@ -166,6 +166,9 @@ def main(supervised=False):
     if os.environ.get('MEETING_OS_LOW_PRIORITY'):   # a Zoom meeting is on screen: never compete with it
         with contextlib.suppress(OSError): os.nice(10)
     args=parser().parse_args()
+    # The data folder is the folder the database lives in: a test or a private copy (--db elsewhere) must never
+    # write heartbeats, imports or settings into the real one (that is what migrated the real mirror early, 10 Sep).
+    data_dir=Path(args.db).parent if getattr(args,'db',None) else DATA_DIR
     os.umask(0o077)
     try:
         cloud_llm=getattr(args,'openrouter_model',None) or args.command in ('glossary','reports','update','document','digest','share')
@@ -272,24 +275,24 @@ def main(supervised=False):
                 if not args.resume and args.audio is None:raise ValueError('Ses dosyası seçin')
                 if args.no_local or args.resume and json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(args.resume,)).fetchone()[0] if store.db.execute('SELECT 1 FROM meetings WHERE id=?',(args.resume,)).fetchone() else '{}').get('cloud_mode'):
                     from .cloud_finalize import finalize_capture,import_file_cloud_only
-                    result=finalize_capture(store,args.resume,DATA_DIR,consent=args.allow_upload,model=args.model) if args.resume else import_file_cloud_only(store,args.audio,args.title,DATA_DIR,consent=args.allow_upload,model=args.model)
+                    result=finalize_capture(store,args.resume,data_dir,consent=args.allow_upload,model=args.model) if args.resume else import_file_cloud_only(store,args.audio,args.title,data_dir,consent=args.allow_upload,model=args.model)
                 else:
                     from .cloud_import import import_file
-                    result=import_file(store,args.audio,args.title,DATA_DIR,consent=args.allow_upload,resume=args.resume,model=args.model)
+                    result=import_file(store,args.audio,args.title,data_dir,consent=args.allow_upload,resume=args.resume,model=args.model)
                 if args.output:args.output.write_text(json.dumps(result,ensure_ascii=False))
                 output(result)
             elif args.command=='openrouter-finalize':
                 from .cloud_finalize import finalize_capture
-                result=finalize_capture(store,args.meeting,DATA_DIR,consent=args.allow_upload,model=args.model)
+                result=finalize_capture(store,args.meeting,data_dir,consent=args.allow_upload,model=args.model)
                 from .correction_memory import apply_rules   # learned and taught fixes land before the summary reads the text
-                try: result['auto_corrections']=apply_rules(store,args.meeting,data_dir=DATA_DIR)
+                try: result['auto_corrections']=apply_rules(store,args.meeting,data_dir=data_dir)
                 except Exception as exc: result['auto_corrections']={'error':str(exc)}
                 if args.output:args.output.write_text(json.dumps(result,ensure_ascii=False))
                 output(result)
             elif args.command=='import':
                 import subprocess, uuid
                 if not args.audio.is_file(): raise ValueError('Audio file not found')
-                dest=DATA_DIR/'imports'/uuid.uuid4().hex
+                dest=data_dir/'imports'/uuid.uuid4().hex
                 dest.mkdir(parents=True,mode=0o700)
                 target=dest/'audio.wav'
                 ffmpeg=which('ffmpeg') or '/opt/homebrew/bin/ffmpeg'
@@ -305,7 +308,7 @@ def main(supervised=False):
                 from .live import record
                 from .live_worker import IsolatedLivePipeline
                 factory=(lambda: IsolatedLivePipeline(args)) if args.live else None
-                record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory,result_path=args.output,data_dir=DATA_DIR,cloud=args.cloud)
+                record(args.capture_bin,args.directory,args.seconds,args.chunk_seconds,None,store,args.title,pipeline_factory=factory,result_path=args.output,data_dir=data_dir,cloud=args.cloud)
             elif args.command=='cleanup-retries':
                 from .retry import RetryStore
                 from .retry_workspaces import cleanup_workspaces
@@ -314,7 +317,7 @@ def main(supervised=False):
             elif args.command=='reports':
                 from . import reports
                 if args.action=='summarize':
-                    summary=reports.summarize(reports.report_root(reports.load_settings(DATA_DIR)))
+                    summary=reports.summarize(reports.report_root(reports.load_settings(data_dir)))
                     for a in summary.get('alerts') or []: print(('✘ ' if a['level']=='error' else '! ' if a['level']=='warning' else '· ')+a['line'],file=sys.stderr)
                     for host,h in sorted((summary.get('hosts') or {}).items()):
                         journal=(h.get('heartbeat') or {}).get('error_journal')
@@ -327,7 +330,7 @@ def main(supervised=False):
                     output(summary)
                 elif args.action=='heartbeat':
                     from . import __version__
-                    output({'path':reports.write_heartbeat(store,DATA_DIR,app={'version':__version__,'commit':None})})
+                    output({'path':reports.write_heartbeat(store,data_dir,app={'version':__version__,'commit':None})})
                 elif args.action=='settings':
                     changes={}
                     for kv in args.set:
@@ -335,12 +338,12 @@ def main(supervised=False):
                         if k in ('report_dir','user_name','team_dir','team_url'): changes[k]=v   # free text; save_settings validates it
                         elif k=='audio_retention_days': changes[k]=int(v) if v.strip().isdigit() else v
                         else: changes[k]=v.lower() in ('1','true','evet','on')
-                    if not changes: output(reports.load_settings(DATA_DIR))
-                    else: output(reports.save_settings_with_rename(store,DATA_DIR,changes))
+                    if not changes: output(reports.load_settings(data_dir))
+                    else: output(reports.save_settings_with_rename(store,data_dir,changes))
                 else:
                     if not args.meeting: raise ValueError('--meeting gerekli')
                     from . import __version__
-                    output({'path':reports.write_meeting_report(store,args.meeting,DATA_DIR,version=__version__)})
+                    output({'path':reports.write_meeting_report(store,args.meeting,data_dir,version=__version__)})
             elif args.command=='errors':
                 from . import errors as E
                 base=Path(args.db).parent
@@ -350,14 +353,14 @@ def main(supervised=False):
                     output({'errors':E.entries(base,limit=args.limit)[::-1],'summary':E.summary(base)})
             elif args.command=='update':
                 from . import updater
-                output(updater.check(ROOT) if args.action=='check' else (updater.start(ROOT,DATA_DIR) if args.action=='start' else updater.status(DATA_DIR)))
+                output(updater.check(ROOT) if args.action=='check' else (updater.start(ROOT,data_dir) if args.action=='start' else updater.status(data_dir)))
             elif args.command=='glossary':
                 # The glossary is read from the folder --db points at, not the real data folder: `glossary.load`
-                # seeds vocabulary.txt on first read, and with DATA_DIR a test run wrote into the user's own data.
+                # seeds vocabulary.txt on first read, and with data_dir a test run wrote into the user's own data.
                 from . import glossary as G
                 if args.action=='import':
                     if not args.path: raise ValueError('glossary.jsonl yolu gerekli')
-                    output(G.import_file(args.path,DATA_DIR,shared=True))
+                    output(G.import_file(args.path,data_dir,shared=True))
                 elif args.action=='show': output({'count':len(G.load(args.db.parent,ROOT)),'entries':G.load(args.db.parent,ROOT)[:50]})
                 elif args.action=='hint': output({'hint':G.stt_hint(G.load(args.db.parent,ROOT))})
                 else:
@@ -378,10 +381,10 @@ def main(supervised=False):
                 if args.action=='list': output({'rules':CM.word_rules(store)})
                 elif args.action=='teach':
                     if not (args.meeting and args.original and args.replacement): raise ValueError('words teach --meeting <toplantı> <yanlış> <doğru>')
-                    output(CM.teach(store,args.meeting,args.original,args.replacement,DATA_DIR))
+                    output(CM.teach(store,args.meeting,args.original,args.replacement,data_dir))
                 else:
                     if not args.original: raise ValueError('words forget <kelime>')
-                    output(CM.forget(store,args.original,DATA_DIR))
+                    output(CM.forget(store,args.original,data_dir))
             elif args.command=='document':
                 from .documents import build_document
                 from .openrouter import OpenRouterClient,validate_analysis_model
@@ -424,7 +427,7 @@ def main(supervised=False):
                 output(build_scorecard(store,start=args.date_from,end=args.date_to))
             elif args.command=='review-debt':
                 from .review import review_debt
-                output(review_debt(store,args.days,DATA_DIR))
+                output(review_debt(store,args.days,data_dir))
             elif args.command=='share':
                 from .share import prepare_share
                 from . import glossary as G
