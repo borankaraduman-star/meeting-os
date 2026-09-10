@@ -34,3 +34,16 @@ Kullanım Mac’i yalnız **etiketli sürümleri** kurar: hem uygulamadaki kontr
 ## Kurulum durumu kartı (1.2.11+)
 
 Kullanım Mac’inde bir şey çalışmıyorsa önce Ayarlar (⌘,) → **Sistem → Kurulum durumu**: izinler, OpenRouter anahtarı, sözlük, sürüm ve teşhis raporu klasörünün yazılabilirliği tek listede; kırmızı maddede “İzin iste” ya da “Ayarları aç” doğrudan ilgili yere götürür. Geliştirme Mac’inde rapor görünmüyorsa kullanım Mac’inde bu karttaki “Teşhis raporları” satırına bakın (kapalı / klasör yok / kaç rapor yazıldı).
+
+## Düğme görünmüyorsa (eski sürümde “güncel” yazıyor ama değil)
+
+1.2.45 öncesi sürümler yerel değişiklik, ayrışma ya da yarıda kalmış güncelleme durumunda düğmeyi gizleyip “güncel” diyordu. Terminal’den güncelleme düğmeden bağımsızdır:
+
+```sh
+cd ~/meeting-os
+git status --short                 # bir şey listeliyorsa: git stash
+git fetch --tags --force origin v0.1
+git show origin/v0.1:scripts/fix-signing-prompts.sh > /tmp/fsp.sh && sh /tmp/fsp.sh   # Mac parolası bir kez
+# Meeting OS’u ⌘Q ile kapatın, sonra:
+sh scripts/update.sh; sleep 60; tail -5 "$HOME/Library/Application Support/MeetingOS/update.log"
+```

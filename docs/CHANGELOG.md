@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 56 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 57 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.52](#v1252) | 2026-09-11 01:35 | Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor |
 | [v1.2.51](#v1251) | 2026-09-11 00:50 | Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez |
 | [v1.2.50](#v1250) | 2026-09-10 23:55 | Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı |
 | [v1.2.49](#v1249) | 2026-09-10 23:20 | Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür |
@@ -76,6 +77,16 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1252"></a>
+### Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor
+
+2026-09-11 01:35 · yerel not · GitHub sürüm sayfası yok
+
+- Kıyas setine `mic_owner` vakası (kurgusal 4 kişilik toplantı; sahibin mikrofon satırları "Ben" etiketiyle, bir yankı satırı, bir karar): sahibin iki sözü sahibe, meslektaşınki meslektaşa, yankı sözü "kontrol edin" ile. Bulutta 7/7, çevrimdışı 11 sözleşme testi. Uygulama kodu değişmedi.
+- `docs/BENCHMARK.md` güncellendi.
+
+Diğer Mac için Terminal'den güncelleme tarifi (eski sürüm düğmeyi gizliyorsa): `docs/TWO_MAC_WORKFLOW.md` → "Düğme görünmüyorsa".
 
 <a id="v1251"></a>
 ### Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez
