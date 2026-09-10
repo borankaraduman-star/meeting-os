@@ -71,6 +71,45 @@ class CaptureBlockTests(unittest.TestCase):
             self.assertIsNone(reports.build_meeting_report(s,other,data)['capture'])
             s.close()
 
+class ReportPrivacyTests(unittest.TestCase):
+    """The Settings caption promises numbers only. The report is written into iCloud Drive or a team folder, so
+    the meeting title and the people in it stay out of it unless the user turns transcript sharing on."""
+    def _meeting(self,data):
+        s=Store(data/'meeting-os.sqlite');mid=s.create_meeting('Yatırımcı görüşmesi',{})
+        s.add_segment(mid,Segment(0,10,'Merhaba','system','Konuşmacı 1',metrics={'cluster':0,'identity':{'similarity':0.91,'suggested':'Ayşe Yılmaz','name':None}}))
+        s.add_segment(mid,Segment(10,20,'Evet','system','Konuşmacı 2',metrics={'cluster':1}))
+        s.correct(mid,'Konuşmacı 1','Ayşe Yılmaz');s.status(mid,'complete')
+        return s,mid
+    def test_the_title_and_the_names_are_left_out_unless_transcript_sharing_is_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s,mid=self._meeting(data)
+            report=reports.build_meeting_report(s,mid,data)
+            blob=json.dumps(report,ensure_ascii=False)
+            self.assertIsNone(report['title'])
+            self.assertNotIn('Yatırımcı görüşmesi',blob);self.assertNotIn('Ayşe Yılmaz',blob)
+            self.assertEqual(sorted(report['speakers']),['S1','S2'])
+            first=report['speakers']['S1']
+            self.assertEqual((first['segments'],first['seconds'],first['clusters']),(1,10.0,1))
+            self.assertEqual((first['similarity'],first['named'],first['name'],first['suggested']),(0.91,True,None,None))
+            self.assertFalse(report['speakers']['S2']['named'])
+            s.close()
+    def test_transcript_sharing_brings_the_title_and_the_real_labels_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s,mid=self._meeting(data)
+            report=reports.build_meeting_report(s,mid,data,include_text=True)
+            self.assertEqual(report['title'],'Yatırımcı görüşmesi')
+            self.assertEqual(report['speakers']['Konuşmacı 1']['name'],'Ayşe Yılmaz')
+            self.assertEqual(report['transcript'][0]['speaker'],'Ayşe Yılmaz')
+            s.close()
+    def test_the_written_report_carries_the_same_redaction_and_the_digest_still_counts_named_people(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s,mid=self._meeting(data)
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run): path=reports.write_meeting_report(s,mid,data)
+            self.assertNotIn('Ayşe Yılmaz',Path(path).read_text(encoding='utf-8'))
+            self.assertEqual(reports.summarize(str(data/'shared'))['reports'][0]['named'],1)
+            s.close()
+
 class HeartbeatTests(unittest.TestCase):
     def test_heartbeat_is_one_file_per_host_with_sizes_disk_and_thermal(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -211,7 +211,12 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         sp['segments'] += 1; sp['seconds'] += float(r['end'] - r['start']); sp['clusters'].add((r.get('metrics') or {}).get('cluster'))
         ident = (r.get('metrics') or {}).get('identity') or {}
         if ident.get('similarity') is not None: sp['similarity'] = round(float(ident['similarity']), 3); sp['suggested'] = ident.get('suggested')
-    for sp in speakers.values(): sp['clusters'] = len(sp['clusters']); sp['seconds'] = round(sp['seconds'], 1)
+    for sp in speakers.values(): sp['clusters'] = len(sp['clusters']); sp['seconds'] = round(sp['seconds'], 1); sp['named'] = bool(sp['name'])
+    if not include_text:
+        # The Settings caption promises "yalnız sayı, puan, maliyet, model adı ve hata satırı". A meeting title
+        # and a person's name are content, and this file lands in iCloud Drive or the team folder; the counts,
+        # the similarity and whether the cluster was named at all survive, the identity does not.
+        speakers = {f'S{i}': {**sp, 'name': None, 'suggested': None} for i, sp in enumerate(speakers.values(), 1)}
     from .review import review_queue
     from .quality import identity_report
     queue = review_queue(store, mid)
@@ -225,7 +230,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
     duration = round(max((r['end'] for r in rows), default=0.0), 1)
     report = {
         'report_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
-        'written': datetime.now(timezone.utc).isoformat(), 'meeting': row['id'], 'title': row['title'], 'created': row['created'], 'status': row['status'],
+        'written': datetime.now(timezone.utc).isoformat(), 'meeting': row['id'], 'title': row['title'] if include_text else None, 'created': row['created'], 'status': row['status'],
         'engine': meta.get('engine'), 'model': meta.get('model'), 'cloud_mode': meta.get('cloud_mode'),
         'duration_seconds': duration, 'segments': len(rows), 'words': sum(len((r.get('text') or '').split()) for r in rows),
         'capture': capture_block(meta.get('capture_dir'), duration),
@@ -371,7 +376,7 @@ def summarize(report_dir, limit=30):
     for path in sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
         try: r = json.loads(path.read_text(encoding='utf-8'))
         except ValueError: continue
-        named = sum(1 for s in (r.get('speakers') or {}).values() if s.get('name'))
+        named = sum(1 for s in (r.get('speakers') or {}).values() if s.get('named') or s.get('name'))   # `name` only in older reports and share_text ones
         out.append({'host': r.get('host'), 'file': path.name, 'title': r.get('title'), 'status': r.get('status'), 'duration_min': round((r.get('duration_seconds') or 0) / 60, 1), 'cost_usd': r.get('cost_usd'), 'model': r.get('model'),
                     'speakers': len(r.get('speakers') or {}), 'named': named, 'review': r.get('review_queue'), 'analysis': (r.get('analysis') or {}).get('counts'), 'errors': len(r.get('errors') or []), 'commit': r.get('commit'), 'app_version': r.get('app_version')})
     hosts = {}
