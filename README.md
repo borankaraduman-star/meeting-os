@@ -35,7 +35,7 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
 5. **Özet** ekranında her maddenin kaynak alıntısını kontrol edin.
-   Kayıt son işlemi ve dosya içe aktarımı bittiğinde yerel analiz otomatik başlar.
+   Kayıt son işlemi ve dosya içe aktarımı bittiğinde özet/görev analizi OpenRouter’da (gpt-4.1-mini) otomatik başlar; yerel modda bu Mac’te çalışır.
    İsim/metin düzeltince analiz eski işaretlenir; Özet sekmesinin sağ üstündeki
    **Özeti güncelle** ile yenileyin.
 6. Aynı kişinin sonraki toplantılarda tanınması için temiz, tek konuşmacılı bir
@@ -251,9 +251,9 @@ Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durum
 
 [Bu Mac'te ölçülen sonuçlar](docs/RELIABILITY_1.0.5.md).
 
-### İsteğe bağlı OpenRouter transkripsiyonu
+### OpenRouter transkripsiyonu (varsayılan yol)
 
-Sol menüde **OpenRouter ile ses aç**, kullanıcı onayıyla varsayılan `openai/gpt-transcribe` veya model menüsündeki dört doğrulanmış alternatifi kullanır. Bu ücretli bulut seçeneği yerel varsayılanları değiştirmez. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı ve özet/görev analizi yerelde kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
+Kenar çubuğunda **⋯ → Ses dosyası aç…**, kullanıcı onayıyla varsayılan `microsoft/mai-transcribe-2` veya model menüsündeki doğrulanmış alternatifleri kullanır. Bu ücretli bulut yolu varsayılandır. Anahtar macOS Anahtar Zinciri’nde tutulur; konuşmacı ayrımı sağlayıcıdan gelir, özet/görev analizi de OpenRouter’da (gpt-4.1-mini) yapılır; yalnız ses profili eşleştirmesi bu Mac’te kalır. Kurulum, fiyat, devam etme ve doğrulama sınırları: [OpenRouter rehberi](docs/OPENROUTER.md).
 
 ### Toplantı sırasında yük (1.2.14+)
 

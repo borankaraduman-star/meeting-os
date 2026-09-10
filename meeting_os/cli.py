@@ -129,7 +129,7 @@ def parser():
     s=sub.add_parser('show'); s.add_argument('meeting'); s.add_argument('--json',action='store_true')
     c=sub.add_parser('label'); c.add_argument('meeting'); c.add_argument('speaker'); c.add_argument('name')
     c=sub.add_parser('label-segment'); c.add_argument('meeting'); c.add_argument('segment',type=int); c.add_argument('name')
-    e=sub.add_parser('enroll'); e.add_argument('meeting'); e.add_argument('segment',type=int); e.add_argument('name'); e.add_argument('--confirmed-clean',action='store_true',required=True,help='Confirm listening to the segment: one speaker, no overlap/echo, >=3s speech')
+    e=sub.add_parser('enroll'); e.add_argument('meeting'); e.add_argument('segment',type=int); e.add_argument('name'); e.add_argument('--confirmed-clean',action='store_true',required=True,help='Confirm listening to the segment: one speaker, no overlap/echo, >=6s speech (the app asks for 6; the store accepts 3)')
     profiles=sub.add_parser('profiles'); profiles.add_argument('--delete')
     b=sub.add_parser('benchmark'); b.add_argument('manifest',type=Path); b.add_argument('--output',type=Path,required=True)
     a=sub.add_parser('openrouter-import'); a.add_argument('audio',type=Path,nargs='?'); a.add_argument('--title',default=os.environ.get('MEETING_OS_TITLE') or 'OpenRouter toplantısı'); a.add_argument('--resume'); a.add_argument('--model'); a.add_argument('--allow-upload',action='store_true'); a.add_argument('--no-local',action='store_true',help='Cloud-only: provider diarization, no local models'); a.add_argument('--output',type=Path)

@@ -6,16 +6,16 @@
 - Kayıt bitince sesi OpenRouter’a gönderir, Türkçe yazıya çevirir ve konuşanları ayırır.
 - Bir kez adlandırdığınız kişiyi ses profilinden sonraki toplantılarda kendiliğinden tanır.
 - Transkriptten özet, kararlar, riskler, açık sorular ve görevleri kaynak alıntısıyla çıkarır.
-- **Kendiliğinden dışarı çıkan iki şey var:** (1) ses ve transkript OpenRouter’a gider, (2) sayısal teşhis raporu ekip klasörüne yazılır (rapor paylaşımı varsayılan olarak açık). Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir.
+- **Kendiliğinden dışarı çıkan iki şey var:** (1) ses ve transkript OpenRouter’a gider, (2) sayısal teşhis raporu ekip klasörüne yazılır (rapor paylaşımı varsayılan olarak açık). Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir. Tek istisna: bir görevi **Hatırlatıcılar’a ekle** derseniz görev başlığı, sahibi ve toplantı adı Apple Hatırlatıcılar’a (iCloud’la eşitlenir) yazılır; toplantıyı silince tamamlanmamış olanlar kaldırılır.
 
 ## Gizlilik — ne nerede kalır
 
-- **Ses kayıtları ve transkriptler Mac’inizde kalır** (`~/Library/Application Support/MeetingOS/`). Bulutta saklanmaz.
+- **Ses kayıtları ve transkriptler Mac’inizde kalır** (`~/Library/Application Support/MeetingOS/`). Ses hiçbir yerde saklanmaz; transkript metni yalnız “Raporlara transkript metnini de ekle” açıksa rapora (iCloud/ekip klasörü) girer. OpenRouter isteklerinde sağlayıcıdan veri saklamaması istenir (`data_collection: deny`); hesabınızın kendi gizlilik ayarını da <https://openrouter.ai/settings/privacy> adresinden kontrol edin.
 - **OpenRouter’a giden iki şey var:** (1) yazıya çevrilmek üzere ses parçaları (Opus 32 kbps, saatte ≈14 MB), (2) özet/karar/görev analizi. Analiz her toplantıdan sonra **kendiliğinden başlar** ve transkriptin tamamını, konuşmacı adlarıyla birlikte, ≈2800 token’lık gruplar hâlinde `openai/gpt-4.1-mini` modeline gönderir — “ilgili bölümler” değil, hepsi. Bunu istemiyorsanız tek yol Ayarlar → Sistem → Yazıya çevirme → **Yerel model**: o zaman ses de metin de OpenRouter’a gitmez.
 - **Ses profilleri Mac’inizden çıkmaz.** Kişi tanıma bu Mac’te yapılır; profiller yalnız kişinin kendi kararıyla ve ileride eklenecek bir dışa aktarma ile paylaşılabilir. Bugün böyle bir yol yok.
 - **Teşhis raporları sayısaldır ama anonim değildir:** süre, parça sayısı, ücret, hata satırı, konuşmacı sayısı — ve bunların yanında **toplantı başlığı** ile konuşmacılara verdiğiniz **adlar**. Transkript metninin kendisi yalnız Ayarlar → Sistem → **Gelişmiş** → “Raporlara transkript metnini de ekle (varsayılan kapalı)” açıksa girer. Rapor yazma varsayılan olarak **açıktır**; kapatmak için Ayarlar → Sistem → **Gelişmiş** → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz” anahtarını kapatın.
 - Ekran kareleri saklanmaz; ekran kaydı izni yalnız sistem sesini almak için gerekir.
-- Toplantıyı silerseniz sesi, transkripti, özeti, görevleri ve o toplantının raporu birlikte silinir.
+- Toplantıyı silerseniz sesi, transkripti, özeti, görevleri, geçici yeniden-deneme kopyaları, o toplantının raporu (önceki rapor klasörlerindeki dahil) ve Hatırlatıcılar’daki tamamlanmamış aktarımları birlikte silinir; veritabanı silinen sayfaları sıfırlar.
 
 ## Asla paylaşmayın
 
@@ -66,7 +66,7 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 3. Hâlâ olmuyorsa Boran’a şunu gönderin (sırayla, elinizde ne varsa):
    - Kenar çubuğunda Ayarlar’ın yanındaki **⋯ → Tanılama raporu kaydet** ile kaydettiğiniz JSON (toplantı içeriği yoktur, yalnız sürüm/bellek/disk sayıları).
    - Ayarlar → Sistem → **Gelişmiş** → **Öz-test** düğmesine basıp sonucun ekran görüntüsü.
-   - `~/Library/Application Support/MeetingOS/last-job.log` (son işin günlüğü).
+   - `~/Library/Application Support/MeetingOS/last-job.log` (son işin günlüğü; 1.2.33’ten itibaren toplantı metni içermez, ama göndermeden önce açıp bakın).
    - Güncelleme yarıda kaldıysa `~/Library/Application Support/MeetingOS/update.log` ve `update-status.json`.
    - Kurulum sırasında hata aldıysanız `~/meeting-os/installation.log`.
    - Ekip klasörü ayarlıysa toplantı raporunuz zaten `<ekip klasörü>/reports/<mac-adı>/` altındadır; yalnız hangi toplantı olduğunu söylemeniz yeter.

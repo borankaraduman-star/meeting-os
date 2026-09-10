@@ -1,6 +1,6 @@
 # Meeting OS — Kullanım kılavuzu (1.2.32)
 
-Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Hiçbir şey kendiliğinden dışarı gönderilmez: bütün dışa aktarımlar dosya olarak kaydedilir.
+Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Kendiliğinden dışarı çıkanlar: kayıt bitince ses ve transkript OpenRouter’a, her toplantıdan sonra sayısal teşhis raporu (başlık ve konuşmacı adları dahil) iCloud’daki ya da ekip klasörüne, altı saatte bir güncelleme kontrolü GitHub’a gider. Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir (Hatırlatıcılar’a eklediğiniz görevler iCloud’la eşitlenir).
 
 ![Ana pencere. Sol: Yeni kayıt, sürüm satırı (Güncelleme ara), toplantı araması, tarih grupları; altta Son durum kartı, Ayarlar ve ⋯ menüsü. Sağ: başlık, özet şeridi (tarih · süre · kişi), sekmeler ve rozetler, konuşmada ara, İsimler kartı, okuma görünümü.](img/sidebar.jpg)
 
