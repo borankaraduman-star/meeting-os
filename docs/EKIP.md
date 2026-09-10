@@ -56,7 +56,7 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 - [ ] **Görevlerim → Bana ait** listesinin gerçekten sizin sözlerinizi gösterdiğini doğrulayın; sahibi yanlışsa Düzenle ile düzeltin.
 - [ ] Bir kez **Gün sonu özeti…** ve bir kez **Beklediklerim** çıktısı alın; işinize yaramıyorsa söyleyin.
 - [ ] Ayarlar → **Sesler ve sözlük → Sözlük**: sık geçen ürün/proje/kişi adlarını her satıra bir tane yazıp **Sözlüğü kaydet** deyin; yazım hataları belirgin biçimde azalır. Ekip klasörü verildiyse proje sözlüğü ekipçe ortaklaşır.
-- [ ] Ayarlar → **Sistem → Depolama**: kayıt sırasında ses geçici olarak ≈2 GB/saat yer kaplar, sıkıştırıldıktan sonra ≈150 MB/saat kalır (ölçülen bir toplantı: 41 dakika = 82 MB). Toplam kullanım ve en büyük toplantılar bu karttadır. Diskte birkaç GB boş tutun; “Eski toplantıların sesi” seçeneğini Ayarlar → Sistem → **Gelişmiş** altında kendinize göre ayarlayın.
+- [ ] Ayarlar → **Sistem → Depolama**: kayıt sırasında ses geçici olarak ≈2 GB/saat yer kaplar, sıkıştırıldıktan sonra ≈150 MB/saat kalır (ölçülen bir toplantı: 41 dakika = 82 MB). Toplam kullanım ve en büyük toplantılar bu karttadır. Diskte birkaç GB boş tutun; “Eski toplantıların sesi” seçeneğini Ayarlar → Sistem → **Gelişmiş** altında kendinize göre ayarlayın. Disk dolduğu için durmuş bir kayıtta hiçbir şey kaybolmaz, ama yazıya çevrilebilmesi için önce birkaç GB yer açmanız gerekir.
 - [ ] Bir haftalık **maliyeti** Ayarlar → Sistem → **Bulut maliyeti** kartından görün.
 
 ## Bir şey çalışmazsa

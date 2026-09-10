@@ -12,7 +12,14 @@ var lastChunkAt = Date.distantPast
 func markChunk() { journalLock.lock(); lastChunkAt = Date(); journalLock.unlock() }
 func chunkClock() -> Date { journalLock.lock(); let value = lastChunkAt; journalLock.unlock(); return value }
 
+/// Every journal line carries the wall clock it was written on. Chunk `start` values are elapsed audio on the
+/// capture host clock: they freeze while the Mac sleeps, and a relaunched helper splices its own timeline onto
+/// the last finalized chunk, so the wall seconds those two things cost are recorded nowhere else. With `wall`
+/// on the chunk lines the drift is measured rather than guessed, and finalize can put the ⌘M markers — which
+/// the app stamps on the wall clock — back where the transcript actually is.
 func emit(_ object: [String: Any]) {
+    var object = object
+    object["wall"] = (Date().timeIntervalSince1970*1000).rounded()/1000
     if let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), var line = String(data: data, encoding: .utf8) {
         line += "\n"
         let bytes = Data(line.utf8)
@@ -91,20 +98,26 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
     let queue = DispatchQueue(label: "meeting-os.audio-writer")
     let writers: [SCStreamOutputType: ChunkWriter]
     let origin: Double
-    var failure: Error?
-    /// Stream-level stop (sleep, display change, ScreenCaptureKit hiccup): the run loop rebuilds the stream instead of ending the meeting.
-    var streamError: Error?
-    var lastSample = Date()
+    /// Watchdog state: the failure that ends the meeting, a stream-level stop the run loop recovers from
+    /// (sleep, display change, ScreenCaptureKit hiccup), and when audio last arrived. The 0.25 s run-loop timer
+    /// reads all three, so they sit behind their own lock rather than on the audio writer queue — a `queue.sync`
+    /// hop made the watchdog wait twelve times a second behind an AVAudioFile write, a moveItem and an fsync,
+    /// and `lastSample` was written from the Task context without the queue at all.
+    private let watch = NSLock()
+    private var failureValue: Error?
+    private var streamErrorValue: Error?
+    private var lastSampleValue = Date()
     init(directory: URL, seconds: Double, offset: Double = 0) {
         origin = CMClockGetTime(CMClockGetHostTimeClock()).seconds
         writers = [.audio: ChunkWriter(directory, "system", seconds, offset: offset), .microphone: ChunkWriter(directory, "mic", seconds, offset: offset)]
     }
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        queue.async { self.streamError = error; emit(["event":"stream_stopped", "message":error.localizedDescription]) }
+        watch.lock(); streamErrorValue = error; watch.unlock()
+        emit(["event":"stream_stopped", "message":error.localizedDescription])
     }
-    func takeStreamError() -> Error? { queue.sync { let e = streamError; streamError = nil; return e } }
-    func secondsSinceLastSample() -> Double { queue.sync { Date().timeIntervalSince(lastSample) } }
-    func markSample() { lastSample = Date() }
+    func takeStreamError() -> Error? { watch.lock(); defer { watch.unlock() }; let e = streamErrorValue; streamErrorValue = nil; return e }
+    func secondsSinceLastSample() -> Double { watch.lock(); defer { watch.unlock() }; return Date().timeIntervalSince(lastSampleValue) }
+    func markSample() { watch.lock(); lastSampleValue = Date(); watch.unlock() }
     func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
         guard let writer = writers[type], sample.isValid, CMSampleBufferDataIsReady(sample),
               let description = sample.formatDescription,
@@ -117,15 +130,15 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
         guard status == noErr else { emit(["event":"error", "message":"PCM copy failed: \(status)"]); return }
         let time = sample.presentationTimeStamp.seconds - origin
         guard time.isFinite, time > -1 else { emit(["event":"error", "message":"Invalid capture clock"]); return }
-        lastSample = Date()
+        markSample()
         do { try writer.append(pcm, time: time) }
-        catch { failure = error; emit(["event":"error", "message":error.localizedDescription]) }
+        catch { fail(error); emit(["event":"error", "message":error.localizedDescription]) }
     }
     func finish() throws {
         try queue.sync { for writer in writers.values { try writer.finish() } }
     }
-    func getFailure() -> Error? { queue.sync { failure } }
-    func fail(_ error:Error) { queue.sync { failure=error } }
+    func getFailure() -> Error? { watch.lock(); defer { watch.unlock() }; return failureValue }
+    func fail(_ error:Error) { watch.lock(); failureValue = error; watch.unlock() }
 }
 
 func option(_ key: String) -> String? {

@@ -55,7 +55,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         """One supervisor line into the journals. events.jsonl is this process's log; the app's capture_state
         reads only the helper journal, so a relaunch has to be visible there too — but never create that file,
         or a folder whose helper died before writing it would look like it holds no audio."""
-        line=json.dumps(event,ensure_ascii=False)+'\n'
+        line=json.dumps({**event,'wall':round(time.time(),3)},ensure_ascii=False)+'\n'   # same wall stamp the helper puts on its own lines
         for name in ('events.jsonl','capture-native.jsonl'):
             path=directory/name
             if name!='events.jsonl' and not path.exists(): continue

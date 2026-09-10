@@ -566,6 +566,68 @@ class MarkerTests(unittest.TestCase):
             q=dispatch({'action':'review_queue','meeting':mid},db)
             self.assertEqual(q['items'][0]['kind'],'marker');self.assertIn('Karar anı',q['items'][0]['reason']);self.assertEqual(q['items'][0]['start'],3.2)
 
+class MarkerDriftTests(unittest.TestCase):
+    """⌘M is stamped on the wall clock; the transcript runs on elapsed audio. Sleep and helper relaunches pull the
+    two apart, and the journal's wall stamps are what puts a marker back on the sentence it was meant for."""
+    ORIGIN=1_700_000_000.0
+    def journal(self,root,chunks,*,stamped=True,name='rec'):
+        d=Path(root)/name;d.mkdir()
+        started={'event':'started','clock':'hostTime','sources':['mic','system']}
+        if stamped: started['wall']=self.ORIGIN
+        lines=[json.dumps(started)]
+        for wall,start,duration in chunks:
+            e={'event':'chunk','source':'system','index':0,'path':str(d/'x.wav'),'sample_rate':48000,'start':start,'duration':duration}
+            if stamped: e['wall']=self.ORIGIN+wall
+            lines.append(json.dumps(e))
+        (d/'capture-native.jsonl').write_text('\n'.join(lines)+'\n')
+        return d
+    def markers(self,d,*wall_elapsed):
+        (d/'markers.jsonl').write_text(''.join(json.dumps({'seconds':round(w,1),'kind':'decision','created':'x','wall':self.ORIGIN+w})+'\n' for w in wall_elapsed))
+        from meeting_os.cloud_finalize import read_markers
+        return read_markers(d)
+    def steady(self,seconds):
+        """Wall and audio in lockstep: a 12 s chunk every 12 s."""
+        return [(t,t-12,12) for t in range(12,seconds+1,12)]
+    def test_no_gap_leaves_the_marker_where_the_user_pressed_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,self.steady(120))
+            self.assertEqual(self.markers(d,100.0),[{'seconds':100.0,'kind':'decision','created':'x'}])
+    def test_five_minute_sleep_before_the_marker_moves_it_back_by_the_sleep(self):
+        # 96 s of audio, a 300 s lid-close the audio clock never counted, then the recording carries on.
+        chunks=self.steady(96)+[(396+12*k,96+12*(k-1),12) for k in range(1,10)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks)
+            self.assertEqual(self.markers(d,500.0),[{'seconds':200.0,'kind':'decision','created':'x','wall_seconds':500.0}])
+    def test_a_gap_after_the_marker_does_not_touch_it(self):
+        chunks=self.steady(96)+[(396+12*k,96+12*(k-1),12) for k in range(1,10)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks)
+            self.assertEqual(self.markers(d,50.0),[{'seconds':50.0,'kind':'decision','created':'x'}])
+    def test_relaunch_splice_is_subtracted_like_a_sleep(self):
+        # The helper dies at 60 s; the replacement is handed --start-offset 60 twenty seconds later, so those
+        # twenty wall seconds are spliced out of the audio timeline exactly as sleep is.
+        chunks=self.steady(60)+[(80+12*k,60+12*(k-1),12) for k in range(1,6)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks)
+            self.assertEqual(self.markers(d,120.0),[{'seconds':100.0,'kind':'decision','created':'x','wall_seconds':120.0}])
+    def test_write_latency_is_not_mistaken_for_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,[(t+0.4,t-12,12) for t in range(12,121,12)])
+            self.assertEqual(self.markers(d,100.0)[0]['seconds'],100.0)
+    def test_a_journal_without_wall_stamps_leaves_every_marker_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,self.steady(120),stamped=False)
+            from meeting_os.cloud_finalize import wall_audio_drift
+            self.assertEqual(wall_audio_drift(d),(None,[]))
+            self.assertEqual(self.markers(d,100.0),[{'seconds':100.0,'kind':'decision','created':'x'}])
+    def test_an_old_marker_without_its_own_wall_stamp_still_gets_corrected(self):
+        chunks=self.steady(96)+[(396+12*k,96+12*(k-1),12) for k in range(1,10)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks)
+            (d/'markers.jsonl').write_text(json.dumps({'seconds':500.0,'kind':'task','created':'x'})+'\n')
+            from meeting_os.cloud_finalize import read_markers
+            self.assertEqual(read_markers(d),[{'seconds':200.0,'kind':'task','created':'x','wall_seconds':500.0}])
+
 class EvidenceDropTests(unittest.TestCase):
     def test_unlocatable_quote_drops_the_evidence_not_the_analysis(self):
         from meeting_os.intelligence import validate_record
