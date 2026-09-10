@@ -34,7 +34,7 @@ public enum CaptureSignalPresentation {
         return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)" + warning + disk
     }
 
-    /// "Disk azalıyor · 1,2 GB boş · kayıt 69 dk sonra durabilir" — built from the helper's `low_disk` journal
+    /// "Disk azalıyor · 1,2 GB boş · kayıt 39 dk sonra durabilir" — built from the helper's `low_disk` journal
     /// line, which the bridge surfaces as `low_disk_bytes`. A number of minutes is the only form of this warning
     /// anyone can act on: "disk is filling up" during a meeting tells the user nothing about whether to stop.
     /// nil whenever the helper has not warned, so nothing is invented from a missing reading.

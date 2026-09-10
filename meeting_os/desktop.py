@@ -484,7 +484,7 @@ def dispatch(request, db=None):
             return report(store)
         if action in ('learn_word','word_apply','word_dismiss','word_rules','forget_word'):
             # Teaching a word is the text half of "adlandır ve öğren": one correction, remembered, applied to
-            # every near-miss spelling from now on — and reversible word by word.
+            # that exact spelling from now on — near-misses are Kontrol suggestions — and reversible word by word.
             from . import correction_memory as CM
             base=DATA_DIR if db is None else Path(db).parent
             if action=='word_rules': return {'rules':CM.word_rules(store)}

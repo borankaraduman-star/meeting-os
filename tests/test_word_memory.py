@@ -1,5 +1,5 @@
-"""Teach a word once. One correction becomes a rule, near-miss spellings of it are fixed from then on,
-Kontrol surfaces the ones nobody has taught yet, and every part of it is reversible."""
+"""Teach a word once. One correction becomes a rule for that exact spelling, near-misses are offered in
+Kontrol instead of being rewritten behind the user's back, and every part of it is reversible."""
 import json
 import tempfile
 import unittest
@@ -30,7 +30,6 @@ class WordMemoryTests(unittest.TestCase):
             result = cm.teach(db, mid, 'Trendyoll', 'Trendyol', data)
             self.assertEqual((result['segments'], result['fixes'], result['vocabulary_added']), (1, 3, True))
             self.assertEqual(result['rule']['source'], 'taught')
-            self.assertTrue(result['rule']['fuzzy'])
             rows = {r['id']: r for r in db.segments(mid)}
             self.assertEqual(rows[first]['text'], 'Trendyol ekibi ve Trendyol tarafı, ikisi de Trendyol.')
             self.assertIn('word_corrected', rows[first]['flags'])
@@ -42,18 +41,70 @@ class WordMemoryTests(unittest.TestCase):
             self.assertEqual(cm.vocabulary_terms(data), ['Jira', 'Trendyol'])
             db.close()
 
-    def test_a_taught_word_catches_near_misses_and_leaves_the_turkish_suffix_alone(self):
+    def test_a_taught_word_fixes_the_exact_spelling_only_and_leaves_the_turkish_suffix_alone(self):
+        """A near-miss is a suggestion, never an automatic rewrite; the apostrophe suffix stays where it was."""
         with tempfile.TemporaryDirectory() as tmp:
             data, db = self._fixture(tmp, 'Jira\n')
             teaching = db.create_meeting('öğret'); later = db.create_meeting('sonra')
             self._segment(db, teaching, 'Trendyoll ile görüştük.')
             cm.teach(db, teaching, 'Trendyoll', 'Trendyol', data)
             sid = self._segment(db, later, "Trendyoll'a yazdık, Trendiyol raporu geldi, Trendyol'a değil, Trendyola da değil.")
+            db.status(later, 'complete')
             report = cm.apply_rules(db, later, data_dir=data)
             row = next(r for r in db.segments(later) if r['id'] == sid)
-            self.assertEqual(row['text'], "Trendyol'a yazdık, Trendyol raporu geldi, Trendyol'a değil, Trendyola da değil.")
-            self.assertEqual((report['segments'], report['fixes']), (1, 2))
+            self.assertEqual(row['text'], "Trendyol'a yazdık, Trendiyol raporu geldi, Trendyol'a değil, Trendyola da değil.")
+            self.assertEqual((report['segments'], report['fixes']), (1, 1))
             self.assertIn('auto_corrected', row['flags'])
+            words = [i for i in review_queue(db, later, data)['items'] if i['kind'] == 'word']
+            self.assertEqual([(i['original'], i['replacement']) for i in words], [('Trendiyol', 'Trendyol')])
+            self.assertIn('muhtemelen', words[0]['reason'])   # the near-miss is offered, not performed
+            db.close()
+
+    def test_a_taught_word_never_rewrites_an_unrelated_turkish_word(self):
+        """Measured on the user's own transcripts: "Ayşe → Ayşen" rewrote "Aynen" three times, and
+        "eğitimize → eğitimimize" rewrote eighteen tokens. A rule matches the spelling it was taught."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data, db = self._fixture(tmp, 'Jira\n')
+            teaching = db.create_meeting('öğret'); later = db.create_meeting('sonra')
+            self._segment(db, teaching, 'Ayşe raporu yolladı.')
+            cm.teach(db, teaching, 'Ayşe', 'Ayşen', data)
+            self._segment(db, teaching, 'yaşıyoruz burada.', 20)
+            cm.teach(db, teaching, 'yaşıyoruz', 'yaşıyorum', data)
+            text = 'Aynen, aynen öyle. Ben de yapıyorum, atıyorum, arıyorum, alıyoruz. Ayşe geldi.'
+            sid = self._segment(db, later, text)
+            db.status(later, 'complete')
+            cm.apply_rules(db, later, data_dir=data)
+            row = next(r for r in db.segments(later) if r['id'] == sid)
+            self.assertEqual(row['text'], 'Aynen, aynen öyle. Ben de yapıyorum, atıyorum, arıyorum, alıyoruz. Ayşen geldi.')
+            offered = {i['original'] for i in review_queue(db, later, data)['items'] if i['kind'] == 'word'}
+            self.assertIn('Aynen', offered)          # a near-miss is a question in Kontrol, never a rewrite
+            self.assertTrue(all(i['reason'].count('muhtemelen') for i in review_queue(db, later, data)['items'] if i['kind'] == 'word'))
+            db.close()
+
+    def test_a_taught_original_that_is_also_a_vocabulary_term_keeps_working(self):
+        """Teaching a word adds the RIGHT spelling to the vocabulary; if the wrong one is in there too (the
+        user put it there, or an earlier version did), the rule stopped firing from the second meeting on."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data, db = self._fixture(tmp, 'Spilendo\n')
+            teaching = db.create_meeting('öğret'); later = db.create_meeting('sonra')
+            self._segment(db, teaching, 'Spilendo demosu.')
+            cm.teach(db, teaching, 'Spilendo', 'Splendo', data)
+            sid = self._segment(db, later, 'Spilendo yine gündemde.')
+            cm.apply_rules(db, later, data_dir=data)
+            self.assertEqual(next(r for r in db.segments(later) if r['id'] == sid)['text'], 'Splendo yine gündemde.')
+            db.close()
+
+    def test_teaching_the_same_rule_three_times_grows_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data, db = self._fixture(tmp, 'Jira\n')
+            mid = db.create_meeting('a')
+            sid = self._segment(db, mid, 'Bunu kanal üzerinden konuşalım.')
+            for _ in range(3): cm.teach(db, mid, 'kanal', 'kanal ekibi', data)
+            row = next(r for r in db.segments(mid) if r['id'] == sid)
+            self.assertEqual(row['text'], 'Bunu kanal ekibi üzerinden konuşalım.')
+            self.assertEqual(len(row['metrics']['word_corrections']), 1)
+            cm.apply_rules(db, mid, data_dir=data)   # the finalize pass must not grow it either
+            self.assertEqual(next(r for r in db.segments(mid) if r['id'] == sid)['text'], 'Bunu kanal ekibi üzerinden konuşalım.')
             db.close()
 
     def test_a_word_another_rule_produces_or_the_vocabulary_holds_is_never_rewritten(self):
@@ -87,6 +138,23 @@ class WordMemoryTests(unittest.TestCase):
             self.assertEqual(cm.forget(db, 'spilendo', data)['forgotten'], False)   # idempotent
             db.close()
 
+    def test_forget_leaves_a_segment_the_user_edited_after_the_fix(self):
+        """Forgetting a word put back the sentence as it was BEFORE the fix — throwing away whatever the user
+        had typed over it since. That segment is left alone and counted instead."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data, db = self._fixture(tmp, 'Jira\n')
+            mid = db.create_meeting('a')
+            kept = self._segment(db, mid, 'Spilendo demosu yarın.')
+            plain = self._segment(db, mid, 'Spilendo raporu geldi.', 10)
+            cm.teach(db, mid, 'Spilendo', 'Splendo', data)
+            db.correct_text(mid, kept, 'Splendo demosu bugün.')   # a manual edit made after the word was taught
+            result = cm.forget(db, 'Spilendo', data)
+            self.assertEqual((result['segments'], result['kept']), (1, 1))
+            rows = {r['id']: r for r in db.segments(mid)}
+            self.assertEqual(rows[kept]['text'], 'Splendo demosu bugün.')      # the user's sentence survives
+            self.assertEqual(rows[plain]['text'], 'Spilendo raporu geldi.')    # the untouched one is put back
+            db.close()
+
     def test_forget_keeps_a_manual_edit_made_before_the_word_was_taught(self):
         with tempfile.TemporaryDirectory() as tmp:
             data, db = self._fixture(tmp, 'Jira\n')
@@ -113,12 +181,13 @@ class WordMemoryTests(unittest.TestCase):
             cm.dismiss_word(db, mid, 'Trendiyol')
             self.assertEqual([i for i in review_queue(db, mid, data)['items'] if i['kind'] == 'word'], [])
             other = db.create_meeting('b')
-            second = self._segment(db, other, 'Trendiyol raporu.')
+            second = self._segment(db, other, 'Trendiyol raporu, Trendyoll notu.')
             db.status(other, 'complete')
-            self.assertTrue([i for i in review_queue(db, other, data)['items'] if i['kind'] == 'word'])
-            cm.teach(db, other, 'Trendiyol', 'Trendyol', data)
+            # "Bu doğru" holds everywhere: the same word was asked about again in every new meeting.
+            self.assertEqual([i['original'] for i in review_queue(db, other, data)['items'] if i['kind'] == 'word'], ['Trendyoll'])
+            cm.teach(db, other, 'Trendyoll', 'Trendyol', data)
             self.assertEqual([i for i in review_queue(db, other, data)['items'] if i['kind'] == 'word'], [])
-            self.assertEqual(next(r for r in db.segments(other) if r['id'] == second)['text'], 'Trendyol raporu.')
+            self.assertEqual(next(r for r in db.segments(other) if r['id'] == second)['text'], 'Trendiyol raporu, Trendyol notu.')
             db.close()
 
     def test_kontrol_does_not_flag_ordinary_turkish_words(self):
@@ -128,6 +197,17 @@ class WordMemoryTests(unittest.TestCase):
             self._segment(db, mid, 'Kontrolü yaptık, karar sonra gelecek.')
             db.status(mid, 'complete')
             self.assertEqual([i for i in review_queue(db, mid, data)['items'] if i['kind'] == 'word'], [])
+            db.close()
+
+    def test_a_short_vocabulary_term_is_not_a_suggestion(self):
+        """Five letters is one letter from half of Turkish; the vocabulary side of Kontrol starts at six."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data, db = self._fixture(tmp, 'Kanal\nRefinement\n')
+            mid = db.create_meeting('a')
+            self._segment(db, mid, 'Kanat raporu ve refinemant notu.')
+            db.status(mid, 'complete')
+            items = [i for i in review_queue(db, mid, data)['items'] if i['kind'] == 'word']
+            self.assertEqual([(i['original'], i['replacement']) for i in items], [('refinemant', 'Refinement')])
             db.close()
 
     def test_bridge_actions_teach_list_dismiss_and_forget(self):

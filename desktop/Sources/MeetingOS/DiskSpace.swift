@@ -12,11 +12,21 @@ enum DiskSpace {
     /// The helper's own `diskStartBytes`: below this it refuses to open the files at all, so the app must not
     /// promise a recording it cannot get.
     static let refuseBytes = 600_000_000
+    /// The helper's `assemblyHeadroomBytes`: the last 200 MB are not recordable, they are the headroom
+    /// finalize needs on top of everything else. Counting them as recording time promised minutes that
+    /// could never be used.
+    static let headroomBytes = 200_000_000
+    /// The stop threshold is not a fixed floor: finalize assembles every second recorded so far into 16 kHz
+    /// float32, one file per source (`assemblyReserveBytes` in the helper), so 128 000 bytes of the free
+    /// space are claimed by every second of recording ON TOP of the ≈289 000 the chunks themselves take.
+    /// Ignoring that overstated a nearly full disk by nearly half — the one moment the number has to be right.
+    static let reserveBytesPerSecond: Double = 128_000
 
     /// Minutes of recording the free space still holds, rounded down. Never negative.
     static func minutesLeft(freeBytes: Int) -> Int {
-        guard freeBytes > 0 else { return 0 }
-        return Int((Double(freeBytes) / bytesPerHour * 60).rounded(.down))
+        let usable = Double(freeBytes - headroomBytes)
+        guard usable > 0 else { return 0 }
+        return Int((usable / (bytesPerHour / 3600 + reserveBytesPerSecond) / 60).rounded(.down))
     }
 
     /// Free space on the volume that holds `url`, in bytes; nil when the volume cannot be read — an unreadable

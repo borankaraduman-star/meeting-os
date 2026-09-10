@@ -4,15 +4,19 @@ import XCTest
 /// "The disk is filling up" is unusable during a meeting; "the recording stops in 69 minutes" is a decision.
 final class LowDiskTests: XCTestCase {
 
-    func testMinutesLeftIsOneHourPerMeasuredGigabyte() {
-        XCTAssertEqual(DiskSpace.minutesLeft(freeBytes: 1_040_000_000), 60)
+    /// A gigabyte is one hour of chunks, but not one hour of recording: the assembly the meeting still owes
+    /// itself grows by 128 000 B/s, and the last 200 MB are headroom, not minutes.
+    func testMinutesLeftCountsTheGrowingStopThreshold() {
+        XCTAssertEqual(DiskSpace.minutesLeft(freeBytes: 1_040_000_000), 33)
+        XCTAssertEqual(DiskSpace.minutesLeft(freeBytes: 3_000_000_000), 111)
+        XCTAssertEqual(DiskSpace.minutesLeft(freeBytes: 200_000_000), 0)
         XCTAssertEqual(DiskSpace.minutesLeft(freeBytes: 0), 0)
         XCTAssertEqual(DiskSpace.minutesLeft(freeBytes: -5), 0)
     }
 
     func testLowDiskLine() {
         XCTAssertEqual(CaptureSignalPresentation.lowDisk(["low_disk_bytes": 1_200_000_000]),
-                       "Disk azalıyor · 1,2 GB boş · kayıt 69 dk sonra durabilir")
+                       "Disk azalıyor · 1,2 GB boş · kayıt 39 dk sonra durabilir")
     }
 
     /// No warning from the helper means nothing is said; a reading that cannot be parsed invents nothing either.
@@ -34,7 +38,7 @@ final class LowDiskTests: XCTestCase {
             ]
         ]
         XCTAssertEqual(CaptureSignalPresentation.label(capture),
-                       "Kayıt: 02:05\nMikrofon: Sinyal var\nSistem: Sessiz\nDisk azalıyor · 1,2 GB boş · kayıt 69 dk sonra durabilir")
+                       "Kayıt: 02:05\nMikrofon: Sinyal var\nSistem: Sessiz\nDisk azalıyor · 1,2 GB boş · kayıt 39 dk sonra durabilir")
     }
 
     /// Before ⌃⌥R: warn under 1,5 GB, refuse only under the helper's own floor, and never refuse over a

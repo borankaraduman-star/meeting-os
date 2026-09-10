@@ -147,12 +147,24 @@ func option(_ key: String) -> String? {
     return args[i+1]
 }
 
+/// Free space the way the app measures it (`DiskSpace.free`): "important usage" is what macOS will actually
+/// hand this process, purgeable caches included. `.systemFreeSize` is a different, smaller number, so the
+/// helper and the app disagreed about the same disk — the app promised minutes the helper then refused.
 func remainingBytes(_ directory:URL) -> Int64? {
-    let values=try? FileManager.default.attributesOfFileSystem(forPath:directory.path)
-    return (values?[.systemFreeSize] as? NSNumber)?.int64Value
+    var probe = directory.standardizedFileURL
+    while true {
+        if let values = try? probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+           let capacity = values.volumeAvailableCapacityForImportantUsage { return Int64(capacity) }
+        let parent = probe.deletingLastPathComponent()
+        guard parent.path != probe.path else { return nil }
+        probe = parent
+    }
 }
 func diskError() -> NSError { NSError(domain:"MeetingCapture",code:6,userInfo:[NSLocalizedDescriptionKey:"Disk doldu. Ses dosyaları korundu; devam etmek için yer açın."]) }
 let diskWarnBytes: Int64 = 3_000_000_000   // journal a warning the app can show; recording continues
+/// One warning per meeting told the user the disk was low once, at a number that was minutes old by the time
+/// they looked. Every further 250 MB gone is a new fact and a new line — the app shows the latest reading.
+let diskWarnStepBytes: Int64 = 250_000_000
 let diskStopBytes: Int64 = 400_000_000     // floor: stop only when the disk is genuinely about to fill
 let diskStartBytes: Int64 = 600_000_000
 let assemblySources = 2                    // mic + system: finalize assembles one float32 file per source
@@ -281,7 +293,7 @@ func run() async throws {
         let deadline = Date().addingTimeInterval(max(1,duration))
         timer.schedule(deadline:.now()+0.25, repeating:0.25)
         var diskCheck=Date.distantPast
-        var warnedDisk=false
+        var lastDiskWarning: Int64? = nil
         var lastWall=Date()
         var lastHost=CMClockGetTime(CMClockGetHostTimeClock()).seconds
         var wakeGap=0.0
@@ -304,8 +316,10 @@ func run() async throws {
                 let warnAt = max(diskWarnBytes, stopAt * 3)   // assemblyReserveBytes is capped well below Int64.max/3
                 if let available=remainingBytes(directory) {
                     if available < stopAt { capture.fail(diskError()) }
-                    else if available < warnAt && !warnedDisk { warnedDisk=true; emit(["event":"low_disk", "free_bytes":available]) }
-                    else if available >= warnAt { warnedDisk=false }
+                    else if available < warnAt, lastDiskWarning.map({ $0-available >= diskWarnStepBytes }) ?? true {
+                        lastDiskWarning=available; emit(["event":"low_disk", "free_bytes":available])
+                    }
+                    else if available >= warnAt { lastDiskWarning=nil }
                 }
             }
             if let err = capture.takeStreamError() { restartStream(reason: err.localizedDescription) }
