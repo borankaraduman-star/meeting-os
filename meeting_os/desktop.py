@@ -380,11 +380,17 @@ def dispatch(request, db=None):
                 return {**saved,'renamed_meetings':(renamed or {}).get('meetings',0),'renamed_segments':(renamed or {}).get('segments',0)}
             if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
+            # The version of the BUNDLE that is running, when the app tells us (CFBundleShortVersionString), not
+            # the repo's. An update that merged and then failed to build leaves the two different, and that gap
+            # is the only way the other Mac can see it happened. Falls back to the repo version for the CLI and
+            # for a plain `swift build`, where the bundle carries no version at all.
+            sent=request.get('app') if isinstance(request.get('app'),dict) else {}
+            app_version=str(sent.get('version') or '').strip() or __version__
             if action=='heartbeat':
                 global _TIGHTENED
                 if not _TIGHTENED: reports.tighten_modes(base); _TIGHTENED=True   # once a run: files written before the mode was fixed stay 0644 forever
-                return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
-            return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
+                return {'path':reports.write_heartbeat(store,base,app={'version':app_version,'commit':None})}
+            return {'path':reports.write_meeting_report(store,request['meeting'],base,version=app_version,commit=reports.repo_commit())}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G
             if action=='glossary_apply_all': return G.apply_all(store,request['meeting'],verified_only=request.get('verified_only',True) is not False)
@@ -532,8 +538,14 @@ def dispatch(request, db=None):
         if action=='setup_status':
             from . import glossary as G
             from .openrouter import KEY_CACHE
-            try: has_key=KEY_CACHE.is_file()   # never `security`: no Keychain dialog from a bridge or a test
+            from .probe import keychain_item_exists,SIGNING_MARKER
+            try: has_key=KEY_CACHE.is_file()   # the key file is the only thing the app reads; the secret is never fetched here
             except Exception: has_key=False
+            # No key file, but the Keychain still holds one (a Mac installed before 1.2.30): a metadata-only
+            # query, no -w, so macOS never prompts. The card then says "open the app once", not "no key".
+            key_in_keychain=False if has_key else keychain_item_exists()
+            try: signing_partition=bool(SIGNING_MARKER.is_file())
+            except Exception: signing_partition=False
             data=DATA_DIR if db is None else Path(db).parent
             entries=G.load(data,ROOT); paths=[p for p in G.sources(data) if p.is_file()]
             behind=0
@@ -548,7 +560,7 @@ def dispatch(request, db=None):
             anchor=folder
             while not anchor.exists() and anchor.parent!=anchor: anchor=anchor.parent   # mkdir(parents=True) creates the rest on first write
             writable=bool(rs.get('share_reports')) and os.access(anchor,os.W_OK)
-            return {'api_key':has_key,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
+            return {'api_key':has_key,'api_key_keychain':key_in_keychain,'signing_partition':signing_partition,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
                     'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder)}
         if action=='cost_report':
             # Real OpenRouter charges: transcription per audio piece, analysis per chat completion.

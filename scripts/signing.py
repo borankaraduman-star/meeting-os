@@ -56,6 +56,25 @@ def verify(app):
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
 
 
+def prune_backups(folder, keep_dir=None, keep=2):
+    """Keep the `keep` newest backups by MODIFICATION TIME, and never the one that was just created.
+
+    They used to be sorted by name. Backups made before 1.2.30 are named by ISO timestamp ("2026-09-08T…") and
+    the ones since by `time.time_ns()` ("17573…"), so every fresh backup sorted BEFORE every legacy one and was
+    the first thing deleted — the rollback copy was destroyed the moment it was made, and this Mac's
+    build/app-backups holds nothing newer than 8 Sep. mtime has no such tie to the naming scheme."""
+    folder = Path(folder)
+    try: entries = [p for p in folder.iterdir() if p.is_dir() and p != keep_dir]
+    except OSError: return []
+    def when(p):
+        try: return p.stat().st_mtime
+        except OSError: return 0.0
+    survivors = keep - (1 if keep_dir is not None else 0)
+    removed = sorted(entries, key=when, reverse=True)[max(survivors, 0):]
+    for old in removed: shutil.rmtree(old, ignore_errors=True)
+    return [str(p) for p in removed]
+
+
 def publish(stage, target):
     verify(stage)
     with (stage / 'Contents/Info.plist').open('rb') as f:
@@ -69,8 +88,7 @@ def publish(stage, target):
         backup.parent.mkdir(parents=True, exist_ok=True)
         target.rename(backup)
         # keep the two newest backups only; each is ~40 MB and they used to accumulate forever
-        for old in sorted(backup.parent.parent.iterdir(), key=lambda p: p.name)[:-2]:
-            if old.is_dir(): shutil.rmtree(old, ignore_errors=True)
+        prune_backups(backup.parent.parent, keep_dir=backup.parent, keep=2)
     try:
         stage.rename(target)
     except BaseException:

@@ -221,6 +221,91 @@ class HeartbeatBridgeTests(unittest.TestCase):
             beat=json.loads(Path(path).read_text())
             from meeting_os import __version__
             self.assertEqual((beat['app_version'],beat['meetings']),(__version__,0))
+    def test_the_bundle_version_the_app_sends_wins_over_the_repo_version(self):
+        """ModelActions.swift sends CFBundleShortVersionString. When it differs from the repo's, an update
+        merged and never finished building — the heartbeat has to carry both, not the repo's twice."""
+        from meeting_os.desktop import dispatch
+        from meeting_os import __version__
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';Store(db).close()
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                path=dispatch({'action':'heartbeat','app':{'version':'1.2.41','bridge':{}}},db)['path']
+            beat=json.loads(Path(path).read_text())
+            self.assertEqual(beat['app_version'],'1.2.41')
+            self.assertEqual(beat['repo_version'],__version__)
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                path=dispatch({'action':'heartbeat','app':{'version':''}},db)['path']   # plain `swift build`: no bundle version
+            self.assertEqual(json.loads(Path(path).read_text())['app_version'],__version__)
+
+class UpdateTruthTests(unittest.TestCase):
+    """What the fleet needs in order to see a half-finished update: the version of the bundle that is actually
+    running, the version and commit of the checkout it would be built from, what update.sh last said, and whether
+    the signing grant is in place. Before this, a Mac that merged and failed to build looked healthy."""
+    def _beat(self,data,app):
+        with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+            s=Store(data/'meeting-os.sqlite')
+            try: return json.loads(Path(reports.write_heartbeat(s,data,app=app)).read_text())
+            finally: s.close()
+    def test_the_heartbeat_separates_the_installed_app_from_the_checkout(self):
+        from meeting_os import __version__
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);reports.save_settings(data,{'report_dir':str(data/'shared')})
+            (data/'update-status.json').write_text(json.dumps({'state':'failed','from':'aaa','to':'bbb',
+                                                               'message':'Derleme başarısız','time':'2026-09-10 04:00:00'}))
+            marker=data/'signing-partition.ok'
+            with patch.object(reports,'_REPO_COMMIT',...),patch('meeting_os.probe.SIGNING_MARKER',marker):
+                beat=self._beat(data,{'version':'1.2.41'})
+            self.assertEqual(beat['app_version'],'1.2.41')          # what the bundle reports
+            self.assertEqual(beat['repo_version'],__version__)      # what the checkout would build
+            self.assertEqual(beat['update_status'],{'state':'failed','message':'Derleme başarısız','time':'2026-09-10 04:00:00'})
+            self.assertFalse(beat['signing_partition'])
+            marker.write_text('granted\n')
+            with patch.object(reports,'_REPO_COMMIT',...),patch('meeting_os.probe.SIGNING_MARKER',marker):
+                beat=self._beat(data,{'version':'1.2.41'})
+            self.assertTrue(beat['signing_partition'])
+    def test_the_commit_falls_back_to_the_checkout_and_never_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch.object(reports,'_REPO_COMMIT','deadbee'):
+                beat=self._beat(data,{'version':'1.2.44'})
+            self.assertEqual(beat['commit'],'deadbee')
+            with patch.object(reports,'_REPO_COMMIT',...),patch('meeting_os.reports.subprocess.run',side_effect=OSError('git yok')):
+                self.assertIsNone(reports.repo_commit())
+    def test_no_update_status_file_is_none_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(reports.update_status(Path(tmp)))
+            (Path(tmp)/'update-status.json').write_text('bozuk')
+            self.assertIsNone(reports.update_status(Path(tmp)))
+    def test_summary_carries_the_new_fields_and_alerts_on_them(self):
+        from meeting_os.reports import alerts
+        from datetime import datetime, timezone
+        now=datetime.now(timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            shared=Path(tmp)/'shared';host=shared/'Mac-Yarim';host.mkdir(parents=True)
+            (host/reports.HEARTBEAT_FILE).write_text(json.dumps({'host':'Mac-Yarim','written':now.isoformat(),
+                'app_version':'1.2.41','repo_version':'1.2.44','commit':'abc1234','signing_partition':False,
+                'update_status':{'state':'failed','message':'Derleme başarısız','time':'2026-09-10 04:00:00'},
+                'sizes':{'free_disk':50*1024**3}}))
+            summary=reports.summarize(str(shared))
+            beat=summary['hosts']['Mac-Yarim']['heartbeat']
+            self.assertEqual((beat['repo_version'],beat['commit']),('1.2.44','abc1234'))
+            keys={a['key']:a for a in summary['alerts']}
+            self.assertIn('version_mismatch',keys); self.assertEqual(keys['version_mismatch']['level'],'error')
+            self.assertIn('1.2.41',keys['version_mismatch']['line']); self.assertIn('sh scripts/update.sh',keys['version_mismatch']['line'])
+            self.assertEqual(keys['update_failed']['level'],'error')
+            self.assertIn('Derleme başarısız',keys['update_failed']['line'])
+            self.assertEqual(keys['signing_partition']['level'],'warning')
+            healthy={'Mac-Iyi':{'reports':0,'errors':0,'heartbeat':{'last_seen':now.isoformat(),'free_disk':50*1024**3,
+                     'app_version':'1.2.44','repo_version':'1.2.44','signing_partition':True,'update_status':{'state':'done'}}}}
+            self.assertEqual(alerts(healthy,now=now),[])
+    def test_a_heartbeat_from_an_older_version_raises_no_alert(self):
+        from meeting_os.reports import alerts
+        from datetime import datetime, timezone
+        now=datetime.now(timezone.utc)
+        hosts={'Eski':{'reports':0,'errors':0,'heartbeat':{'last_seen':now.isoformat(),'free_disk':50*1024**3,'app_version':'1.2.15'}}}
+        self.assertEqual(alerts(hosts,now=now),[])   # no repo_version, no signing_partition: nothing to compare
+
 
 class UserNameTests(unittest.TestCase):
     def test_the_name_is_validated_and_nobody_is_the_default(self):

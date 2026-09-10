@@ -23,7 +23,13 @@ certificate is selected on first build, or select its SHA-1 explicitly with
 They stage and verify the new app before replacement, preserve the old bundle in
 `build/app-backups`, and refuse replacement when the target executable is running.
 Build/install serially with the application closed; the process check is a
-snapshot, not a system-wide launch lock. Backups are retained for manual cleanup.
+snapshot, not a system-wide launch lock. Of those backups the **two most recent
+are kept and older ones are pruned** — by modification time, and never the one
+just created. (Until 1.2.44 they were pruned by name, and because backups made
+before 1.2.30 are named by ISO timestamp while later ones use `time.time_ns()`,
+every fresh backup sorted first and was deleted the moment it was made.) A backup
+is restored only when the replacement step itself fails; it is not a rollback
+mechanism — see docs/TWO_MAC_WORKFLOW.md.
 
 The certificate and private key remain in the macOS keychain. No private key is
 exported and no custom permissive code requirement is installed. One trust

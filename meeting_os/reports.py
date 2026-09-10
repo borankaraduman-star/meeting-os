@@ -391,13 +391,54 @@ def _memory_pressure():
     except Exception: return None
 
 
+_REPO_COMMIT = ...   # resolved once per run; a git call per heartbeat is pointless and can fail slowly
+
+
+def repo_commit():
+    """Short HEAD of the checkout this process runs from, or None. Cached, and tolerant of every way git can be
+    absent: the heartbeat is observability and must never raise or block on it."""
+    global _REPO_COMMIT
+    if _REPO_COMMIT is ...:
+        _REPO_COMMIT = None
+        try:
+            from .cli import ROOT
+            r = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True, timeout=5)
+            if r.returncode == 0: _REPO_COMMIT = r.stdout.strip() or None
+        except Exception: pass
+    return _REPO_COMMIT
+
+
+def update_status(data_dir):
+    """What scripts/update.sh last recorded: state, message, time. The other Mac learns from this that an update
+    started and never finished, instead of guessing from a version that stopped moving."""
+    try:
+        raw = json.loads((Path(data_dir) / 'update-status.json').read_text(encoding='utf-8'))
+        return {k: raw.get(k) for k in ('state', 'message', 'time')} if isinstance(raw, dict) else None
+    except (OSError, ValueError): return None
+
+
+def signing_partition_granted():
+    """The marker scripts/fix-signing-prompts.sh writes. Read through the probe module so tests can redirect it;
+    nothing here ever calls `security`, so it can never open a dialog."""
+    try:
+        from . import probe
+        return bool(probe.SIGNING_MARKER.is_file())
+    except Exception: return None
+
+
 def build_heartbeat(store, data_dir, *, app=None):
-    """This Mac's current state, independent of any single meeting: counts, sizes, disk, thermal, errors."""
+    """This Mac's current state, independent of any single meeting: counts, sizes, disk, thermal, errors.
+
+    `app_version` is what the RUNNING BUNDLE reports (CFBundleShortVersionString, handed over by the app);
+    `repo_version` and `commit` describe the checkout the update would build from. When they disagree, an update
+    merged but never finished its build — the one failure the fleet could not see before."""
     from .desktop import folder_bytes   # the bridge owns the one copy; importing it here keeps this module light
+    from . import __version__
     data = Path(data_dir)
     version = commit = None
     if isinstance(app, dict): version, commit = app.get('version'), app.get('commit')
     elif isinstance(app, str): version = app
+    commit = commit or repo_commit()
     statuses = {row[0]: row[1] for row in store.db.execute('SELECT status,count(*) FROM meetings GROUP BY status')}
     last = store.db.execute("SELECT max(created) FROM meetings WHERE status='complete'").fetchone()[0]
     db_path = Path(getattr(store, 'path', data/'meeting-os.sqlite'))
@@ -408,6 +449,7 @@ def build_heartbeat(store, data_dir, *, app=None):
     except OSError: load = None
     return {
         'heartbeat_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
+        'repo_version': __version__, 'update_status': update_status(data), 'signing_partition': signing_partition_granted(),
         'written': datetime.now(timezone.utc).isoformat(), 'meetings': sum(statuses.values()), 'statuses': statuses, 'last_complete': last,
         'sizes': {'recordings': folder_bytes(data/'recordings'), 'imports': folder_bytes(data/'imports'), 'database': database, 'free_disk': free},
         'memory_pressure': _memory_pressure(), 'thermal': _thermal(), 'load_average': load,
@@ -498,6 +540,8 @@ def summarize(report_dir, limit=30):
         hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})
         hosts[host]['heartbeat'] = {'last_seen': beat.get('written'), 'free_disk': (beat.get('sizes') or {}).get('free_disk'), 'thermal': beat.get('thermal'),
                                     'memory_pressure': beat.get('memory_pressure'), 'meetings': beat.get('meetings'), 'app_version': beat.get('app_version'),
+                                    'repo_version': beat.get('repo_version'), 'commit': beat.get('commit'),
+                                    'update_status': beat.get('update_status'), 'signing_partition': beat.get('signing_partition'),
                                     'probe': beat.get('probe'), 'cloud_blocked': beat.get('cloud_blocked'), 'errors': len(beat.get('errors') or [])}
     for path in sorted(root.glob('*/'+RECORDING_HEARTBEAT_FILE)):   # a Mac that is in a meeting right now says so
         beat = read_recording_heartbeat(path)
@@ -531,6 +575,19 @@ def alerts(hosts, *, now=None):
         probe = beat.get('probe') or {}
         if probe and not probe.get('ok'): out.append({'host': host, 'level': 'error', 'key': 'probe', 'line': f'{host}: {probe.get("summary") or "öz-test başarısız"}'})
         elif probe.get('warnings'): out.append({'host': host, 'level': 'warning', 'key': 'probe', 'line': f'{host}: {probe.get("summary")}'})
+        # The installed bundle and the checkout it would be built from disagree: `git merge --ff-only` landed and
+        # the build did not. The Mac then reports itself as up to date (behind=0) while running the old app.
+        app_version, repo_version = beat.get('app_version'), beat.get('repo_version')
+        if app_version and repo_version and app_version != repo_version:
+            out.append({'host': host, 'level': 'error', 'key': 'version_mismatch',
+                        'line': f'{host}: eski uygulama ({app_version}, depo {repo_version}) · güncelleme yarıda kalmış olabilir: sh scripts/update.sh'})
+        update = beat.get('update_status') or {}
+        if update.get('state') == 'failed':
+            out.append({'host': host, 'level': 'error', 'key': 'update_failed',
+                        'line': f'{host}: son güncelleme başarısız · {update.get("message") or "ayrıntı update.log"}'})
+        if beat.get('signing_partition') is False:
+            out.append({'host': host, 'level': 'warning', 'key': 'signing_partition',
+                        'line': f'{host}: imzalama izni yok · güncelleme başlamadan durur: sh scripts/fix-signing-prompts.sh'})
         blocked = beat.get('cloud_blocked')
         if isinstance(blocked, int) and blocked > 0: out.append({'host': host, 'level': 'error', 'key': 'cloud', 'line': f'{host}: {blocked} toplantı bulutta bekliyor (anahtar/kredi) · kişi Ayarlar → OpenRouter’a bakmalı'})
         if beat.get('memory_pressure') not in (None, 0, 1, 'normal'): out.append({'host': host, 'level': 'warning', 'key': 'memory', 'line': f'{host}: bellek baskısı {beat.get("memory_pressure")} · yerel işler durur, bulut işleri sürer'})
