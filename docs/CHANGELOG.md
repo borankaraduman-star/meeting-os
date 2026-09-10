@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 66 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 67 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.62](#v1262) | 2026-09-10 21:34 | Meeting OS 1.2.62 — ekran paylaşırken göze batmaz |
 | [v1.2.61](#v1261) | 2026-09-10 21:19 | Meeting OS 1.2.61 — konuşma payı yine gözünüzün önünde |
 | [v1.2.60](#v1260) | 2026-09-10 21:16 | Meeting OS 1.2.60 — ekran kaydı izni neden isteniyor, kartta yazıyor |
 | [v1.2.59](#v1259) | 2026-09-10 21:10 | Meeting OS 1.2.59 — ortalı boş durumlar, her sayfada ✕, Geri düğmesi |
@@ -86,6 +87,18 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1262"></a>
+### Meeting OS 1.2.62 — ekran paylaşırken göze batmaz
+
+2026-09-10 21:34 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "ekran paylaşan biri kayıt alıyorsa diğerleri menü çubuğundaki ikonu ya da paneli görmemeli."
+- **Göze batma** (Ayarlar → Genel, varsayılan açık): kayıt sırasında menü çubuğu simgesi boştaki ile birebir aynı (kırmızı nokta, süre, "kaydediyor" yok; menü açılınca Bitir/An/Karar yine orada).
+- Zoom ekran paylaşımı algılanınca (paylaşım çubuğu penceresi) yüzen panel tamamen gizlenir, paylaşım bitince geri gelir; ⌃⌥R / ⌃⌥M çalışmaya devam eder.
+- Ana pencere ve paneller ekran yakalamaya girmez (`sharingType = .none`): paylaşılan ekranda transkript görünmez.
+- Paylaşım sürerken bildirim gösterilmez (kuyruğa alınır).
+- Canlı doğrulanmadı: Zoom'un paylaşım çubuğu pencere adı (eşleşme listesi geniş tutuldu); Zoom'da ana pencerenin gerçekten boş görünmesi.
 
 <a id="v1261"></a>
 ### Meeting OS 1.2.61 — konuşma payı yine gözünüzün önünde
