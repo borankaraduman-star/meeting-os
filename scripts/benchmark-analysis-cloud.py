@@ -201,7 +201,7 @@ def main(argv=None):
             rows=[{'id':i+1,'start':i*10.,'end':i*10.+9,'source':'system','speaker':'S'+str(i),'speaker_name':s['speaker'],'text':s['text'],'flags':[]} for i,s in enumerate(case['segments'])]
             recorder.reset();before=dict(spend);started=time.monotonic()
             try:
-                result=analyze_rows(rows,llm)
+                result=analyze_rows(rows,llm,glossary=case.get('glossary'))   # a fixture may carry a (possibly poisoned) glossary, like a team folder would
                 checks={'valid_evidence_schema':True,**check_fixture_analysis(result,case)}
                 leaks,elsewhere=forbidden_leaks(result,case['forbidden_action_terms'])
                 item={'case':path.stem,'checks':checks,'passed':all(checks.values()),

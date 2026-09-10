@@ -163,9 +163,22 @@ def stt_hint(entries, limit=900):
     return ''.join(out)
 
 
+INSTRUCTION_MARKERS = re.compile(r'talimat|yok say|ignore|instruction|görev ekle|owner|state|done|tamamland|dışarı gönder|silin|delete|system|assistant', re.I)
+EXPANSION_LIMIT = 80
+
+
+def safe_expansion(text):
+    """A glossary expansion is a noun phrase, never a sentence with instructions. Anything past the first
+    sentence boundary is dropped, the rest is capped, and an entry that reads like an instruction is blanked —
+    the shared team glossary is the one input an outsider to this Mac can write."""
+    if not isinstance(text, str): return None
+    head = re.split(r'[.;:!?\n]', text, maxsplit=1)[0].strip()[:EXPANSION_LIMIT]
+    return None if not head or INSTRUCTION_MARKERS.search(head) else head
+
+
 def analysis_context(entries, limit=60):
-    """Compact list for the analysis prompt: term, expansion, category."""
-    return [{'term': e['term'], 'expansion': e['expansion'], 'category': e['category']} for e in entries[:limit]]
+    """Compact list for the analysis prompt: term, expansion, category — expansions sanitized (see safe_expansion)."""
+    return [{'term': e['term'], 'expansion': safe_expansion(e.get('expansion')), 'category': e['category']} for e in entries[:limit]]
 
 
 def _fold(s):
