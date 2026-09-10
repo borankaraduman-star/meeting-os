@@ -10,7 +10,6 @@ struct SettingsSheet:View {
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:16) {
-                HStack { Text("Ayarlar").font(.title2.bold()); Spacer(); Text("⌘,").font(.caption.monospaced()).foregroundStyle(.secondary) }
                 Picker("Ayar grubu",selection:Binding(get:{ SettingsSections.normalize(section) },set:{ section=$0 })) { Text("Genel").tag("genel"); Text("Sesler ve sözlük").tag("sesler"); Text("Sistem").tag("sistem") }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("settingsSection")
                 if group=="sistem" {
                 Text("Yazıya çevirme").font(.headline)
@@ -166,11 +165,18 @@ struct SettingsSheet:View {
                     Button("Veri klasörünü aç") { NSWorkspace.shared.open(model.dataDir) }
                     Spacer()
                     if group=="sesler" { Button("Sözlüğü kaydet") { Task { await model.saveVocabulary() } }.buttonStyle(.borderedProminent).accessibilityIdentifier("saveSettingsButton") }
-                    Button("Kapat") { model.showSettings=false }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelSettingsButton")
                 }
-            }.padding(28)
-        }.scrollIndicators(.visible).frame(width:640,height:min(CGFloat(SettingsSections.height(section)),(NSScreen.main?.visibleFrame.height ?? 900)-80))
+            }.padding(.horizontal,28).padding(.top,18).padding(.bottom,28)
+        }.scrollIndicators(.visible).frame(maxHeight:.infinity)
+        .sheetChrome(title:"Ayarlar",hint:"⌘,",onClose:close)
+        .frame(width:640,height:CGFloat(SettingsSections.sheetHeight(section,screen:Double(NSScreen.main?.visibleFrame.height ?? 900))))
         .task { await model.loadCloudModels() }
+    }
+    /// The ✕ must leave the sheet exactly as the old footer button did: the name typed in Genel is written back
+    /// (the field's onDisappear does it too, but only if the field was on screen) and the sheet closes.
+    func close() {
+        Task { await model.saveUserName() }
+        model.showSettings=false
     }
     /// Folded from the five sections that shipped earlier; a value stored back then must still open a section.
     var group:String { SettingsSections.normalize(section) }

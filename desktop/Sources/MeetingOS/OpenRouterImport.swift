@@ -91,7 +91,6 @@ struct OpenRouterImportView:View {
     }
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
-            Text("OpenRouter · Ses dosyasını yazıya çevir").font(.title2.bold())
             Text("Türkçe ses → transkript. Bu yolda bu Mac’te model yüklenmez; konuşmacı ayrımı seçilen modelden gelir (ayrım sunmayan modellerde konuşmacılar ayrılmaz). Özet, karar ve görevleri işlem bitince Özet sekmesinden bu Mac’te hazırlayabilirsiniz.").foregroundStyle(.secondary)
             if models.isEmpty { Text("Model listesi yükleniyor…").font(.caption) }
             else {
@@ -141,13 +140,14 @@ struct OpenRouterImportView:View {
             }
             if !message.isEmpty { Text(message).font(.callout).textSelection(.enabled) }
             HStack {
-                Button("Vazgeç") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 if let mid=resumable { Button("Seçili işlemi sürdür") { start(resume:mid) }.disabled(!consent || model.busy || selectedModel != model.meeting?.metadata["model"] as? String) }
                 Button(ImportDuplicate.uploadLabel(duplicate:duplicate != nil)) { start(resume:nil) }.buttonStyle(.borderedProminent)
                     .disabled(!consent || models.isEmpty || path==nil || title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.busy)
             }
-        }.padding(24).frame(width:640)
+        }.padding(.horizontal,24).padding(.top,16).padding(.bottom,24)
+        .sheetChrome(title:"OpenRouter · Ses dosyasını yazıya çevir") { dismiss() }
+        .frame(width:640)
         .task {
             do {
                 let response=try await model.request(["action":"openrouter_models"])

@@ -107,7 +107,6 @@ struct CleanSamplePicker:View {
     @State private var candidates:[CleanCandidate]?=nil
     var body:some View {
         VStack(alignment:.leading,spacing:10) {
-            Text("“\(name)” için temiz örnek").font(.headline)
             Text("Bu kişinin adıyla kayıtlı, en az 6 saniyelik, belirsizlik işareti taşımayan en uzun bölümler. Dinleyip emin olun; seçtiğiniz bölüm ses profiline eklenir.").font(.caption).foregroundStyle(.secondary)
             if let list=candidates {
                 if list.isEmpty { Text("Uygun bölüm yok · bu kişinin uzun ve temiz bir bölümü henüz kaydedilmemiş ya da hepsi zaten örnek olmuş.").font(.caption).foregroundStyle(.secondary) }
@@ -123,8 +122,9 @@ struct CleanSamplePicker:View {
                     }
                 }
             } else { Text("Yükleniyor…").font(.caption).foregroundStyle(.secondary) }
-            HStack { Spacer(); Button("Kapat") { open=false }.keyboardShortcut(.cancelAction) }
-        }.padding(18).frame(width:480).task { candidates=await model.loadCleanCandidates(name) }
+        }.padding(.horizontal,18).padding(.top,12).padding(.bottom,18)
+        .sheetChrome(title:SheetChrome.cleanSample(name:name)) { open=false }
+        .frame(width:480).task { candidates=await model.loadCleanCandidates(name) }
         .accessibilityElement(children:.contain).accessibilityIdentifier("cleanSamplePicker")
     }
 }

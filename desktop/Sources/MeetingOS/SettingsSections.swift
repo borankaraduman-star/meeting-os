@@ -16,4 +16,12 @@ enum SettingsSections {
         }
     }
     static func height(_ raw:String)->Int { heights[normalize(raw)] ?? 700 }
+    /// The pinned title bar (title + ✕) lives outside the scroll area, so the sheet window is that much taller
+    /// than the content heights above — otherwise the chrome would eat a strip of every section.
+    static let chromeHeight:Double=52
+    /// What the sheet window is actually sized to. Never taller than what the screen can show, so the ✕ in the
+    /// header is on screen at every section and on every Mac; never so short that a section is a slit.
+    static func sheetHeight(_ raw:String,screen:Double)->Double {
+        max(360,min(Double(height(raw))+chromeHeight,max(360,screen-80)))
+    }
 }
