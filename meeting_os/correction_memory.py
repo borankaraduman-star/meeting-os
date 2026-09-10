@@ -418,7 +418,12 @@ def share_words(store, data_dir):
     if not data_dir: return None
     try:
         from .team_knowledge import sync
-        return sync(store, data_dir, profiles=False)
+        result = sync(store, data_dir, profiles=False, cloud=False)   # a teach runs on the fast bridge: no network here
+        try:
+            from . import team_cloud
+            team_cloud.sync_async(data_dir)   # the team learns the word in the background, one pass at a time
+        except Exception: pass
+        return result
     except Exception: return None   # every failure here is somebody else's disk; the local rule is already saved
 
 

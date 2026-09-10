@@ -1,0 +1,589 @@
+"""The team's shared knowledge, without a folder anybody has to pick.
+
+Until 1.2.63 the team knowledge base was a FOLDER: `team_dir` (the user picks one) or iCloud Drive
+`MeetingOS-Shared`. iCloud is per-Apple-ID and never reaches a colleague; picking a folder is a step every
+teammate has to take. Neither is "install and forget", and Boran's rule for this app is that a teammate opens
+the app and nothing is asked of them.
+
+So the folder gets a stand-in. `<data_dir>/team/` is an ordinary local mirror of the very same layout
+(`team-words.jsonl`, `glossary.jsonl`, `profiles/<host>.jsonl`, `reports/<host>/…`), `reports.team_dir`
+returns it when the cloud is configured, and everything else in the app — `team_knowledge`, `glossary`,
+`reports` — keeps writing to a folder and reading from a folder, exactly as before. This module is the only
+piece that knows there is a server: it uploads THIS Mac's files and downloads everybody else's.
+
+Identity with nothing to paste: the team token is derived from the OpenRouter key (`sha256("meetingos-team-v1:"
++ key)`), so the Macs installed with the same key are the same team by construction. A Mac installed with a
+different key joins with `team.token` (`MEETING_OS_TEAM=… sh scripts/install.sh`, or `meeting_os team join`).
+The token never reaches the repo and the raw key never leaves the Mac — only its hash does, as a bearer token.
+
+Rules this module lives by:
+  * It never raises. A sync failure is a line in `team-cloud-state.json` and, at most once an hour, one line
+    in the error journal. A meeting must never fail because a server is down.
+  * It never blocks a meeting. Connect timeout 5 s, a whole-pass budget of 20 s, and the fast bridge hooks
+    call `sync_async` (one background pass at a time), never `sync`.
+  * Merging happens here, not on the server: every Mac uploads only its own files and downloads the others'.
+    Two Macs can never write the same file, so there is no race and no conflict resolution to get wrong.
+  * What goes up is exactly what went into the shared folder before: names and voice vectors, taught words,
+    the glossary, diagnostic reports, the redacted error journal. Never audio, transcript or meeting titles.
+"""
+import hashlib
+import json
+import os
+import re
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .glossary import ICLOUD, SHARED_DIR, REAL_DATA_DIR   # iCloud is only ever read, and only to seed once
+
+DEFAULT_URL = 'https://hermes-vps.tail2d8c7e.ts.net/meetingos'
+TOKEN_FILE = 'team.token'
+KEY_FILE = 'openrouter.key'
+STATE_FILE = 'team-cloud-state.json'
+MIRROR_NAME = 'team'
+WORDS_FILE = 'team-words.jsonl'
+GLOSSARY_FILE = 'glossary.jsonl'
+PROFILES_DIR = 'profiles'
+REPORTS_DIR = 'reports'
+ERRORS_FILE = 'errors.jsonl'
+ICLOUD_REPORTS = ICLOUD / 'MeetingOS-Reports'
+HEARTBEAT_FILE = 'heartbeat.json'
+
+TOKEN_SALT = 'meetingos-team-v1:'
+TOKEN_RE = re.compile(r'^[0-9a-fA-F]{32,128}$')
+HOST_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')
+REPORT_RE = re.compile(r'^[A-Za-z0-9._-]{1,120}\.json$')
+PRIVATE_MODE = 0o600
+MIRROR_MODE = 0o700
+CONNECT_TIMEOUT = 5.0        # a server that does not answer in five seconds is a server that is down
+BUDGET = 20.0                # the whole pass, uploads and downloads together
+PULL_REPORTS = 300           # the newest reports of the other Macs; a team's history is not a download
+MAX_FILE_BYTES = 4*1024*1024  # the server refuses more; refusing it here keeps one big file out of the budget
+ERROR_JOURNAL_EVERY = 3600   # a Mac offline for a week must leave one line an hour, not one line a minute
+CLIENT_AGENT = 'MeetingOS-team-cloud/1'
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------- identity
+
+def token(data_dir):
+    """This Mac's team token, or None. `team.token` (written by the installer or `team join`) wins; otherwise
+    the OpenRouter key is hashed, so Macs installed with the same key are the same team without anyone doing
+    anything. The key itself never leaves the Mac: only this hash travels, as a bearer token."""
+    data = Path(data_dir)
+    try:
+        raw = (data / TOKEN_FILE).read_text(encoding='utf-8').strip()
+        if TOKEN_RE.match(raw): return raw.lower()
+    except (OSError, ValueError): pass
+    try: key = (data / KEY_FILE).read_text(encoding='utf-8').strip()
+    except (OSError, ValueError): return None
+    return hashlib.sha256((TOKEN_SALT + key).encode('utf-8')).hexdigest() if key else None
+
+
+def team_id_short(tok):
+    """Six characters that name the team in a log line or a setup card and identify nobody."""
+    return hashlib.sha256((tok or '').encode('utf-8')).hexdigest()[:6] if tok else ''
+
+
+def mirror_dir(data_dir):
+    """`<data_dir>/team` — the local stand-in for the shared folder. 0700: it is this Mac's copy."""
+    return Path(data_dir) / MIRROR_NAME
+
+
+def ensure_mirror(data_dir):
+    mirror = mirror_dir(data_dir)
+    mirror.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
+    try: mirror.chmod(MIRROR_MODE)
+    except OSError: pass
+    return mirror
+
+
+def configured(settings, data_dir):
+    """True when this Mac should use the cloud: a token exists and the user has NOT picked a team folder.
+    A picked folder always wins — a team that keeps its knowledge on a NAS keeps it there."""
+    try:
+        if (settings.get('team_dir') or '').strip(): return False
+        return token(data_dir) is not None
+    except Exception: return False
+
+
+def url(settings):
+    base = (settings.get('team_url') or '').strip() if isinstance(settings, dict) else ''
+    return (base or DEFAULT_URL).rstrip('/')
+
+
+def join(data_dir, tok):
+    """Write `team.token` so this Mac joins the team that owns that token. 32–128 hex, 0600, never in the repo."""
+    tok = (tok or '').strip()
+    if not TOKEN_RE.match(tok): raise ValueError('Ekip belirteci 32–128 onaltılık karakter olmalı')
+    data = Path(data_dir); data.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
+    path = data / TOKEN_FILE
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, PRIVATE_MODE)
+    try: os.write(fd, (tok.lower() + '\n').encode('utf-8'))
+    finally: os.close(fd)
+    try: path.chmod(PRIVATE_MODE)
+    except OSError: pass
+    return {'joined': True, 'team_id_short': team_id_short(tok.lower()), 'path': str(path)}
+
+
+def invite_line(data_dir):
+    """The one line a teammate runs on a new Mac. It carries the token, so it is shared privately — never in
+    the repo, never in a public channel."""
+    tok = token(data_dir)
+    if not tok: return {'token': '', 'line': '', 'team_id_short': '',
+                        'error': 'Bu Mac’te ekip belirteci yok (OpenRouter anahtarı ya da team.token gerekir)'}
+    line = ('git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git ~/meeting-os && '
+            f'MEETING_OS_TEAM={tok} sh ~/meeting-os/scripts/install.sh')
+    return {'token': tok, 'team_id_short': team_id_short(tok), 'line': line}
+
+
+# ---------------------------------------------------------------- state
+
+def state_path(data_dir):
+    return Path(data_dir) / STATE_FILE
+
+
+def _load_state(data_dir):
+    try:
+        state = json.loads(state_path(data_dir).read_text(encoding='utf-8'))
+        return state if isinstance(state, dict) else {}
+    except (OSError, ValueError): return {}
+
+
+def _save_state(data_dir, state):
+    try:
+        path = state_path(data_dir)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, PRIVATE_MODE)
+        try: os.write(fd, json.dumps(state, ensure_ascii=False).encode('utf-8'))
+        finally: os.close(fd)
+    except (OSError, ValueError, TypeError): pass
+
+
+def status(data_dir, settings=None):
+    """What the setup card and the heartbeat show. Reads one small file; never touches the network."""
+    data = Path(data_dir); state = _load_state(data); tok = token(data)
+    try:
+        from .reports import host_name
+        host = host_name()
+    except Exception: host = ''
+    return {'configured': tok is not None, 'url': url(settings or {}) if settings else (state.get('url') or DEFAULT_URL),
+            'host': host, 'team_id_short': state.get('team_id_short') or team_id_short(tok),
+            'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'last_attempt': state.get('last_attempt'),
+            'hosts': state.get('hosts') or [], 'pushed': len(state.get('pushed') or {}), 'pulled': len(state.get('pulled') or {})}
+
+
+def _short(exc):
+    """`ClassName: message`, one line, home path masked, bounded — the card shows it and it reaches the team."""
+    from .reports import redact_home
+    message = ' '.join(str(exc).split())[:100]
+    return redact_home(f'{type(exc).__name__}: {message}' if message else type(exc).__name__)[:120]
+
+
+def _record_once(data_dir, state, message, moment):
+    """One journal line an hour at most. A Mac on a plane would otherwise fill its own error journal with the
+    same "network is down" line and bury the faults that matter."""
+    last = state.get('error_recorded')
+    if isinstance(last, str):
+        try: age = (datetime.fromisoformat(moment) - datetime.fromisoformat(last)).total_seconds()
+        except ValueError: age = None
+        if age is not None and 0 <= age < ERROR_JOURNAL_EVERY: return False
+    state['error_recorded'] = moment
+    try:
+        from .errors import record
+        record('cloud', f'Ekip bulutu eşitlenemedi: {message}', context={'where': 'team_cloud'}, data_dir=str(data_dir))
+    except Exception: pass
+    return True
+
+
+# ---------------------------------------------------------------- http
+
+_OPENER = None
+
+
+def _opener():
+    global _OPENER
+    if _OPENER is None:
+        # No proxy handler: a corporate proxy variable in the environment must not silently redirect the team's
+        # knowledge somewhere else, and it must not break a local test server either.
+        _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return _OPENER
+
+
+class _Http:
+    """The whole protocol: GET /v1/index, GET|PUT|DELETE /v1/file/<path>. Bearer token, host header, ETag."""
+
+    def __init__(self, base, tok, host, deadline):
+        self.base = base.rstrip('/'); self.token = tok; self.host = host; self.deadline = deadline
+        self.requests = 0
+
+    def left(self):
+        return self.deadline - time.monotonic()
+
+    def _open(self, method, path, body=None, etag=None):
+        headers = {'Authorization': f'Bearer {self.token}', 'X-Meeting-OS-Host': self.host, 'User-Agent': CLIENT_AGENT}
+        if etag: headers['If-None-Match'] = f'"{etag}"'
+        if body is not None: headers['Content-Type'] = 'application/octet-stream'
+        request = urllib.request.Request(f'{self.base}/v1/{path}', data=body, headers=headers, method=method)
+        self.requests += 1
+        timeout = min(CONNECT_TIMEOUT, max(0.5, self.left()))
+        try:
+            with _opener().open(request, timeout=timeout) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            code = exc.code
+            try: exc.read()
+            except Exception: pass
+            finally: exc.close()
+            if code in (304, 404): return code, b''
+            raise
+
+    def index(self):
+        _, body = self._open('GET', 'index')
+        data = json.loads(body.decode('utf-8'))
+        files = data.get('files') if isinstance(data.get('files'), dict) else {}
+        hosts = [h for h in (data.get('hosts') or []) if isinstance(h, str) and HOST_RE.match(h)]
+        return {p: m for p, m in files.items() if isinstance(m, dict)}, sorted(set(hosts))
+
+    def get(self, path, etag=None):
+        status_code, body = self._open('GET', 'file/' + path, etag=etag)
+        return (None if status_code in (304, 404) else body)
+
+    def put(self, path, body):
+        self._open('PUT', 'file/' + path, body=body)
+
+    def delete(self, path):
+        self._open('DELETE', 'file/' + path)
+
+
+class _OutOfTime(Exception):
+    """The 20 s budget ran out. Whatever was already uploaded stays uploaded; the rest waits for the next pass."""
+
+
+# ---------------------------------------------------------------- files
+
+def _write_private(path, data):
+    """Atomic write at 0600 inside the 0700 mirror: a reader never sees half a file and nobody else sees it."""
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(data, str): data = data.encode('utf-8')
+    handle, name = tempfile.mkstemp(dir=str(path.parent), prefix='.' + path.name + '.')
+    temporary = Path(name)
+    try:
+        os.fchmod(handle, PRIVATE_MODE)
+        os.write(handle, data)
+        os.fsync(handle)
+        os.close(handle); handle = None
+        os.replace(temporary, path); temporary = None
+    finally:
+        if handle is not None: os.close(handle)
+        if temporary is not None: temporary.unlink(missing_ok=True)
+    return path
+
+
+def _lines(blob):
+    text = blob.decode('utf-8', errors='replace') if isinstance(blob, bytes) else str(blob)
+    return [l for l in text.splitlines() if l.strip()]
+
+
+def _dump(entries):
+    return (''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in entries)).encode('utf-8')
+
+
+def _is_real(data_dir):
+    try: return Path(data_dir).resolve() == REAL_DATA_DIR.resolve()
+    except OSError: return False
+
+
+def _seed(data_dir, mirror, host):
+    """First run only: carry over what the folder era already produced on THIS Mac, so the first sync uploads a
+    working knowledge base instead of an empty one. iCloud is read (never written) and only for the real data
+    folder — a test or a private copy must never touch the user's iCloud Drive."""
+    if any(mirror.iterdir()) if mirror.is_dir() else False: return {'seeded': 0}
+    if not _is_real(data_dir): return {'seeded': 0}
+    seeded = 0
+    try:
+        from .team_knowledge import parse_word
+        profile = SHARED_DIR / PROFILES_DIR / f'{host}.jsonl'
+        if profile.is_file():
+            _write_private(mirror / PROFILES_DIR / f'{host}.jsonl', profile.read_bytes()); seeded += 1
+        words = SHARED_DIR / WORDS_FILE
+        if words.is_file():
+            mine = [e for e in (parse_word(l) for l in _lines(words.read_bytes())) if e and e['host'] == host]
+            if mine: _write_private(mirror / WORDS_FILE, _dump(mine)); seeded += 1
+        heartbeat = ICLOUD_REPORTS / host / HEARTBEAT_FILE
+        if heartbeat.is_file():
+            _write_private(mirror / REPORTS_DIR / host / HEARTBEAT_FILE, heartbeat.read_bytes()); seeded += 1
+    except OSError: pass
+    return {'seeded': seeded}
+
+
+def _own_words(mirror, host):
+    """This Mac's own lines out of the shared aggregate. The file is one file for the whole team; the server
+    stores one file per host, so the split happens here — and an empty result is uploaded too, because that is
+    how a `forget` reaches everybody."""
+    path = mirror / WORDS_FILE
+    if not path.is_file(): return None
+    from .team_knowledge import parse_word
+    mine = [e for e in (parse_word(l) for l in _lines(path.read_bytes())) if e and e['host'] == host]
+    return _dump(mine)
+
+
+def _own_glossary(data_dir):
+    """The glossary this Mac contributes: its own `glossary.jsonl` plus (real data folder only) the iCloud
+    shared one, merged the way `glossary.merge_into` merges — first definition of a term wins, capped."""
+    from .glossary import parse_line, MAX_TERMS
+    paths = [Path(data_dir) / GLOSSARY_FILE]
+    if _is_real(data_dir) and ICLOUD.is_dir(): paths.append(SHARED_DIR / GLOSSARY_FILE)
+    entries = []; seen = set()
+    found = False
+    for path in paths:
+        if not path.is_file(): continue
+        found = True
+        for line in _lines(path.read_bytes()):
+            entry = parse_line(line)
+            if entry and entry['term'].casefold() not in seen and len(entries) < MAX_TERMS:
+                seen.add(entry['term'].casefold()); entries.append(entry)
+    return _dump(entries) if found else None
+
+
+def _own_files(data_dir, mirror, host, settings, pushed):
+    """Every path this Mac owns on the server, with its content. Only ever `<kind>/<this host>…`: a Mac can
+    physically not write a teammate's file, so nothing here can lose somebody else's work.
+
+    An EMPTY file is uploaded only when this Mac uploaded a full one before — that is how the last forgotten
+    word or deleted profile reaches the team. A Mac that never taught anything uploads nothing at all, so it
+    does not appear in the team's host list for an empty file nobody reads."""
+    data = Path(data_dir)
+    share_reports = settings.get('share_reports') is not False
+    out = {}
+
+    def add(path, blob):
+        if blob and blob.strip() or path in pushed: out[path] = blob
+
+    if settings.get('share_profiles') is not False:
+        profile = mirror / PROFILES_DIR / f'{host}.jsonl'
+        if profile.is_file(): add(f'profiles/{host}.jsonl', profile.read_bytes())
+    if settings.get('share_words') is not False:
+        words = _own_words(mirror, host)
+        if words is not None: add(f'words/{host}.jsonl', words)
+    if settings.get('share_glossary') is not False:
+        glossary_blob = _own_glossary(data)
+        if glossary_blob is not None: add(f'glossary/{host}.jsonl', glossary_blob)
+    if share_reports:
+        folder = mirror / REPORTS_DIR / host
+        if folder.is_dir():
+            for path in sorted(folder.glob('*.json')):
+                if REPORT_RE.match(path.name): out[f'reports/{host}/{path.name}'] = path.read_bytes()
+        journal = data / ERRORS_FILE
+        if journal.is_file(): out[f'errors/{host}.jsonl'] = journal.read_bytes()
+    # A file the server would refuse (4 MB) is dropped here rather than spending the budget on a 413.
+    return {path: blob for path, blob in out.items() if len(blob) <= MAX_FILE_BYTES}
+
+
+def _owner(path):
+    parts = path.split('/')
+    if len(parts) == 2 and parts[1].endswith('.jsonl'): return parts[1][:-len('.jsonl')]
+    if len(parts) == 3 and parts[0] == REPORTS_DIR: return parts[1]
+    return ''
+
+
+# ---------------------------------------------------------------- sync
+
+def _push(http, own, files, pushed, result):
+    for path in sorted(own):
+        blob = own[path]
+        digest = hashlib.sha256(blob).hexdigest()
+        # Unchanged here AND present there: a server that lost its disk is re-filled on the next pass.
+        if pushed.get(path) == digest and (files.get(path) or {}).get('sha256') == digest: continue
+        if http.left() <= 0: raise _OutOfTime()
+        http.put(path, blob)
+        pushed[path] = digest; result['pushed'] += 1
+
+
+def _push_deletions(http, own, pushed, host, result):
+    """A report this Mac deleted locally (a deleted meeting) has to leave the team too. Only this host's own
+    reports: nothing here can delete a teammate's file, and the server would refuse anyway."""
+    for path in sorted(p for p in list(pushed) if p.startswith(f'{REPORTS_DIR}/{host}/')):
+        if path in own: continue
+        if http.left() <= 0: raise _OutOfTime()
+        http.delete(path)
+        pushed.pop(path, None); result['deleted'] += 1
+
+
+def _pull_file(http, path, meta, target, pulled, result):
+    digest = (meta or {}).get('sha256')
+    if pulled.get(path) == digest and target.is_file(): return False
+    if http.left() <= 0: raise _OutOfTime()
+    blob = http.get(path, etag=pulled.get(path) if target.is_file() else None)
+    if blob is None: return False   # 304 (unchanged) or 404 (gone between index and fetch)
+    _write_private(target, blob)
+    pulled[path] = digest or hashlib.sha256(blob).hexdigest(); result['pulled'] += 1
+    return True
+
+
+def _pull_words(http, mirror, others, pulled, host, result):
+    """The mirror's `team-words.jsonl` is the whole team's file: this Mac's own lines plus every other host's.
+    Rebuilt from the hosts the index still lists, so a teammate's `forget` — and a host that left — reaches
+    this Mac as a line that is simply no longer there."""
+    from .team_knowledge import parse_word, read_words
+    paths = {p: m for p, m in others.items() if p.startswith('words/')}
+    stale = [p for p in pulled if p.startswith('words/') and _owner(p) != host and p not in paths]
+    changed = [p for p, m in paths.items() if pulled.get(p) != (m or {}).get('sha256')]
+    if not changed and not stale: return
+    fetched = {}
+    for path in sorted(changed):
+        if http.left() <= 0: raise _OutOfTime()
+        blob = http.get(path)
+        if blob is None: continue
+        fetched[_owner(path)] = [e for e in (parse_word(l) for l in _lines(blob)) if e]
+        pulled[path] = (paths[path] or {}).get('sha256') or hashlib.sha256(blob).hexdigest()
+        result['pulled'] += 1
+    existing = read_words(mirror / WORDS_FILE)
+    entries = [e for e in existing if e['host'] == host]
+    for path in sorted(paths):
+        owner = _owner(path)
+        entries += fetched[owner] if owner in fetched else [e for e in existing if e['host'] == owner]
+    for path in stale: pulled.pop(path, None)
+    _write_private(mirror / WORDS_FILE, _dump(entries))
+
+
+def _pull_glossary(http, mirror, others, pulled, host, result):
+    """The mirror's `glossary.jsonl` holds the OTHER Macs' terms only (this Mac reads its own file first
+    anyway). A term a teammate removed has to disappear here, and entries carry no host, so when any of them
+    changed the others' files are read again and the file is rebuilt from what the team has now."""
+    from .glossary import parse_line, MAX_TERMS
+    paths = {p: m for p, m in others.items() if p.startswith('glossary/')}
+    stale = [p for p in pulled if p.startswith('glossary/') and _owner(p) != host and p not in paths]
+    changed = [p for p, m in paths.items() if pulled.get(p) != (m or {}).get('sha256')]
+    if not changed and not stale: return
+    entries = []; seen = set()
+    for path in sorted(paths):
+        if http.left() <= 0: raise _OutOfTime()
+        blob = http.get(path)
+        if blob is None: continue
+        pulled[path] = (paths[path] or {}).get('sha256') or hashlib.sha256(blob).hexdigest()
+        if path in changed: result['pulled'] += 1
+        for line in _lines(blob):
+            entry = parse_line(line)
+            if entry and entry['term'].casefold() not in seen and len(entries) < MAX_TERMS:
+                seen.add(entry['term'].casefold()); entries.append(entry)
+    for path in stale: pulled.pop(path, None)
+    _write_private(mirror / GLOSSARY_FILE, _dump(entries))
+
+
+def _sweep(mirror, files, host, pulled):
+    """A teammate's file that is no longer in the index is gone from the mirror too: that is how their delete
+    (a forgotten profile, a deleted meeting's report) reaches this Mac. This host's own files are never touched."""
+    removed = 0
+    profiles = mirror / PROFILES_DIR
+    if profiles.is_dir():
+        for path in sorted(profiles.glob('*.jsonl')):
+            key = f'{PROFILES_DIR}/{path.stem}.jsonl'
+            if path.stem == host or key in files: continue
+            path.unlink(missing_ok=True); pulled.pop(key, None); removed += 1
+    reports = mirror / REPORTS_DIR
+    if reports.is_dir():
+        for folder in sorted(p for p in reports.iterdir() if p.is_dir()):
+            if folder.name == host: continue
+            for path in sorted(folder.glob('*.json')):
+                key = f'{REPORTS_DIR}/{folder.name}/{path.name}'
+                if key in files: continue
+                path.unlink(missing_ok=True); pulled.pop(key, None); removed += 1
+            try:
+                if not any(folder.iterdir()): folder.rmdir()
+            except OSError: pass
+    return removed
+
+
+def _run(data_dir, settings, http, mirror, host, state, result):
+    files, hosts = http.index()
+    state['hosts'] = hosts
+    pushed = dict(state.get('pushed') or {}); pulled = dict(state.get('pulled') or {})
+    incomplete = False
+    try:
+        own = _own_files(data_dir, mirror, host, settings, pushed)
+        _push(http, own, files, pushed, result)
+        _push_deletions(http, own, pushed, host, result)
+        others = {p: m for p, m in files.items() if _owner(p) and _owner(p) != host and not p.startswith('errors/')}
+        for path in sorted(p for p in others if p.startswith(f'{PROFILES_DIR}/')):
+            _pull_file(http, path, others[path], mirror / PROFILES_DIR / f'{_owner(path)}.jsonl', pulled, result)
+        _pull_words(http, mirror, others, pulled, host, result)
+        _pull_glossary(http, mirror, others, pulled, host, result)
+        reports = sorted(((p, m) for p, m in others.items() if p.startswith(f'{REPORTS_DIR}/')),
+                         key=lambda item: ((item[1] or {}).get('updated') or '', item[0]), reverse=True)
+        for path, meta in reports[:PULL_REPORTS]:
+            name = path.split('/')[-1]
+            if not REPORT_RE.match(name): continue
+            _pull_file(http, path, meta, mirror / REPORTS_DIR / _owner(path) / name, pulled, result)
+        result['removed'] = _sweep(mirror, files, host, pulled)
+    except _OutOfTime:
+        incomplete = True
+    finally:
+        state['pushed'] = pushed; state['pulled'] = pulled
+    return 'budget' if incomplete else None
+
+
+def sync(data_dir, settings=None, budget=BUDGET):
+    """One pass: upload this Mac's files, download everybody else's, write the state file. NEVER raises — the
+    caller is a naming, a housekeeping tick or app launch, and none of them may fail because a server did."""
+    data = Path(data_dir)
+    result = {'pushed': 0, 'pulled': 0, 'deleted': 0, 'removed': 0, 'hosts': []}
+    try: seconds = float(BUDGET if budget is None else budget)
+    except (TypeError, ValueError): seconds = BUDGET
+    deadline = time.monotonic() + max(0.0, seconds)
+    try:
+        from .reports import load_settings, host_name
+        if settings is None: settings = load_settings(data)
+        tok = token(data)
+        if tok is None or (settings.get('team_dir') or '').strip(): return {**result, 'error': 'unconfigured'}
+        host = host_name()
+        if not HOST_RE.match(host or ''): return {**result, 'error': 'host'}
+        base = url(settings)
+    except Exception as exc:
+        return {**result, 'error': _short(exc)}
+    state = _load_state(data)
+    moment = _now(); error = None
+    try:
+        mirror = ensure_mirror(data)
+        _seed(data, mirror, host)
+        error = _run(data, settings, _Http(base, tok, host, deadline), mirror, host, state, result)
+    except Exception as exc:
+        error = _short(exc)
+        _record_once(data, state, error, moment)
+    state['url'] = base; state['team_id_short'] = team_id_short(tok); state['last_attempt'] = moment
+    if error: state['last_error'] = error
+    else: state['last_ok'] = moment; state['last_error'] = None
+    _save_state(data, state)
+    result['hosts'] = state.get('hosts') or []
+    return {**result, **({'error': error} if error else {})}
+
+
+_LOCK = threading.Lock()
+_RUNNING = False
+
+
+def sync_async(data_dir):
+    """A background pass, one at a time. The fast bridge (naming a voice, teaching a word) calls this: the
+    ten-second watchdog must never wait for a network round trip. Returns the thread, or None when a pass is
+    already running."""
+    global _RUNNING
+    with _LOCK:
+        if _RUNNING: return None
+        _RUNNING = True
+
+    def run():
+        global _RUNNING
+        try: sync(data_dir)
+        except Exception: pass
+        finally:
+            with _LOCK: _RUNNING = False
+    thread = threading.Thread(target=run, name='team-cloud-sync', daemon=True)
+    thread.start()
+    return thread

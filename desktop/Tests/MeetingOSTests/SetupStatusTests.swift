@@ -34,6 +34,25 @@ final class SetupStatusTests: XCTestCase {
         XCTAssertEqual(SetupStatus.serviceChecks(["api_key":true,"api_key_keychain":true])[0].state,.ok)
         XCTAssertEqual(SetupStatus.serviceChecks(["api_key":false,"api_key_keychain":false])[0].state,.missing)
     }
+    /// The team knowledge base with nothing to set up: the bridge says "cloud" and the row has to read as a
+    /// working shared brain, an outage the app survives, or a first sync that has not happened yet — never as
+    /// a missing folder the user has to go and pick.
+    func testTeamRowReadsTheCloudState() {
+        let ok=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["last_ok":"2026-09-10T21:40:03.512345+00:00","hosts":["mac-a","mac-b"]]])
+        XCTAssertEqual(ok.id,"team"); XCTAssertEqual(ok.state,.ok)
+        XCTAssertTrue(ok.hint.hasPrefix("ekip bulutu · 2 Mac · son eşitleme "))
+        XCTAssertEqual(ok.hint.count,"ekip bulutu · 2 Mac · son eşitleme ".count+5)   // HH:mm, in the reader's own time zone
+        let down=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["last_error":"URLError: bağlanılamadı","hosts":["mac-a"]]])
+        XCTAssertEqual(down.state,.optional)
+        XCTAssertEqual(down.hint,"bulut şu an erişilemiyor (URLError: bağlanılamadı); yerel bilgi korunuyor, bağlanınca eşitlenir")
+        let first=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":[String:Any]()])
+        XCTAssertEqual(first.state,.optional); XCTAssertEqual(first.hint,"ekip bulutu · ilk eşitleme bekleniyor")
+        // The folder answers are untouched: a picked folder still wins and a Mac with neither still says so.
+        XCTAssertEqual(SetupStatus.teamRootCheck(["team_root_kind":"team","team_root":"/Volumes/Ekip"]).state,.ok)
+        XCTAssertEqual(SetupStatus.teamRootCheck(["team_root_kind":"icloud"]).state,.optional)
+        XCTAssertEqual(SetupStatus.teamRootCheck([:]).state,.missing)
+        XCTAssertEqual(SetupStatus.serviceChecks(["team_root_kind":"cloud","team_cloud":["last_ok":"2026-09-10T21:40:03+00:00"]])[3].state,.ok)
+    }
     /// P0-4: the setup card and the sidebar must say the same thing about a branch that cannot be updated.
     func testDivergedBranchReplacesTheUpToDateRow() {
         let info=UpdateInfo.parse(["available":false,"diverged":true,"ahead":2])

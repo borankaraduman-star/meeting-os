@@ -52,7 +52,7 @@ def load_settings(data_dir):
     # auto_retry: when OpenRouter was down, pick the meeting up again while the Mac is idle. On by default —
     # a meeting the cloud refused is otherwise a meeting the user has to remember.
     defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30, 'auto_retry': True,
-                'user_name': DEFAULT_USER_NAME, 'user_name_confirmed': False, 'team_dir': '', 'share_glossary': True,
+                'user_name': DEFAULT_USER_NAME, 'user_name_confirmed': False, 'team_dir': '', 'team_url': '', 'share_glossary': True,
                 # The team folder is one knowledge base, so both halves of it are on by default: a taught word and
                 # a named voice are worth the same to everybody, and the way out is per row (a team word can be
                 # switched off, a person's team samples deleted) rather than a switch nobody finds.
@@ -61,6 +61,14 @@ def load_settings(data_dir):
     # 1.2.42 and earlier wrote the old default 'Boran' into settings.json on any settings save, so a teammate's file
     # can carry a stranger's name nobody typed. Only a name saved through save_settings (confirmed) counts.
     if merged.get('user_name') == LEGACY_DEFAULT_NAME and not merged.get('user_name_confirmed'): merged['user_name'] = ''
+    # The team cloud has no setting to switch on: when this Mac has a team token and the user has NOT picked a
+    # team folder, the local mirror IS the team folder, and every caller of `team_dir` (report_root,
+    # glossary.team_path, team_knowledge.shared_root) follows it without knowing a server exists. `_mirror` is
+    # derived, never stored (`save_settings` drops it) and never shown in Ayarlar: `team_dir` stays ''.
+    try:
+        from . import team_cloud
+        if not merged['team_dir'] and team_cloud.configured(merged, data_dir): merged['_mirror'] = str(team_cloud.mirror_dir(data_dir))
+    except Exception: pass   # a broken token file must never make settings unreadable
     return merged
 
 
@@ -78,6 +86,8 @@ def save_settings(data_dir, changes):
                 current[key] = value.strip(); current['user_name_confirmed'] = bool(value.strip())
         # An unreachable team folder is refused rather than stored: the app would silently stop sharing.
         elif key == 'team_dir' and isinstance(value, str) and (not value.strip() or Path(value.strip()).expanduser().is_dir()): current[key] = value.strip()
+        elif key == 'team_url' and isinstance(value, str): current[key] = value.strip()
+    current.pop('_mirror', None)   # derived at load time; persisting it would turn the mirror into a picked folder
     Path(data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
     publish(settings_path(data_dir), json.dumps(current, ensure_ascii=False, indent=2))   # the report folder and the team folder live in here
     return current
@@ -155,10 +165,13 @@ def host_name():
 
 
 def team_dir(settings):
-    """The shared team folder, or None. iCloud Drive is per-Apple-ID, so teammates need an ordinary folder
-    (a shared drive, Dropbox, a network volume) that every Mac can see."""
+    """The shared team folder, or None. A folder the user picked wins (a NAS, a shared drive); otherwise the
+    team cloud's local mirror (`_mirror`, added by `load_settings`), which the sync client keeps in step with
+    the server. iCloud Drive is per-Apple-ID, so it was never a team answer at all."""
     team = (settings.get('team_dir') or '').strip()
-    return Path(team).expanduser() if team else None
+    if team: return Path(team).expanduser()
+    mirror = (settings.get('_mirror') or '').strip()
+    return Path(mirror) if mirror else None
 
 
 def report_root(settings):
@@ -197,7 +210,9 @@ def prepare_folder(settings):
     """(folder, shared) for this host's report folder. mkdir's `mode` is masked by the umask, and the bridge runs
     under 077, so a team folder created that way came out 0700 and no teammate could list it. chmod says it
     outright, on the host folder and on the `reports` root above it."""
-    folder = host_dir(settings); shared = bool(team_dir(settings))
+    # `shared` means "a folder other people open": a picked team folder, never the cloud mirror, which is this
+    # Mac's own 0700 copy and reaches teammates through the sync client instead.
+    folder = host_dir(settings); shared = bool((settings.get('team_dir') or '').strip())
     folder.mkdir(parents=True, exist_ok=True)
     for target in ((folder, folder.parent) if shared else (folder,)):
         try: target.chmod(SHARED_DIR_MODE if shared else 0o700)
@@ -499,9 +514,21 @@ def build_heartbeat(store, data_dir, *, app=None):
         'error_journal': error_journal(data),   # errors.jsonl: crashes, failed jobs, cloud/capture faults nobody reported
         'cloud_blocked': store.db.execute("SELECT count(*) FROM meetings WHERE status!='complete' AND json_extract(metadata,'$.cloud_error.kind') IN ('auth','credit')").fetchone()[0],
         'probe': daily_probe(data),
+        'team_cloud': _team_cloud(data),   # is the shared knowledge base reaching the server, and how many Macs are on it
         # What this Mac takes from the shared knowledge base and what it puts back in. Counts only: no name, no word.
         **_team_counts(store),
     }
+
+
+def _team_cloud(data_dir):
+    """The team cloud in three fields: when it last synced, what went wrong if anything, which Macs are on it.
+    Never raises and never touches the network — it reads one small state file."""
+    try:
+        from . import team_cloud
+        state = team_cloud.status(data_dir)
+        return {'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'hosts': state.get('hosts') or []}
+    except Exception:
+        return {}
 
 
 def _team_counts(store):

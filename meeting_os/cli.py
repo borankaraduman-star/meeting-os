@@ -154,7 +154,8 @@ def parser():
     sh=sub.add_parser('share',help='Share preview of one meeting as Markdown; names can be masked, decisions-only mode'); sh.add_argument('--meeting',required=True); sh.add_argument('--mask-names',action='store_true'); sh.add_argument('--only-decisions',action='store_true'); sh.add_argument('--no-transcript',action='store_true'); sh.add_argument('--no-summary',action='store_true'); sh.add_argument('--include-segments',help='Comma-separated segment ids'); sh.add_argument('--exclude-segments',help='Comma-separated segment ids'); sh.add_argument('--output',type=Path)
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
     wd=sub.add_parser('words',help='Öğretilen kelimeler: bir kez düzelt, benzer yazımlar da düzelsin'); wd.add_argument('action',choices=['teach','forget','list']); wd.add_argument('original',nargs='?'); wd.add_argument('replacement',nargs='?'); wd.add_argument('--meeting')
-    rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir, user_name, team_dir, share_glossary, share_words, share_profiles, audio_retention_days')
+    rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir, user_name, team_dir, team_url, share_glossary, share_words, share_profiles, audio_retention_days')
+    tm=sub.add_parser('team',help='Ekip bulutu: ortak bilgi tabanının durumu, elle eşitleme, davet satırı, başka bir ekibe katılma'); tm.add_argument('action',choices=['status','sync','invite','join']); tm.add_argument('token',nargs='?',help='join: 32–128 onaltılık karakterlik ekip belirteci')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
     er=sub.add_parser('errors',help='Bu Mac’in yerel hata günlüğü: hatalar ve çökmeler'); er.add_argument('action',choices=['list','clear']); er.add_argument('--limit',type=int,default=20)
     dc=sub.add_parser('document',help='Meeting → PRD / bug report / customer request / Claude Code prompt'); dc.add_argument('--meeting',required=True); dc.add_argument('--kind',choices=['prd','bug','customer','claude'],default='prd'); dc.add_argument('--output',type=Path); dc.add_argument('--openrouter-model',default='openai/gpt-4.1-mini')
@@ -212,6 +213,19 @@ def main(supervised=False):
         if args.command=='benchmark':
             from .benchmark import benchmark
             output(benchmark(args.manifest,args.output)); return
+        if args.command=='team':
+            # No database: the team cloud is files in the data folder, and `join` has to work on a Mac that has
+            # never recorded anything.
+            from . import team_cloud as TC
+            from .reports import load_settings
+            base=Path(args.db).parent
+            if args.action=='status': output(TC.status(base,load_settings(base)))
+            elif args.action=='sync': output(TC.sync(base))
+            elif args.action=='invite': output(TC.invite_line(base))
+            else:
+                if not args.token: raise ValueError('meeting_os team join <belirteç>')
+                output({**TC.join(base,args.token),**TC.status(base)})
+            return
         from .store import Store
         store=Store(args.db)
         try:
@@ -305,7 +319,7 @@ def main(supervised=False):
                     changes={}
                     for kv in args.set:
                         k,_,v=kv.partition('=')
-                        if k in ('report_dir','user_name','team_dir'): changes[k]=v            # free text; save_settings validates it
+                        if k in ('report_dir','user_name','team_dir','team_url'): changes[k]=v   # free text; save_settings validates it
                         elif k=='audio_retention_days': changes[k]=int(v) if v.strip().isdigit() else v
                         else: changes[k]=v.lower() in ('1','true','evet','on')
                     if not changes: output(reports.load_settings(DATA_DIR))

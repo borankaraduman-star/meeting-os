@@ -7,6 +7,27 @@
 - Her transkript ve analiz sonunda toplantı raporu `iCloud Drive/MeetingOS-Reports/<mac-adı>/<tarih>_<toplantı>.json` dosyasına yazılır (Ayarlar’dan kapatılabilir). İçerik: süre, parça/ücret, yankı, konuşmacı küme/benzerlik/isim, kontrol kuyruğu sayıları, analiz sayıları, kimlik karnesi, son hata satırları (yollar maskelenir) ve `capture` bloğu (kaynak başına parça dosyası sayısı, süreden beklenen sayı, günlükteki `gap`/`error` olayları ve toplam boşluk saniyesi, birleştirilmiş `*-full.wav` boyutları). Transkript metni yalnız “metni de ekle” açıksa girer.
 - Toplantıdan bağımsız nabız: `.venv/bin/python -m meeting_os reports heartbeat` (ya da köprüde `{"action":"heartbeat"}`) aynı klasöre `<mac-adı>/heartbeat.json` yazar ve her seferinde üzerine yazar. İçerik: yazılma zamanı, **kurulu uygulamanın sürümü** (`app_version` — uygulamanın kendi `CFBundleShortVersionString` değeri, deponunki değil), **deponun sürümü** (`repo_version`), **deponun commit'i** (`commit`), **son güncellemenin durumu** (`update_status`: `state`/`message`/`time`), **imzalama işareti** (`signing_partition`), toplantı sayısı ve durum dağılımı, son tamamlanan toplantı, recordings/imports/sqlite boyutları, boş disk, bellek baskısı, `pmset -g therm` CPU_Speed_Limit, yük ortalaması, son 5 hata satırı ve **ekip bilgisi sayıları** (`team_profiles`/`team_words`: ekip klasöründen alınanlar, `shared_profiles`/`shared_words`: bu Mac'in oraya koyduğu) — yalnız sayılar, ad ya da kelime değil. Rapor paylaşımı kapalıysa yazılmaz.
 
+### Ekip bulutu (1.2.67+): iCloud artık şart değil, ekip klasörü isteğe bağlı
+
+Ortak bilgi tabanının kökü artık kendiliğinden bulunur ve sırası şudur: **seçilmiş ekip klasörü → ekip bulutu →
+iCloud**. Bir ekip klasörü seçilmemişse ve bu Mac'te bir OpenRouter anahtarı (ya da `team.token`) varsa kök,
+sunucuyla eşitlenen yerel ayna olur: `~/Library/Application Support/MeetingOS/team/`. Klasör düzeni birebir aynıdır
+(`team-words.jsonl`, `glossary.jsonl`, `profiles/<mac-adı>.jsonl`, `reports/<mac-adı>/…`), yani `team_knowledge`,
+`glossary` ve `reports` hiç değişmedi: hepsi hâlâ bir klasöre yazıp bir klasörden okuyor.
+
+Pratik sonuçları:
+
+- **İkinci Mac için iCloud Drive gerekmiyor.** İki Mac'te de aynı OpenRouter anahtarı varsa profiller, kelimeler,
+  sözlük ve raporlar birbirine ulaşır — iCloud kapalı olsa bile. (iCloud yalnız bulut da klasör de yoksa yedek
+  olarak kalır ve yalnız gerçek veri klasörü için okunur.)
+- **Ekip klasörü isteğe bağlıdır**, kaldırılmadı: seçiliyse her zaman kazanır.
+- Teşhis raporları ve nabız aynanın `reports/<mac-adı>/` klasörüne yazılır ve oradan sunucuya çıkar; geliştirme
+  Mac'i onları kendi aynasında görür (`reports summarize` aynı komut).
+- Ağ çağrısı hiçbir zaman hızlı köprüde yapılmaz: adlandırma/öğretme kancaları arka plan geçişini tetikler,
+  bloklayan eşitleme yalnız açılışta ve saatlik bakımda koşar. Sunucu düşerse hata yalnız
+  `team-cloud-state.json` dosyasına ve kurulum kartına düşer; öğrenilenler yerelde durur.
+- Ayrıntı ve protokol: `docs/TEAM_CLOUD.md`; kullanıcıya bakan anlatım: `docs/EKIP.md`.
+
 ### Ekip klasöründeki iki ortak dosya (1.2.62+)
 
 Ayarlar → Sesler ve sözlük → **Ekip klasörü** doluyken sözlüğün yanında iki dosya daha ortaklaşır ve **her Mac ikisine de yazar, ikisini de okur**: `<ekip klasörü>/team-words.jsonl` (öğretilen kelimeler: `original`, `replacement`, `host`, `created`, `updated` — satır başına bir JSON nesnesi) ve `<ekip klasörü>/profiles/<mac-adı>.jsonl` (ses profilleri: `name`, `model`, `vector`, `duration`, `created`, `host`). İkisinde de **ses, transkript, toplantı adı ve toplantı numarası yoktur**; ikisi de varsayılan açıktır (`share_words`, `share_profiles`). Yazma sırası her yerde aynı: **önce yayınla, hemen ardından oku** — bir kelime öğretilir öğretilmez, bir kişi adlandırılır adlandırılmaz yayınlanır; okuma açılışta, saatlik bakım geçişinde (`storage_housekeeping`, kayıt yokken) ve her yayından hemen sonra yapılır, böylece aynı anda düzelten iki kişi bir turda buluşur.

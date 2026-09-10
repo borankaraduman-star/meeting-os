@@ -68,7 +68,13 @@ def share_profiles(store,db):
     Best effort: an unmounted share must never turn a successful naming into an error on screen."""
     try:
         from .team_knowledge import sync
-        return sync(store,DATA_DIR if db is None else Path(db).parent,words=False)
+        base=DATA_DIR if db is None else Path(db).parent
+        result=sync(store,base,words=False,cloud=False)   # this hook is on the FAST bridge: never wait for a network call
+        try:
+            from . import team_cloud
+            team_cloud.sync_async(base)   # the teammates learn the new name in the background, one pass at a time
+        except Exception: pass
+        return result
     except Exception: return None   # every failure here is somebody else's disk; the local naming is already saved
 
 
@@ -631,8 +637,13 @@ def dispatch(request, db=None):
             # Where the team's shared knowledge (profiles, words, glossary) goes: the picked team folder, else iCloud
             # Drive. A Mac with neither writes nothing and never says so — this row is the one place that does.
             from .team_knowledge import shared_root
+            from . import team_cloud as TC
             team_root=shared_root(rs, data)
-            return {'team_root':str(team_root) if team_root else '','team_root_kind':('team' if rs.get('team_dir') else ('icloud' if team_root else 'none')),
+            # 'cloud' is the zero-setup answer: no folder was picked, but a team token exists and the local
+            # mirror is kept in step with the server. 'team' stays what it always meant — a folder the user chose.
+            cloud=TC.configured(rs,data)
+            return {'team_root':str(team_root) if team_root else '','team_root_kind':('team' if rs.get('team_dir') else ('cloud' if cloud else ('icloud' if team_root else 'none'))),
+                    'team_cloud':TC.status(data,rs),
                     'api_key':has_key,'api_key_keychain':key_in_keychain,'signing_partition':signing_partition,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
                     'update_diverged':bool(update.get('diverged')),'update_ahead':int(update.get('ahead') or 0),
                     'update_hint':str(update.get('hint') or ''),'update_error':update_error,
