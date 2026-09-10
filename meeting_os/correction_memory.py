@@ -212,7 +212,7 @@ def apply_taught(text, targets, protected):
         # run, not one that is missing: teaching the same thing twice must not grow the sentence word by word.
         parts = _fold(replacement).split()
         if parts and parts[0] == folded and [_fold(t) for t in _tokens(m.string[m.end():])[:len(parts) - 1]] == parts[1:]:
-            return token
+            if len(parts) > 1 or stem == replacement: return token   # a case-only rule (istanbul → İstanbul) still has work to do
         if stem[:1].isupper() and not replacement[:1].isupper(): replacement = _upper_first(replacement)
         hits[rule['original']] = hits.get(rule['original'], 0) + 1
         return replacement + suffix
@@ -412,7 +412,13 @@ def teach(store, mid, original, replacement, data_dir=None):
     The meeting's analysis goes stale by itself when the text changes; the fingerprint covers the transcript."""
     original = (original or '').strip(); replacement = (replacement or '').strip()
     if not original or not replacement: raise ValueError('Düzeltilecek kelime ve doğru yazımı gerekli')
-    if _fold(original) == _fold(replacement): raise ValueError('Kelime zaten bu şekilde yazılıyor')
+    # A clicked word usually carries its Turkish suffix ("Trendyoll'a"): the rule is about the stem. When both
+    # sides end in the same apostrophe suffix it is dropped from both, so the stored rule matches the token path,
+    # which re-attaches suffixes itself. A different suffix on each side is kept verbatim (the user meant it).
+    if ' ' not in original and ' ' not in replacement:
+        o_stem, o_suf = _split(original); r_stem, r_suf = _split(replacement)
+        if o_suf and _fold(o_suf) == _fold(r_suf): original, replacement = o_stem, r_stem
+    if original == replacement: raise ValueError('Kelime zaten bu şekilde yazılıyor')   # a case-only fix (istanbul → İstanbul) is a real correction
     if len(original.split()) > MAX_SPAN or len(replacement.split()) > MAX_SPAN: raise ValueError(f'En çok {MAX_SPAN} kelime öğretilebilir')
     if len(original) > 120 or len(replacement) > 120: raise ValueError('Kelime düzeltmesi için fazla uzun')
     _ensure(store); _ensure_taught(store)

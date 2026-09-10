@@ -45,7 +45,7 @@ struct InsightRow:View {
             Button(action:toggle) {
                 HStack(alignment:.firstTextBaseline,spacing:8) {
                     Text("•").font(.system(size:15,weight:.bold)).foregroundStyle(MeetingStyle.accent)
-                    Text(item.text).font(.system(size:15)).lineSpacing(4).multilineTextAlignment(.leading)
+                    Text(item.text).font(.system(size:15)).lineSpacing(4).multilineTextAlignment(.leading).textSelection(.enabled)
                         .strikethrough(item.superseded).foregroundStyle(item.superseded ? AnyShapeStyle(.secondary):AnyShapeStyle(.primary))
                         .fixedSize(horizontal:false,vertical:true)
                     ForEach(SummaryUX.chips(review:item.review,superseded:item.superseded)) { SummaryChipView(chip:$0) }

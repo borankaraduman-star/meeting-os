@@ -174,7 +174,7 @@ struct TranscriptBlockView:View, Equatable {
                     Text(canEdit ? WordTextCache.text(block:block.id,rows:block.rows,hideFillers:hideFillers) : AttributedString(hideFillers ? Fillers.clean(block.text) : block.text))
                         .font(.system(size:15)).tint(.primary).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
                         .popover(item:Binding(get:{ wordFix },set:{ model.wordFix=$0 }),arrowEdge:.bottom) { fix in WordFixPopover(model:model,fix:fix) }
-                        .onHover { inside in if canEdit { if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } } }
+                        .pointerStyle(canEdit ? .link : .default)
                     if continued { Spacer(minLength:0); Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.mini).buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("editBlock-\(block.id)") }
                 }
                 let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")

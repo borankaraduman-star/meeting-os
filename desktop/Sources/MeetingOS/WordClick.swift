@@ -126,7 +126,8 @@ enum WordClick {
                 raw=f.uppercased()+raw.dropFirst()   // Fillers.clean re-capitalises a sentence it beheaded
             }
             var piece=AttributedString(raw)
-            if !t.core.isEmpty, let u=url(WordRef(segment:row.id,index:t.index,word:t.core)) { piece.link=u }
+            let shown=core(raw)   // what the reader sees (re-capitalised when a filler was beheaded), so the popover quotes the same word
+            if !shown.isEmpty, let u=url(WordRef(segment:row.id,index:t.index,word:shown)) { piece.link=u }
             out.append(piece)
             emitted=true; first=false
             cursor=t.range.upperBound

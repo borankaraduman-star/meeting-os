@@ -254,3 +254,32 @@ class ShortClusterTests(unittest.TestCase):
             kinds={(i['kind'],i.get('speaker_key')) for i in items}
             self.assertIn(('unnamed_speaker','system:S1'),kinds); self.assertNotIn(('unnamed_speaker','system:S14'),kinds)
             db.close()
+
+
+class ApostropheTeachTests(unittest.TestCase):
+    def test_teaching_an_inflected_word_learns_the_stem_and_fixes_the_token(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.types import Segment
+        from meeting_os import correction_memory as CM
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            sid=db.add_segment(mid,Segment(0,5,"Sonra Trendyoll'a gittik, Trendyoll güzel.",'system','S1',flags=['cloud_transcript']))
+            r=CM.teach(db,mid,"Trendyoll'a","Trendyol'a",tmp)
+            self.assertEqual(r['rule']['original'].lower(),'trendyoll')
+            text=[x for x in db.segments(mid) if x['id']==sid][0]['text']
+            self.assertEqual(text,"Sonra Trendyol'a gittik, Trendyol güzel.")
+            db.close()
+    def test_case_only_fix_is_a_real_correction(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.types import Segment
+        from meeting_os import correction_memory as CM
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            sid=db.add_segment(mid,Segment(0,5,"istanbul toplantısı",'system','S1',flags=['cloud_transcript']))
+            CM.teach(db,mid,"istanbul","İstanbul",tmp)
+            self.assertEqual([x for x in db.segments(mid) if x['id']==sid][0]['text'],"İstanbul toplantısı")
+            db.close()

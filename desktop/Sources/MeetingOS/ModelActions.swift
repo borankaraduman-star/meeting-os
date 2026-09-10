@@ -194,6 +194,7 @@ extension Model {
     func fixWordHere(_ fix:WordFix,replacement:String) async {
         let to=replacement.trimmingCharacters(in:.whitespacesAndNewlines)
         guard let mid=selected, !busy, !to.isEmpty, to != fix.original, let row=rows.first(where:{ $0.id==fix.segmentID }) else { wordFix=nil; return }
+        let live=WordClick.tokens(row.text); guard fix.index<live.count, live[fix.index].core==fix.original else { activity="Bu bölüm değişti; kelimeye yeniden tıklayın"; wordFix=nil; return }
         let text=WordClick.replacing(row.text,index:fix.index,with:to)
         wordFix=nil
         guard text != row.text else { return }

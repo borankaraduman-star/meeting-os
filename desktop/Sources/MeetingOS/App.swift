@@ -979,7 +979,7 @@ func statusLabel(_ status:String)->String {
         Window("Meeting OS",id:"main") { MeetingContent(m:model).preferredColorScheme(model.colorScheme).tint(MeetingStyle.accent).id(model.accentKey).onAppear { GlobalHotkeys.install { id in Task { @MainActor in AppDelegate.model?.hotkey(id) } } } }.windowStyle(.titleBar).defaultSize(width:1100,height:780).commands {
             CommandGroup(replacing:.undoRedo) { Button("Adlandırmayı geri al") { Task { await model.undoNaming() } }.keyboardShortcut("z",modifiers:.command).disabled(!model.canUndoNaming || model.busy) }
             CommandMenu("Toplantı") {
-                Button("Toplantıyı sil…") { if let meeting=model.meeting { model.deleteCandidate=meeting } }.keyboardShortcut(.delete,modifiers:.command).disabled(model.meeting==nil || model.recording || model.meeting?.recoveryState=="active")
+                Button("Toplantıyı sil…") { if let meeting=model.meeting { model.deleteCandidate=meeting } }.keyboardShortcut(.delete,modifiers:.command).disabled(model.meeting==nil || model.recording || model.meeting?.recoveryState=="active" || model.editRow != nil || model.showSettings || model.showShare || model.showOpenRouter || model.wordFix != nil)   // ⌘⌫ stays "delete to line start" inside any text field
             }
             CommandMenu("Git") {
                 Button("Konuşmada ara") { model.focusTranscriptSearch() }.keyboardShortcut("f",modifiers:.command)

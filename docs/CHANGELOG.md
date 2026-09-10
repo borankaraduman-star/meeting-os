@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 62 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 63 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.58](#v1258) | 2026-09-10 20:50 | Meeting OS 1.2.58 — tıkla-düzelt ve Özet'e ikinci görüş düzeltmeleri |
 | [v1.2.57](#v1257) | 2026-09-10 20:47 | Meeting OS 1.2.57 — soldaki listede çöp kutusu; 1–2 saniyelik seslere isim istenmez |
 | [v1.2.56](#v1256) | 2026-09-10 20:38 | Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli |
 | [v1.2.55](#v1255) | 2026-09-10 19:57 | Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural |
@@ -82,6 +83,17 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1258"></a>
+### Meeting OS 1.2.58 — tıkla-düzelt ve Özet'e ikinci görüş düzeltmeleri
+
+2026-09-10 20:50 · yerel not · GitHub sürüm sayfası yok
+
+- ⌘⌫ artık bir metin alanı/pencere açıkken "toplantıyı sil" penceresi açmaz (metin düzenleme kısayolu olarak kalır).
+- "Trendyoll'a" gibi ekli kelimeye "Düzelt ve öğret": kural kökten öğrenilir (Trendyoll → Trendyol), ek korunur; eskiden kural ölü doğuyor ve "öğrenildi" deniyordu.
+- "istanbul → İstanbul" gibi yalnız büyük/küçük harf düzeltmesi artık öğretilebilir ve uygulanır.
+- "Yalnız burada" tıklanan kelime bu arada değiştiyse (başka bir düzeltme geldiyse) yanlış kelimeyi değiştirmez; "kelimeye yeniden tıklayın" der.
+- Kelime üzerinde el imleci sistem yoluyla (imleç takılı kalmıyor); Özet maddeleri yine kopyalanabilir; baloncuk ekranda görünen yazımı (büyük harfli) kullanır.
 
 <a id="v1257"></a>
 ### Meeting OS 1.2.57 — soldaki listede çöp kutusu; 1–2 saniyelik seslere isim istenmez
