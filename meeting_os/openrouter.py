@@ -89,8 +89,6 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl): return None
 
 
-KEYCHAIN_TIMEOUT = 300  # macOS may show an access prompt; the user needs time to answer it.
-
 KEY_CACHE = Path.home() / 'Library/Application Support/MeetingOS/openrouter.key'   # 0600, written by the app after its one Keychain read
 
 
