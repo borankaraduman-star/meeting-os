@@ -55,6 +55,9 @@ def capture_state(metadata, include_signal=False):
     return result
 
 
+_TIGHTENED=False   # the hourly heartbeat action tightens the personal file modes once per bridge run
+
+
 # Statuses whose display still depends on the capture folder and the job owner.
 UNSETTLED=('processing','provisional','incomplete','failed')
 SNAPSHOT_LIMIT=300          # newest first; the sidebar never shows more, the open meeting is always included
@@ -360,7 +363,10 @@ def dispatch(request, db=None):
             if action=='report_settings_set': return reports.save_settings(base,request.get('changes') or {})
             if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
-            if action=='heartbeat': return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
+            if action=='heartbeat':
+                global _TIGHTENED
+                if not _TIGHTENED: reports.tighten_modes(base); _TIGHTENED=True   # once a run: files written before the mode was fixed stay 0644 forever
+                return {'path':reports.write_heartbeat(store,base,app={'version':__version__,'commit':None})}
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=__version__,commit=None)}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G
