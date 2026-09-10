@@ -517,7 +517,8 @@ def dispatch(request, db=None):
             import subprocess
             from .openrouter import KEYCHAIN_SERVICE
             from . import glossary as G
-            try: has_key=subprocess.run(['/usr/bin/security','find-generic-password','-s',KEYCHAIN_SERVICE],capture_output=True,timeout=5).returncode==0
+            from .openrouter import KEY_CACHE
+            try: has_key=KEY_CACHE.is_file() or subprocess.run(['/usr/bin/security','find-generic-password','-s',KEYCHAIN_SERVICE],capture_output=True,timeout=5).returncode==0
             except Exception: has_key=False
             data=DATA_DIR if db is None else Path(db).parent
             entries=G.load(data,ROOT); paths=[p for p in G.sources(data) if p.is_file()]

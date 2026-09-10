@@ -57,7 +57,8 @@ def run(root, data_dir, *, network=False, timeout=8):
     except OSError as exc: items.append(_item('disk', False, str(exc)[:120], None, level='warning'))
     try:
         from .openrouter import KEYCHAIN_SERVICE
-        has_key = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE], capture_output=True, timeout=5).returncode == 0
+        from .openrouter import KEY_CACHE
+        has_key = KEY_CACHE.is_file() or subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE], capture_output=True, timeout=5).returncode == 0
     except Exception: has_key = False
     items.append(_item('api_key', has_key, 'OpenRouter anahtarı Keychain’de' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
     try:

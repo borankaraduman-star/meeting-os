@@ -3,6 +3,7 @@ import base64
 import json
 import math
 import os
+from pathlib import Path
 import re
 import subprocess
 import urllib.error
@@ -90,8 +91,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 KEYCHAIN_TIMEOUT = 300  # macOS may show an access prompt; the user needs time to answer it.
 
+KEY_CACHE = Path.home() / 'Library/Application Support/MeetingOS/openrouter.key'   # 0600, written by the app after its one Keychain read
+
+
 def read_api_key():
     key = os.environ.get('OPENROUTER_API_KEY', '').strip()
+    if not key:
+        try: key = KEY_CACHE.read_text(encoding='utf-8').strip()
+        except OSError: key = ''
     if not key:
         try:
             result = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE,

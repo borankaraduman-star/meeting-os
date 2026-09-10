@@ -6,23 +6,39 @@ import Security
 enum OpenRouterCredential {
     static let service="local.boran.meeting-os.openrouter"
     static var query:[String:Any] { [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:"openrouter"] }
-    /// The app (which owns the Keychain item) reads the key and hands it to jobs; Python then never calls `security`,
-    /// so the "security wants to use your keychain" dialog cannot appear in the middle of a meeting.
+    /// Every rebuild/update changes the app's code signature, and macOS then asks "Meeting OS wants to use your keychain"
+    /// again even after "Her Zaman İzin Ver". So the key is read from the Keychain once and cached in a 0600 file the app
+    /// owns (like gh/aws do); later launches and every job read the file and never touch the Keychain.
+    static let cacheURL=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MeetingOS/openrouter.key")
+    static func cached()->String? {
+        guard let data=try? Data(contentsOf:cacheURL), let s=String(data:data,encoding:.utf8) else { return nil }
+        let v=s.trimmingCharacters(in:.whitespacesAndNewlines); return v.isEmpty ? nil : v
+    }
+    static func cache(_ value:String) {
+        let dir=cacheURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+        try? Data((value+"\n").utf8).write(to:cacheURL,options:.atomic)
+        try? FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:cacheURL.path)
+    }
     static func read()->String? {
+        if let v=cached() { return v }
         var q=query; q[kSecReturnData as String]=true; q[kSecMatchLimit as String]=kSecMatchLimitOne
         var item:CFTypeRef?; guard SecItemCopyMatching(q as CFDictionary,&item)==errSecSuccess, let data=item as? Data, let s=String(data:data,encoding:.utf8) else { return nil }
-        let v=s.trimmingCharacters(in:.whitespacesAndNewlines); return v.isEmpty ? nil : v
+        let v=s.trimmingCharacters(in:.whitespacesAndNewlines); if v.isEmpty { return nil }
+        cache(v); return v   // one Keychain dialog per Mac, not one per update
     }
     static func environment()->[String:String] { read().map { ["OPENROUTER_API_KEY":$0] } ?? [:] }
     static func save(_ key:String) throws {
         let value=key.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !value.isEmpty,!value.contains(where:{$0.isWhitespace}) else { throw failure("Geçerli bir OpenRouter API anahtarı girin.") }
+        cache(value)   // the file is what runs the product; the Keychain copy is the backup that survives a data-folder wipe
         var attributes=query;attributes[kSecValueData as String]=Data(value.utf8)
         attributes[kSecAttrAccessible as String]=kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         var status=SecItemAdd(attributes as CFDictionary,nil)
         if status==errSecDuplicateItem { status=SecItemUpdate(query as CFDictionary,[kSecValueData as String:Data(value.utf8)] as CFDictionary) }
         guard status==errSecSuccess else { throw failure("Anahtar macOS Anahtar Zinciri’ne kaydedilemedi (\(status)).") }
     }
+    static func forget() { try? FileManager.default.removeItem(at:cacheURL); SecItemDelete(query as CFDictionary) }
     static func failure(_ message:String)->NSError { NSError(domain:"MeetingOS.OpenRouter",code:1,userInfo:[NSLocalizedDescriptionKey:message]) }
 }
 
