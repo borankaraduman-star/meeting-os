@@ -148,6 +148,24 @@ class WordTests(TeamFixture):
             tk.pull_words(b, settings_b, data_b)
             self.assertEqual(tk.team_rules(b), [])
 
+    def test_a_words_file_that_is_not_there_removes_nothing(self):
+        """The other side of "a teammate's forget reaches this Mac": the file has to be READ before it can say
+        anything. An unmounted share is not a team that unlearned its vocabulary, and a locally taught word is
+        never a team word's to remove."""
+        data_a, a, _ = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        mid = a.create_meeting('a'); self.segment(a, mid, 'Trendyoll.')
+        with patch.object(tk, 'host_name', return_value='mac-a'):
+            cm.teach(a, mid, 'Trendyoll', 'Trendyol', data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            own = b.create_meeting('b'); self.segment(b, own, 'Splendoo.')
+            cm.teach(b, own, 'Splendoo', 'Splendo', data_b)
+            tk.pull_words(b, settings_b, data_b)
+            self.assertEqual([r['original'] for r in tk.team_rules(b)], ['Trendyoll'])
+            (self.root / tk.WORDS_FILE).unlink()
+            self.assertEqual(tk.pull_words(b, settings_b, data_b), {'imported': 0, 'hosts': 0})
+            self.assertEqual([r['original'] for r in tk.team_rules(b)], ['Trendyoll'])   # still there
+            self.assertEqual([r['original'] for r in cm.taught_rules(b)], ['Splendoo'])  # and its own untouched
+
     def test_the_team_spelling_joins_the_asr_hint_but_never_the_vocabulary_file(self):
         data_a, a, _ = self.mac('a'); data_b, b, settings_b = self.mac('b')
         mid = a.create_meeting('a'); self.segment(a, mid, 'Splendoo çıktı.')
@@ -214,16 +232,62 @@ class ProfileTests(TeamFixture):
         self.assertNotIn('Bu cümle', text)
         self.assertEqual(sorted(json.loads(text.splitlines()[0])), ['created', 'duration', 'host', 'model', 'name', 'vector'])
 
-    def test_a_name_this_mac_rejected_is_not_imported(self):
+    def _reject(self, store, name, vector, model='emb-1'):
+        """What the app writes when the user says "that voice is not this person" (`store.correct_segment`)."""
+        with store.db:
+            store.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',
+                             (name, model, json.dumps(vector), 'toplanti-9:mark', '2026-01-01'))
+
+    def test_a_rejection_is_about_a_voice_and_not_about_the_whole_person(self):
+        """The user hears the app call a stranger "Ayşe" and corrects it. That is a fact about that VOICE. It
+        used to shut every teammate's Ayşe out of this Mac for good — the one person the team knows best became
+        the one person this Mac could never learn. The rejection now works the way local recognition works: it
+        vetoes a voice close to the one that was rejected, and nothing else."""
         data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
         a.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
         with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
-        with b.db:
-            b.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',
-                         ('Ayşe', 'emb-1', json.dumps(self.OTHER), 'toplanti-9:mark', '2026-01-01'))
+        self._reject(b, 'Ayşe', self.OTHER)          # a different voice somebody once labelled Ayşe
         with patch.object(tk, 'host_name', return_value='mac-b'):
-            self.assertEqual(tk.pull_profiles(b, settings_b, data_b), {'imported': 0, 'hosts': 1, 'skipped': 1})
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b),
+                             {'imported': 1, 'hosts': 1, 'skipped': 0, 'removed': 0})
+        self.assertEqual([(p['name'], p['samples']) for p in b.profiles()], [('Ayşe', 1)])
+        self.assertEqual(b.identify(self.VECTOR, 'emb-1')['name'], 'Ayşe')
+
+    def test_the_very_voice_the_user_rejected_is_still_refused(self):
+        """The other half of the same rule, and the one that must not regress: a team sample within
+        `REJECT_SIMILARITY` of a rejected voice is the voice the user already said is not this person."""
+        data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        a.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        self._reject(b, 'ayse', [v + 0.02 for v in self.VECTOR])   # same voice, folded name, same model
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b),
+                             {'imported': 0, 'hosts': 1, 'skipped': 1, 'removed': 0})
         self.assertEqual(b.profiles(), [])
+        # …and a rejection filed against a DIFFERENT embedding model says nothing about this one
+        self._reject(b, 'Mehmet', self.VECTOR, model='emb-9')
+        a.enroll('Mehmet', self.VECTOR, 'emb-1', 12.0, 'toplanti-2:5')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b)['imported'], 1)
+        self.assertEqual([p['name'] for p in b.profiles()], ['Mehmet'])
+
+    def test_an_automatic_identification_is_never_published(self):
+        """A self-fed `auto:` sample is this Mac being confident, not a person confirming. Publishing guesses is
+        how one wrong label becomes the team's: the others import it, match more speech to it and publish that
+        in turn. What travels is what a human named."""
+        data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        a.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')                     # the user named her
+        a.enroll('Ayşe', self.OTHER, 'emb-1', 9.0, 'auto:toplanti-4:7')                  # the app matched this one
+        with patch.object(tk, 'host_name', return_value='mac-a'):
+            self.assertEqual(tk.publish_profiles(a, settings_a, data_a)['published'], 1)
+        published = tk.read_profiles(self.root / tk.PROFILES_DIR / 'mac-a.jsonl')
+        self.assertEqual([round(v, 3) for v in published[0]['vector']],
+                         [round(v, 3) for v in tk._vector(self.VECTOR)])
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            tk.pull_profiles(b, settings_b, data_b)
+        self.assertEqual([(p['name'], p['samples']) for p in b.profiles()], [('Ayşe', 1)])
+        self.assertEqual([s['kind'] for s in a.profile_samples('Ayşe')], ['bölüm', 'otomatik'])   # both still local
 
     def test_deleting_a_person_takes_their_team_samples_and_blocks_the_re_import(self):
         data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
@@ -250,6 +314,89 @@ class ProfileTests(TeamFixture):
         samples = b.profile_samples('Ayşe')
         self.assertEqual(len(samples), tk.PROFILE_CAP)
         self.assertEqual(samples[0]['provenance'], 'yerel-1:2')   # the local sample is still there, first and untouched
+
+    def test_a_sample_the_source_mac_took_back_is_taken_back_here_too(self):
+        """The one that mattered most in review: a voice taught to the wrong person spread through the team and
+        could never be recalled. A host's file is the whole truth about what that host publishes, so a sample
+        that left it is soft-deleted here — while this Mac's OWN samples of the same person are untouched."""
+        data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        a.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+        a.enroll('Mehmet', self.OTHER, 'emb-1', 11.0, 'toplanti-2:5')
+        b.enroll('Ayşe', [v + 0.5 for v in self.OTHER], 'emb-1', 20.0, 'yerel-1:2')   # b heard her itself
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b)['imported'], 2)
+        self.assertEqual(len(b.profile_samples('Ayşe')), 2)
+        # the user on mac-a realises that voice was not Ayşe at all and deletes the profile
+        a.delete_profile('Ayşe')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b)['removed'], 1)
+        self.assertEqual([s['provenance'] for s in b.profile_samples('Ayşe')], ['yerel-1:2'])   # only its own left
+        self.assertEqual([(p['name'], p['samples']) for p in b.profiles()], [('Ayşe', 1), ('Mehmet', 1)])
+        # …hidden, not destroyed: nothing a sync does to this database throws a row away
+        self.assertEqual(b.db.execute("SELECT count(*) FROM samples WHERE deleted_by LIKE 'team-sync:%'").fetchone()[0], 1)
+
+    def test_a_source_file_that_cannot_be_read_removes_nothing(self):
+        """"I cannot see it" is not "they deleted it". An unmounted share, a permission the sync has not got
+        yet, a half-written file: none of them may be read as a team that forgot everything."""
+        data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        a.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'): tk.pull_profiles(b, settings_b, data_b)
+        path = self.root / tk.PROFILES_DIR / 'mac-a.jsonl'
+        path.chmod(0o000)
+        try:
+            with patch.object(tk, 'host_name', return_value='mac-b'):
+                self.assertEqual(tk.pull_profiles(b, settings_b, data_b),
+                                 {'imported': 0, 'hosts': 0, 'skipped': 0, 'removed': 0})
+        finally: path.chmod(0o600)
+        self.assertEqual([(p['name'], p['samples']) for p in b.profiles()], [('Ayşe', 1)])
+        # and the whole folder gone (an unmounted share) says nothing either
+        for f in (self.root / tk.PROFILES_DIR).glob('*.jsonl'): f.unlink()
+        (self.root / tk.PROFILES_DIR).rmdir()
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b)['removed'], 0)
+        self.assertEqual([(p['name'], p['samples']) for p in b.profiles()], [('Ayşe', 1)])
+
+    def test_a_corrected_sample_gets_in_even_with_that_person_at_the_cap(self):
+        """The reconciliation runs BEFORE the import for exactly this case. A person already holding the full
+        eight samples would otherwise refuse the corrected one and only then lose the wrong one, ending up a
+        sample short with the fix an hour away."""
+        data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        for i in range(tk.PROFILE_CAP):
+            a.enroll('Ayşe', [v + i for v in self.VECTOR], 'emb-1', 10.0 + i, f'toplanti-{i}:5')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b)['imported'], tk.PROFILE_CAP)
+        stale = {s['provenance'] for s in b.profile_samples('Ayşe')}
+        # mac-a replaces one sample with a cleaner recording of the same person
+        with a.db: a.db.execute("UPDATE samples SET deleted_by='düzeltme' WHERE duration=?", (10.0,))
+        a.enroll('Ayşe', self.OTHER, 'emb-1', 30.0, 'toplanti-temiz:5')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            result = tk.pull_profiles(b, settings_b, data_b)
+        self.assertEqual((result['imported'], result['removed']), (1, 1))
+        samples = b.profile_samples('Ayşe')
+        self.assertEqual(len(samples), tk.PROFILE_CAP)                    # still full, and now correct
+        self.assertEqual(len({s['provenance'] for s in samples} - stale), 1)
+
+    def test_a_person_renamed_on_the_source_mac_arrives_under_the_new_name_only(self):
+        """Same vector, new name → a new sample hash, so the old line is gone from the source file and the new
+        one is new. Deletion and import are the same pass, so nobody is listed twice."""
+        data_a, a, settings_a = self.mac('a'); data_b, b, settings_b = self.mac('b')
+        a.enroll('Ayşen', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+        a.enroll('Ayşen', self.OTHER, 'emb-1', 9.0, 'toplanti-2:5')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            self.assertEqual(tk.pull_profiles(b, settings_b, data_b)['imported'], 2)
+        a.rename_profile('Ayşen', 'Ayşe Nur')
+        with patch.object(tk, 'host_name', return_value='mac-a'): tk.publish_profiles(a, settings_a, data_a)
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            result = tk.pull_profiles(b, settings_b, data_b)
+        self.assertEqual((result['imported'], result['removed']), (2, 2))
+        self.assertEqual([(p['name'], p['samples']) for p in b.profiles()], [('Ayşe Nur', 2)])
+        self.assertEqual(b.identify(self.VECTOR, 'emb-1')['name'], 'Ayşe Nur')
 
     def test_sharing_profiles_can_be_switched_off(self):
         data_a, a, settings_a = self.mac('a', share_profiles=False)

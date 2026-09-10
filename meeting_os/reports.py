@@ -521,12 +521,15 @@ def build_heartbeat(store, data_dir, *, app=None):
 
 
 def _team_cloud(data_dir):
-    """The team cloud in three fields: when it last synced, what went wrong if anything, which Macs are on it.
-    Never raises and never touches the network — it reads one small state file."""
+    """The team cloud in four fields: when it last synced, what went wrong if anything, which Macs are on it,
+    and which DEVICE this heartbeat came from. The host name a heartbeat carries is `LocalHostName`, which two
+    Macs in an office can share and any user can change; `device` is this Mac's own random id, so the team's
+    diagnostics can still tell two same-named Macs apart. Never raises and never touches the network."""
     try:
         from . import team_cloud
         state = team_cloud.status(data_dir)
-        return {'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'hosts': state.get('hosts') or []}
+        return {'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'hosts': state.get('hosts') or [],
+                'device': state.get('device') or ''}
     except Exception:
         return {}
 

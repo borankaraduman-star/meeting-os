@@ -17,8 +17,14 @@ bir NAS'ı tercih eden ekip için), iCloud da bulut yoksa yedek olarak kalır.
   Aynı anahtarı kullanan Mac'ler aynı ekiptir; kimse bir şey seçmez, yapıştırmaz. Farklı anahtarla kurulan bir Mac
   için `team.token` dosyası (`MEETING_OS_TEAM=<token> sh scripts/install.sh` ya da `meeting_os team join <token>`)
   aynı ekibe alır. Token asla depoya yazılmaz (depo herkese açık).
-- **Yerel ayna.** Sunucu, mevcut klasör düzeninin aynasıdır: istemci `~/Library/Application Support/MeetingOS/team/`
-  klasörünü "ekip klasörü" olarak kullanır (`reports.team_dir` bulut yapılandırılmışsa bu klasörü döndürür) ve
+- **Ekip kimliği yapışkandır.** Anahtardan TÜRETİLEN ilk token `team.token` dosyasına yazılır (0600) ve bir daha
+  türetilmez. API anahtarı faturayla ilgilidir, kimlikle değil: anahtarı yenilemek ya da kişisel bir anahtarı
+  yapıştırmak Mac'i sessizce tek kişilik bir ekibe taşımaz. Açık `join` her zaman kazanır.
+- **Ekip bir sınırdır.** Ayna, eşitleme durumu ve veritabanına giren satırlar tek bir ekibe aittir; ayrıntı için
+  aşağıdaki "Ekip sınırı".
+- **Yerel ayna.** Sunucu, mevcut klasör düzeninin aynasıdır: istemci
+  `~/Library/Application Support/MeetingOS/team/<ekip kısa id>/` klasörünü "ekip klasörü" olarak kullanır
+  (`reports.team_dir` bulut yapılandırılmışsa bu klasörü döndürür) ve
   `team_cloud.sync` bu klasörü sunucuyla eşitler. `team_knowledge`, `glossary`, `reports` DEĞİŞMEZ: hepsi klasöre
   yazıp klasörden okumaya devam eder. Sunucu düşerse uygulama yerel aynadan çalışır; hiçbir öğrenim kaybolmaz.
 - **Sunucu aptaldır.** Ekip başına, host başına dosya saklar. Birleştirme istemcide: her Mac yalnız KENDİ
@@ -75,13 +81,17 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
 - `DEFAULT_URL = 'https://hermes-vps.tail2d8c7e.ts.net/meetingos'`; ayar `team_url` ('' = varsayılan).
 - `token(data_dir)`: `data_dir/team.token` (0600) varsa o; yoksa `data_dir/openrouter.key`'den türetilir; ikisi de
   yoksa None. (`openrouter.key` dosyası `data_dir` altındadır, bu yüzden testler gerçek anahtarı asla görmez.)
-- `mirror_dir(data_dir) = data_dir/'team'` (0700).
+- `mirror_dir(data_dir) = data_dir/'team'/<ekip kısa id>` (0700) — ekip başına bir ayna.
+- `device_id(data_dir)`: `device.id` (12 rastgele onaltılık karakter, bir kez üretilir, 0600). GÖRÜNEN ad hâlâ
+  `reports.host_name()`; cihaz kimliği yalnız `X-Meeting-OS-Device` başlığında ve nabızda (`team_cloud.device`)
+  taşınır. Sunucu bugün onunla bir şey yapmıyor; aynı `LocalHostName`'i taşıyan iki Mac'i ayırt etmek için var.
 - `configured(settings, data_dir)`: token var ve `team_dir` seçilmemiş.
 - `reports.load_settings` sonucu `_mirror` anahtarını taşır (bulut yapılandırılmışsa ayna yolu; `save_settings`
   yazmadan önce düşürür); `reports.team_dir(settings)` = `team_dir` ya da `_mirror`. Böylece `report_root`,
   `glossary.team_path`, `team_knowledge.shared_root` kendiliğinden aynayı kullanır.
 - Ayna düzeni (klasörle bire bir): `team-words.jsonl`, `glossary.jsonl` (**yalnız diğer host'ların** terimleri),
-  `profiles/<host>.jsonl`, `reports/<host>/…`.
+  `profiles/<host>.jsonl`, `reports/<host>/…` — artı indirilen ham kopyalar: `words/<host>.jsonl`,
+  `glossary/<host>.jsonl`. Birleşik `team-words.jsonl` ve `glossary.jsonl` bu ham dosyalardan yeniden kurulur.
 - `sync(data_dir, settings=None, budget=20.0)` → sözlük (`pushed`, `pulled`, `hosts`, `error`), asla yükseltmez:
   1. **İlk çalıştırmada tohum:** ayna boşsa ve iCloud `MeetingOS-Shared/profiles/<host>.jsonl` varsa kopyala;
      `team-words.jsonl`'den kendi satırlarını al; `MeetingOS-Reports/<host>/heartbeat.json` kopyala.
@@ -91,10 +101,15 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
      `errors/<host>.jsonl` (`errors.jsonl` kopyası; `share_reports` kapalıysa raporlar ve hatalar yüklenmez).
      `team-cloud-state.json` `pushed[path]=sha256`; değişmeyen dosya yüklenmez.
   3. **İndir (yalnız diğerleri):** `index`'ten `host != ben` dosyaları; `pulled[path]=sha256` ile aynı olanlar
-     atlanır. `profiles/<other>.jsonl` → ayna; `words/<other>.jsonl` → aynadaki `team-words.jsonl` = kendi
-     satırlarım + bütün diğerlerinin satırları (yeniden yazılır); `glossary/<other>.jsonl` → ayna `glossary.jsonl` =
-     diğerlerinin birleşimi; `reports/<other>/*.json` → ayna. Sunucuda artık olmayan bir başkasının dosyası
-     aynadan silinir (bir ekip arkadaşının `forget`/silmesi böyle ulaşır).
+     atlanır. **Sıra:** önce baytlar aynadaki ham dosyaya atomik yazılır (`profiles/<other>.jsonl`,
+     `words/<other>.jsonl`, `glossary/<other>.jsonl`, `reports/<other>/*.json`), sonra birleşik görünümler bu
+     dosyalardan yeniden kurulur (`team-words.jsonl` = kendi satırlarım + diğerlerinin ham dosyaları;
+     `glossary.jsonl` = diğerlerinin birleşimi), **en son** `pulled[path]` yazılır. Bütçe ya da ağ ortada
+     biterse: diske inenler "alındı" işaretlenir, inmeyenler işaretlenmez ve sonraki tur onları tamamlar.
+     Yarım bir indirme hiçbir zaman "uygulandı" görünmez. Henüz indirilmemiş bir host'un satırları birleşik
+     dosyada olduğu gibi bırakılır — yavaş bir ilk tur "bütün ekip her şeyi unuttu" gibi görünmez.
+     Sunucuda artık olmayan bir başkasının dosyası aynadan (ham kopyası dâhil) silinir (bir ekip arkadaşının
+     `forget`/silmesi böyle ulaşır).
   4. Durum: `last_ok`, `last_error` (sınıf adı + kısa mesaj), `hosts` (index'teki host listesi), `team_id_short`.
 - `sync_async(data_dir)`: daemon iş parçacığı, modül kilidiyle tek seferde bir; hızlı köprü kancaları bunu çağırır.
 - `team_knowledge.sync`: publish_words + publish_profiles (aynaya yaz) → `team_cloud.sync` (yapılandırılmışsa) →
@@ -104,7 +119,44 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
   hosts}`; Swift `teamRootCheck`: cloud + last_ok → `.ok` "ekip bulutu · N Mac · son eşitleme HH:MM"; cloud +
   last_error → `.optional` "bulut şu an erişilemiyor (…); yerel bilgi korunuyor, bağlanınca eşitlenir"; cloud
   henüz hiç denenmemiş → `.optional` "ekip bulutu · ilk eşitleme bekleniyor".
-- Nabız (`build_heartbeat`): `team_cloud: {last_ok, last_error, hosts}`.
+- Nabız (`build_heartbeat`): `team_cloud: {last_ok, last_error, hosts, device}`.
+
+### Ekip sınırı (kural)
+
+Ekip bir **sınırdır**: bir ekipte öğrenilen hiçbir şey başka bir ekibe taşınmaz.
+
+- **Ayna** ekip başına: `data_dir/team/<ekip kısa id>/`. **Durum dosyası** ekip başına:
+  `team-cloud-state-<ekip kısa id>.json`. `reports.load_settings` `_mirror` değerini aynı `mirror_dir()`
+  üzerinden çözer, dolayısıyla `report_root`, `glossary.team_path`, `team_knowledge.shared_root` hepsi
+  kendiliğinden doğru ekibin klasörüne bakar.
+- **Göç (bir kez):** 1.2.67 ve öncesinin düz `team/` klasörü ile `team-cloud-state.json` dosyası, durum
+  dosyasının söylediği ekibin (`team_id_short`; yoksa şimdiki ekip) altına TAŞINIR. Hiçbir şey silinmez,
+  birleştirilmez ve hiçbir yere yüklenmez.
+- **`join(data_dir, token, store=None)` taşınmadır, birleşme değil.** Başka bir ekibe geçildiğinde önceki ekibin
+  çekmelerinin veritabanına koyduğu satırlar kaldırılır: `provenance` değeri `team:` ile başlayan ses örnekleri
+  YUMUŞAK silinir (`deleted_by='team-join:<utc>'` — gizlenir, yok edilmez; geri alma sunulmuyor) ve `team_words`
+  tablosu boşaltılır (o tablo bir ekip arkadaşının dosyasının kopyasıdır, yeni ekibin ilk çekmesi yeniden kurar).
+  Yerel örnekler ve yerel öğretilen kelimeler asla dokunulmaz. Aynı ekibe yeniden katılmak hiçbir şey yapmaz.
+- Sonuç: A ekibinde üretilen rapor/profil B ekibinin sunucusuna yüklenemez, çünkü B'nin aynası boştur ve
+  `_own_files` yalnız aynadan okur.
+
+### Profil uzlaştırma ve ret kapsamı (kural)
+
+- **Silme yayılır.** `pull_profiles` her kaynak host'un anlık görüntüsüyle UZLAŞIR: `team:<host>:<hash>`
+  kaynaklı bir örnek o host'un dosyasında artık yoksa burada da yumuşak silinir
+  (`deleted_by='team-sync:<utc>'`). Yalnız **okunabilen** dosyalar için: eksik ya da okunamayan bir dosya
+  hiçbir şeyi silmez ("göremiyorum" ≠ "silmişler"). Yerel örnekler (provenance `team:` değil) asla dokunulmaz.
+  Uzlaştırma içe aktarmadan ÖNCE çalışır: kişi başı üst sınıra (8) dayanmış bir profilde düzeltilmiş örnek
+  ancak böyle içeri girebilir. Kaynakta ADI DEĞİŞEN kişi yeni bir hash'tir: eskisi silinir, yenisi alınır.
+- **Ret bir sese aittir, kişiye değil.** `rejections` tablosundaki bir satır "bu SES bu kişi değil" demektir; bu
+  yüzden yalnız aynı ad ve aynı model için, vektörü `Store.REJECT_SIMILARITY` (0,90) yakınlığındaki ekip
+  örneğini engeller — yerel tanımadaki (`store._scores`) kuralın aynısı. Bir yanlış eşleşmeyi düzeltmek, ekibin
+  o kişiye ait temiz örneklerinden mahrum kalmak demek değildir. "Bu kişiyi hiç alma" mekanizması ayrıdır ve
+  değişmedi: `team_profile_blocks` (`block_profile`/`unblock_profile`, profil silindiğinde yazılır).
+- **Yayımlanan yalnız insan adlandırmasıdır.** `publish_profiles` `provenance` değeri `team:` ya da `auto:` ile
+  başlayan örnekleri yayımlamaz. Otomatik eşleşme bir tahmindir; tahmini yayımlamak bir Mac'in yanlış etiketini
+  ekibin ortak yanlışına çevirir (diğerleri alır, üstüne konuşma eşler, o da yayımlanır). `auto:` örnekler
+  yerelde çalışmaya devam eder.
 - CLI `python -m meeting_os team status|sync|invite|join <token>`; `invite` token'ı ve ekip arkadaşına
   gönderilecek tek satırı basar (`git clone -b v0.1 … && MEETING_OS_TEAM=<token> sh scripts/install.sh`).
 - `scripts/install.sh`: `MEETING_OS_TEAM` doluysa `team.token` yazar (0600); 6/6 çıktısında ekip durumunu söyler.
@@ -115,6 +167,10 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
 
 - Python: `tests/test_team_cloud.py` (yerel test sunucusuyla uçtan uca: iki sahte host, kelime/profil/rapor
   yükle-indir, `forget` yayılımı, ağ yokken sessiz hata, ayna kökü çözümü, token türetimi, `save_settings` `_mirror`
-  düşürür) + mevcut `test_team_knowledge`/`test_desktop`/`test_glossary`/`test_reports` yeşil.
+  düşürür; ayrıca: türetilen token'ın kalıcılığı, cihaz kimliği + başlık, ekip değiştirmede ayna/durum/satır
+  ayrışması, eski düzenin göçü, üç kaynaktan ikincisi zaman aşımına uğrayan yarım indirme) +
+  `tests/test_team_knowledge.py` (silme yayılımı, okunamayan dosya hiçbir şeyi silmez, üst sınırda düzeltme,
+  yeniden adlandırma, ret kapsamı, `auto:` yayımlanmaz) + mevcut
+  `test_desktop`/`test_glossary`/`test_reports` yeşil.
 - Canlı: bu Mac 1.2.67 ile açılınca `team_sync` → sunucuda `profiles/Boran-MacBook-Air.jsonl` + `reports/…/heartbeat.json`;
   diğer Mac güncellenince aynı ekipte görünür (`index.hosts` 2), profilleri buraya iner.

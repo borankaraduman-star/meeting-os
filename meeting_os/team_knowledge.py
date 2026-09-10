@@ -31,7 +31,7 @@ from pathlib import Path
 from .correction_memory import _fold, taught_rules
 from .glossary import ICLOUD, SHARED_DIR, REAL_DATA_DIR
 from .reports import host_name, publish, team_dir, SHARED_DIR_MODE
-from .store import fold_name, unit
+from .store import cosine, fold_name, unit
 
 WORDS_FILE = 'team-words.jsonl'
 PROFILES_DIR = 'profiles'
@@ -267,7 +267,12 @@ def publish_profiles(store, settings, data_dir=None):
     fingerprint that recognises the person and nothing that says where they were heard.
 
     Samples that arrived FROM the team (`provenance` starting with `team:`) are not re-published: every Mac
-    publishes only what it learned itself, so a person's line has one owner and cannot echo around the folder."""
+    publishes only what it learned itself, so a person's line has one owner and cannot echo around the folder.
+    Samples the app produced by itself (`auto:`) are not published either: an automatic match is a guess this
+    Mac was confident about, not a person saying "yes, that is her". Publishing guesses is how one Mac's wrong
+    label becomes the team's: the other Macs import it, match more speech to it and publish that in turn. What
+    travels is what a human named or confirmed; the automatic ones keep working locally, where they can be
+    corrected by the person who can hear the difference."""
     if settings.get('share_profiles') is False: return {'published': 0, 'path': None}
     path = profile_path(settings, data_dir)
     if path is None: return {'published': 0, 'path': None}
@@ -275,7 +280,7 @@ def publish_profiles(store, settings, data_dir=None):
     host = host_name(); now = _now()
     people = {}
     for r in store.db.execute('SELECT name,model,vector,duration,provenance FROM samples WHERE deleted_by IS NULL ORDER BY id'):
-        if (r['provenance'] or '').startswith('team:'): continue
+        if (r['provenance'] or '').startswith(('team:', 'auto:')): continue
         name = (r['name'] or '').strip(); duration = float(r['duration'] or 0)
         if not name or duration < MIN_DURATION: continue
         try: vector = _vector(json.loads(r['vector']))
@@ -291,6 +296,24 @@ def publish_profiles(store, settings, data_dir=None):
     if read_profiles(path) == lines: return {'published': len(lines), 'path': str(path), 'unchanged': True}
     _write(path, lines, root=shared_root(settings, data_dir))
     return {'published': len(lines), 'path': str(path), 'people': len(people)}
+
+
+def forget_team_imports(store, reason='team-join'):
+    """Everything a team's pulls put into THIS database, put away. Called when the Mac joins another team: what
+    the old team taught must not follow it there, and must not be re-published to the new team as this Mac's
+    own knowledge.
+
+    Samples are soft-deleted (`deleted_by='<reason>:<utc>'`) — hidden from recognition, from the profile screen
+    and from publishing, but not destroyed; a wrong `join` costs nothing that cannot be looked at again. Team
+    words are deleted outright: `team_words` is a copy of a teammate's file, and the next pull rebuilds it.
+    Local samples and locally taught words are never touched — they are this Mac's, not any team's."""
+    mark = f'{reason}:{_now()}'
+    _ensure_words(store)
+    with store.db:
+        samples = store.db.execute("UPDATE samples SET deleted_by=? WHERE deleted_by IS NULL AND provenance LIKE 'team:%'",
+                                   (mark,)).rowcount
+        words = store.db.execute('DELETE FROM team_words').rowcount
+    return {'forgotten_samples': max(samples, 0), 'forgotten_words': max(words, 0)}
 
 
 def _ensure_blocks(store):
@@ -322,30 +345,103 @@ def unblock_profile(store, name):
     return {'blocked': False, 'name': name}
 
 
-def pull_profiles(store, settings, data_dir=None):
-    """Import the other Macs' voice samples. Idempotent by content hash, capped per person like any self-fed
-    profile, and it never overwrites a local sample: `add_sample_if_new` only ever inserts, and the cap is filled
-    by this Mac's own samples first. A name the user rejected here, or a profile they deleted, is skipped —
-    the local Mac's own corrections outrank anything the folder says."""
-    if settings.get('share_profiles') is False: return {'imported': 0, 'hosts': 0, 'skipped': 0}
-    directory = profiles_dir(settings, data_dir)
-    if directory is None or not directory.is_dir(): return {'imported': 0, 'hosts': 0, 'skipped': 0}
-    host = host_name()
-    blocked = blocked_profiles(store)
-    rejected = {fold_name(r[0]) for r in store.db.execute('SELECT DISTINCT name FROM rejections')}
-    imported = skipped = hosts = 0
+def _rejection_vectors(store):
+    """"That voice is not X", by folded name and embedding model. A rejection is about a VOICE — the user heard
+    one sample and said it was somebody else — so it is stored, and has to be read back, as a vector."""
+    out = {}
+    for r in store.db.execute('SELECT name,model,vector FROM rejections'):
+        try: vector = unit(json.loads(r['vector']))
+        except (ValueError, TypeError, ZeroDivisionError): continue
+        out.setdefault((fold_name(r['name']), r['model']), []).append(vector)
+    return out
+
+
+def _rejected(store, rejections, key, entry):
+    """True when THIS sample is the voice the user said is not this person: same name, same model, and within
+    `Store.REJECT_SIMILARITY` — the same bar local recognition uses (`store._scores`). A different voice under
+    the same name is a different question, and the answer to it is not "no"."""
+    vetoes = rejections.get((key, entry['model']))
+    if not vetoes: return False
+    try: vector = unit(entry['vector'])
+    except (ValueError, TypeError, ZeroDivisionError): return False
+    return any(len(v) == len(vector) and cosine(vector, v) >= store.REJECT_SIMILARITY for v in vetoes)
+
+
+def _published_by_host(directory, host):
+    """{publishing host: {sample hash: entry}} for every teammate file that could be READ. A file that is
+    missing or unreadable is not in the result at all, so it cannot be mistaken for "that Mac published
+    nothing" — an unmounted share must never look like a team that deleted everything."""
+    published = {}
     for path in sorted(directory.glob('*.jsonl')):
         if path.stem == host: continue
-        hosts += 1
-        for e in read_profiles(path):
+        try: entries = read_profiles(path)
+        except OSError: continue   # cannot read it → it says nothing → it removes nothing
+        published.setdefault(path.stem, {})
+        for e in entries:
+            owner = e['host'] or path.stem
+            published.setdefault(owner, {})[sample_hash(e['name'], e['model'], e['vector'])] = e
+    return published
+
+
+def _reconcile_profiles(store, published):
+    """A host's file is the whole truth about what that host publishes, so a `team:<that host>:<hash>` sample
+    this Mac holds and that host no longer lists is soft-deleted here. That is how a correction, a deletion or
+    a ⌘Z on the Mac that taught the voice reaches everybody else — until this existed, one wrong "that is Ayşe"
+    spread through the team and could never be taken back.
+
+    Soft, never destructive (`deleted_by='team-sync:<utc>'`), and only ever `team:` rows: a sample this Mac
+    recorded itself is its own, whatever any teammate's file says."""
+    if not published: return 0
+    mark = f'team-sync:{_now()}'
+    removed = 0
+    with store.db:
+        for owner, digests in published.items():
+            like = owner.replace('\\', '\\\\').replace('_', '\\_').replace('%', '\\%')
+            rows = store.db.execute("SELECT id,provenance FROM samples WHERE deleted_by IS NULL"
+                                    " AND provenance LIKE ? ESCAPE '\\'", (f'team:{like}:%',)).fetchall()
+            gone = [(mark, r['id']) for r in rows if r['provenance'].split(':', 2)[-1] not in digests]
+            if gone:
+                store.db.executemany('UPDATE samples SET deleted_by=? WHERE id=?', gone)
+                removed += len(gone)
+    return removed
+
+
+def pull_profiles(store, settings, data_dir=None):
+    """Import the other Macs' voice samples, and RECONCILE with them. Idempotent by content hash, capped per
+    person like any self-fed profile, and it never overwrites a local sample: `add_sample_if_new` only ever
+    inserts, and the cap is filled by this Mac's own samples first.
+
+    Reconciliation first, import second. A sample that left a teammate's file leaves this database too (see
+    `_reconcile_profiles`), and doing it BEFORE the import is what makes a correction land: a person already at
+    the cap would otherwise refuse the corrected sample and then lose the wrong one, ending up with one sample
+    fewer and the fix arriving an hour late. A person RENAMED on the source Mac is the same story told twice —
+    the vector's hash changes with the name, so the old line is gone (deleted here) and the new one is new
+    (imported here).
+
+    Two different refusals, deliberately not the same thing. `team_profile_blocks` is "never import this
+    person": the user deleted the profile and it must not come back. A `rejection` is "that VOICE is not this
+    person", so it only stops a sample close enough to the rejected one to BE it — correcting one wrong match
+    must not cost the user every clean sample of the real person the rest of the team has."""
+    empty = {'imported': 0, 'hosts': 0, 'skipped': 0, 'removed': 0}
+    if settings.get('share_profiles') is False: return empty
+    directory = profiles_dir(settings, data_dir)
+    if directory is None or not directory.is_dir(): return empty
+    host = host_name()
+    published = _published_by_host(directory, host)
+    removed = _reconcile_profiles(store, published)
+    blocked = blocked_profiles(store)
+    rejections = _rejection_vectors(store)
+    imported = skipped = 0
+    for owner in sorted(published):
+        for digest, e in published[owner].items():
             key = fold_name(e['name'])
-            if key in blocked or key in rejected: skipped += 1; continue
-            provenance = f"team:{e['host'] or path.stem}:{sample_hash(e['name'], e['model'], e['vector'])}"
+            if key in blocked or _rejected(store, rejections, key, e): skipped += 1; continue
             try:
-                if store.add_sample_if_new(e['name'], e['vector'], e['model'], e['duration'], provenance, cap=PROFILE_CAP): imported += 1
+                if store.add_sample_if_new(e['name'], e['vector'], e['model'], e['duration'],
+                                           f'team:{owner}:{digest}', cap=PROFILE_CAP): imported += 1
                 else: skipped += 1
             except ValueError: skipped += 1   # a line this Mac's `enroll` refuses is one line, not a failed import
-    return {'imported': imported, 'hosts': hosts, 'skipped': skipped}
+    return {'imported': imported, 'hosts': len(published), 'skipped': skipped, 'removed': removed}
 
 
 def team_summary(store):

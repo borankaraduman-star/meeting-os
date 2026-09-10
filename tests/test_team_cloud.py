@@ -11,9 +11,11 @@ import hashlib
 import http.server
 import json
 import re
+import socket
 import tempfile
 import threading
 import unittest
+import urllib.error
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +55,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _reply(self, code, body=b'', kind='application/json', etag=None):
         self.server.seen.append((self.command, self.path, code))
+        self.server.devices.append(self.headers.get('X-Meeting-OS-Device'))
         self.send_response(code)
         self.send_header('Content-Type', kind); self.send_header('Content-Length', str(len(body)))
         if etag: self.send_header('ETag', f'"{etag}"')
@@ -126,7 +129,7 @@ class CloudFixture(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory(); self.tmp = Path(self._tmp.name)
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
-        self.server.root = self.tmp / 'sunucu'; self.server.root.mkdir(); self.server.seen = []
+        self.server.root = self.tmp / 'sunucu'; self.server.root.mkdir(); self.server.seen = []; self.server.devices = []
         self.url = f'http://127.0.0.1:{self.server.server_address[1]}'
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.stores = []
@@ -174,20 +177,21 @@ class MirrorTests(CloudFixture):
     def test_the_mirror_is_the_team_folder_and_never_a_stored_setting(self):
         mac = self.mac('a')
         settings = mac.settings()
+        team = mac.data / 'team' / TC.team_id_short(TC.token(mac.data))   # one folder per TEAM, not one per Mac
         self.assertEqual(settings['team_dir'], '')                                  # Ayarlar still shows "seçilmedi"
-        self.assertEqual(settings['_mirror'], str(mac.data / 'team'))
-        self.assertEqual(reports.team_dir(settings), mac.data / 'team')
-        self.assertEqual(reports.report_root(settings), mac.data / 'team' / 'reports')
+        self.assertEqual(settings['_mirror'], str(team))
+        self.assertEqual(reports.team_dir(settings), team)
+        self.assertEqual(reports.report_root(settings), team / 'reports')
         with mac.host():
-            self.assertEqual(reports.host_dir(settings), mac.data / 'team' / 'reports' / 'a')
-            self.assertEqual(tk.shared_root(settings, mac.data), mac.data / 'team')
-            self.assertEqual(tk.words_path(settings, mac.data), mac.data / 'team' / 'team-words.jsonl')
-        self.assertEqual(glossary.team_path(mac.data), mac.data / 'team' / 'glossary.jsonl')
+            self.assertEqual(reports.host_dir(settings), team / 'reports' / 'a')
+            self.assertEqual(tk.shared_root(settings, mac.data), team)
+            self.assertEqual(tk.words_path(settings, mac.data), team / 'team-words.jsonl')
+        self.assertEqual(glossary.team_path(mac.data), team / 'glossary.jsonl')
         # …and it is derived every time, never written: settings.json is what a teammate's Mac would read.
         saved = reports.save_settings(mac.data, {'share_text': True})
         self.assertNotIn('_mirror', saved)
         self.assertNotIn('_mirror', json.loads((mac.data / 'settings.json').read_text(encoding='utf-8')))
-        self.assertEqual(reports.load_settings(mac.data)['_mirror'], str(mac.data / 'team'))
+        self.assertEqual(reports.load_settings(mac.data)['_mirror'], str(team))
 
     def test_a_picked_team_folder_still_wins(self):
         folder = self.tmp / 'nas'; folder.mkdir()
@@ -230,6 +234,133 @@ class TokenTests(CloudFixture):
     def test_a_junk_token_file_falls_back_to_the_key(self):
         mac = self.mac('a'); (mac.data / 'team.token').write_text('elle yazılmış\n', encoding='utf-8')
         self.assertEqual(TC.token(mac.data), hashlib.sha256(b'meetingos-team-v1:' + self.KEY.encode()).hexdigest())
+
+    def test_the_derived_token_is_written_down_so_a_new_api_key_never_moves_this_mac(self):
+        """The API key pays for summaries; it is not who the user's team is. Renewing it, or pasting a personal
+        one over a shared one, used to move the Mac to a team of one — silently, with the old team's mirror and
+        reports left behind. The first derivation is remembered instead, and the team stops moving."""
+        mac = self.mac('a')
+        derived = TC.token(mac.data)
+        self.assertEqual((mac.data / 'team.token').read_text(encoding='utf-8').strip(), derived)
+        self.assertEqual((mac.data / 'team.token').stat().st_mode & 0o777, 0o600)
+        (mac.data / 'openrouter.key').write_text('sk-or-v1-yepyeni-anahtar\n', encoding='utf-8')
+        self.assertEqual(TC.token(mac.data), derived)                    # same team, new invoice
+        self.assertEqual(reports.load_settings(mac.data)['_mirror'], str(TC.mirror_dir(mac.data)))
+        # …and an explicit join still wins over anything derived: that is a person saying where they belong.
+        TC.join(mac.data, 'f' * 40)
+        self.assertEqual(TC.token(mac.data), 'f' * 40)
+
+    def test_this_mac_has_its_own_id_and_it_travels_with_every_request(self):
+        """`LocalHostName` is a label the user can change and two Macs in one office can share; it stays the
+        NAME the team sees. The device id is neither of those things: random, written once, sent as a header
+        and recorded in the heartbeat, so two Macs called the same thing are still two devices."""
+        mac = self.mac('a')
+        device = TC.device_id(mac.data)
+        self.assertRegex(device, r'^[0-9a-f]{12}$')
+        self.assertEqual(TC.device_id(mac.data), device)                 # made once, never again
+        self.assertEqual((mac.data / 'device.id').stat().st_mode & 0o777, 0o600)
+        other = self.mac('b')
+        self.assertNotEqual(TC.device_id(other.data), device)            # two Macs, two ids
+        with mac.host(): mac.sync()
+        self.assertTrue(self.server.devices)
+        self.assertEqual(set(self.server.devices), {device})
+        self.assertEqual(TC.status(mac.data)['device'], device)
+
+
+class TeamBoundaryTests(CloudFixture):
+    """A team is a boundary: mirror, sync state and imported rows all belong to one team, so joining another
+    one starts clean instead of carrying the first team's work into it."""
+
+    VECTOR = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.4, 0.2]
+
+    def test_joining_another_team_leaves_the_first_teams_mirror_state_and_rows_behind(self):
+        a = self.mac('a'); b = self.mac('b')
+        with a.host():
+            mid = a.store.create_meeting('a'); self.segment(a.store, mid, 'Trendyoll ile görüştük.')
+            cm.teach(a.store, mid, 'Trendyoll', 'Trendyol', a.data)
+            a.store.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+            tk.publish_profiles(a.store, a.settings(), a.data)
+            a.sync()
+        with b.host():
+            b.store.enroll('Mehmet', [0.9, 0.1, 0.4, 0.2, 0.7, 0.3, 0.5, 0.8, 0.2, 0.6, 0.1, 0.3], 'emb-1', 11.0, 'yerel-1:2')
+            tk.publish_profiles(b.store, b.settings(), b.data)
+            self.report(b, '2026-09-10_b.json', {'meeting': 'b'})
+            b.sync()
+            tk.pull_words(b.store, b.settings(), b.data); tk.pull_profiles(b.store, b.settings(), b.data)
+            self.assertEqual(sorted(p['name'] for p in b.store.profiles()), ['Ayşe', 'Mehmet'])
+            self.assertEqual(len(tk.team_rules(b.store)), 1)
+        first_team = TC.mirror_dir(b.data); first_state = TC.state_path(b.data)
+        # …and now this Mac is invited into a different team
+        stranger = self.mac('c', key='sk-or-v1-baska-ekip')
+        left = TC.join(b.data, TC.token(stranger.data), store=b.store)
+        self.assertEqual((left['joined'], left['forgotten_samples'], left['forgotten_words']), (True, 1, 1))
+        second_team = TC.mirror_dir(b.data)
+        self.assertNotEqual(second_team, first_team)
+        self.assertEqual(second_team.parent, first_team.parent)          # data/team/<team>, side by side
+        self.assertNotEqual(TC.state_path(b.data), first_state)
+        # what the first team taught is put away, not destroyed; what this Mac learned itself is untouched
+        self.assertEqual([p['name'] for p in b.store.profiles()], ['Mehmet'])
+        self.assertEqual(tk.team_rules(b.store), [])
+        self.assertEqual(b.store.db.execute("SELECT count(*) FROM samples WHERE deleted_by LIKE 'team-join:%'").fetchone()[0], 1)
+        self.assertTrue((first_team / tk.WORDS_FILE).is_file())          # the old team's mirror stays on disk
+        self.assertTrue(first_state.is_file())
+        with b.host():
+            self.assertEqual(reports.load_settings(b.data)['_mirror'], str(second_team))
+            b.sync()
+        # nothing of the first team — not even this Mac's own file from back then — reached the second team
+        second = self.server.root / hashlib.sha256(TC.token(stranger.data).encode()).hexdigest()[:32]
+        self.assertEqual(sorted(p.relative_to(second).as_posix() for p in second.rglob('*') if p.is_file()), [])
+        first = self.server.root / hashlib.sha256(TC.token(a.data).encode()).hexdigest()[:32]
+        self.assertIn('profiles/b.jsonl', [p.relative_to(first).as_posix() for p in first.rglob('*') if p.is_file()])
+
+    def test_rejoining_the_same_team_changes_nothing(self):
+        a = self.mac('a'); b = self.mac('b')
+        with a.host():
+            a.store.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+            tk.publish_profiles(a.store, a.settings(), a.data); a.sync()
+        with b.host():
+            b.sync(); tk.pull_profiles(b.store, b.settings(), b.data)
+        mirror = TC.mirror_dir(b.data)
+        again = TC.join(b.data, TC.token(b.data).upper(), store=b.store)   # the same team, typed in upper case
+        self.assertNotIn('forgotten_samples', again)
+        self.assertEqual(TC.mirror_dir(b.data), mirror)
+        self.assertEqual([p['name'] for p in b.store.profiles()], ['Ayşe'])
+
+    def test_the_old_single_folder_layout_is_moved_under_the_team_that_wrote_it(self):
+        """Upgrading must not lose a thing: `team/*` and `team-cloud-state.json` are moved, not rebuilt, and
+        they land under the team the state file says they belonged to."""
+        data = self.tmp / 'eski'; data.mkdir()
+        (data / 'openrouter.key').write_text(self.KEY + '\n', encoding='utf-8')
+        short = TC.team_id_short(TC.token(data))
+        legacy = data / 'team'; (legacy / 'profiles').mkdir(parents=True)
+        (legacy / tk.WORDS_FILE).write_text(json.dumps(
+            {'original': 'Trendyoll', 'replacement': 'Trendyol', 'host': 'a'}) + '\n', encoding='utf-8')
+        (legacy / 'profiles' / 'a.jsonl').write_text('{}\n', encoding='utf-8')
+        (data / TC.STATE_FILE).write_text(json.dumps({'team_id_short': short, 'pulled': {'words/a.jsonl': 'x'}}), encoding='utf-8')
+        mirror = TC.mirror_dir(data)
+        self.assertEqual(mirror, legacy / short)
+        self.assertEqual([e['original'] for e in tk.read_words(mirror / tk.WORDS_FILE)], ['Trendyoll'])
+        self.assertTrue((mirror / 'profiles' / 'a.jsonl').is_file())
+        self.assertFalse((legacy / tk.WORDS_FILE).exists())
+        self.assertEqual(TC.state_path(data), data / f'team-cloud-state-{short}.json')
+        self.assertEqual(json.loads(TC.state_path(data).read_text(encoding='utf-8'))['pulled'], {'words/a.jsonl': 'x'})
+        self.assertFalse((data / TC.STATE_FILE).exists())
+
+    def test_a_legacy_folder_from_another_team_is_not_handed_to_this_one(self):
+        """The state file names the team those files came from. If this Mac is in a different team now, the old
+        mirror keeps its own name and the new team starts empty — the wrong answer here uploads one team's
+        reports to another."""
+        data = self.tmp / 'devredilen'; data.mkdir()
+        (data / 'openrouter.key').write_text(self.KEY + '\n', encoding='utf-8')
+        legacy = data / 'team'; legacy.mkdir()
+        (legacy / tk.WORDS_FILE).write_text(json.dumps(
+            {'original': 'Trendyoll', 'replacement': 'Trendyol', 'host': 'a'}) + '\n', encoding='utf-8')
+        (data / TC.STATE_FILE).write_text(json.dumps({'team_id_short': 'abc123'}), encoding='utf-8')
+        mirror = TC.mirror_dir(data)
+        self.assertEqual(mirror, legacy / TC.team_id_short(TC.token(data)))
+        self.assertFalse((mirror / tk.WORDS_FILE).exists())              # not this team's knowledge
+        self.assertTrue((legacy / 'abc123' / tk.WORDS_FILE).is_file())   # still there, under its own team
+        self.assertTrue((data / 'team-cloud-state-abc123.json').is_file())
 
 
 class RoundTripTests(CloudFixture):
@@ -287,6 +418,26 @@ class RoundTripTests(CloudFixture):
             self.assertEqual([r['original'] for r in tk.team_rules(b.store)], ['Splendoo'])
             self.assertEqual([e['original'] for e in tk.read_words(b.mirror / tk.WORDS_FILE)], ['Splendoo'])
 
+    def test_a_voice_the_teaching_mac_took_back_stops_being_a_voice_here(self):
+        """End to end over the server, because this is the failure a teammate actually feels: one Mac teaches a
+        voice to the wrong person, every Mac imports it, and the correction has to travel as far as the mistake
+        did — including into recognition, not only into the mirror file."""
+        a = self.mac('a'); b = self.mac('b')
+        with a.host():
+            a.store.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+            tk.publish_profiles(a.store, a.settings(), a.data); a.sync()
+        with b.host():
+            b.sync(); tk.pull_profiles(b.store, b.settings(), b.data)
+            self.assertEqual(b.store.identify(self.VECTOR, 'emb-1')['name'], 'Ayşe')
+        with a.host():
+            a.store.delete_profile('Ayşe')
+            tk.publish_profiles(a.store, a.settings(), a.data); a.sync()
+        with b.host():
+            b.sync()
+            self.assertEqual(tk.pull_profiles(b.store, b.settings(), b.data)['removed'], 1)
+            self.assertEqual(b.store.profiles(), [])
+            self.assertIsNone(b.store.identify(self.VECTOR, 'emb-1')['name'])
+
     def test_a_deleted_meetings_report_leaves_the_team(self):
         a = self.mac('a'); b = self.mac('b')
         with a.host():
@@ -342,9 +493,9 @@ class ResilienceTests(CloudFixture):
         journal = [e for e in E.entries(mac.data) if e['kind'] == 'cloud']
         self.assertEqual(len(journal), 1)                                  # one line an hour, not one line a pass
         self.assertEqual(journal[0]['context'], {'where': 'team_cloud'})
-        stamp = json.loads((mac.data / TC.STATE_FILE).read_text(encoding='utf-8'))['error_recorded']
+        stamp = json.loads(TC.state_path(mac.data).read_text(encoding='utf-8'))['error_recorded']
         self.assertTrue(stamp)
-        self.assertEqual((mac.data / TC.STATE_FILE).stat().st_mode & 0o777, 0o600)
+        self.assertEqual(TC.state_path(mac.data).stat().st_mode & 0o777, 0o600)
 
     def test_the_budget_stops_the_pass_without_losing_what_was_written(self):
         mac = self.mac('a')
@@ -361,6 +512,51 @@ class ResilienceTests(CloudFixture):
             self.assertTrue(TC.status(mac.data)['last_ok'])
             # A pass with nothing left to do does not report a budget error even with no time at all.
             self.assertNotIn('error', mac.sync(budget=0))
+
+    def test_a_download_that_dies_half_way_is_never_recorded_as_applied(self):
+        """Three Macs have taught a word each; the fourth joins and the second download times out.
+
+        The dangerous outcome is not the failure — it is a state file that says `words/b.jsonl` was pulled when
+        its words never reached the merged file. That Mac would then be permanently missing a correction the
+        whole team has, and everything would look fine. So the bytes land in the mirror first, the merged view
+        is rebuilt from the files on disk, and only then is the progress written down: what did arrive counts,
+        what did not is simply not marked, and the next pass finishes it."""
+        macs = [self.mac(name) for name in ('a', 'b', 'c')]
+        for mac, wrong, right in zip(macs, ('Trendyoll', 'Splendoo', 'Purodakk'), ('Trendyol', 'Splendo', 'Purodak')):
+            with self.hosted(mac.name):
+                mid = mac.store.create_meeting(mac.name); self.segment(mac.store, mid, f'{wrong} geçti.')
+                cm.teach(mac.store, mid, wrong, right, mac.data)
+                mac.sync()
+        new_mac = self.mac('d')
+        real = TC._Http.get; calls = []
+
+        def flaky(http, path, etag=None):
+            if path.startswith('words/'):
+                calls.append(path)
+                if len(calls) == 2: raise urllib.error.URLError(socket.timeout('timed out'))
+            return real(http, path, etag=etag)
+
+        with new_mac.host(), patch.object(TC._Http, 'get', flaky):
+            half = new_mac.sync()
+        self.assertTrue(half['error'])
+        self.assertEqual(calls, ['words/a.jsonl', 'words/b.jsonl'])
+        state = json.loads(TC.state_path(new_mac.data).read_text(encoding='utf-8'))
+        self.assertEqual(sorted(p for p in state['pulled'] if p.startswith('words/')), ['words/a.jsonl'])
+        self.assertEqual([e['original'] for e in tk.read_words(new_mac.mirror / tk.WORDS_FILE)], ['Trendyoll'])
+        self.assertTrue((new_mac.mirror / 'words' / 'a.jsonl').is_file())   # the raw copy the merged view is built from
+        self.assertFalse((new_mac.mirror / 'words' / 'b.jsonl').exists())
+        with new_mac.host():
+            done = new_mac.sync()
+            self.assertNotIn('error', done)
+            tk.pull_words(new_mac.store, new_mac.settings(), new_mac.data)
+        state = json.loads(TC.state_path(new_mac.data).read_text(encoding='utf-8'))
+        self.assertEqual(sorted(p for p in state['pulled'] if p.startswith('words/')),
+                         ['words/a.jsonl', 'words/b.jsonl', 'words/c.jsonl'])
+        self.assertEqual(sorted(e['original'] for e in tk.read_words(new_mac.mirror / tk.WORDS_FILE)),
+                         ['Purodakk', 'Splendoo', 'Trendyoll'])
+        # …every word exactly once, and every one of them actually applying
+        self.assertEqual(sorted(r['original'] for r in tk.team_rules(new_mac.store)), ['Purodakk', 'Splendoo', 'Trendyoll'])
+        self.assertEqual([r['active'] for r in tk.team_rules(new_mac.store)], [True, True, True])
 
     def test_the_error_journal_travels_only_when_reports_are_shared(self):
         a = self.mac('a'); quiet = self.mac('q', share_reports=False); b = self.mac('b')
@@ -445,8 +641,9 @@ class HeartbeatTests(CloudFixture):
         with mac.host():
             mac.sync()
             beat = reports._team_cloud(mac.data)
-        self.assertEqual(sorted(beat), ['hosts', 'last_error', 'last_ok'])
+        self.assertEqual(sorted(beat), ['device', 'hosts', 'last_error', 'last_ok'])
         self.assertTrue(beat['last_ok']); self.assertIsNone(beat['last_error'])
+        self.assertEqual(beat['device'], TC.device_id(mac.data))
 
     def test_setup_status_calls_the_mirror_a_cloud_and_not_a_picked_folder(self):
         from meeting_os.desktop import dispatch
