@@ -1,0 +1,40 @@
+{
+  "title": "Kurgu test — Koşullu söz ve başkasına devredilen iş",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip, ürün veya toplantı değildir. Codex #10 için: koşula bağlanan söz ('geçerse … çıkarırım, geçmezse çıkarmam') kabul edilmiş bir taahhüt değildir; 'Murat yapsın' önerisini Murat kabul etmez. Yalnızca performans raporu gerçek bir taahhüttür.",
+  "segments": [
+    {
+      "speaker": "Can",
+      "text": "Eğer yük testleri geçerse canary trafiğini yüzde yirmiye çıkarırım. Geçmezse çıkarmam, olduğu yerde bırakırız. Yani bu şu an bir söz değil, koşula bağlı."
+    },
+    {
+      "speaker": "Selin",
+      "text": "Bu deploy işini bence Murat yapsın, benim bu hafta hiç vaktim yok. Sadece bir öneri, karar Murat'ın."
+    },
+    {
+      "speaker": "Murat",
+      "text": "Deploy işini alamam, o hafta izinliyim. Ama ben performans raporunu perşembeye kadar çıkaracağım, bu kesin."
+    },
+    {
+      "speaker": "Can",
+      "text": "Yük testlerinin sonucunu zaten yarın göreceğiz. Sonucu görmeden kimse bir şeye söz vermesin, boşuna beklenti yaratmayalım."
+    }
+  ],
+  "expected_actions": 1,
+  "forbidden_action_terms": [
+    "canary",
+    "deploy",
+    "yük test"
+  ],
+  "expected_owners": [
+    "Murat"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "performans"
+      ],
+      "owner": "Murat",
+      "due_text": "perşembeye kadar"
+    }
+  ]
+}

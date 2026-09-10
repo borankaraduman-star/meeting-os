@@ -1,0 +1,48 @@
+{
+  "title": "Kurgu test — Aynı başlık, iki ayrı vade",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip, ürün veya toplantı değildir. Codex #5 için: aynı kişinin aynı başlıkla verdiği iki ayrı sözün vadeleri farklıdır ve ikisi de gerçek taahhüttür; birleştirilirse ikinci söz sessizce kaybolur. Vadeler bilerek ayrı günlerdir. İki görevin başlığı bilerek aynıdır: benchmark'ın 'duplicates' sayacı bunu tekrar olarak raporlar, bu bir kapı değil bilgi satırıdır.",
+  "segments": [
+    {
+      "speaker": "Ece",
+      "text": "Durum raporunu pazartesiye kadar göndereceğim, sprint başındaki toplantı için lazım olacak."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Peki hafta sonunda da bir tane lazım, müşteri görüşmesinden önce. İkisi ayrı ihtiyaç, biri diğerinin yerine geçmiyor."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Tamam, o zaman durum raporunu cumaya kadar da göndereceğim. İkisini de yapacağım, ikisi ayrı iş."
+    },
+    {
+      "speaker": "Can",
+      "text": "Eski arşiv temizliğini geçen ay bitirdik, orada kimseye iş kalmadı. Sadece kapanış bilgisi."
+    }
+  ],
+  "expected_actions": 2,
+  "forbidden_action_terms": [
+    "arşiv"
+  ],
+  "expected_owners": [
+    "Ece",
+    "Ece"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "durum",
+        "rapor"
+      ],
+      "owner": "Ece",
+      "due_text": "pazartesiye kadar"
+    },
+    {
+      "title_terms": [
+        "durum",
+        "rapor"
+      ],
+      "owner": "Ece",
+      "due_text": "cumaya kadar"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 """Versioned analysis and durable task state on the existing local SQLite store."""
 import json
 from datetime import datetime,timezone
-from .intelligence import fingerprint
+from .intelligence import action_conflict,fingerprint
 from .metrics import normalize
 
 STOPWORDS={'ve','bir','bu','şu','o','ne','kaç','mi','mı','mu','mü','ile','için','de','da','ki','ama','veya','ya','gibi','çok','daha','en','var','yok','mi','nasıl','neden','hangi','kim','nerede','zaman','olan','oldu','olduğu','söylendi','söyledi','söylemiş','dedi','diye','ise','hakkında','bana','bize','şey'}
@@ -91,7 +91,11 @@ def dedupe_actions(actions,threshold=0.8):
     both survived and the meeting counted the same task twice in the digest and the karne. Near-identical
     titles (normalized token Jaccard) collapse onto the wording with more evidence — the one a reader can
     check against the transcript. Two different people promising a similar thing are two commitments, so
-    the owners have to agree (or both be missing). Nothing else about the item is merged."""
+    the owners have to agree (or both be missing). Nothing else about the item is merged.
+
+    One promise carrying two different deadlines is also two promises ("pazartesi" and "cuma"), and so
+    is one carrying two different quantities: those stay apart however alike the titles read, and the
+    doubt from either of them is carried onto both so the pair stays visible (Codex #5)."""
     kept=[]
     for item in actions:
         tokens=_title_tokens(item.get('title'))
@@ -101,6 +105,9 @@ def dedupe_actions(actions,threshold=0.8):
             # A Jaccard verdict over three tokens is a coin toss; short titles must match exactly.
             same=len(tokens&other_tokens)/len(union)>=threshold if len(union)>=4 else normalize(item.get('title') or '')==normalize(other.get('title') or '')
             if not same:continue
+            if action_conflict(item,other):
+                if item.get('needs_review') or other.get('needs_review'):item['needs_review']=other['needs_review']=True
+                continue
             winner,loser=(item,other) if len(item.get('evidence') or [])>len(other.get('evidence') or []) else (other,item)
             # Merge, never drop: the loser's quotes, a deadline the winner lacked, and a trace of what was folded in.
             seen={(e.get('segment_id'),e.get('quote')) for e in winner.get('evidence') or []}

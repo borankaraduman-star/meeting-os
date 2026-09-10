@@ -1,5 +1,6 @@
 """Evidence-bound meeting analysis; transcript is data, never executable instruction."""
 import hashlib,json,re
+from datetime import date
 from .metrics import normalize
 from .schemas import analysis_schema
 # `memory.owner_key` is this same function; imported from `store` because `memory` imports this module.
@@ -140,6 +141,28 @@ def uncertain(row):
     return bool(UNCERTAIN_FLAGS.intersection(row.get('flags') or []))
 
 
+# Verification proves a quote is REAL; it does not prove the quote supports a commitment. A genuine
+# quote can negate the task ("göndermeyeceğim"), make it conditional ("testler geçerse") or hand it to
+# somebody else ("Deniz yapsın") while still sharing every content word with the claim, so the stem
+# check above lets it through. These three Turkish patterns are deliberately narrow: they only raise
+# `needs_review`, they never drop an item, and they cost nothing — no second model call. A missed case
+# is what the pipeline does today; a false flag would teach people to ignore the badge.
+NEGATED=re.compile(r'm[ae]y[ae]c[ae]ğ|\byapmayal[ıi]m\b|\b[ıi]ptal(?!\s*(?:edilmey|edilmed|olmay|değil))|\bvazge[cç](?:tik|ti|iyoruz|meli)|\bgerek (?:yok|kalmad\w*)\b|\b[ıi]htiya[cç] (?:yok|kalmad\w*)\b')
+CONDITIONAL=re.compile(r'\b(?:eğer|şayet)\b|\b\w{2,}[ıiuüae]rs[ae]k?\b|\b(?:varsa|olsa|olsayd[ıi])\b')
+DELEGATED=re.compile(r'\b(?:yaps[ıi]n|baks[ıi]n|als[ıi]n|halletsin|g[öo]ndersin|yazs[ıi]n|çıkars[ıi]n|[üu]stlensin|ilgilensin|devrals[ıi]n|devretsin|hazırlas[ıi]n)\b|\b\w*[ae]\s+(?:verelim|devredelim|b[ıi]rakal[ıi]m|yıkal[ıi]m)\b')
+COMMITMENT_DOUBT=(('negation',NEGATED),('conditional',CONDITIONAL),('delegation',DELEGATED))
+
+def commitment_doubt(text):
+    """Why a human should read the evidence behind a firm commitment, or None.
+
+    Turkish only, and matched on `normalize`d text, which has already dropped punctuation and folded
+    İ/I — "Deniz'e verelim" arrives here as "deniz e verelim"."""
+    folded=normalize(text or '')
+    for name,pattern in COMMITMENT_DOUBT:
+        if pattern.search(folded):return name
+    return None
+
+
 def validate_record(record,rows,mic_owner=None):
     by_id={r['id']:r for r in rows};result={key:[] for key in CATEGORIES};dropped=0;dropped_items=0;total_items=0
     for key in CATEGORIES:
@@ -170,6 +193,7 @@ def validate_record(record,rows,mic_owner=None):
             flagged=any(uncertain(r) for r in selected) or rescued   # a stitched quote, or a row the pipeline itself doubted
             clean={field:text.strip(),'evidence':evidence,'needs_review':flagged}
             if key=='actions':
+                inferred_from_mic=False   # set below; kept out of `item` so a model-written field can never drive the badge
                 owner=item.get('owner');due=item.get('due_text');quotes=' '.join(e['quote'] for e in evidence)
                 owner=canonical_owner(owner,rows,mic_owner)   # "Deniz'in", "deniz bey" and "Deniz" are one person before anything is verified
                 owner_key=owner_match_key(owner)
@@ -191,7 +215,7 @@ def validate_record(record,rows,mic_owner=None):
                     if len(names)==1:
                         owner=row_person(first[0],mic_owner)
                         # A mic row can carry an unflagged echo of a colleague: the attribution stands, marked for a look.
-                        if all(r.get('source')=='mic' for r in first):item['needs_review']=True
+                        if all(r.get('source')=='mic' for r in first):inferred_from_mic=True
                 if any('speaker_ambiguous' in r.get('flags',[]) for r in selected):owner=None
                 due=due.strip() if isinstance(due,str) and due.strip() and due in quotes else None
                 # Marking every single task for review marked none of them: the badge said nothing and people
@@ -199,7 +223,9 @@ def validate_record(record,rows,mic_owner=None):
                 # uncertain row) or when the model named an owner the evidence did not support — the abstention
                 # the comment above promises. A clean, quoted, owned task is not a question for the user.
                 abstained=bool((item.get('owner') or '').strip()) and not owner
-                clean.update(owner=owner,due_text=due,needs_review=flagged or abstained)
+                # `inferred_from_mic` used to be written into `item` and then overwritten here, so the one
+                # attribution the pipeline itself calls a guess shipped as a clean task (Codex #10).
+                clean.update(owner=owner,due_text=due,needs_review=flagged or abstained or inferred_from_mic or bool(commitment_doubt(quotes)))
             result[key].append(clean)
     if total_items and dropped_items==total_items: raise ValueError('Analiz gerçek kaynak alıntısıyla eşleşmiyor')   # whole batch unusable → caller retries once
     result['dropped_quotes']=dropped;result['dropped_items']=dropped_items
@@ -258,6 +284,79 @@ def canonical_owner(owner,rows,mic_owner=None):
 
 def _text_of(item):return item.get('title',item.get('text','')) or ''
 
+
+DUE_ANCHORS=(date(2026,1,5),date(2026,1,7))   # a Monday and a Wednesday
+
+def due_days(text):
+    """The calendar day a spoken deadline means, read from two different weekdays, or None.
+
+    A deadline is spoken relative to the meeting ("yarın", "haftaya salı") and de-duplication has no
+    meeting date, so both anchors are fictional. Reading each wording from a Monday AND from a
+    Wednesday is what makes the comparison honest: "cuma" and "cuma gününe kadar" land on one day from
+    both, while "yarın" and "salı" — the same day only if the meeting happened to be on a Monday —
+    do not."""
+    from .due_dates import suggest_due   # imported late: due_dates imports memory, which imports this module
+    text=(text or '').strip()
+    if not text:return None
+    days=tuple(suggest_due(text,anchor) for anchor in DUE_ANCHORS)
+    return days if all(days) else None
+
+
+def due_conflict(first,second):
+    """Two deadlines that are both spoken and clearly different: never one task (Codex #5).
+
+    The same person promising "pazartesi" and "cuma" made two promises, and merging them drops one
+    silently. An empty deadline on either side is not a conflict — that side only said less — and two
+    wordings of one day ("cuma", "cuma gününe kadar") are not a conflict either."""
+    a=(first or '').strip();b=(second or '').strip()
+    if not a or not b or normalize(a)==normalize(b):return False
+    days,others=due_days(a),due_days(b)
+    return not (days and others and days==others)
+
+
+def _digits(text):
+    return {word for word in normalize(text or '').split() if any(c.isdigit() for c in word)}
+
+
+def quantity_conflict(first,second):
+    """"On sunucu" vs "30 sunucu": a different number is a different commitment. `memory._title_tokens`
+    keeps digit tokens out of the noise filter for exactly this reason; this states the rule once,
+    where both merge layers read it."""
+    mine,theirs=_digits(first),_digits(second)
+    return bool(mine and theirs and mine!=theirs)
+
+
+def action_due(item):
+    """What an action is due by: the spoken words, or the calendar date a human approved for them."""
+    return (item.get('due_text') or '').strip() or str(item.get('due_date') or '').strip()
+
+
+def action_conflict(first,second):
+    """Two same-owner actions that must stay apart however alike their wording is."""
+    return due_conflict(action_due(first),action_due(second)) or quantity_conflict(_text_of(first),_text_of(second))
+
+
+def alike(text,second):
+    """The wording test both merge layers share, on already normalized text: one restatement contains
+    the other, or its content words are a subset of the other's and it says strictly less."""
+    if not text or not second:return False
+    if text==second or text in second or second in text:return True
+    mine,theirs=stems(text),stems(second)
+    return min(len(mine),len(theirs))>=3 and (mine<=theirs or theirs<=mine)
+
+
+def conflicting_indices(key,item,kept):
+    """Where `kept` holds a task this one would have merged into but for an explicit deadline or
+    quantity conflict. Nothing is dropped; the caller carries the doubt onto both of them."""
+    if key!='actions':return []
+    text=normalize(_text_of(item));out=[]
+    if not text:return out
+    for index,other in enumerate(kept):
+        if normalize(item.get('owner') or '')!=normalize(other.get('owner') or ''):continue
+        if action_conflict(item,other) and alike(text,normalize(_text_of(other))):out.append(index)
+    return out
+
+
 def duplicate_index(key,item,kept):
     """Where `item` already exists in `kept`, or None.
 
@@ -265,17 +364,20 @@ def duplicate_index(key,item,kept):
     two different wordings and plain normalized equality misses it. A restatement is recognised
     when one wording is contained in the other, or when its content words are a subset of the
     other's and say strictly less. Two tasks are additionally required to share an owner, and a
-    cross-chunk task repeat also has to carry the same spoken deadline and topic."""
+    cross-chunk task repeat also has to carry the same spoken deadline and topic. Two tasks whose
+    deadlines or quantities explicitly disagree are never one task, however alike the wording."""
     text=normalize(_text_of(item))
     if not text:return None
     mine=stems(text)
     for index,other in enumerate(kept):
         second=normalize(_text_of(other))
         if not second:continue
-        if key=='actions' and normalize(item.get('owner') or '')!=normalize(other.get('owner') or ''):continue
+        if key=='actions':
+            if normalize(item.get('owner') or '')!=normalize(other.get('owner') or ''):continue
+            # Same words, different spoken deadline or different quantity: two commitments, not one.
+            if action_conflict(item,other):continue
         theirs=stems(second)
-        if text==second or text in second or second in text:return index
-        if min(len(mine),len(theirs))>=3 and (mine<=theirs or theirs<=mine):return index
+        if alike(text,second):return index
         if key!='actions':continue
         if not normalize(item.get('due_text') or '') or normalize(item.get('due_text') or '')!=normalize(other.get('due_text') or ''):continue   # two undated tasks of one owner are two tasks
         due=stems(item.get('due_text') or '')|stems(other.get('due_text') or '')
@@ -329,8 +431,14 @@ def merge_records(records):
         for record in records:
             for item in record[key]:
                 index=duplicate_index(key,item,out[key])
-                if index is None:out[key].append(item)
-                else:out[key][index]=absorb(out[key][index],item)
+                if index is not None:out[key][index]=absorb(out[key][index],item);continue
+                # Kept apart only because the deadline or the quantity differs: exactly the pair a human
+                # should read. Neither is dropped and doubt from either side is carried onto both, the way
+                # `absorb` carries it when the two really are one task.
+                for other in conflicting_indices(key,item,out[key]):
+                    if item.get('needs_review') or out[key][other].get('needs_review'):
+                        item={**item,'needs_review':True};out[key][other]={**out[key][other],'needs_review':True}
+                out[key].append(item)
     out['decisions']=drop_superseded(out['decisions'])
     # What the model produced and validation refused, summed over every chunk. Kept in the saved payload so the
     # report and the app can say "3 alıntı doğrulanamadı" instead of quietly showing a shorter list.

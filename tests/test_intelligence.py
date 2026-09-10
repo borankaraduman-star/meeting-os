@@ -332,3 +332,138 @@ class RetiredTaskTests(unittest.TestCase):
             self._save(s, mem, mid, 'PRD taslağını bitir ve paylaş')
             self.assertEqual({t['id']: t['state'] for t in mem.actions()}[old], 'in_progress')
             s.close()
+
+
+class DueConflictTests(unittest.TestCase):
+    """Codex #5: the same words with two different deadlines are two promises, in both merge layers."""
+
+    def merged(self, *actions):
+        return merge_records([blank(actions=list(actions))])['actions']
+
+    def deduped(self, *actions):
+        from meeting_os.memory import dedupe_actions
+        return dedupe_actions(list(actions))
+
+    def test_two_deadlines_for_one_title_stay_two_tasks(self):
+        a = task('Durum raporunu gönder', 'Ayşe', 'pazartesi', quote='pazartesi')
+        b = task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='cuma')
+        self.assertEqual(len(self.merged(a, b)), 2)
+        self.assertEqual(len(self.deduped(dict(a), dict(b))), 2)
+
+    def test_one_side_without_a_deadline_still_merges(self):
+        a = task('Durum raporunu gönder', 'Ayşe', None, quote='rapor')
+        b = task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='cuma')
+        self.assertEqual(len(self.merged(a, b)), 1)
+        out = self.deduped(dict(a), dict(b))
+        self.assertEqual(len(out), 1); self.assertEqual(out[0]['due_text'], 'cuma')
+
+    def test_the_same_deadline_worded_twice_is_one_task(self):
+        a = task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='cuma')
+        b = task('Durum raporunu gönder', 'Ayşe', 'cuma gününe kadar', quote='cuma gününe kadar')
+        self.assertEqual(len(self.merged(a, b)), 1)
+        self.assertEqual(len(self.deduped(dict(a), dict(b))), 1)
+
+    def test_equal_deadlines_merge(self):
+        a = task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='bir')
+        b = task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='iki')
+        self.assertEqual(len(self.merged(a, b)), 1)
+        self.assertEqual(len(self.deduped(dict(a), dict(b))), 1)
+
+    def test_a_different_quantity_is_a_different_commitment(self):
+        a = task('10 sunucu kur', 'Ayşe', None, quote='on')
+        b = task('15 sunucu kur', 'Ayşe', None, quote='onbeş')
+        self.assertEqual(len(self.merged(a, b)), 2)
+        self.assertEqual(len(self.deduped(dict(a), dict(b))), 2)
+
+    def test_doubt_survives_on_both_halves_of_a_deadline_conflict(self):
+        a = task('Durum raporunu gönder', 'Ayşe', 'pazartesi', quote='pazartesi')
+        b = {**task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='cuma'), 'needs_review': False}
+        out = self.merged(a, b)
+        self.assertEqual([item['needs_review'] for item in out], [True, True])
+        x, y = dict(a), {**b}
+        self.deduped(x, y)
+        self.assertTrue(x['needs_review'] and y['needs_review'])
+
+    def test_a_clean_pair_is_not_flagged_by_the_conflict_alone(self):
+        a = {**task('Durum raporunu gönder', 'Ayşe', 'pazartesi', quote='pazartesi'), 'needs_review': False}
+        b = {**task('Durum raporunu gönder', 'Ayşe', 'cuma', quote='cuma'), 'needs_review': False}
+        self.assertEqual([item['needs_review'] for item in self.merged(a, b)], [False, False])
+
+    def test_two_deadlines_survive_the_memory_layer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = Store(Path(tmp) / 'db'); mid = s.create_meeting('Rapor')
+            first = s.add_segment(mid, Segment(0, 5, 'Durum raporunu pazartesi göndereceğim.', 'mic', 'mic:S0', 'Ayşe'))
+            second = s.add_segment(mid, Segment(6, 10, 'Durum raporunu cuma da göndereceğim.', 'mic', 'mic:S0', 'Ayşe'))
+            mem = Memory(s)
+            def action(sid, due, quote):
+                return {'title': 'Durum raporunu gönder', 'owner': 'Ayşe', 'due_text': due, 'needs_review': False,
+                        'evidence': [{'segment_id': sid, 'quote': quote, 'start': 0., 'source': 'mic', 'speaker': 'Ayşe'}]}
+            record = blank(actions=[action(first, 'pazartesi', 'Durum raporunu pazartesi göndereceğim.'),
+                                    action(second, 'cuma', 'Durum raporunu cuma da göndereceğim.')])
+            mem.save_analysis(mid, mem.current_hash(mid), 'test', record)
+            stored = mem.actions()
+            self.assertEqual(len(stored), 2)
+            self.assertEqual(sorted(t['due_text'] for t in stored), ['cuma', 'pazartesi'])
+            s.close()
+
+
+class CommitmentDoubtTests(unittest.TestCase):
+    """Codex #10: a real quote can still fail to support the commitment it is cited for."""
+
+    def flag(self, text, title, owner=None):
+        rows = [{'id': 1, 'start': 0., 'end': 8., 'source': 'system', 'speaker': 'S0', 'speaker_name': 'Deniz', 'text': text, 'flags': []}]
+        record = blank(actions=[{'title': title, 'owner': owner, 'due_text': None,
+                                 'evidence': [{'segment_id': 1, 'quote': text}]}])
+        return validate_record(record, rows)['actions'][0]
+
+    def test_a_negated_commitment_is_marked_for_review(self):
+        self.assertTrue(self.flag('Rollout dokümanını bu hafta güncellemeyeceğim.', 'Rollout dokümanını güncelle')['needs_review'])
+
+    def test_a_cancellation_inside_the_quote_is_marked_for_review(self):
+        self.assertTrue(self.flag('Migration planı iptal edildi, migration yazmayacağız.', 'Migration planını yaz')['needs_review'])
+
+    def test_a_conditional_commitment_is_marked_for_review(self):
+        self.assertTrue(self.flag('Testler geçerse deploy edeceğim.', 'Deploy et')['needs_review'])
+
+    def test_a_delegated_commitment_is_marked_for_review(self):
+        self.assertTrue(self.flag('Bu deploy işini Selin yapsın, ben alamam.', 'Deploy işini yap')['needs_review'])
+
+    def test_a_plain_commitment_is_not_flagged(self):
+        item = self.flag('Rollout dokümanını yarın güncelleyeceğim.', 'Rollout dokümanını güncelle')
+        self.assertFalse(item['needs_review'])
+
+    def test_taking_the_work_on_is_not_delegation(self):
+        self.assertFalse(self.flag('Bu deploy işini ben üstleniyorum, kimseye devretmiyorum.', 'Deploy işini yap')['needs_review'])
+
+    def test_ordinary_turkish_words_do_not_look_like_a_condition(self):
+        from meeting_os.intelligence import commitment_doubt
+        for text in ('Borsa raporunu hazırlayacağım.', 'Derse kadar bitireceğim.', 'Karar verelim.', 'Kurs kaydını yaparım.'):
+            with self.subTest(text=text):
+                self.assertIsNone(commitment_doubt(text))
+
+    def test_each_guard_names_the_kind_of_doubt_it_found(self):
+        from meeting_os.intelligence import commitment_doubt
+        self.assertEqual(commitment_doubt('Raporu göndermeyeceğim.'), 'negation')
+        self.assertEqual(commitment_doubt('Bütçe onaylanırsa alırım.'), 'conditional')
+        self.assertEqual(commitment_doubt("Bu işi Deniz'e verelim."), 'delegation')
+
+
+class MicInferenceFlagTests(unittest.TestCase):
+    """Codex #10: the flag the validation raises for a mic-only attribution used to be overwritten."""
+
+    def owned(self, source):
+        rows = [{'id': 1, 'start': 0., 'end': 8., 'source': source, 'speaker': 'mic:S0' if source == 'mic' else 'S0',
+                 'speaker_name': 'Boran', 'text': 'Ben raporu yarın göndereceğim.', 'flags': []}]
+        record = blank(actions=[{'title': 'Raporu gönder', 'owner': None, 'due_text': 'yarın',
+                                 'evidence': [{'segment_id': 1, 'quote': 'Ben raporu yarın göndereceğim.'}]}])
+        return validate_record(record, rows)['actions'][0]
+
+    def test_a_mic_only_first_person_attribution_is_marked_for_review(self):
+        item = self.owned('mic')
+        self.assertEqual(item['owner'], 'Boran')
+        self.assertTrue(item['needs_review'])   # the mic can carry an unflagged echo of a colleague
+
+    def test_the_same_attribution_from_a_named_room_row_is_not_flagged(self):
+        item = self.owned('system')
+        self.assertEqual(item['owner'], 'Boran')
+        self.assertFalse(item['needs_review'])
