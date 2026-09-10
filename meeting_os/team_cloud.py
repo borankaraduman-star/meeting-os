@@ -548,21 +548,29 @@ def sync(data_dir, settings=None, budget=BUDGET):
         base = url(settings)
     except Exception as exc:
         return {**result, 'error': _short(exc)}
-    state = _load_state(data)
-    moment = _now(); error = None
+    # One pass at a time per process: a launch sync and a naming's background pass must not both rewrite the
+    # mirror and the state file. The second caller waits (bounded by its own budget), it does not skip.
+    if not _PASS.acquire(timeout=max(1.0, seconds)): return {**result, 'error': 'busy'}
     try:
-        mirror = ensure_mirror(data)
-        _seed(data, mirror, host)
-        error = _run(data, settings, _Http(base, tok, host, deadline), mirror, host, state, result)
-    except Exception as exc:
-        error = _short(exc)
-        _record_once(data, state, error, moment)
-    state['url'] = base; state['team_id_short'] = team_id_short(tok); state['last_attempt'] = moment
-    if error: state['last_error'] = error
-    else: state['last_ok'] = moment; state['last_error'] = None
-    _save_state(data, state)
-    result['hosts'] = state.get('hosts') or []
-    return {**result, **({'error': error} if error else {})}
+        state = _load_state(data)
+        moment = _now(); error = None
+        try:
+            mirror = ensure_mirror(data)
+            _seed(data, mirror, host)
+            error = _run(data, settings, _Http(base, tok, host, deadline), mirror, host, state, result)
+        except Exception as exc:
+            error = _short(exc)
+            _record_once(data, state, error, moment)
+        state['url'] = base; state['team_id_short'] = team_id_short(tok); state['last_attempt'] = moment
+        if error: state['last_error'] = error
+        else: state['last_ok'] = moment; state['last_error'] = None
+        _save_state(data, state)
+        result['hosts'] = state.get('hosts') or []
+        return {**result, **({'error': error} if error else {})}
+    finally: _PASS.release()
+
+
+_PASS = threading.Lock()   # serialises sync() itself; _LOCK/_RUNNING below only dedupe background passes
 
 
 _LOCK = threading.Lock()

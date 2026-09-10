@@ -269,7 +269,8 @@ class Store:
         if not name: raise ValueError('Name cannot be empty')
         rows=[r for r in self.segments(mid) if r['id']==sid]
         if not rows: raise ValueError('Segment not found in meeting')
-        r=rows[0]; duration=r['end']-r['start']; previous=r.get('speaker_name')
+        r=rows[0]; previous=r.get('speaker_name')
+        duration=(r['end']-r['start']) if r.get('end') is not None and r.get('start') is not None else 0.0   # an imported text-only transcript has no clock
         learnable=bool(r.get('embedding')) and duration>=self.SEGMENT_SAMPLE_SECONDS and not self.UNCLEAN_FLAGS.intersection(r['flags'])
         provenance=f'{mid}:{sid}'; created=datetime.now(timezone.utc).isoformat()
         with self.db:
