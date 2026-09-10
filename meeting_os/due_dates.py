@@ -3,7 +3,7 @@
 Anchored to the meeting date. Only a suggestion: the app asks the user to approve before anything is written,
 and an expression that is not clearly a date yields None rather than a guess."""
 import calendar, re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from .memory import RETIRED
 
@@ -70,7 +70,7 @@ def suggest_due(text, anchor):
     return None
 
 
-def suggestions_for_tasks(tasks, anchors=None):
+def suggestions_for_tasks(tasks, anchors=None, today=None):
     """tasks: iterable of dicts with 'id', 'due_text', 'created' (ISO), optional 'meeting' and payload.due_date.
     Returns proposals for tasks without a confirmed date.
 
@@ -79,6 +79,7 @@ def suggestions_for_tasks(tasks, anchors=None):
     a meeting recorded at 00:30 local was analysed on the previous UTC day, and every relative date came out
     one day early. Without an anchor the local day of `created` is the closest honest fallback."""
     from .insights import local_day
+    today = today or datetime.now(timezone.utc).astimezone().date()
     out = []
     for t in tasks:
         payload = t.get('payload') or {}
@@ -86,5 +87,7 @@ def suggestions_for_tasks(tasks, anchors=None):
         anchor = (anchors or {}).get(t.get('meeting')) or local_day(t.get('created'))
         if anchor is None: continue
         d = suggest_due(t['due_text'], anchor)
-        if d: out.append({'task': t['id'], 'title': t.get('title'), 'due_text': t['due_text'], 'suggested': d.isoformat(), 'anchor': anchor.isoformat()})
+        # A meeting analysed weeks later still says "yarın", and the day it meant has gone: the suggestion
+        # stands (it is what the words said) but `past` lets the app show it as history, not as a plan.
+        if d: out.append({'task': t['id'], 'title': t.get('title'), 'due_text': t['due_text'], 'suggested': d.isoformat(), 'anchor': anchor.isoformat(), 'past': d < today})
     return out

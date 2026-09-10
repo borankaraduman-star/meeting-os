@@ -12,7 +12,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .capture_metrics import journal_events
 
@@ -570,6 +570,38 @@ def summarize(report_dir, limit=30):
 
 STALE_HEARTBEAT_SECONDS = 3*24*3600
 LOW_DISK_BYTES = 3*1024**3
+
+
+RETENTION_WARNING_DAYS = 3
+
+
+def audio_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DAYS):
+    """One line, `ahead` days before the OLDEST recording's audio is deleted — or None when nothing is close.
+
+    With a single retention setting every recording of a busy week reaches the cutoff on the same day, so the
+    first thing the user notices is that everything is gone at once. Marking a meeting “Sesi koru”
+    (metadata.keep) still saves it, and so does widening the setting — but only before the pass runs.
+    Read-only: this deletes nothing and never raises on a meeting whose metadata is unreadable."""
+    if not days or int(days) <= 0: return None
+    days = int(days); now = now or datetime.now(timezone.utc)
+    horizon = now + timedelta(days=int(ahead)) - timedelta(days=days)   # created before this is due within the window
+    oldest = None; count = 0
+    for row in store.meetings():
+        try: meta = json.loads(row['metadata'] or '{}')
+        except (TypeError, ValueError): continue
+        if row['status'] != 'complete' or meta.get('keep') is True or meta.get('cloud_error'): continue
+        if meta.get('audio_removed') or not (meta.get('paths') or meta.get('capture_dir')): continue   # its audio is already gone
+        try: created = datetime.fromisoformat(row['created'])
+        except (TypeError, ValueError): continue
+        if created.tzinfo is None: created = created.replace(tzinfo=timezone.utc)
+        if created > horizon: continue
+        count += 1
+        if oldest is None or created < oldest: oldest = created
+    if not count: return None
+    left = max(0, int((oldest + timedelta(days=days) - now).total_seconds() // 86400))
+    return {'meetings': count, 'retention_days': days, 'days_left': left, 'within_days': int(ahead),
+            'line': f'{count} kaydın sesi {int(ahead)} gün içinde silinecek ({days} gün); saklamak için toplantının “Sesi koru” anahtarını açın '
+                    'ya da Ayarlar → Sistem → Gelişmiş → Eski toplantıların sesi'}
 
 
 def alerts(hosts, *, now=None):

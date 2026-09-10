@@ -4,7 +4,7 @@ that looks like an answer is offered as a hint ("muhtemelen cevaplandı"), nothi
 from difflib import SequenceMatcher
 from pathlib import Path
 from .continuity import prepare, score
-from .insights import build_masker, payload_items, prepared_header, source_line, stale_meetings
+from .insights import build_masker, payload_items, prepared_header, source_line
 from .memory import Memory, normalize
 
 REPEAT_THRESHOLD = 0.5
@@ -25,7 +25,7 @@ def question_radar(store, query=None, limit=DEFAULT_LIMIT, threshold=REPEAT_THRE
         for c in clusters:
             if max(score(pq[n], pq[k], threshold, sm) for k in c) >= threshold: c.append(n); break
         else: clusters.append([n])
-    groups = []
+    built = []   # (group, the meetings inside it whose analysis is out of date)
     for c in clusters:
         newest = questions[c[0]]; meetings = []; seen = set()
         for i in (questions[k] for k in c):
@@ -34,14 +34,17 @@ def question_radar(store, query=None, limit=DEFAULT_LIMIT, threshold=REPEAT_THRE
         hits = [{'text': d['text'], 'meeting': d['meeting'], 'title': d['title'], 'created': d['created'], 'similarity': score(pq[c[0]], p, answer_threshold, sm)}
                 for d, p in zip(decisions, pd) if (d['created'] or '') > (newest['created'] or '')]
         hits = sorted([h for h in hits if h['similarity'] >= answer_threshold], key=lambda h: (h['similarity'], h['created'] or ''), reverse=True)
-        groups.append({'text': newest['text'], 'meetings': meetings, 'count': len(meetings), 'created': newest['created'],
-                       'evidence': newest['evidence'], 'answered_by': hits[0] if hits else None,
-                       'stale': any(questions[k].get('stale') for k in c)})
-    groups.sort(key=lambda g: (g['count'], g['created'] or ''), reverse=True)   # most meetings first, then newest
+        stale = {questions[k]['meeting'] for k in c if questions[k].get('stale')}
+        built.append(({'text': newest['text'], 'meetings': meetings, 'count': len(meetings), 'created': newest['created'],
+                       'evidence': newest['evidence'], 'answered_by': hits[0] if hits else None, 'stale': bool(stale)}, stale))
+    built.sort(key=lambda gs: (gs[0]['count'], gs[0]['created'] or ''), reverse=True)   # most meetings first, then newest
     needle = normalize(query or '')
-    matched = [g for g in groups if not needle or needle in normalize(g['text']) or any(needle in normalize(x['title'] or '') for x in g['meetings'])]
-    return {'groups': matched[:min(max(1, int(limit or DEFAULT_LIMIT)), 1000)], 'total': len(groups), 'matched': len(matched),
-            'questions': len(questions), 'stale_meetings': stale_meetings(questions), 'query': query or None}
+    matched = [gs for gs in built if not needle or needle in normalize(gs[0]['text']) or any(needle in normalize(x['title'] or '') for x in gs[0]['meetings'])]
+    # The header counts what the reader can see: over every stored question it announced stale meetings
+    # that the filter or the limit had already removed from the list underneath it.
+    shown = matched[:min(max(1, int(limit or DEFAULT_LIMIT)), 1000)]
+    return {'groups': [g for g, _ in shown], 'total': len(built), 'matched': len(matched),
+            'questions': len(questions), 'stale_meetings': len({m for _, s in shown for m in s}), 'query': query or None}
 
 
 def render_question_radar(radar, mask=None):

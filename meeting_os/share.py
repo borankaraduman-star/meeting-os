@@ -7,6 +7,9 @@ from .memory import Memory, RETIRED
 
 STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı', 'superseded': 'yenilendi'}
 _TURKISH = dict.fromkeys('iİıI', 'iİıI')   # STT output mixes dotted/dotless forms; for redaction, matching all four is the safe side
+# First names that are also everyday Turkish words. Case-insensitive masking turned "can sıkıntısı" into
+# "Kişi A sıkıntısı"; for these, only a capitalised occurrence is treated as the person.
+COMMON_WORDS = {'can', 'su', 'deniz', 'umut', 'barış', 'nur', 'güneş', 'yağmur', 'kaya', 'duru', 'ece', 'ada'}
 
 
 def placeholder(index):
@@ -25,14 +28,28 @@ def _char_class(c):
     return '[' + ''.join(re.escape(v) for v in sorted(variants)) + ']'
 
 
-def _pattern(name):
-    parts = [''.join(_char_class(c) for c in word) for word in name.split()]
+def _initial_class(c):
+    """The capital forms of one letter only — 'C' and 'İ'/'I', never 'c' or 'i'."""
+    variants = set(_TURKISH.get(c, '') or (c.lower() + c.upper()))
+    variants.add(c)
+    upper = {v for v in variants if v.isupper()} or variants
+    return '[' + ''.join(re.escape(v) for v in sorted(upper)) + ']'
+
+
+def _pattern(name, capitalised=False):
+    words = name.split()
+    parts = []
+    for index, word in enumerate(words):
+        head = _initial_class(word[0]) if capitalised and index == 0 else _char_class(word[0])
+        parts.append(head + ''.join(_char_class(c) for c in word[1:]))
     return re.compile(r'(?<!\w)' + r'\s+'.join(parts) + r'(?!\w)')
 
 
 class NameMasker:
     """Replaces every listed name with a stable placeholder. Matching ignores case (Turkish İ/ı aware) and
-    stops at word boundaries, so possessive suffixes after an apostrophe survive (“Boran’ın” → “Kişi A’ın”)."""
+    stops at word boundaries, so possessive suffixes after an apostrophe survive (“Boran’ın” → “Kişi A’ın”).
+    A one-word name that is also an everyday Turkish word (“Can”, “Su”, “Deniz”) is matched only when it is
+    capitalised: “can sıkıntısı” is not a person and redacting it made the shared text unreadable."""
     def __init__(self, groups):
         self.mapping = {}; self.rules = []; self.hits = {}
         for index, group in enumerate(groups):
@@ -41,7 +58,7 @@ class NameMasker:
                 name = (name or '').strip()
                 if len(name) < 2 or name.casefold() in self.mapping: continue
                 self.mapping[name.casefold()] = label
-                self.rules.append((name, label, _pattern(name)))
+                self.rules.append((name, label, _pattern(name, len(name.split()) == 1 and name.casefold() in COMMON_WORDS)))
         self.rules.sort(key=lambda r: -len(r[0]))   # longest first: “Ali Tasarım” before “Ali”
     def mask(self, text):
         if not text or not self.rules: return text
@@ -74,11 +91,15 @@ def name_groups(rows, glossary, owner=None):
 
     `speaker_name` alone is not the list of people: a microphone row keeps its label in the `speaker`
     column (that label is the owner of this Mac), so a mask built from names only published the one name
-    the user most wanted hidden — their own. `owner` is the settings name, added even when this meeting
-    happens to be all cloud rows labelled "Ben"."""
+    the user most wanted hidden — their own. `owner` is the settings name, and it counts as a person of
+    THIS meeting only when a microphone row exists in it: the owner of the Mac was not in a meeting they
+    never spoke in, and masking their name there redacted an ordinary word ("Can sıkıntısı") for nothing.
+    A meeting where they did speak already carries their label, so nothing is lost."""
     from .intelligence import row_person
+    rows = list(rows)
+    spoke = any((r.get('source') or '') == 'mic' for r in rows)
     groups = []; seen = set()
-    for r in list(rows) + [{'speaker_name': owner}]:
+    for r in rows + ([{'speaker_name': owner}] if spoke else []):
         name = (row_person(r, owner) or '').strip()
         if name and name.casefold() not in seen: seen.add(name.casefold()); groups.append([name])
     for e in glossary or []:

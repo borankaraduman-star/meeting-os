@@ -28,7 +28,9 @@ extension Model {
         // A task retired by a newer analysis of the same meeting (state "superseded") is history, not a to-do.
         actions=(result["tasks"] as? [[String:Any]] ?? []).map(ActionItem.init).filter { $0.state != "superseded" }
         drafts=(result["drafts"] as? [[String:Any]] ?? []).map(DraftItem.init)
-        dueSuggestions=Dictionary(uniqueKeysWithValues:(result["due_suggestions"] as? [[String:Any]] ?? []).compactMap { d in (d["task"] as? String).flatMap { t in (d["suggested"] as? String).map { (t,$0) } } })
+        let suggestions=result["due_suggestions"] as? [[String:Any]] ?? []
+        dueSuggestions=Dictionary(uniqueKeysWithValues:suggestions.compactMap { d in (d["task"] as? String).flatMap { t in (d["suggested"] as? String).map { (t,$0) } } })
+        pastDueSuggestions=Set(suggestions.filter { $0["past"] as? Bool == true }.compactMap { $0["task"] as? String })
     }
     /// Approve (or clear) a calendar date for a task; the transcript's own wording stays as due_text.
     func setDue(_ item:ActionItem,_ iso:String?) async {

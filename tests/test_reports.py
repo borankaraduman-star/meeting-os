@@ -592,3 +592,40 @@ class LegacyDefaultNameTests(unittest.TestCase):
             self.assertEqual(reports.settings_owner(tmp),'Ayşe')
             reports.save_settings(tmp,{'user_name':'','user_name_clear':True})
             self.assertEqual(reports.settings_owner(tmp),'')
+
+
+class AudioRetentionWarningTests(unittest.TestCase):
+    """One retention setting deletes a whole week of recordings on the same day; the first warning must not be
+    the empty player."""
+    def meeting(self, store, title, age_days, **meta):
+        from datetime import datetime, timedelta, timezone
+        mid = store.create_meeting(title, {'paths': {'system': '/tmp/a.wav'}, **meta})
+        store.add_segment(mid, Segment(0, 5, 'Merhaba', 'system', 'S0')); store.status(mid, 'complete')
+        with store.db: store.db.execute('UPDATE meetings SET created=? WHERE id=?', ((datetime.now(timezone.utc) - timedelta(days=age_days)).isoformat(), mid))
+        return mid
+
+    def test_it_warns_three_days_before_the_oldest_recording_goes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'meeting-os.sqlite'; s = Store(db)
+            self.meeting(s, 'Eski', 28); self.meeting(s, 'Daha eski ama korunuyor', 29, keep=True); self.meeting(s, 'Yeni', 2)
+            self.assertIsNone(reports.audio_retention_warning(s, 0))          # retention off
+            self.assertIsNone(reports.audio_retention_warning(s, 90))         # nothing is close
+            warning = reports.audio_retention_warning(s, 30)
+            self.assertEqual((warning['meetings'], warning['retention_days'], warning['days_left']), (1, 30, 1))
+            self.assertIn('1 kaydın sesi 3 gün içinde silinecek (30 gün)', warning['line'])
+            self.assertIn('Sesi koru', warning['line']); s.close()
+
+    def test_a_recording_whose_audio_is_already_gone_is_not_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'meeting-os.sqlite'; s = Store(db)
+            self.meeting(s, 'Sesi silinmiş', 29, audio_removed='2026-01-01T00:00:00+00:00')
+            self.assertIsNone(reports.audio_retention_warning(s, 30)); s.close()
+
+    def test_the_housekeeping_answer_carries_it(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp); db = data / 'meeting-os.sqlite'; s = Store(db); self.meeting(s, 'Eski', 28); s.close()
+            reports.save_settings(data, {'audio_retention_days': 30})
+            self.assertEqual(dispatch({'action': 'storage_housekeeping'}, db)['retention_warning']['meetings'], 1)
+            reports.save_settings(data, {'audio_retention_days': 0})
+            self.assertIsNone(dispatch({'action': 'storage_housekeeping'}, db)['retention_warning'])

@@ -47,6 +47,8 @@ extension Model {
         if let r=try? await request(["action":"decision_log","query":query,"limit":200]) {
             decisions=(r["decisions"] as? [[String:Any]] ?? []).enumerated().map { DecisionEntry($0.element,index:$0.offset) }
             decisionStaleMeetings=r["stale_meetings"] as? Int ?? Set(decisions.filter { $0.stale }.map { $0.meeting }).count
+            decisionLive=r["live"] as? Int ?? decisions.filter { !$0.superseded }.count
+            decisionSuperseded=r["superseded"] as? Int ?? decisions.filter { $0.superseded }.count
         }
     }
 
@@ -103,7 +105,10 @@ extension Model {
             _=try? await request(["action":"heartbeat","app":["version":UpdateInfo.appVersion,"bridge":BridgeStats.shared.snapshot]])
             if !recording, recordProcess==nil, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
-                if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
+                // One retention setting deletes a whole week of recordings on the same day; the warning comes first,
+                // while marking a meeting "Sesi koru" (or widening the setting) can still save it.
+                if let warning=(r["retention_warning"] as? [String:Any])?["line"] as? String { activity=warning }
+                else if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
             }
         }
     }

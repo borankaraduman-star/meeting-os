@@ -2,13 +2,15 @@ import SwiftUI
 
 struct RelatedTask:Identifiable, Equatable {
     let id:String; let title:String; let meetingTitle:String; let state:String; let owner:String; let due:String; let similarity:Double; let supersededBy:String
-    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? ""; state=d["state"] as? String ?? ""; owner=d["owner"] as? String ?? ""; due=d["due_text"] as? String ?? ""; similarity=d["similarity"] as? Double ?? 0; supersededBy=d["superseded_by"] as? String ?? "" }
+    /// The pair comes from THIS meeting: one meeting promised the same thing twice, in two wordings.
+    let sameMeeting:Bool
+    init(_ d:[String:Any]) { id=d["id"] as? String ?? ""; title=d["title"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? ""; state=d["state"] as? String ?? ""; owner=d["owner"] as? String ?? ""; due=d["due_text"] as? String ?? ""; similarity=d["similarity"] as? Double ?? 0; supersededBy=d["superseded_by"] as? String ?? ""; sameMeeting=d["same_meeting"] as? Bool ?? false }
 }
 struct PreviousDecision:Identifiable, Equatable {
     let id:String; let meetingTitle:String; let text:String; let similarity:Double
     init(_ d:[String:Any]) { meetingTitle=d["meeting_title"] as? String ?? ""; text=d["text"] as? String ?? ""; similarity=d["similarity"] as? Double ?? 0; id=meetingTitle+"|"+text }
 }
-/// Cross-meeting links for the selected meeting: tasks seen before, decisions that changed.
+/// Links for the selected meeting: tasks seen before (in an earlier meeting or twice in this one), decisions that changed.
 struct Continuity:Equatable {
     var relatedByTask:[String:[RelatedTask]]=[:]
     var historyByDecision:[String:[PreviousDecision]]=[:]

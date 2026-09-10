@@ -52,8 +52,10 @@ def build_masker(store, meetings=None, glossary=None, owner=None):
     if owner is None:
         from .reports import store_owner
         owner = store_owner(store)
+    # The owner is not appended blind: a microphone row already resolves to them (row_person), and a name
+    # that never appears in any of these meetings is not a person to redact — "Can sıkıntısı" is not Can.
     names = [{'speaker_name': row_person({'speaker_name': r['name'], 'source': r['source'], 'speaker': r['speaker']}, owner)} for r in people]
-    return NameMasker(name_groups(names + [{'speaker_name': owner}], glossary))
+    return NameMasker(name_groups(names, glossary))
 
 
 def local_day(created):

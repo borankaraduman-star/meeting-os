@@ -7,7 +7,7 @@ import json
 import re
 from collections import Counter
 from .insights import latest_analyses
-from .memory import Memory, normalize
+from .memory import Memory, normalize, owner_key
 
 STOP = {'ve', 'ile', 'için', 'bir', 'bu', 'şu', 'o', 'da', 'de', 'mi', 'mı', 'mu', 'mü', 'the', 'a', 'to', 'of', 'in', 'on', 'yapmak', 'etmek', 'olmak', 'hazırlamak', 'kontrol'}
 _ROUND = 0.001   # scores are rounded to 3 digits before a caller compares them; keep the floor under that step
@@ -67,22 +67,38 @@ def similarity_index(texts, floor):
     return out
 
 
+def _hit(other, similarity, same_meeting):
+    return {'id': other['id'], 'title': other['title'], 'meeting': other['meeting'], 'meeting_title': other['meeting_title'], 'state': other['state'],
+            'owner': other['owner'], 'due_text': other['due_text'], 'created': other['created'], 'similarity': similarity, 'same_meeting': same_meeting,
+            'superseded_by': (other.get('payload') or {}).get('superseded_by')}
+
+
 def related_tasks(store, mid, threshold=0.5):
+    """Tasks of `mid` that repeat one already on record — in an earlier meeting, or twice in this one.
+
+    One meeting can promise the same thing twice in two wordings ("Eğitimleri evde çocuklarla vakit
+    geçirirken vermek", said again ten minutes later): that is a duplicate like any other and is offered
+    as a link, marked `same_meeting` so the app can say where it comes from. A same-meeting pair must
+    also agree on the owner (both named the same person, or both nameless) — two different people
+    promising a similar thing in one meeting are two commitments, not one."""
     memory = Memory(store)
     live = lambda t: t.get('state') != 'superseded'   # a row a newer analysis of its own meeting left behind is not a suggestion
     mine = [t for t in memory.actions(meeting=mid) if live(t)]
     others = [t for t in memory.actions() if t['meeting'] != mid and live(t)]
     prepared = [prepare(o['title']) for o in others]
+    ours = [prepare(t['title']) for t in mine]
     sm = difflib.SequenceMatcher(None)
     out = []
-    for t in mine:
-        pt = prepare(t['title']); hits = []
+    for t, pt in zip(mine, ours):
+        hits = []
         for o, po in zip(others, prepared):
             s = score(pt, po, threshold, sm)
-            if s >= threshold:
-                hits.append({'id': o['id'], 'title': o['title'], 'meeting': o['meeting'], 'meeting_title': o['meeting_title'], 'state': o['state'], 'owner': o['owner'], 'due_text': o['due_text'], 'created': o['created'], 'similarity': s,
-                             'superseded_by': (o.get('payload') or {}).get('superseded_by')})
-        hits.sort(key=lambda h: (-h['similarity'], h['created']))
+            if s >= threshold: hits.append(_hit(o, s, False))
+        for o, po in zip(mine, ours):
+            if o['id'] == t['id'] or owner_key(o['owner']) != owner_key(t['owner']): continue
+            s = score(pt, po, threshold, sm)
+            if s >= threshold: hits.append(_hit(o, s, True))
+        hits.sort(key=lambda h: (-h['similarity'], h['created'], h['id']))
         if hits: out.append({'task': t['id'], 'title': t['title'], 'related': hits[:5]})
     return out
 
@@ -107,10 +123,13 @@ def decision_history(store, mid, threshold=0.45):
 
 
 def supersede(store, old_id, new_id):
-    """The user says: this is the same commitment. The older task is dismissed with a pointer to the new one."""
+    """The user says: this is the same commitment. The older task is dismissed with a pointer to the new one.
+
+    A meeting that promised the same thing twice is the commonest case of all, so a pair from one meeting
+    is allowed; only a task pointed at itself is refused."""
+    if old_id == new_id: raise ValueError('Bir görev kendisiyle birleştirilmez')
     memory = Memory(store)
     old = memory.task(old_id); new = memory.task(new_id)
-    if old['meeting'] == new['meeting']: raise ValueError('Aynı toplantıdaki görevler birleştirilmez')
     with store.db:
         op = old['payload']; op['superseded_by'] = new_id
         np_ = new['payload']; np_['continues'] = old_id
