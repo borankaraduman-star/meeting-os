@@ -747,3 +747,7 @@ Boran (canlı kullanım): “boş tablerde uyarı ortalı değil, genişletince/
 ## 2026-09-10 21:45 — 1.2.60: ekran kaydı izni açıklaması
 
 Boran: “bu uygulama ekran erişim izni de mi istiyor, neden?” → cevap: ScreenCaptureKit sistem sesi için; yalnız ses akışı, kare yok. `SetupStatus.serviceChecks` “Ekran kaydı (toplantı sesi)” satırının ipucu her iki durumda nedeni söylüyor. Swift 211.
+
+## 2026-09-10 21:55 — 1.2.61: konuşma payı varsayılan açık
+
+Boran: “kimin ne kadar konuştuğu istatistiği iyiydi, hâlâ görebilmeliyim” → Özet’te `showTalkShare` `@AppStorage("summaryTalkShareOpen")` varsayılan true, toplantı değişince sıfırlanmıyor. Swift 211.
