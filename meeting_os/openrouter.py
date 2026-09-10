@@ -292,6 +292,12 @@ class OpenRouterLLM:
     supports_const_choices=False   # strict JSON schema mode rejects anyOf/const evidence menus; quotes are verified locally instead
     def __init__(self,client,model):self.client,self.model_id=client,model
     def count(self,text):return max(1,len(text.encode('utf-8'))//3)  # ≈ tokens for Turkish; no tokenizer download
+    @staticmethod
+    def _starved(result):
+        try:
+            choice=result['choices'][0]; text=choice['message'].get('content')
+            return choice.get('finish_reason')=='length' and not (isinstance(text,str) and text.strip())
+        except (KeyError,IndexError,TypeError,AttributeError): return False
     def complete(self,system,user,max_tokens=1800,schema=None):
         payload={'model':self.model_id,'messages':[{'role':'system','content':system},{'role':'user','content':user}],
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
@@ -300,10 +306,16 @@ class OpenRouterLLM:
         try: result=self.client._post('chat/completions',payload)
         except OpenRouterError as exc:
             # Reasoning-family endpoints (GPT-5, Claude Sonnet 5) accept no `temperature`; with require_parameters
-            # OpenRouter answers 404 "no endpoints found that can handle the requested parameters". One retry without
-            # it (10 Sep 2026 benchmark) — the strict schema keeps the output deterministic enough.
+            # OpenRouter answers 404 "no endpoints found that can handle the requested parameters". One retry as a
+            # reasoning request (10 Sep 2026 benchmark): no temperature, low effort (this is extraction against a strict
+            # schema, not a puzzle) and room for the thinking tokens that otherwise eat the whole answer budget.
             if getattr(exc,'code',None)!=404 or 'temperature' not in payload: raise
-            payload.pop('temperature')
+            payload.pop('temperature'); payload['reasoning']={'effort':'low'}; payload['max_tokens']=max_tokens+6000
+            result=self.client._post('chat/completions',payload)
+        if self._starved(result) and 'reasoning' not in payload:
+            # A thinking model that stopped for length with nothing to show: it spent the budget reasoning. Same
+            # remedy, one retry; a second empty answer is an error like any other.
+            payload.pop('temperature',None); payload['reasoning']={'effort':'low'}; payload['max_tokens']=max_tokens+6000
             result=self.client._post('chat/completions',payload)
         sink=_USAGE_SINK.get()
         if sink is not None:
