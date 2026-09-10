@@ -116,9 +116,15 @@ class DedupeTests(unittest.TestCase):
 class SupersededDecisionTests(unittest.TestCase):
  def test_a_reversed_decision_is_replaced_by_the_reversal(self):
   later='E-posta doğrulama adımı bu sprint eklenmeyecek; karar iptal edildi.'
-  kept=merge_records([blank(decisions=[note("Onboarding'e e-posta doğrulama adımı bu sprint eklenmesine karar verildi.",60.)]),
-                      blank(decisions=[note(later,600.)])])['decisions']
-  self.assertEqual([i['text'] for i in kept],[later])
+  earlier="Onboarding'e e-posta doğrulama adımı bu sprint eklenmesine karar verildi."
+  kept=merge_records([blank(decisions=[note(earlier,60.)]),blank(decisions=[note(later,600.)])])['decisions']
+  self.assertEqual([i['text'] for i in kept],[earlier,later])   # nothing is deleted: the reversed decision stays, marked
+  self.assertTrue(kept[0].get('superseded') and kept[0]['needs_review']); self.assertFalse(kept[1].get('superseded'))
+  confirm=note('Ödeme sağlayıcısı değişimi iptal edilmeyecek; Stripe planı aynen devam.',600.)
+  still=merge_records([blank(decisions=[note('Ödeme sağlayıcısı Stripe olarak değiştirilecek.',60.),confirm])])['decisions']
+  self.assertFalse(any(i.get('superseded') for i in still))   # a negated reversal is a confirmation
+  far=merge_records([blank(decisions=[note('Mobil uygulamada karanlık tema eklenecek.',10.),note('Mobil uygulamada widget çalışması ertelendi.',600.)])])['decisions']
+  self.assertFalse(any(i.get('superseded') for i in far))     # same product area is not the same decision
  def test_an_unrelated_cancellation_does_not_remove_a_live_decision(self):
   live=note('Onboarding için scope daraltıldı, yalnızca e-posta doğrulama ekranı çıkacak.',60.)
   other=note('Payment migration bu sprint iptal edildi.',600.)
@@ -129,3 +135,25 @@ class SupersededDecisionTests(unittest.TestCase):
  def test_two_cancellations_do_not_cancel_each_other(self):
   first=note('Migration planı iptal edildi.',60.);second=note('Ayrıca demo hazırlığı da iptal edildi.',600.)
   self.assertEqual(len(merge_records([blank(decisions=[first,second])])['decisions']),2)
+
+
+class SecondOpinionAnalysisTests(unittest.TestCase):
+ def test_filler_fragment_cannot_carry_an_invented_claim(self):
+  from meeting_os.intelligence import validate_record
+  rows=[{'id':1,'start':0,'source':'system','speaker':'S0','text':'Evet tamam öyle yapalım. Sonra toplantıyı bitiriyoruz.','flags':[]}]
+  out=validate_record({'decisions':[{'text':"Stripe'a geçilecek.",'evidence':[{'segment_id':1,'quote':"Ödeme sağlayıcısı Stripe'a geçilmesine karar verildi. Evet tamam öyle yapalım."}]}]},rows) if False else None
+  try:
+   validate_record({'decisions':[{'text':"Stripe'a geçilecek.",'evidence':[{'segment_id':1,'quote':"Ödeme sağlayıcısı Stripe'a geçilmesine karar verildi. Evet tamam öyle yapalım."}]}]},rows); self.fail('filler was accepted as evidence')
+  except ValueError: pass   # the only item lost its evidence → whole batch rejected, exactly as before the rescue existed
+ def test_rescued_quote_marks_the_item_for_review(self):
+  from meeting_os.intelligence import validate_record
+  rows=[{'id':1,'start':0,'source':'system','speaker':'S0','text':'Canary dağıtımı yapacağız, riskli gördük. Ufak bir not daha var.','flags':[]}]
+  out=validate_record({'decisions':[{'text':'Canary dağıtımı yapılacak.','evidence':[{'segment_id':1,'quote':'Canary dağıtımı yapacağız, riskli gördük … bunu perşembe bitiriyoruz.'}]}]},rows)
+  self.assertEqual(len(out['decisions']),1); self.assertTrue(out['decisions'][0]['needs_review'])
+ def test_two_undated_tasks_of_one_owner_stay_two(self):
+  a={'title':'Arama indeksi şemasını çıkar','owner':'Ece','due_text':None,'evidence':[{'segment_id':1,'quote':'q1','start':0}],'needs_review':False}
+  b={'title':'Arama indeksi migration planını yaz','owner':'Ece','due_text':None,'evidence':[{'segment_id':2,'quote':'q2','start':5}],'needs_review':False}
+  self.assertEqual(len(merge_records([blank(actions=[a]),blank(actions=[b])])['actions']),2)
+ def test_owner_key_folds_dotted_i(self):
+  from meeting_os.memory import owner_key
+  self.assertEqual(owner_key('İlker'),owner_key('Ilker')); self.assertEqual(owner_key('ilker'),owner_key('İLKER'))

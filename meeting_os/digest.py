@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from .insights import build_masker, local_day, prepared_header, source_line
 from .memory import Memory
 from .metrics import normalize
+from .memory import owner_key
 
 STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı'}
 
@@ -50,9 +51,9 @@ def build_digest(store, day=None, owner=None, start=None, end=None, mask_names=F
     inside = lambda created: (lambda d: d is not None and first <= d <= last)(local_day(created))
     meetings = sorted((m for m in store.meetings() if inside(m['created'])), key=lambda m: m['created'])
     titles = {m['id']: m['title'] for m in meetings}
-    owner = (owner or '').strip(); wanted = normalize(owner)
+    owner = (owner or '').strip(); wanted = owner_key(owner)
     period = [t for t in memory.actions() if t.get('meeting') in titles]
-    tasks = [t for t in period if wanted and normalize(t.get('owner') or '') == wanted and t.get('state') != 'dismissed']
+    tasks = [t for t in period if wanted and owner_key(t.get('owner') or '') == wanted and t.get('state') != 'dismissed']
     lines = []; questions = []; decisions = []; risks = []; groups = []
     for m in meetings:
         line, latest = meeting_line(store, memory, m)

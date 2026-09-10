@@ -1,7 +1,7 @@
 """Pre-meeting brief for named attendees: what each person still owes, what they asked, what was decided with them.
 Deterministic, from recorded meetings only; a draft the user reads before walking in."""
 from .insights import prepared_header
-from .memory import Memory
+from .memory import Memory, owner_key
 from .metrics import normalize
 
 
@@ -15,7 +15,7 @@ def _person_meetings(store, name):
     return out
 
 
-def build_brief(store, title, attendees, limit=5):
+def build_brief(store, title, attendees, limit=5, owner=None):
     memory = Memory(store)
     meetings = {m['id']: m for m in store.meetings() if m['status'] == 'complete'}
     tasks = memory.actions()
@@ -34,7 +34,7 @@ def build_brief(store, title, attendees, limit=5):
         last = meetings[mids[0]] if mids else None
         people.append({'name': name.strip(), 'owed': [{'title': t['title'], 'due_text': t.get('due_text'), 'meeting_title': t.get('meeting_title'), 'created': t.get('created'), 'due_date': (t.get('payload') or {}).get('due_date')} for t in owed],
                        'meetings': len(mids), 'last_meeting': {'title': last['title'], 'created': last['created']} if last else None, 'decisions': decisions[:8], 'questions': questions[:8]})
-    mine = [t for t in tasks if t.get('state') in ('open', 'in_progress') and normalize(t.get('owner') or '') == 'boran']
+    mine = [t for t in tasks if t.get('state') in ('open', 'in_progress') and owner and owner_key(t.get('owner') or '') == owner_key(owner)]
     return {'title': title or 'Sıradaki toplantı', 'people': people, 'mine': [{'title': t['title'], 'due_text': t.get('due_text'), 'meeting_title': t.get('meeting_title')} for t in mine[:10]]}
 
 

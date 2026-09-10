@@ -12,7 +12,7 @@ DEFAULT_LIMIT = 200
 
 def decision_log(store, query=None, limit=DEFAULT_LIMIT, threshold=PREVIOUS_THRESHOLD):
     memory = Memory(store)
-    entries = [{**d, 'previous': []} for d in payload_items(store, memory, 'decisions')]
+    entries = [{**d, 'previous': []} for d in payload_items(store, memory, 'decisions') if not d.get('superseded')]   # a decision the same meeting reversed is not a standing decision
     prepared = [prepare(e['text']) for e in entries]
     sm = SequenceMatcher(None)
     for e, pe in zip(entries, prepared):

@@ -396,7 +396,7 @@ def dispatch(request, db=None):
             return supersede(store,request['old'],request['new'])
         if action=='brief':
             from .brief import build_brief,render_brief
-            brief=build_brief(store,request.get('title') or '',request.get('attendees') or []);text=render_brief(brief)
+            brief=build_brief(store,request.get('title') or '',request.get('attendees') or [],owner=settings_owner(DATA_DIR if db is None else Path(db).parent));text=render_brief(brief)
             if request.get('path'): Path(request['path']).write_text(text,encoding='utf-8')
             return {'path':request.get('path'),'people':len(brief['people']),'owed':sum(len(p['owed']) for p in brief['people']),'questions':sum(len(p['questions']) for p in brief['people']),'text':text if not request.get('path') else None}
         if action=='agenda':

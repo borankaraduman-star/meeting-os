@@ -2,7 +2,7 @@
 Deterministic only — no model call; nothing is sent anywhere and nothing stored is changed."""
 from .continuity import similarity_index
 from .insights import age_days, prepared_header
-from .memory import Memory, normalize
+from .memory import Memory, normalize, owner_key
 
 OPEN = ('open', 'in_progress')
 REPEAT_THRESHOLD = 0.6
@@ -33,20 +33,20 @@ def build_waiting(store, owner=None, threshold=REPEAT_THRESHOLD):
     memory = Memory(store)
     dates = {m['id']: (m['created'] or '')[:10] for m in store.meetings()}
     everything = [t for t in memory.actions() if t.get('state') in OPEN]
-    mine = normalize(owner or '')
+    mine = owner_key(owner or '')
     links = {}
     for i, j in similarity_index([t['title'] for t in everything], threshold): links.setdefault(i, []).append(j)
     people = {}
     for n, t in enumerate(everything):
         who = (t.get('owner') or '').strip()
-        if not who or (mine and normalize(who) == mine): continue
+        if not who or (mine and owner_key(who) == mine): continue
         meetings = {everything[j]['meeting'] for j in links.get(n, ()) if everything[j]['meeting'] != t['meeting']}
         meetings.add(t['meeting'])
         item = {'task': t['id'], 'title': t['title'], 'owner': who, 'meeting': t['meeting'], 'meeting_title': t.get('meeting_title'),
                 'meeting_date': dates.get(t['meeting']), 'created': t.get('created'), 'due_text': t.get('due_text'), 'state': t.get('state'),
                 'stale': t.get('stale'), 'age_days': age_days(t.get('created')), 'quote': first_quote(t),
                 'repeat': len(meetings) >= 2, 'meetings': len(meetings)}
-        people.setdefault(normalize(who), {'owner': who, 'items': []})['items'].append(item)
+        people.setdefault(owner_key(who), {'owner': who, 'items': []})['items'].append(item)
     board = []
     for group in people.values():
         group['items'].sort(key=lambda i: (-(i['age_days'] or 0), i.get('created') or '', i['title']))   # longest wait first

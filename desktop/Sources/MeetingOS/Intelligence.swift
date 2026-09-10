@@ -8,9 +8,9 @@ struct Evidence:Identifiable {
     init(_ d:[String:Any]) { segment=d["segment_id"] as? Int ?? d["id"] as? Int ?? 0; quote=d["quote"] as? String ?? d["text"] as? String ?? ""; start=d["start"] as? Double ?? 0; speaker=d["speaker"] as? String ?? d["speaker_name"] as? String ?? ""; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "" }
 }
 struct Insight:Identifiable {
-    let text:String; let evidence:[Evidence]; let review:Bool
+    let text:String; let evidence:[Evidence]; let review:Bool; let superseded:Bool
     var id:String { text }
-    init(_ d:[String:Any]) { text=d["text"] as? String ?? ""; evidence=(d["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); review=d["needs_review"] as? Bool ?? false }
+    init(_ d:[String:Any]) { text=d["text"] as? String ?? ""; evidence=(d["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); review=d["needs_review"] as? Bool ?? false; superseded=d["superseded"] as? Bool ?? false }
 }
 struct ActionItem:Identifiable {
     let id:String; let title:String; let owner:String; let due:String; let state:String; let meeting:String; let meetingTitle:String; let stale:Bool; let route:String; let evidence:[Evidence]; let dueDate:String
@@ -111,7 +111,7 @@ struct AnalysisView:View {
         if let payload=m.analysis?["payload"] as? [String:Any] {
             ForEach(categories,id:\.0) { key,label in VStack(alignment:.leading,spacing:10) { Text(label).font(.headline);let items=(payload[key] as? [[String:Any]] ?? []).map(Insight.init)
                 if items.isEmpty { Text("Kayıtlarda açık bir madde bulunmadı.").foregroundStyle(.secondary) }
-                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled);if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };if key=="decisions", let prev=m.continuity.historyByDecision[item.text], !prev.isEmpty { VStack(alignment:.leading,spacing:3) { ForEach(prev) { p in Label("Önceki karar · \(p.meetingTitle): \(p.text)",systemImage:"clock.arrow.circlepath").font(.caption).foregroundStyle(.secondary) } } };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
+                ForEach(items) { item in VStack(alignment:.leading,spacing:5) { Text(item.text).font(.system(size:15,weight:.medium)).lineSpacing(5).textSelection(.enabled).strikethrough(item.superseded).foregroundStyle(item.superseded ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary));if item.superseded { Label("Toplantı içinde geri alındı; aşağıdaki karar geçerli.",systemImage:"arrow.uturn.backward").font(.caption).foregroundStyle(.secondary) } else if item.review { Label("Kaynak ses belirsiz; kontrol edin.",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) };if key=="decisions", let prev=m.continuity.historyByDecision[item.text], !prev.isEmpty { VStack(alignment:.leading,spacing:3) { ForEach(prev) { p in Label("Önceki karar · \(p.meetingTitle): \(p.text)",systemImage:"clock.arrow.circlepath").font(.caption).foregroundStyle(.secondary) } } };EvidenceView(m:m,evidence:item.evidence) }.padding(18).frame(maxWidth:.infinity,alignment:.leading).meetingCard() }
             } }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout)
         } else { ContentUnavailableView("Henüz özet yok",systemImage:"text.bubble",description:Text(m.transcriptionMode=="openrouter" ? "Transkript hazır olunca özet, kararlar ve görevler OpenRouter’daki \(m.analysisModel) modeliyle çıkarılır; bu Mac’te model yüklenmez." : "Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }

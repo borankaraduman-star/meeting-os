@@ -28,7 +28,7 @@ SYSTEM += (
  "\nWrite text, title, owner and due_text in Turkish. Never emit English section names or labels such as 'Summary', 'Action item', 'Owner', 'unassigned', 'TBD' or 'N/A'. Keep the loanwords the speakers actually used."
  "\nIf the same commitment or topic is stated twice, report it once."
  # last word on purpose: the capture rules above pulled cancelled and merely proposed work back into actions until this filter was read last
- "\nSON SÜZGEÇ — yukarıdaki bütün kuralları uyguladıktan sonra her action'ı bir kez daha ele: transkriptte o işi iptal eden, reddeden, geri alan, vazgeçilen, başkasına devreden veya zaten tamamlandığını söyleyen bir ifade varsa o iş action DEĞİLDİR, listeden çıkar ve yalnızca decisions altında iptal olarak raporla. Kimsenin kabul etmediği öneri ('X yapsa mı?', 'kimse üstlenmedi', toplantıda olmayan birine verilen iş), ekibe yapılan genel rica veya uyarı ('ricam şu, … kullanmayın', 'şunu yapmayı unutmayın') ve 'birinin yapması lazım' denip kimsenin almadığı iş hiçbir koşulda action değildir — owner=null ile bile. Bu süzgeç diğer bütün kuralların üstündedir."
+ "\nSON SÜZGEÇ — yukarıdaki bütün kuralları uyguladıktan sonra her action'ı bir kez daha ele: transkriptte o işi iptal eden, reddeden, geri alan, vazgeçilen, sahibi değişen (görev yeni sahibiyle action olarak kalır, silinmez) ya da veya zaten tamamlandığını söyleyen bir ifade varsa o iş action DEĞİLDİR, listeden çıkar ve yalnızca decisions altında iptal olarak raporla. Kimsenin kabul etmediği öneri ('X yapsa mı?', 'kimse üstlenmedi', toplantıda olmayan birine verilen iş), ekibe yapılan genel rica veya uyarı ('ricam şu, … kullanmayın', 'şunu yapmayı unutmayın') ve 'birinin yapması lazım' denip kimsenin almadığı iş hiçbir koşulda action değildir — owner=null ile bile. Bu süzgeç diğer bütün kuralların üstündedir."
 )
 
 def fingerprint(rows):
@@ -53,7 +53,7 @@ def _fold(text):
 
 SPLIT=re.compile(r'\.{2,}|…|(?<=[.!?;])\s+')
 
-def locate_quote(quote,text,min_ratio=0.8,min_fragment_words=4):
+def locate_quote(quote,text,min_ratio=0.8,min_fragment_words=4,claim=None):
     """Return the exact source substring a model quote refers to, or None.
 
     Cloud models trim punctuation, fix case or drop a filler word, and they also build a quote out
@@ -64,10 +64,13 @@ def locate_quote(quote,text,min_ratio=0.8,min_fragment_words=4):
     as the citation, and if no fragment is long enough the item still loses its evidence."""
     found=_locate_span(quote,text,min_ratio)
     if found is not None:return found
-    best=None
+    best=None;claim_stems=stems(claim) if claim else None
     for fragment in SPLIT.split(quote):
         fragment=fragment.strip()
-        if len(fragment.split())<min_fragment_words:continue
+        # Filler ("evet tamam öyle yapalım") must never stand as evidence: the fragment needs content words,
+        # and when the claim is known it must share a topic word with it.
+        if len(fragment.split())<min_fragment_words or len(stems(fragment))<3:continue
+        if claim_stems and not (stems(fragment)&claim_stems):continue
         found=_locate_span(fragment,text,min_ratio)
         if found is not None and (best is None or len(found)>len(best)):best=found
     return best
@@ -113,16 +116,18 @@ def validate_record(record,rows):
             total_items+=1
             field='title' if key=='actions' else 'text';text=item.get(field)
             if not isinstance(text,str) or not text.strip() or len(text)>1600:raise ValueError('Geçersiz analiz metni')
-            refs=item.get('evidence');evidence=[];selected=[]
+            refs=item.get('evidence');evidence=[];selected=[];rescued=False
             if not isinstance(refs,list) or not 1<=len(refs)<=12:raise ValueError('Kaynak alıntısı zorunlu')
             for ref in refs:
                 sid=ref.get('segment_id') if isinstance(ref,dict) else None;quote=ref.get('quote') if isinstance(ref,dict) else None
                 if type(sid)!=int or sid not in by_id or not isinstance(quote,str) or not quote.strip(): dropped+=1;continue
-                quote=locate_quote(quote,by_id[sid]['text'])
+                exact=_locate_span(quote,by_id[sid]['text'])
+                quote=exact if exact is not None else locate_quote(quote,by_id[sid]['text'],claim=text)
                 if quote is None: dropped+=1;continue   # a quote that is not real transcript text is discarded, never repaired
+                if exact is None: rescued=True   # a stitched quote survived on one real fragment: the item is shown, but marked for a human look
                 row=by_id[sid];selected.append(row);evidence.append({'segment_id':sid,'quote':quote,'start':row['start'],'source':row['source'],'speaker':row.get('speaker_name') or row['speaker']})
             if not evidence: dropped_items+=1;continue   # an item without one verifiable quote is not reported
-            clean={field:text.strip(),'evidence':evidence,'needs_review':any(uncertain(r) for r in selected)}
+            clean={field:text.strip(),'evidence':evidence,'needs_review':any(uncertain(r) for r in selected) or rescued}
             if key=='actions':
                 owner=item.get('owner');due=item.get('due_text');quotes=' '.join(e['quote'] for e in evidence)
                 owner=canonical_owner(owner,rows)   # "Deniz'in", "deniz bey" and "Deniz" are one person before anything is verified
@@ -170,9 +175,12 @@ def canonical_owner(owner,rows):
     if not cleaned:return None
     for match in (normalize,_name_key):
         key=match(cleaned)
+        hits=[]
         for row in rows:
             name=row.get('speaker_name')
-            if name and match(name)==key:return name
+            if name and match(name)==key and name not in hits:hits.append(name)
+        if len(hits)==1:return hits[0]
+        if len(hits)>1:break   # "Ilker" and "İlker" both speak: never guess between two people
     return cleaned
 
 
@@ -197,7 +205,7 @@ def duplicate_index(key,item,kept):
         if text==second or text in second or second in text:return index
         if min(len(mine),len(theirs))>=3 and (mine<=theirs or theirs<=mine):return index
         if key!='actions':continue
-        if normalize(item.get('due_text') or '')!=normalize(other.get('due_text') or ''):continue
+        if not normalize(item.get('due_text') or '') or normalize(item.get('due_text') or '')!=normalize(other.get('due_text') or ''):continue   # two undated tasks of one owner are two tasks
         due=stems(item.get('due_text') or '')|stems(other.get('due_text') or '')
         if len((mine-due)&(theirs-due))>=2:return index
     return None
@@ -217,20 +225,29 @@ def absorb(kept,item):
     return merged
 
 
-REVERSAL=re.compile(r'iptal|geri al|vazgeç|yapılmayacak|yapmayacağ|ertelen|askıya|geçersiz|kaldırıld|rafa',re.I)
+REVERSAL=re.compile(r'iptal(?!\s*(?:edilmey|edilmed|olmay|değil))|geri al(?!ınmay)|vazgeç(?!ilmey|ilmed)|yapılmayacak|yapmayacağ|ertelen(?!mey|med)|askıya|geçersiz|kaldırıld|rafa',re.I)
 
 def drop_superseded(items):
-    """Remove a decision the meeting later reversed, so the list never states a plan that no longer
-    stands. Only a later bullet that itself says the plan was cancelled, and that shares the topic,
-    supersedes an earlier one; two cancellations never cancel each other."""
+    """Mark a decision the meeting later reversed, so the list never states a plan that no longer stands
+    without saying so. Only a later bullet that itself says the plan was cancelled (negations such as
+    "iptal edilmeyecek" do not count) and that clearly shares the topic supersedes an earlier one; two
+    cancellations never cancel each other. Nothing is deleted: the earlier decision stays with
+    `superseded=True` and its evidence, so the decision log and the reader can see what changed."""
+    import math
     when=[min((e['start'] for e in item.get('evidence') or []),default=0.) for item in items]
-    dead=set()
+    dead={}
     for b,later in enumerate(items):
         if not REVERSAL.search(_text_of(later)):continue
         for a,earlier in enumerate(items):
             if a==b or a in dead or when[a]>=when[b] or REVERSAL.search(_text_of(earlier)):continue
-            if len(stems(_text_of(earlier))&stems(_text_of(later)))>=2:dead.add(a)
-    return [item for index,item in enumerate(items) if index not in dead]
+            mine,theirs=stems(_text_of(earlier)),stems(_text_of(later))
+            need=max(3,math.ceil(0.5*min(len(mine),len(theirs)))) if mine and theirs else 99
+            if len(mine&theirs)>=need:dead[a]=b
+    out=[]
+    for index,item in enumerate(items):
+        if index in dead: item=dict(item);item['superseded']=True;item['needs_review']=True
+        out.append(item)
+    return out
 
 
 def merge_records(records):
@@ -302,7 +319,7 @@ def compact_summary(items,rows,llm):
             if not result:raise ValueError('Özet birleştirme boş döndü; analiz korunmadı')
             for item in result:
                 for e in item['evidence']:
-                    if not any(e['segment_id']==ref['segment_id'] and e['quote'] in ref['quote'] for ref in refs):raise ValueError('Birleştirilmiş özette verilen alıntılar dışına çıkıldı')
+                    if not any(e['segment_id']==ref['segment_id'] and (normalize(e['quote']) in normalize(ref['quote']) or normalize(ref['quote']) in normalize(e['quote'])) for ref in refs):raise ValueError('Birleştirilmiş özette verilen alıntılar dışına çıkıldı')
             reduced.extend(result)
         if len(reduced)>=len(current):raise ValueError('Özet kısaltılamadı')
         current=reduced
