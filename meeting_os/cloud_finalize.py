@@ -44,6 +44,14 @@ def backoff_minutes(attempt):
     return BACKOFF_MINUTES[attempt-1] if 1<=attempt<=len(BACKOFF_MINUTES) else 24*60
 
 
+def next_attempt(meta):
+    """The 1-based attempt number this meeting is about to spend, capped. Counted when the attempt STARTS: a
+    SIGKILL, a power cut or a kernel panic never reaches note_cloud_failure, and a meeting that takes the helper
+    down every single time was therefore offered to the queue forever."""
+    previous=meta.get('cloud_retry_attempt')
+    return min((previous if isinstance(previous,int) and not isinstance(previous,bool) and previous>0 else 0)+1,MAX_CLOUD_RETRIES)
+
+
 def note_cloud_failure(store, mid, exc):
     """Remember why the cloud refused this meeting, and when it is worth asking again. Nothing about the
     audio or the finished pieces changes: this is the one line the sidebar shows and the idle queue reads."""
@@ -51,8 +59,8 @@ def note_cloud_failure(store, mid, exc):
     row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
     if not row: return None
     meta=json.loads(row['metadata'] or '{}')
-    previous=meta.get('cloud_retry_attempt')
-    attempt=min((previous if isinstance(previous,int) and not isinstance(previous,bool) and previous>0 else 0)+1,MAX_CLOUD_RETRIES)
+    # The attempt is already counted when it started, unless this failure came from somewhere that never began one.
+    attempt=meta.get('cloud_retry_attempt') if meta.pop('cloud_attempt_open',None) else next_attempt(meta)
     now=datetime.now(timezone.utc)
     meta['cloud_error']={'kind':error_kind(exc),'message':error_message(exc),'at':now.isoformat()}
     meta['cloud_retry_attempt']=attempt
@@ -68,6 +76,7 @@ def note_cloud_cancel(store, mid):
     row=store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
     if not row: return None
     meta=json.loads(row['metadata'] or '{}')
+    meta.pop('cloud_attempt_open',None)   # the attempt is over; a later failure must count itself
     meta['cloud_canceled']=True
     with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),mid))
     return True
@@ -538,8 +547,9 @@ def compact_capture(store, mid):
     full={k:Path(v) for k,v in paths.items() if isinstance(v,str)}
     if not full or not all(f.is_file() and f.stat().st_size>0 for f in full.values()): return 0
     freed=0;removed=0
-    # `*.partial.wav` is a chunk the helper was still writing when it was killed. Its audio is in the assembled
-    # *-full.wav either way, and nothing else ever sweeps it, so it stayed on disk for the life of the meeting.
+    # `*.partial.wav` is a chunk the helper was still writing when it was killed. It never announced a chunk
+    # event, so the assembler skipped it and those seconds are NOT in *-full.wav — but neither is the file
+    # usable, nothing else ever sweeps it, and it stayed on disk for the life of the meeting.
     for pattern in ('*-[0-9][0-9][0-9][0-9][0-9][0-9].wav','*-[0-9][0-9][0-9][0-9][0-9][0-9].partial.wav'):
         for chunk in directory.glob(pattern):
             if chunk.resolve() in {f.resolve() for f in full.values()}: continue
@@ -587,6 +597,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             with store.db: store.db.execute('DELETE FROM segments WHERE meeting=?',(mid,))  # provisional live text is replaced by the cloud transcript
         metadata.update({'engine':'openrouter','model':model,'cloud_mode':mode or 'capture','cloud_upload_authorized':True,'paths':sources,'provisional':False})
         metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_canceled',None)   # an attempt is under way; the old verdict is stale
+        metadata['cloud_retry_attempt']=next_attempt(metadata);metadata['cloud_attempt_open']=True   # spent now, so a kill still counts against MAX_CLOUD_RETRIES
         if capture and mode!='file': metadata['markers']=read_markers(capture)
         metadata.update(current_job_metadata())
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
@@ -599,7 +610,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))
             metadata['job_usage']=job_usage(job_started)
-            metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_retry_attempt',None)   # it worked: nothing left to retry
+            metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_retry_attempt',None);metadata.pop('cloud_attempt_open',None)   # it worked: nothing left to retry
             try:
                 identity=identify_clusters(store,mid,sources,embedder)
                 metadata['identity']=identity;metadata.pop('identity_error',None)

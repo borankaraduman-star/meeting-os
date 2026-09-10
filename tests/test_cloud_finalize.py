@@ -781,6 +781,65 @@ class CloudFailureTests(unittest.TestCase):
             self.assertTrue(Path(meta['capture_dir']).is_dir())
             store.close()
 
+    def _meta(self,store,mid):
+        return json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+
+    def test_the_attempt_is_counted_when_it_starts_so_a_kill_still_counts(self):
+        """cloud_retry_attempt was only written by note_cloud_failure. A SIGKILL, a power cut or a kernel panic
+        never reaches it, so a meeting that takes the helper down every time was offered to the idle queue for
+        ever and MAX_CLOUD_RETRIES never bit."""
+        from unittest.mock import patch
+        from meeting_os.openrouter import CloudUnavailable
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            class C:
+                def transcribe(self,*a,**kw):raise CloudUnavailable('bağlantı yok')
+            for expected in (1,2):
+                # note_cloud_failure suppressed: a process the kernel killed never gets to run it either
+                with patch('time.sleep',lambda s: None),patch('meeting_os.cloud_finalize.note_cloud_failure',return_value=None), \
+                     self.assertRaises(CloudUnavailable):
+                    finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+                meta=self._meta(store,mid)
+                self.assertEqual(meta['cloud_retry_attempt'],expected)
+                self.assertTrue(meta['cloud_attempt_open'])   # the mark a finished attempt would have cleared
+            store.close()
+
+    def test_a_started_attempt_is_not_counted_twice_by_the_failure_that_follows(self):
+        from unittest.mock import patch
+        from meeting_os.openrouter import CloudUnavailable
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            class C:
+                def transcribe(self,*a,**kw):raise CloudUnavailable('bağlantı yok')
+            with patch('time.sleep',lambda s: None), self.assertRaises(CloudUnavailable):
+                finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            meta=self._meta(store,mid)
+            self.assertEqual(meta['cloud_retry_attempt'],1);self.assertNotIn('cloud_attempt_open',meta)
+            store.close()
+
+    def test_a_cancel_closes_the_attempt_so_the_next_failure_counts_itself(self):
+        from meeting_os.cloud_finalize import note_cloud_cancel, note_cloud_failure
+        from meeting_os.openrouter import CloudUnavailable
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps({'cloud_retry_attempt':1,'cloud_attempt_open':True}),mid))
+            note_cloud_cancel(store,mid)
+            self.assertNotIn('cloud_attempt_open',self._meta(store,mid))
+            note_cloud_failure(store,mid,CloudUnavailable('bağlantı yok'))
+            self.assertEqual(self._meta(store,mid)['cloud_retry_attempt'],2)
+            store.close()
+
+    def test_a_finished_meeting_forgets_the_counter_and_the_open_mark(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store,mid=self._meeting(tmp,seconds=35)
+            class C:
+                def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
+                    return {'text':'metin','usage':{'seconds':30,'cost':0.001}}
+            finalize_capture(store,mid,tmp,consent=True,model='openai/gpt-transcribe',client=C())
+            meta=self._meta(store,mid)
+            self.assertNotIn('cloud_retry_attempt',meta);self.assertNotIn('cloud_attempt_open',meta)
+            store.close()
+
     def test_backoff_ladder_caps_at_a_day_and_attempts_are_capped(self):
         from meeting_os.cloud_finalize import backoff_minutes, MAX_CLOUD_RETRIES
         self.assertEqual([backoff_minutes(n) for n in (1,2,3,4,5,30)],[10,30,120,360,1440,1440])
