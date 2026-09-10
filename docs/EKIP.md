@@ -27,6 +27,36 @@
 - **Ne görürsünüz, nasıl silersiniz:** Ayarlar (⌘,) → **Sistem → Hatalar** kartında son 5 kayıt durur; **Hata günlüğünü temizle** hepsini siler. Günlük özeti, rapor paylaşımı açıkken nabızla birlikte paylaşılan klasöre de gider (yukarıdaki liste, madde 2) — kapatmak için aynı anahtar: Ayarlar → Sistem → Gelişmiş → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz”.
 - Ekran kareleri saklanmaz; ekran kaydı izni yalnız sistem sesini almak için gerekir.
 
+### Ekip bilgisi buluta gider (1.2.67+) — ayarlanacak bir şey yok
+
+Ekip bilgi tabanı artık bir klasöre bağlı değil. Uygulamayı kurduğunuz anda bu Mac ekibin sunucusuna bağlanır;
+**kimse bir klasör seçmez, bir adres yapıştırmaz, bir düğmeye basmaz.** Ekip kimliği OpenRouter anahtarınızdan
+türetilir (anahtarın kendisi asla dışarı çıkmaz, yalnız geri döndürülemez özeti kullanılır), yani **aynı anahtarla
+kurulan Mac'ler aynı ekiptir.**
+
+- **Paylaşılan şey klasör döneminin aynısı:** öğretilen kelimeler, ses profilleri (kişi adı + ses vektörü),
+  proje sözlüğü, teşhis raporları ve redakte edilmiş hata günlüğü. **Ses kaydı, transkript metni, toplantı adı ve
+  toplantı numarası hiçbir zaman gitmez.** Rapor ve hata günlüğü, “Her toplantıdan sonra teşhis raporunu paylaşılan
+  klasöre yaz” anahtarı kapalıysa gönderilmez; kelime ve profil anahtarları da eskisi gibi çalışır.
+- **Kim görür:** yalnız aynı ekip belirtecine sahip Mac'ler. Sunucu ekip başına ve Mac başına dosya saklar; her Mac
+  yalnız **kendi** dosyalarını yükler, ötekilerinkini indirir. Kimse kimsenin dosyasının üzerine yazamaz.
+- **Sunucu kapalıyken hiçbir şey kaybolmaz.** Uygulama her şeyi önce yerel aynaya
+  (`~/Library/Application Support/MeetingOS/team/`) yazar ve oradan okur; bağlantı gelince eşitlenir. Kurulum
+  durumu kartındaki **Ekip bilgi tabanı** satırı son eşitlemeyi ya da “bulut şu an erişilemiyor” bilgisini söyler.
+- **Farklı bir OpenRouter anahtarıyla kurulan bir Mac** aynı ekibe tek satırla katılır. Ekipteki bir Mac'te
+  `.venv/bin/python -m meeting_os team invite` komutu bu satırı basar; yeni Mac'te çalıştırılır:
+
+  ```sh
+  git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git ~/meeting-os && \
+    MEETING_OS_TEAM=<belirteç> sh ~/meeting-os/scripts/install.sh
+  ```
+
+  Belirteç bir paroladır: **depoya, bir kanala, bir bilete yazılmaz**; kurulu bir Mac'te
+  `meeting_os team join <belirteç>` ile sonradan da girilebilir. Durum: `meeting_os team status`, elle eşitleme:
+  `meeting_os team sync`.
+- **Ekip klasörü hâlâ çalışıyor.** Ayarlar → Sesler ve sözlük → **Ekip klasörü**'nde bir klasör seçiliyse o kazanır
+  (aynı ağdaki bir NAS'ı yeğleyen ekipler için); bulut yalnız hiçbir klasör seçilmemişken devreye girer.
+
 ### Ekip bilgisi — ekip klasörüne ne yazılır, nasıl kapatılır
 
 Ekip klasörü **ortak bilgi tabanıdır**: herkesin adlandırması ve kelime düzeltmesi herkeste birikir. 3–5 kişi kullanınca aynı ürün adını üç kez düzeltmek, aynı kişiyi üç kez adlandırmak gerekmez. Klasöre yalnız iki dosya yazılır ve **ikisinde de ses kaydı, transkript metni, toplantı adı ya da toplantı numarası yoktur**:
