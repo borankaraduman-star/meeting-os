@@ -26,8 +26,11 @@ def decision_log(store, query=None, limit=DEFAULT_LIMIT, threshold=PREVIOUS_THRE
     needle = normalize(query or '')
     matched = [e for e in entries if not needle or needle in normalize(e['text']) or needle in normalize(e['title'] or '')]
     live = [e for e in entries if not e.get('superseded')]
-    return {'decisions': matched[:min(max(1, int(limit or DEFAULT_LIMIT)), 1000)], 'total': len(entries), 'matched': len(matched),
-            'live': len(live), 'superseded': len(entries) - len(live), 'stale_meetings': stale_meetings(entries), 'query': query or None}
+    # The header counts what the reader can see: `stale_meetings` over the whole archive announced meetings
+    # that a filter or the limit had already cut out of the list underneath it.
+    shown = matched[:min(max(1, int(limit or DEFAULT_LIMIT)), 1000)]
+    return {'decisions': shown, 'total': len(entries), 'matched': len(matched),
+            'live': len(live), 'superseded': len(entries) - len(live), 'stale_meetings': stale_meetings(shown), 'query': query or None}
 
 
 def render_decision_log(log, mask=None):

@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from .insights import build_masker, local_day, prepared_header, source_line
 from .memory import Memory, RETIRED
 from .metrics import normalize
-from .intelligence import REVERSED_NOTE
+from .intelligence import REVERSED_NOTE, row_person
 from .memory import owner_key
 
 STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı', 'superseded': 'yenilendi'}
@@ -26,6 +26,19 @@ def parse_range(day=None, start=None, end=None):
     last = parse_day(end if end is not None else start)
     if last < first: raise ValueError('Bitiş tarihi başlangıçtan önce olamaz')
     return first, last
+
+
+def asked_by(evidence, owner=None):
+    """Who asked, resolved exactly the way every other report resolves a person (intelligence.row_person).
+
+    A stored evidence entry keeps `speaker_name or speaker` in `speaker`, and on a microphone row that is
+    the Mac's own label — "Ben" until Settings knows the name. Read raw, the owner's own questions came
+    back with an `asked_by` that matched nobody and ranked first as questions somebody was waiting on
+    them for."""
+    e = (evidence or [{}])[0] or {}
+    speaker = e.get('speaker')
+    mic = (e.get('source') or '') == 'mic'
+    return row_person({'speaker_name': None if mic else speaker, 'source': e.get('source'), 'speaker': speaker}, owner)
 
 
 def duration_label(seconds):
@@ -62,7 +75,7 @@ def build_digest(store, day=None, owner=None, start=None, end=None, mask_names=F
         payload = (latest or {}).get('payload') or {}
         pick = lambda key: [{'meeting': m['id'], 'title': m['title'], 'text': i.get('text'), 'evidence': i.get('evidence', []),
                              'superseded': bool(i.get('superseded')), 'note': i.get('note') or (REVERSED_NOTE if i.get('superseded') else None),
-                             'asked_by': ((i.get('evidence') or [{}])[0] or {}).get('speaker')} for i in payload.get(key, [])]
+                             'asked_by': asked_by(i.get('evidence'), owner)} for i in payload.get(key, [])]
         qs, ds, rs = pick('questions'), pick('decisions'), pick('risks')
         questions += qs; decisions += ds; risks += rs
         own = [t for t in period if t.get('meeting') == m['id']]

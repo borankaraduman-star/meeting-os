@@ -165,3 +165,40 @@ class UnansweredQuestionOrderTests(unittest.TestCase):
    self.assertEqual([q['for_me'] for q in d['questions']],[True,False])
    text=render_digest(d)
    self.assertIn('## Cevapsız sorular',text);self.assertNotIn('Senden beklenen cevaplar',text)
+
+ def test_a_question_the_owner_asked_from_the_microphone_is_not_waiting_on_them(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Sprint',{})
+   sid=s.add_segment(mid,Segment(0,10,'Rapor ne zaman? Bütçe kimde?','mic','Ben',flags=['cloud_transcript']));s.status(mid,'complete')
+   mem=Memory(s)
+   mem.save_analysis(mid,mem.current_hash(mid),'test-model',{'summary':[],'risks':[],'decisions':[],'actions':[],
+    'questions':[{'text':'Kendi sorum','evidence':[{'segment_id':sid,'quote':'Rapor ne zaman','start':0,'source':'mic','speaker':'Ben'}]}]})
+   s.close()
+   d=build_digest(Store(db),owner='Boran')
+   self.assertEqual([q['asked_by'] for q in d['questions']],['Boran'])   # the mic label IS the owner
+   self.assertEqual([q['for_me'] for q in d['questions']],[False])
+
+class CommonWordNameTests(unittest.TestCase):
+ """“Can sıkıntısı” is not a person. The settings owner is only masked in a meeting they actually spoke in,
+ and a one-word name that is also an everyday Turkish word is masked only where it is capitalised."""
+ def meeting(self,tmp,*,mic):
+  db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('Plan',{})
+  if mic: s.add_segment(mid,Segment(0,10,'Bugün planı konuşalım.','mic','Ben',flags=['cloud_transcript']))
+  s.add_segment(mid,Segment(10,20,'Can sıkıntısı yok. Can bunu yarın yapacak.','system','S1',speaker_name='İpek'))
+  s.status(mid,'complete');s.close();return db,mid
+ def test_a_meeting_the_owner_never_spoke_in_keeps_the_everyday_word(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db,mid=self.meeting(tmp,mic=False)
+   s=Store(db);text=prepare_share(s,mid,mask_names=True,owner='Can')['text'];s.close()
+   self.assertIn('Can sıkıntısı yok',text);self.assertIn('Kişi A',text)   # İpek is still masked; the absent owner is not a person here
+   self.assertNotIn('İpek',text)
+ def test_the_owner_who_spoke_is_masked(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   db,mid=self.meeting(tmp,mic=True)
+   s=Store(db);text=prepare_share(s,mid,mask_names=True,owner='Can')['text'];s.close()
+   self.assertIn('bunu yarın yapacak',text);self.assertNotIn('Can bunu',text)
+   self.assertNotIn('İpek',text)
+ def test_only_the_capitalised_form_of_an_everyday_word_is_a_person(self):
+  masker=NameMasker([['Can'],['İpek']])
+  self.assertEqual(masker.mask('Can bunu yapacak, can sıkıntısı yok, CANLI yayın'),'Kişi A bunu yapacak, can sıkıntısı yok, CANLI yayın')
+  self.assertEqual(masker.mask('ipek bir kumaş, İpek geldi'),'Kişi B bir kumaş, Kişi B geldi')   # an ordinary name still matches either case

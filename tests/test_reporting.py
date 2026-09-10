@@ -403,6 +403,17 @@ class StaleAnalysisReportTests(unittest.TestCase):
    self.assertIn('1 toplantının analizi güncel değil',render_decision_log(log))
    radar=question_radar(Store(db))
    self.assertEqual(radar['stale_meetings'],1);self.assertTrue(radar['groups'][0]['stale'])
+ def test_the_header_counts_only_the_meetings_the_reader_can_see(self):
+  """A filter or the limit hides the stale meeting; the header must stop announcing it."""
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';mid,sid=reversed_seed(db,title='Eski karar',created=(datetime.now(timezone.utc)-timedelta(days=2)).isoformat())
+   s=Store(db);s.correct_text(mid,sid,'Metin değişti; e-posta doğrulama eklenecek.');s.close()
+   seed(db,'Taze toplantı',datetime.now(timezone.utc).isoformat(),'Fiyatlandırma sabit kalacak',questions=('Bütçe kimde?',))
+   self.assertEqual(decision_log(Store(db))['stale_meetings'],1)
+   self.assertEqual(decision_log(Store(db),query='Fiyatlandırma')['stale_meetings'],0)   # the stale meeting is not in the list
+   self.assertEqual(decision_log(Store(db),limit=1)['stale_meetings'],0)                 # …nor below the limit
+   self.assertEqual(question_radar(Store(db))['stale_meetings'],1)
+   self.assertEqual(question_radar(Store(db),query='Bütçe')['stale_meetings'],0)
 
 
 class ScorecardCostTests(unittest.TestCase):

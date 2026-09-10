@@ -31,7 +31,9 @@ struct ActionsView:View {
                 Label(MeetingDates.dayLabel(item.dueDate),systemImage:"calendar").font(.caption).foregroundStyle(MeetingDates.isPast(item.dueDate) && !["done","dismissed"].contains(item.state) ? .orange : .secondary)
                 Button("Kaldır") { Task { await m.setDue(item,nil) } }.controlSize(.mini).buttonStyle(.plain).foregroundStyle(.secondary)
             } else if let s=m.dueSuggestions[item.id] {
-                Label("Öneri: \(MeetingDates.dayLabel(s))",systemImage:"calendar.badge.clock").font(.caption).foregroundStyle(.secondary).help("“\(item.due)” ifadesi toplantı tarihine göre çevrildi; onaylamadan hiçbir yere yazılmaz")
+                // A date the meeting meant but that has already gone stays a suggestion — it is what the words said —
+                // and says so, so nobody approves last month's "yarın" as a plan.
+                Label("Öneri: \(MeetingDates.dayLabel(s))"+(m.pastDueSuggestions.contains(item.id) ? " (geçmiş)" : ""),systemImage:"calendar.badge.clock").font(.caption).foregroundStyle(.secondary).help("“\(item.due)” ifadesi toplantı tarihine göre çevrildi; onaylamadan hiçbir yere yazılmaz")
                 Button("Onayla") { Task { await m.setDue(item,s) } }.controlSize(.mini).accessibilityIdentifier("approveDue-\(item.id)")
             }
         }
@@ -61,7 +63,8 @@ struct ActionsView:View {
                 if item.stale { Label("Kaynak değişti · Görevi yeniden doğrulayın",systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
                 if let rel=m.continuity.relatedByTask[item.id], let first=rel.first(where:{ $0.supersededBy.isEmpty && $0.state != "dismissed" }) {
                     HStack(spacing:8) {
-                        Label("Önceki toplantıda benzer görev · \(first.meetingTitle): “\(first.title)” (\(first.state=="done" ? "tamamlandı" : "açık"))",systemImage:"arrow.triangle.branch").font(.caption).foregroundStyle(.secondary)
+                        Label(first.sameMeeting ? "Bu toplantıda benzer görev · “\(first.title)” (\(first.state=="done" ? "tamamlandı" : "açık"))"
+                                                 : "Önceki toplantıda benzer görev · \(first.meetingTitle): “\(first.title)” (\(first.state=="done" ? "tamamlandı" : "açık"))",systemImage:"arrow.triangle.branch").font(.caption).foregroundStyle(.secondary)
                         if first.state != "done" { Button("Aynı görev, eskisini kapat") { Task { await m.supersede(old:first.id,new:item.id) } }.controlSize(.small).help("Eski görev “kaldırıldı” olur ve bu göreve bağlanır; kaynaklar korunur") }
                     }
                 }

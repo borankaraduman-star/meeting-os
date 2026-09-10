@@ -74,6 +74,31 @@ def score_and_hits(terms,text):
 def match_score(terms,text):
     return score_and_hits(terms,text)[0]
 
+def _title_tokens(text):
+    return {w for w in normalize(text or '').split() if len(w)>2}
+
+def dedupe_actions(actions,threshold=0.8):
+    """One analysis that promised the same thing twice is one commitment, not two.
+
+    Chunks are analysed independently and `duplicate_index` only catches a restatement that contains
+    the other; two wordings of the same promise ("Eğitimleri evde çocuklarla vakit geçirirken vermek")
+    both survived and the meeting counted the same task twice in the digest and the karne. Near-identical
+    titles (normalized token Jaccard) collapse onto the wording with more evidence — the one a reader can
+    check against the transcript. Two different people promising a similar thing are two commitments, so
+    the owners have to agree (or both be missing). Nothing else about the item is merged."""
+    kept=[]
+    for item in actions:
+        tokens=_title_tokens(item.get('title'))
+        for index,(other,other_tokens) in enumerate(kept):
+            if owner_key(item.get('owner'))!=owner_key(other.get('owner')):continue
+            union=tokens|other_tokens
+            same=len(tokens&other_tokens)/len(union)>=threshold if union else normalize(item.get('title') or '')==normalize(other.get('title') or '')
+            if not same:continue
+            if len(item.get('evidence') or [])>len(other.get('evidence') or []):kept[index]=(item,tokens)
+            break
+        else:kept.append((item,tokens))
+    return [item for item,_ in kept]
+
 def now():return datetime.now(timezone.utc).isoformat()
 class Memory:
     def __init__(self,store):
@@ -110,6 +135,7 @@ class Memory:
         d=dict(row);d['payload']=json.loads(d['payload']);d['stale']=d['input_hash']!=self.current_hash(mid);return d
     def save_analysis(self,mid,input_hash,model,record):
         import hashlib   # only a save needs it; every report imports this module and none of them do
+        record={**record,'actions':dedupe_actions(record['actions'])}   # the same promise, worded twice in one analysis, is stored once
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if self.current_hash(mid)!=input_hash:raise ValueError('Transkript analiz sırasında değişti; yeniden analiz edin')

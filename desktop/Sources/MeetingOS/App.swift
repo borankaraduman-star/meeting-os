@@ -591,10 +591,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     /// Talk shares depend on rows only; computed once per row change instead of in the Özet body every poll.
     @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
+    /// Suggestions whose day has already gone (a meeting analysed weeks after it happened still says "yarın").
+    @Published var pastDueSuggestions:Set<String>=[]
     @Published var questions:[QuestionGroup]=[]; @Published var scorePeriod:[String:Any]?; @Published var scoreMeetings:[ScoreMeeting]=[]
     /// How many meetings behind each cross-meeting list have been edited since their analysis ran. Set once per
     /// load next to the list itself — never on a timer — so the header sentence costs nothing to keep honest.
     @Published var decisionStaleMeetings=0; @Published var questionStaleMeetings=0; @Published var waitingStaleMeetings=0
+    /// Decisions that still stand and the ones a later meeting took back. The header used to count the rows it had
+    /// been handed (matched/total), which disagreed with the karne — that counts live decisions only.
+    @Published var decisionLive=0; @Published var decisionSuperseded=0
     /// Poll fingerprints: rows and intelligence are re-fetched only when the Python side reports a change.
     var segmentsHash=""; var lastSegmentsMeeting=""; var intelHash=""
     /// Görünüm: "system" | "light" | "dark", and the accent preset key.

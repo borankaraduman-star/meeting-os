@@ -526,11 +526,13 @@ def dispatch(request, db=None):
         if action=='storage_housekeeping':
             # Hourly, only when nothing records: archive finished audio, then drop audio older than the retention setting.
             from .audio_archive import archive_all
-            from .reports import load_settings
+            from .reports import audio_retention_warning,load_settings
             data=DATA_DIR if db is None else Path(db).parent
             arch=archive_all(store); days=int(load_settings(data).get('audio_retention_days') or 0)
             cleaned=storage_cleanup(store,data,days=days,dry_run=False) if days>0 else {'meetings':[],'bytes':0}
-            return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes']}
+            # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
+            return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
+                    'retention_warning':audio_retention_warning(store,days)}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='probe':
@@ -576,6 +578,10 @@ def dispatch(request, db=None):
             for u in analysis:
                 slot=per_meeting.setdefault(u['meeting'],{'cost':0.0,'calls':0,'estimated':False})
                 slot['cost']+=float(u['cost'] or 0);slot['calls']+=1;slot['estimated']=slot['estimated'] or bool(u['estimated'])
+            # An analysed meeting with no usage row is a meeting whose analysis cost nobody knows (it ran before
+            # 1.2.43, or through a local model). One such meeting makes the whole total partial, not wrong.
+            analysed={r[0] for r in store.db.execute('SELECT DISTINCT meeting FROM analyses')} if store.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='analyses'").fetchone() else set()
+            unpriced=len(analysed-{u['meeting'] for u in analysis})
             def bucket(rs):
                 ids={r[0] for r in rs};mine=[u for u in analysis if u['meeting'] in ids]
                 return {'usd':round(sum(float(r[3] or 0) for r in rs),4),'meetings':len(rs),'minutes':round(sum(float(r[4] or 0) for r in rs)/60,1),
@@ -587,7 +593,7 @@ def dispatch(request, db=None):
                     'analysis_cost':round(sum(float(u['cost'] or 0) for u in analysis),4),'analysis_calls':len(analysis),
                     'analysis_estimated':any(u['estimated'] for u in analysis),
                     # Analyses that ran before usage was recorded (pre-1.2.43) have no rows: the total is unknown, not $0.
-                    'analysis_cost_known':bool(analysis) or not store.db.execute('SELECT 1 FROM analyses LIMIT 1').fetchone(),
+                    'analysis_cost_known':not unpriced,'analysis_unpriced':unpriced,
                     'recent':[{'meeting':r[0],'title':r[1],'usd':round(float(r[3] or 0),4),'minutes':round(float(r[4] or 0)/60,1),
                                'analysis_cost':round(slot(r[0])['cost'],4),'analysis_calls':slot(r[0])['calls'],'analysis_estimated':slot(r[0])['estimated']} for r in rows[:5]]}
         if action=='meeting_context':

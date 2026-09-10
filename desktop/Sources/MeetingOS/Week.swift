@@ -36,7 +36,7 @@ struct DecisionLogView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             HStack {
-                Text("\(m.decisions.count) karar").font(.caption).foregroundStyle(.secondary)
+                Text("\(m.decisionLive) karar"+(m.decisionSuperseded>0 ? " · \(m.decisionSuperseded) geri alındı" : "")).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("decisionCounts")
                 Spacer()
                 Button("Markdown…") { Task { await m.exportDecisions(query:m.memoryQuery) } }.disabled(m.decisions.isEmpty).accessibilityIdentifier("exportDecisions")
             }

@@ -71,3 +71,12 @@ class MeetingDayAnchorTests(unittest.TestCase):
     def test_a_retired_task_gets_no_proposal(self):
         tasks = [{'id': 'a', 'title': 'Rapor', 'due_text': 'yarın', 'created': '2026-09-09T10:00:00+00:00', 'state': 'superseded', 'payload': {}}]
         self.assertEqual(suggestions_for_tasks(tasks), [])
+
+    def test_a_suggestion_the_day_has_already_passed_says_so(self):
+        from datetime import date as _date
+        tasks = [{'id': 'a', 'meeting': 'm', 'title': 'Rapor', 'due_text': 'yarın', 'created': '2026-09-09T10:00:00+00:00', 'state': 'open', 'payload': {}}]
+        past = suggestions_for_tasks(tasks, {'m': A}, today=_date(2026, 10, 1))
+        self.assertEqual((past[0]['suggested'], past[0]['past']), ('2026-09-10', True))
+        ahead = suggestions_for_tasks(tasks, {'m': A}, today=A)
+        self.assertEqual((ahead[0]['suggested'], ahead[0]['past']), ('2026-09-10', False))
+        self.assertFalse(suggestions_for_tasks(tasks, {'m': A}, today=_date(2026, 9, 10))[0]['past'])   # today is not past

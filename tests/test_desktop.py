@@ -296,6 +296,46 @@ class DesktopTests(unittest.TestCase):
    tasks={t['id']:t for t in Memory(Store(db)).actions()}
    self.assertEqual(tasks[old]['state'],'dismissed');self.assertEqual(tasks[old]['payload']['superseded_by'],new);self.assertEqual(tasks[new]['payload']['continues'],old)
    with self.assertRaises(ValueError):dispatch({'action':'supersede_task','old':new,'new':new},db)
+ def test_one_meeting_that_promised_the_same_thing_twice_merges_it_and_links_the_rest(self):
+  """Kontrol showed "Eğitimleri evde …" twice in a single meeting: one analysis wrote both wordings, and
+  nothing across meetings could see it."""
+  from meeting_os.memory import Memory
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Kontrol',{})
+   long='Eğitimleri evde çocuklarla vakit geçirirken vermek'
+   short='eğitimleri evde vermek'
+   sid=s.add_segment(mid,Segment(0,60,f'{long} istiyoruz; {short} şart.','system','S0',speaker_name='Boran'))
+   s.status(mid,'complete');mem=Memory(s)
+   act=lambda title,owner,quotes:{'title':title,'owner':owner,'due_text':None,'evidence':[{'segment_id':sid,'quote':q} for q in quotes]}
+   latest=mem.save_analysis(mid,mem.current_hash(mid),'test',{'summary':[],'decisions':[],'risks':[],'questions':[],
+    'actions':[act(long,'Boran',[long]),act(long+'.','Boran',[long,short]),act('Eğitimleri evde vermek','Boran',[short]),act('Eğitimleri evde vermek','İpek',[long])]})   # a different quote: same title, but her own row
+   s.close()
+   kept=[a['title'] for a in latest['payload']['actions']]
+   self.assertEqual(kept,[long+'.','Eğitimleri evde vermek','Eğitimleri evde vermek'])   # the doubled wording collapsed onto the better-quoted one
+   c=dispatch({'action':'continuity','meeting':mid},db)
+   linked={r['task']:r['related'] for r in c['related_tasks']}
+   self.assertEqual(len(linked),2)   # İpek's identical promise is her own, not a duplicate of Boran's
+   for related in linked.values():
+    self.assertTrue(all(h['same_meeting'] and h['meeting']==mid for h in related))
+   entry=c['related_tasks'][0];hit=entry['related'][0]
+   r=dispatch({'action':'supersede_task','old':hit['id'],'new':entry['task']},db)   # a same-meeting pair may now be merged
+   self.assertEqual(r['superseded'],hit['id'])
+   tasks={x['id']:x for x in Memory(Store(db)).actions()}
+   self.assertEqual(tasks[hit['id']]['state'],'dismissed');self.assertEqual(tasks[entry['task']]['payload']['continues'],hit['id'])
+ def test_the_analysis_cost_is_partial_when_an_analysed_meeting_has_no_recorded_call(self):
+  from meeting_os.memory import Memory
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';s=Store(db)
+   def analysed(title):
+    mid=s.create_meeting(title,{});sid=s.add_segment(mid,Segment(0,5,'Karar verildi.','system','S0'));s.status(mid,'complete')
+    mem=Memory(s);mem.save_analysis(mid,mem.current_hash(mid),'test',{'summary':[],'decisions':[],'risks':[],'questions':[],'actions':[]});return mid
+   priced=analysed('Ücretli');analysed('Ücretsiz')
+   s.record_analysis_usage(priced,'openai/gpt-4.1-mini',{'prompt_tokens':10,'completion_tokens':2,'cost':0.004,'estimated':False});s.close()
+   r=dispatch({'action':'cost_report'},db)
+   self.assertEqual((r['analysis_cost'],r['analysis_unpriced'],r['analysis_cost_known']),(0.004,1,False))
+   s=Store(db);s.record_analysis_usage([m['id'] for m in s.meetings() if m['title']=='Ücretsiz'][0],'openai/gpt-4.1-mini',{'prompt_tokens':10,'completion_tokens':2,'cost':0.001,'estimated':False});s.close()
+   r=dispatch({'action':'cost_report'},db)
+   self.assertEqual((r['analysis_unpriced'],r['analysis_cost_known']),(0,True))
  def test_document_builder_validates_headings_and_numbers(self):
   from meeting_os.documents import build_document, KINDS
   with tempfile.TemporaryDirectory() as tmp:
