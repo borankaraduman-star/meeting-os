@@ -6,6 +6,13 @@ from .metrics import normalize
 
 STOPWORDS={'ve','bir','bu','şu','o','ne','kaç','mi','mı','mu','mü','ile','için','de','da','ki','ama','veya','ya','gibi','çok','daha','en','var','yok','mi','nasıl','neden','hangi','kim','nerede','zaman','olan','oldu','olduğu','söylendi','söyledi','söylemiş','dedi','diye','ise','hakkında','bana','bize','şey'}
 
+
+def owner_key(name):
+    """Loose match for a person's name: case, İ/I/ı and diacritics do not separate "İlker", "Ilker" and "ilker".
+    `metrics.normalize` keeps ı and i apart (right for word error rates, wrong for a name typed two ways)."""
+    from .store import fold_name
+    return fold_name(name or '').replace('ı','i')
+
 def query_terms(query,limit=12):
     """Content words of a question, without Turkish function words; short tokens are kept only when nothing else remains."""
     tokens=normalize(query).split()
@@ -91,7 +98,7 @@ class Memory:
         result=[];latest_ids={r['meeting']:r['id'] for r in self.db.execute('SELECT meeting,MAX(id) AS id FROM analyses GROUP BY meeting')}
         for row in self.db.execute('SELECT tasks.*,meetings.title AS meeting_title FROM tasks JOIN meetings ON meetings.id=tasks.meeting ORDER BY tasks.created DESC'):
             d=dict(row)
-            if owner and normalize(d['owner'] or '')!=normalize(owner):continue
+            if owner and owner_key(d['owner'] or '')!=owner_key(owner):continue
             if meeting and d['meeting']!=meeting:continue
             d['payload']=json.loads(d['payload'])
             d['stale']=d['input_hash']!=self.current_hash(d['meeting']) or d['analysis']!=latest_ids.get(d['meeting']);result.append(d)
