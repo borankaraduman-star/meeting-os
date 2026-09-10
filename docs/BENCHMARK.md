@@ -80,3 +80,50 @@ paydalar null'dır, başarı sayılmaz. 3–5 toplantının TP/FP/FN sayıları 
 micro precision/recall hesaplanabilir; toplantı başına skorları ayrıca saklayın.
 Özeti modelin kendisine puanlatmak yerine kaydı bilen bir insan değerlendirsin.
 İsim düzeltmeden önce/sonra sonuçları ayrı koşu olarak kaydedin.
+
+## Bulut analiz kıyası
+
+`scripts/benchmark-analysis-cloud.py`, `scripts/benchmark-analysis.py` ile aynı
+kurgu fixture'ları ve aynı `check_fixture_analysis` kapılarını kullanır; tek
+fark, modelin yerel model yerine OpenRouter adaptörü olmasıdır. Gerçek toplantı
+verisi kullanılmaz, kullanılamaz: girdi yalnızca `tests/fixtures/analysis/*.json`.
+Her istek ücretlidir, bu yüzden onay açıktır ve koşunun sert bir çağrı bütçesi vardır.
+
+```sh
+.venv/bin/python scripts/benchmark-analysis-cloud.py \
+  --output /local/analysis-cloud.json --model openai/gpt-4.1-mini \
+  --allow-upload --max-calls 40
+```
+
+Kapıların dışında şunlar mekanik olarak ölçülür: modelin alıntılarının kaçı
+harfi harfine doğruydu (`verbatim`), kaçı `locate_quote` ile gerçek metne
+oturtulabildi (`verified`), actions altına sızan yasak terimler, eksik referans
+görevler ve eksiklik sebebi, parça birleştirmesinden sağ çıkan tekrarlar,
+`required_decision_terms` ile karşılanmayan kararlar ve Türkçe çıktıdaki
+İngilizce bölüm adları/etiketleri.
+
+10 Eylül 2026, `openai/gpt-4.1-mini`, beş kurgu fixture. Önce = 39b8095'teki
+`intelligence.py`, sonra = bu daldaki hâli; fixture'lar iki koşuda da aynıdır.
+
+| case | checks | verified | verbatim | actions | özet maddesi | eksik görev | eksik karar |
+|---|---|---|---|---|---|---|---|
+| cancel | 5/5 → 5/5 | 1.00 → 1.00 | 1.00 → 1.00 | 0 → 0 | 3 → 3 | 0 → 0 | 0 → 0 |
+| handover (2 parça) | 2/5 → 5/5 | 0.89 → 1.00 | 0.83 → 0.96 | 5 → 4 | 3 → 5 | 0 → 0 | 1 → 0 |
+| injection | 5/5 → 5/5 | 1.00 → 1.00 | 1.00 → 1.00 | 1 → 1 | 2 → 2 | 0 → 0 | 0 → 0 |
+| reversal | 2/5 → 5/5 | 1.00 → 1.00 | 1.00 → 1.00 | 2 → 3 | 5 → 5 | 1 → 0 | 0 → 0 |
+| sprint | 5/5 → 5/5 | 1.00 → 1.00 | 1.00 → 1.00 | 3 → 3 | 5 → 4 | 0 → 0 | 0 → 0 |
+
+Koşu başına 11 bulut çağrısı, ≈ $0.011 (önce) / ≈ $0.015 (sonra).
+
+Ölçülen kusurlar ve karşılıkları: uzun toplantıda aynı görev iki parçada iki kez
+raporlanıyordu; ikinci parçada alınan karar iptali hiç görünmüyordu, çünkü model
+alıntıyı "…" ile veya araya giren cümleyi atlayarak iki parçadan birleştiriyor ve
+doğrulama bütün maddeyi düşürüyordu; başkasının ağzından aktarılan taahhüt yanlış
+kişiye yazılıyordu; kendi alıntısının içinde duran tarih kayboluyordu; uzun
+toplantının özeti 3 maddeye çöküyordu.
+
+Bu tablo sözlüksel bir gerilemedir, anlam doğruluğu değildir. Beş kurgu fixture
+istatistiksel garanti vermez ve gerçek toplantı performansını temsil etmez;
+gerçek ölçüm için yukarıdaki insan değerlendirmesi şarttır. `handover` bir koşuda
+ekibe yapılan genel bir ricayı görev sanmıştı: aynı fixture'ı en az iki kez koşup
+kararsız maddeleri not edin, tek koşuyu sonuç saymayın.

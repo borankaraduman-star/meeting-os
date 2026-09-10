@@ -52,7 +52,7 @@
     },
     {
       "speaker": "Murat",
-      "text": "Ben regression suite'i paralelleştirmeyi haftaya deneyeceğim. Dört worker'a bölersek kırk dakika on beş dakikaya inebilir. Flaky testleri de aynı hafta ayrı bir listeye çıkarırım ama önce paralelleştirme."
+      "text": "Ben regression suite'i paralelleştirmeyi haftaya deneyeceğim. Dört worker'a bölersek kırk dakika on beş dakikaya inebilir. Flaky testlerin ayrı bir listeye çıkması da lazım ama onu şimdilik kimse almıyor."
     },
     {
       "speaker": "Selin",
@@ -138,7 +138,10 @@
     "e-posta doğrulama",
     "çeyrek rapor",
     "headcount",
-    "looker"
+    "looker",
+    "flaky",
+    "hard-coded",
+    "token"
   ],
   "expected_owners": [
     "Ece",

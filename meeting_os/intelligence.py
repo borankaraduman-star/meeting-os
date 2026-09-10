@@ -28,7 +28,7 @@ SYSTEM += (
  "\nWrite text, title, owner and due_text in Turkish. Never emit English section names or labels such as 'Summary', 'Action item', 'Owner', 'unassigned', 'TBD' or 'N/A'. Keep the loanwords the speakers actually used."
  "\nIf the same commitment or topic is stated twice, report it once."
  # last word on purpose: the capture rules above pulled cancelled and merely proposed work back into actions until this filter was read last
- "\nSON SÜZGEÇ — yukarıdaki bütün kuralları uyguladıktan sonra her action'ı bir kez daha ele: transkriptte o işi iptal eden, reddeden, geri alan, vazgeçilen, başkasına devreden veya zaten tamamlandığını söyleyen bir ifade varsa o iş action DEĞİLDİR, listeden çıkar ve yalnızca decisions altında iptal olarak raporla. Kimsenin kabul etmediği öneri ('X yapsa mı?', 'kimse üstlenmedi', toplantıda olmayan birine verilen iş) hiçbir koşulda action değildir — owner=null ile bile. Bu süzgeç diğer bütün kuralların üstündedir."
+ "\nSON SÜZGEÇ — yukarıdaki bütün kuralları uyguladıktan sonra her action'ı bir kez daha ele: transkriptte o işi iptal eden, reddeden, geri alan, vazgeçilen, başkasına devreden veya zaten tamamlandığını söyleyen bir ifade varsa o iş action DEĞİLDİR, listeden çıkar ve yalnızca decisions altında iptal olarak raporla. Kimsenin kabul etmediği öneri ('X yapsa mı?', 'kimse üstlenmedi', toplantıda olmayan birine verilen iş), ekibe yapılan genel rica veya uyarı ('ricam şu, … kullanmayın', 'şunu yapmayı unutmayın') ve 'birinin yapması lazım' denip kimsenin almadığı iş hiçbir koşulda action değildir — owner=null ile bile. Bu süzgeç diğer bütün kuralların üstündedir."
 )
 
 def fingerprint(rows):
