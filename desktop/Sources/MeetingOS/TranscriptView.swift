@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct TranscriptView:View {
     @ObservedObject var model:Model
@@ -37,21 +38,34 @@ struct TranscriptView:View {
                 }
                 let canPlay = !model.recording && model.meeting?.metadata["text_only"] as? Bool != true
                 let canEdit = model.meeting?.status == "complete"
+                if canEdit && !model.rows.isEmpty {
+                    Text("Bir kelimeye tıklayın: yalnız burada ya da öğreterek düzeltin").font(.caption).foregroundStyle(.secondary)
+                }
                 if model.readingMode && model.search.isEmpty && model.focusedSegment == nil {
                     let blocks=model.blocks
 
                     ForEach(Array(blocks.enumerated()),id:\.element.id) { i,block in
                         if i>0, blocks[i-1].label != block.label { Divider().padding(.leading,62).padding(.vertical,4) }
-                        TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label,marks:Markers.inBlock(marks,start:block.start,end:block.end),hideFillers:model.hideFillers,profiles:model.profiles.map(\.name),attendees:model.calendarAttendees).equatable().id(block.id)
+                        TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label,marks:Markers.inBlock(marks,start:block.start,end:block.end),hideFillers:model.hideFillers,profiles:model.profiles.map(\.name),attendees:model.calendarAttendees,wordFix:model.wordFix?.blockID==block.id ? model.wordFix : nil).equatable().id(block.id)
                     }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
                     let rows=model.visibleRows   // filtered once per rebuild, not once per body pass
-                    ForEach(rows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable().id(row.id) }
+                    ForEach(rows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit,wordFix:model.wordFix?.blockID==row.id ? model.wordFix : nil).equatable().id(row.id) }
                     if rows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 }
             }.padding(24)
         }
+        // Every word in the transcript is a link to a private meetingos://word URL; this is where a click
+        // on one lands. Nothing else in the app opens URLs from inside the transcript, so the handler can own
+        // the scheme outright and hand everything else back to the system.
+        .environment(\.openURL,OpenURLAction { url in
+            guard let ref=WordClick.parse(url) else { return .systemAction }
+            guard model.meeting?.status=="complete", !model.recording else { return .handled }
+            let anchor=(model.readingMode && model.search.isEmpty && model.focusedSegment==nil) ? (model.blockId(containing:ref.segment) ?? ref.segment) : ref.segment
+            model.wordFix=WordFix(segmentID:ref.segment,index:ref.index,original:ref.word,blockID:anchor)
+            return .handled
+        })
         .onChange(of:model.revealToken) { _,_ in
             guard let target=model.revealTarget else { return }
             let anchor=(model.readingMode && model.search.isEmpty) ? (model.blockId(containing:target) ?? target) : target
@@ -65,7 +79,8 @@ struct TranscriptRow:View, Equatable {
     let row:Row
     let canPlay:Bool
     let canEdit:Bool
-    static func == (lhs:Self,rhs:Self)->Bool { lhs.row == rhs.row && lhs.canPlay == rhs.canPlay && lhs.canEdit == rhs.canEdit && lhs.model === rhs.model }
+    var wordFix:WordFix?   // non-nil only for the row whose word was clicked, so no other row redraws
+    static func == (lhs:Self,rhs:Self)->Bool { lhs.row == rhs.row && lhs.canPlay == rhs.canPlay && lhs.canEdit == rhs.canEdit && lhs.wordFix == rhs.wordFix && lhs.model === rhs.model }
     var body:some View {
         HStack(alignment:.top,spacing:14) {
             if canPlay {
@@ -89,7 +104,9 @@ struct TranscriptRow:View, Equatable {
                 }
                 // fixedSize(vertical) pins wrapped-text heights so LazyVStack estimates converge; without it long
                 // paragraphs made the layout engine oscillate and the app spun at 100% CPU.
-                Text(row.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
+                Text(canEdit ? WordTextCache.text(block:row.id,rows:[row],hideFillers:false) : AttributedString(row.text))
+                    .font(.system(size:15)).tint(.primary).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true)
+                    .popover(item:Binding(get:{ wordFix },set:{ model.wordFix=$0 }),arrowEdge:.bottom) { fix in WordFixPopover(model:model,fix:fix) }
                 if !row.notices.isEmpty { Label(row.notices,systemImage:"exclamationmark.triangle").font(.caption2).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true) }
             }.frame(maxWidth:.infinity,alignment:.leading)
         }.padding(20).meetingCard()
@@ -115,9 +132,11 @@ struct TranscriptBlockView:View, Equatable {
     var hideFillers:Bool=true
     var profiles:[String]=[]
     var attendees:[String]=[]
+    var wordFix:WordFix?   // non-nil only for the paragraph whose word was clicked
+
     /// Everything the body reads is a parameter, so an unrelated publish on Model leaves the paragraph untouched.
     static func ==(a:TranscriptBlockView,b:TranscriptBlockView)->Bool {
-        a.model===b.model && a.block==b.block && a.canPlay==b.canPlay && a.canEdit==b.canEdit && a.showAsides==b.showAsides && a.highlighted==b.highlighted && a.continued==b.continued && a.marks==b.marks && a.hideFillers==b.hideFillers && a.profiles==b.profiles && a.attendees==b.attendees
+        a.model===b.model && a.block==b.block && a.canPlay==b.canPlay && a.canEdit==b.canEdit && a.showAsides==b.showAsides && a.highlighted==b.highlighted && a.continued==b.continued && a.marks==b.marks && a.hideFillers==b.hideFillers && a.profiles==b.profiles && a.attendees==b.attendees && a.wordFix==b.wordFix
     }
     /// Rename this speaker's whole cluster from the paragraph header: saved profiles, calendar attendees, or the full editor.
     var speakerMenu:some View {
@@ -150,7 +169,12 @@ struct TranscriptBlockView:View, Equatable {
                     Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.small).accessibilityIdentifier("editBlock-\(block.id)")
                 } }
                 HStack(alignment:.top,spacing:8) {
-                    Text(hideFillers ? Fillers.clean(block.text) : block.text).font(.system(size:15)).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
+                    // Every word is its own link (WordClick); the cached AttributedString keeps a 1200-row
+                    // meeting as cheap as the plain string it replaced.
+                    Text(canEdit ? WordTextCache.text(block:block.id,rows:block.rows,hideFillers:hideFillers) : AttributedString(hideFillers ? Fillers.clean(block.text) : block.text))
+                        .font(.system(size:15)).tint(.primary).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
+                        .popover(item:Binding(get:{ wordFix },set:{ model.wordFix=$0 }),arrowEdge:.bottom) { fix in WordFixPopover(model:model,fix:fix) }
+                        .onHover { inside in if canEdit { if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } } }
                     if continued { Spacer(minLength:0); Button("Düzelt") { model.editRow=block.lead;model.editName=block.lead.name;model.editText=block.lead.text;model.clean=false }.disabled(!canEdit).controlSize(.mini).buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("editBlock-\(block.id)") }
                 }
                 let notices=Set(block.rows.map(\.notices)).filter { !$0.isEmpty }.sorted().joined(separator:" · ")
