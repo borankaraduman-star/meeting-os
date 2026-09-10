@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 60 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 61 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.56](#v1256) | 2026-09-11 07:10 | Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli |
 | [v1.2.55](#v1255) | 2026-09-11 05:05 | Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural |
 | [v1.2.54](#v1254) | 2026-09-11 03:50 | Meeting OS 1.2.54 — 2 saatlik toplantı: kayıp yok, disk dürüst, arayüz tembel |
 | [v1.2.53](#v1253) | 2026-09-11 03:05 | Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin |
@@ -81,6 +82,20 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 ## Notlar
 
+<a id="v1256"></a>
+### Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli
+
+2026-09-11 07:10 · yerel not · GitHub sürüm sayfası yok
+
+Boran'ın üç isteği + ikinci görüşün kritik bulgusu:
+- **Kelimeye tıklayarak düzeltme:** transkriptte herhangi bir kelimeye tıklayın → küçük baloncuk: "Yalnız burada" (sadece bu geçiş) ya da "Düzelt ve öğret". Düzelt penceresine girmeye gerek yok; oradaki satır da duruyor.
+- **Özet sayfası:** her madde tek satır (kontrol/geri alındı çipleriyle); kanıtlar varsayılan gizli, maddeye tıklayınca açılır; bölüm başlığında "Kanıtları göster/gizle"; tepede tek satır istatistik; konuşma payı katlanır; kartlar sadeleşti.
+- **Kenar çubuğundan silme:** sağ tık satırın her yerinde "Toplantıyı sil…" (artık iş sürerken de gri değil); seçili toplantıda ⌫ ve ⌘⌫; iş sürüyorsa neden silinmediği yazılır.
+- **Kelime öğrenme güvenliği (kritik):** 1.2.53'ün bulanık eşlemesi gerçek transkriptlerde başka kelimeleri de değiştiriyordu ("Aynen" → "Ayşen"). Artık otomatik düzeltme yalnız birebir yazımda; yakın yazımlar yalnız Kontrol'e öneri olarak gelir, onaylanınca düzelir. "Unut" elle düzenlenmiş bölümü bozmaz; aynı kelimeyi iki kez öğretmek metni büyütmez; "Bu doğru" bütün toplantılar için geçerli; öğretilen kelime sözlük terimiyse de çalışır.
+- Görev sahibi kanıt kapısı aksanları korur ("Şen" ≠ "sen"); disk dolunca deneme hakkı geri gitmez (48 saat sonra normal hata); devam eden yüklemede kalan süre bu koşuya göre; disk geri sayımı doğru (1,2 GB → ≈39 dk) ve uyarı 250 MB'de bir yenilenir; geçici birleştirme dosyasına 1 saat tolerans.
+
+Kıyas 7/7 (bir koşuda `mic_owner` vade metni "cuma günü"/"cuma gününe kadar" farkıyla 4/5, tekrarında 5/5 — model varyansı), replay 14/0/2, Python 781, Swift 200.
+
 <a id="v1255"></a>
 ### Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural
 
@@ -119,8 +134,8 @@ Tur 16 ölçek denetimi (2 saat / 1200 bölüm, ölçüldü: 4 P0, 4 P1, 5 P2) �
 Boran'ın isteği: "kelimelerde de düzeltme yapabilmeliyim; sonrasında o kelimeyi öğrenmeli ve yakınsa o şekilde algılamalı; Kontrol'e gelmeyen yanlış kelime algıları var; eğitilebilir olmalı."
 
 - **Düzelt penceresinde "Kelime düzelt":** kelimeyi seçin, doğrusunu yazın, "Düzelt ve öğret". Bu toplantıdaki bütün geçişler düzelir (büyük/küçük harf korunur), kural hemen öğrenilir, doğru kelime yazıya çevirme sözlüğüne (ASR ipucu) eklenir.
-- **Yakın yazımlar:** sonraki toplantılarda yanlış ya da doğru yazıma 1–2 harf uzaklıktaki kelimeler kendiliğinden düzeltilir (Türkçe ek ve kesme işareti korunur: "Trendyoll'a" → "Trendyol'a"; "Trendyola" gibi ekli doğru yazımlara dokunulmaz; yaygın Türkçe kelimeler ve sözlükteki başka terimler korunur).
-- **Kontrol:** "Kelime: X muhtemelen Y" maddeleri (öğretilen kelimelere ve sözlük terimlerine yakın yazımlar) — "Düzelt ve öğret" / "Bu doğru". Yakın yazımların kendiliğinden düzeltilmesi geri alındı: gerçek toplantılarda alakasız Türkçe kelimeleri değiştiriyordu, artık yalnız öneri olarak gelir.
+- **Yakın yazımlar:** (1.2.56'da değişti) kendiliğinden düzeltilmez, Kontrol'e "muhtemelen" önerisi olarak gelir; onaylayınca düzelir ve öğrenilir. Kendiliğinden düzelen yalnız öğretilen yazımın kendisidir (Türkçe ek ve kesme işareti korunur: "Trendyoll'a" → "Trendyol'a"; "Trendyola" gibi ekli doğru yazımlara dokunulmaz).
+- **Kontrol:** "Kelime: X muhtemelen Y" maddeleri (öğretilen kelimelere ve sözlük terimlerine yakın yazımlar) — "Düzelt ve öğret" / "Bu doğru".
 - **Ayarlar → Sesler ve sözlük → Öğrenilen kelimeler:** liste ve "Unut" (metinler geri döner, sözlük satırı kalkar). CLI: `words teach|forget|list`.
 - Eskisi gibi: aynı düzeltme iki toplantıda tekrarlanınca da kural öğrenilir; "Metni kaydet" Gelişmiş altında duruyor.
 
