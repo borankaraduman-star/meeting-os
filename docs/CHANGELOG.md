@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 57 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 58 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.53](#v1253) | 2026-09-11 03:05 | Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin |
 | [v1.2.52](#v1252) | 2026-09-11 01:35 | Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor |
 | [v1.2.51](#v1251) | 2026-09-11 00:50 | Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez |
 | [v1.2.50](#v1250) | 2026-09-10 23:55 | Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı |
@@ -77,6 +78,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1253"></a>
+### Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin
+
+2026-09-11 03:05 · yerel not · GitHub sürüm sayfası yok
+
+Boran'ın isteği: "kelimelerde de düzeltme yapabilmeliyim; sonrasında o kelimeyi öğrenmeli ve yakınsa o şekilde algılamalı; Kontrol'e gelmeyen yanlış kelime algıları var; eğitilebilir olmalı."
+
+- **Düzelt penceresinde "Kelime düzelt":** kelimeyi seçin, doğrusunu yazın, "Düzelt ve öğret". Bu toplantıdaki bütün geçişler düzelir (büyük/küçük harf korunur), kural hemen öğrenilir, doğru kelime yazıya çevirme sözlüğüne (ASR ipucu) eklenir.
+- **Yakın yazımlar:** sonraki toplantılarda yanlış ya da doğru yazıma 1–2 harf uzaklıktaki kelimeler kendiliğinden düzeltilir (Türkçe ek ve kesme işareti korunur: "Trendyoll'a" → "Trendyol'a"; "Trendyola" gibi ekli doğru yazımlara dokunulmaz; yaygın Türkçe kelimeler ve sözlükteki başka terimler korunur).
+- **Kontrol:** "Kelime: X muhtemelen Y" maddeleri (öğretilen kelimelere ve sözlük terimlerine yakın yazımlar) — "Düzelt ve öğret" / "Bu doğru".
+- **Ayarlar → Sesler ve sözlük → Öğrenilen kelimeler:** liste ve "Unut" (metinler geri döner, sözlük satırı kalkar). CLI: `words teach|forget|list`.
+- Eskisi gibi: aynı düzeltme iki toplantıda tekrarlanınca da kural öğrenilir; "Metni kaydet" Gelişmiş altında duruyor.
 
 <a id="v1252"></a>
 ### Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor
