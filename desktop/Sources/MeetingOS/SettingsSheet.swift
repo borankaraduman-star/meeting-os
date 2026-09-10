@@ -81,7 +81,7 @@ struct SettingsSheet:View {
                             SmallMetric(value:String(format:"$%.2f",month["usd"] as? Double ?? 0),label:"Bu ay · \(month["meetings"] as? Int ?? 0) toplantı, \(Int(month["minutes"] as? Double ?? 0)) dk",icon:"cloud")
                             SmallMetric(value:String(format:"$%.2f",all["usd"] as? Double ?? 0),label:"Toplam · \(all["meetings"] as? Int ?? 0) toplantı, \(Int(all["minutes"] as? Double ?? 0)) dk",icon:"sum")
                         }
-                        SmallMetric(value:String(format:"$%.2f",cost["analysis_cost"] as? Double ?? 0),label:"Analiz · \(cost["analysis_calls"] as? Int ?? 0) çağrı"+((cost["analysis_estimated"] as? Bool)==true ? " (tahmini)" : ""),icon:"text.badge.checkmark").accessibilityIdentifier("analysisCost")
+                        SmallMetric(value:(cost["analysis_cost_known"] as? Bool)==false || cost["analysis_cost"] == nil ? "—" : String(format:"$%.2f",cost["analysis_cost"] as? Double ?? 0),label:"Analiz · \(cost["analysis_calls"] as? Int ?? 0) çağrı"+((cost["analysis_estimated"] as? Bool)==true ? " (tahmini)" : ""),icon:"text.badge.checkmark").accessibilityIdentifier("analysisCost")
                         Text("OpenRouter’ın bildirdiği transkript ücretleri (≈ $0.10/saat MAI-Transcribe 2) ve özet/görev analizi çağrıları"+((cost["analysis_estimated"] as? Bool)==true ? " (analiz tutarı model fiyatından tahmin edilir)" : "")+". Yankı olarak atlanan parçalar ücretlendirilmez.").font(.caption2).foregroundStyle(.secondary)
                     }
                 }

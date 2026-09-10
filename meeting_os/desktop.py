@@ -586,6 +586,8 @@ def dispatch(request, db=None):
                     # Whole-database analysis totals, including meetings that were analysed but never transcribed in the cloud.
                     'analysis_cost':round(sum(float(u['cost'] or 0) for u in analysis),4),'analysis_calls':len(analysis),
                     'analysis_estimated':any(u['estimated'] for u in analysis),
+                    # Analyses that ran before usage was recorded (pre-1.2.43) have no rows: the total is unknown, not $0.
+                    'analysis_cost_known':bool(analysis) or not store.db.execute('SELECT 1 FROM analyses LIMIT 1').fetchone(),
                     'recent':[{'meeting':r[0],'title':r[1],'usd':round(float(r[3] or 0),4),'minutes':round(float(r[4] or 0)/60,1),
                                'analysis_cost':round(slot(r[0])['cost'],4),'analysis_calls':slot(r[0])['calls'],'analysis_estimated':slot(r[0])['estimated']} for r in rows[:5]]}
         if action=='meeting_context':

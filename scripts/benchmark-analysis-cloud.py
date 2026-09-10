@@ -123,7 +123,7 @@ class Recorder:
     def __init__(self):self.reset()
     def reset(self):self.raw_quotes=self.exact=self.repaired=self.unusable=0;self.raw_actions=self.raw_owners=self.raw_dues=0;self.kept_owners=self.kept_dues=0;self.batches=0
     def wrap(self,original):
-        def wrapper(record,rows):
+        def wrapper(record,rows,*args,**kwargs):   # validate_record grew keyword arguments (mic_owner); pass everything through
             self.batches+=1;by_id={r['id']:r['text'] for r in rows}
             for key in CATEGORIES:
                 for item in (record.get(key) or []):
@@ -141,7 +141,7 @@ class Recorder:
                         elif quote in source:self.exact+=1
                         elif locate_quote(quote,source) is not None:self.repaired+=1
                         else:self.unusable+=1
-            verified=original(record,rows)
+            verified=original(record,rows,*args,**kwargs)
             # counted here, not on the final record: de-duplication also removes actions, and that is not an abstention
             self.kept_owners+=sum(1 for a in verified['actions'] if a.get('owner'))
             self.kept_dues+=sum(1 for a in verified['actions'] if a.get('due_text'))

@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 51 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 52 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.47](#v1247) | 2026-09-10 21:40 | Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst |
 | [v1.2.46](#v1246) | 2026-09-10 19:40 | Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir |
 | [v1.2.45](#v1245) | 2026-09-10 18:40 | Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz |
 | [v1.2.44](#v1244) | 2026-09-10 17:15 | Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır |
@@ -71,6 +72,32 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1247"></a>
+### Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst
+
+2026-09-10 21:40 · yerel not · GitHub sürüm sayfası yok
+
+Tur 13 denetimi (Hafıza, gün sonu özeti, brifing, karne — gerçek veriyle: 3 P0, 8 P1, 9 P2) → uygulandı.
+
+**Görev sahipliği (P0)**
+- Bulut yolunda sahip ataması mikrofon etiketini hiç okumuyordu: kendi verdiğiniz sözler asla "Bana ait" olmuyor, gün sonu özeti "sana düşen görev yok" diyordu. Artık mikrofon satırındaki adınız sahiptir (ad yoksa Ayarlar'daki ad); model de mikrofon kişisini görür.
+- Brifing adları alt-dize ile eşliyordu (Ali → Salih, Can → Cansu): tam ad/kelime eşleşmesi.
+- Ad değişince (Ayarlar'da ya da konuşmacı yeniden adlandırınca) görev sahipleri de taşınır; kendi göreviniz "Beklediklerim"e düşmez.
+
+**Hafıza ve raporlar (P1)**
+- Karne: analiz edilmemiş toplantı "analiz yok" der (sıfır değil); "N toplantı analiz edilmedi" satırı; analiz ücreti satırı; boş aralıkta sakin boş durum.
+- Geri alınan kararlar Kararlar'da "geri alındı" olarak görünür, özet/brifing/paylaşım/karnede canlı sayılmaz.
+- Bayat analiz Kararlar/Sorular/Beklediklerim'de turuncu "Kaynak değişti" rozetiyle; başlıkta "N toplantının analizi bayat".
+- "İsimleri maskele" sizin adınızı da maskeler; gün sonu görev alıntıları da maskeli.
+- Vade önerisi toplantının kendi gününe göre (analiz saatinin UTC gününe değil).
+- Yeniden analiz eski görevi açık bırakmıyor (yenilendi olarak emekli; sayımlarda yok).
+- "Senden beklenen cevaplar" → "Cevapsız sorular" (dürüst); "Muhtemelen cevaplandı" bir ipucu gibi görünür.
+- Eski analizlerin bilinmeyen maliyeti "$0.00" yerine "—".
+
+**P2:** arama eşitlik kırma (daha çok isabet, kısa bölüm önce), konuşmacı süzgeci aksan katlaması, karne konuşanlarda mikrofon sahibi, silinmiş toplantının örneği "toplantı silindi", Kontrol ve karne aynı 7 takvim günü.
+
+Kıyas seti 6/6, replay 14/0/2. Kıyas betiğinin sarmalayıcısı yeni argümanı geçirmiyordu; düzeltildi.
 
 <a id="v1246"></a>
 ### Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir

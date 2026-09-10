@@ -25,7 +25,8 @@ extension Model {
         let result=try await request(["action":"intelligence","meeting":mid])
         guard mid==(selected ?? "") else { return }
         analysis=result["analysis"] as? [String:Any]
-        actions=(result["tasks"] as? [[String:Any]] ?? []).map(ActionItem.init)
+        // A task retired by a newer analysis of the same meeting (state "superseded") is history, not a to-do.
+        actions=(result["tasks"] as? [[String:Any]] ?? []).map(ActionItem.init).filter { $0.state != "superseded" }
         drafts=(result["drafts"] as? [[String:Any]] ?? []).map(DraftItem.init)
         dueSuggestions=Dictionary(uniqueKeysWithValues:(result["due_suggestions"] as? [[String:Any]] ?? []).compactMap { d in (d["task"] as? String).flatMap { t in (d["suggested"] as? String).map { (t,$0) } } })
     }
