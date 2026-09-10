@@ -592,6 +592,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published private(set) var shares:[TalkShare]=[]
     @Published var dueSuggestions:[String:String]=[:]
     @Published var questions:[QuestionGroup]=[]; @Published var scorePeriod:[String:Any]?; @Published var scoreMeetings:[ScoreMeeting]=[]
+    /// How many meetings behind each cross-meeting list have been edited since their analysis ran. Set once per
+    /// load next to the list itself — never on a timer — so the header sentence costs nothing to keep honest.
+    @Published var decisionStaleMeetings=0; @Published var questionStaleMeetings=0; @Published var waitingStaleMeetings=0
     /// Poll fingerprints: rows and intelligence are re-fetched only when the Python side reports a change.
     var segmentsHash=""; var lastSegmentsMeeting=""; var intelHash=""
     /// Görünüm: "system" | "light" | "dark", and the accent preset key.
