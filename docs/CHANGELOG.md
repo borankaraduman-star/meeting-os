@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 67 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 68 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.63](#v1263) | 2026-09-10 21:45 | Meeting OS 1.2.63 — ekip klasörü ortak bilgi tabanı: profiller ve kelimeler herkeste birikir |
 | [v1.2.62](#v1262) | 2026-09-10 21:34 | Meeting OS 1.2.62 — ekran paylaşırken göze batmaz |
 | [v1.2.61](#v1261) | 2026-09-10 21:19 | Meeting OS 1.2.61 — konuşma payı yine gözünüzün önünde |
 | [v1.2.60](#v1260) | 2026-09-10 21:16 | Meeting OS 1.2.60 — ekran kaydı izni neden isteniyor, kartta yazıyor |
@@ -87,6 +88,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1263"></a>
+### Meeting OS 1.2.63 — ekip klasörü ortak bilgi tabanı: profiller ve kelimeler herkeste birikir
+
+2026-09-10 21:45 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "3–5 kişi kullanınca isim ve kelime düzeltmeleri herkeste birikmeli; kimse cold start yaşamamalı; kullananlardan beslenen bir platform."
+- **Ortak bilgi tabanı = ekip klasörü** (Ayarlar → Sistem → Ekip klasörü; yoksa iCloud Drive/MeetingOS-Shared): `team-words.jsonl` (öğretilen kelimeler) ve `profiles/<Mac>.jsonl` (kişi adı + ses vektörü). Ses kaydı, transkript, toplantı adı hiç yazılmaz.
+- **Herkes yazar, herkes alır:** her adlandırma/kelime öğretme sonrası hemen, açılışta ve saatte bir eşitleme. İlk açılışta Mac'teki bütün mevcut profiller ve kelimeler geriye dönük yüklenir; yeni kurulan Mac ilk toplantısında tanıdıkları tanır.
+- **Kurallar:** çakışmada yerel düzeltme kazanır, aksi hâlde en yeni; ekipten gelen bir kelimeyi "Kapat", bir profili kişi kartından silip engelleyebilirsiniz; reddettiğiniz kişi ekipten geri gelmez. Ekip kelimeleri de yalnız birebir yazımda otomatik uygulanır.
+- Ayarlar → Sesler ve sözlük: "Öğretilen kelimeleri ekiple paylaş" ve "Ses profillerimi ekiple paylaş" (ikisi de açık); "ekipten N profil, M kelime" sayacı; öğrenilen kelimeler listesinde kaynak Mac rozeti.
+- Nabız/özet: her Mac'in katkısı (`team_profiles/team_words/shared_*`).
+- EKIP.md "Ekip bilgisi" bölümü: neyin çıktığı, nasıl kapatıldığı.
 
 <a id="v1262"></a>
 ### Meeting OS 1.2.62 — ekran paylaşırken göze batmaz
