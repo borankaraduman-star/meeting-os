@@ -1,0 +1,181 @@
+{
+  "title": "Kurgu test — Uzun haftalık, iki parçaya bölünen konular",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip, ürün veya toplantı değildir. Aynı konu bilerek toplantının başında ve sonunda iki kez geçer; bir karar toplantının ikinci yarısında geri alınır.",
+  "segments": [
+    {
+      "speaker": "Boran",
+      "text": "Herkese günaydın. Bugünkü gündem şöyle: önce geçen sprint retro maddeleri, sonra arama tarafındaki gecikme, ardından onboarding funnel ve en sonda da release treni. Yani çok maddemiz var, ııı, o yüzden her başlıkta beş dakikayı geçmeyelim lütfen. Retro'dan çıkan en büyük şikâyet, işte, sprint ortasında scope'un değişmesiydi."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Arama servisinde durum şu: p95 gecikme geçen hafta bir virgül sekiz saniyeydi, bu hafta iki virgül altı saniyeye çıktı. Sebebi büyük ihtimalle cache invalidation tarafındaki bug; her yazma işleminde bütün indeks segmentini boşaltıyoruz. Yani aslında sorun trafik artışı değil, bizim kendi kodumuz."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Ben arama indeksini yeniden yazacağım, sprint sonuna kadar bitiririm. Cache invalidation'ı segment bazlı yapacağım, böylece tam boşaltma olmayacak. Bunu tek başıma alıyorum, kimseyi beklemeye gerek yok."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Mobil tarafta onboarding drop-off yüzde otuz sekiz. Yani kullanıcıların neredeyse dörtte biri ikinci ekranda düşüyor. Funnel'da en kötü adım telefon doğrulama ekranı; orada bekleme süresi bazen on iki saniyeyi buluyor, kullanıcı da haliyle uygulamayı kapatıyor."
+    },
+    {
+      "speaker": "Selin",
+      "text": "Tasarım tarafında yeni onboarding akışını çalıştım. Üç ekranı ikiye indirdik, ilerleme göstergesi ekledik. Ben yeni onboarding akışının figma dosyalarını perşembeye kadar hazırlayacağım, sonra hep birlikte üstünden geçeriz."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Şunu netleştirelim: onboarding'e e-posta doğrulama adımını bu sprint eklemeye karar verdik. Yani telefon doğrulamanın yanına e-posta doğrulama da gelecek. Bu bir karar, öneri değil, herkes not alsın lütfen."
+    },
+    {
+      "speaker": "Can",
+      "text": "Data tarafında churn oranı bu ay yüzde on iki. Geçen aya göre iki puan artmış. Cohort analizine bakmadan sebebini söylemek zor; olabilir ki fiyat değişikliğiyle ilgili, olabilir ki onboarding'le. Elimde kesin bir veri yok şu an, tahmin yürütmek istemiyorum."
+    },
+    {
+      "speaker": "Murat",
+      "text": "QA tarafında regression suite artık kırk dakika sürüyor. Ayrıca beş tane flaky test var, özellikle ödeme akışında; bunlar bazen kırmızı bazen yeşil dönüyor ve ekip artık sonuçlara güvenmiyor. Bu güven kaybı bence en büyük risk."
+    },
+    {
+      "speaker": "Can",
+      "text": "Cohort analizini kim çıkaracak peki? Ben bu hafta müsait değilim, dashboard işi var. Yani bunu birinin alması lazım ama ben söz veremiyorum."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Bir karar daha: staging ortamını canary'ye çeviriyoruz. Yeni sürümler önce yüzde beş trafiğe gidecek, sorun yoksa yüzde yüze çıkacağız. Bu kararı bugün alıyoruz ve geri dönüşü yok."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Release treni tarafında App Store review süresi ortalama yirmi dört saat, bazen kırk sekiz saate çıkıyor. Yani perşembe akşamı gönderirsek pazartesi yayında oluruz. Bunu planlarken hesaba katmamız lazım, aksi halde sprint demosunda elimizde build olmaz."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Bir de rate limit konusu var. Geçen hafta iki yüz kadar dört yüz yirmi dokuz hatası aldık. Küçük bir incident yaşadık ama on dakikada toparladık. Şu an limitleri geçici olarak yükselttim, kalıcı çözüm gerekiyor ama bugün konuşmayalım."
+    },
+    {
+      "speaker": "Murat",
+      "text": "Ben regression suite'i paralelleştirmeyi haftaya deneyeceğim. Dört worker'a bölersek kırk dakika on beş dakikaya inebilir. Flaky testleri de aynı hafta ayrı bir listeye çıkarırım ama önce paralelleştirme."
+    },
+    {
+      "speaker": "Selin",
+      "text": "Design system tarafında renk token'larını güncelledik, artık dark mode da tutarlı. Ekipten ricam, yeni ekranlarda hard-coded renk kullanmayın; token'lar hazır ve dokümante edildi."
+    },
+    {
+      "speaker": "Murat",
+      "text": "Test ortamı tarafında cihaz çiftliğinde iki telefon bozuldu, o yüzden düşük bellekli cihazlarda koşamıyoruz şu an. Yani sonuçlar eksik, bunu bilerek okuyun. Yeni cihaz siparişi satın alma tarafında bekliyor, benim elimde değil, sadece bilgi olarak söylüyorum."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Android tarafında parçalanma hâlâ ciddi. Kullanıcıların yüzde on dördü hâlâ minSdk sınırımızın hemen üstünde bir sürümde. Yani minSdk'yı yükseltirsek bu kesimi kaybederiz. Şu an bir şey önermiyorum, sadece rakamı paylaşıyorum ki kararı veriyle alalım."
+    },
+    {
+      "speaker": "Can",
+      "text": "Event şeması tarafında karışıklık var. Aynı olay için üç farklı isim kullanılmış: signup_completed, sign_up_done ve onboarding_finished. Tracking plan güncel değil, o yüzden funnel rakamlarına tam güvenmeyin. Bunu düzeltmek lazım ama bugün kim yapacak konuşmadık."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Log maliyeti bu ay beklenenin üstünde çıktı, neredeyse iki katı. Sebebi debug seviyesinde log'ların prod'da açık kalması. Geçici olarak seviyeyi düşürdüm, fatura normale dönmeli. Kalıcı çözüm için bir sampling stratejisi lazım ama henüz tasarlamadım."
+    },
+    {
+      "speaker": "Selin",
+      "text": "Erişilebilirlik denetiminde on iki kontrast hatası çıktı, çoğu ikincil butonlarda. VoiceOver ile de bazı ekranlarda sıra yanlış okunuyor. Bunları listeledim, backlog'a girdi; öncelik sırasını beraber belirleyelim, tek başıma karar vermek istemiyorum."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Geçen hafta iki müşteriyle görüştüm. İkisi de raporlama ekranının yavaş olduğunu söyledi, biri de export'un çok sık zaman aşımına uğradığını. Bunlar bizim ölçtüğümüz rakamlarla uyuşuyor, yani sürpriz değil. Şimdilik sadece not ediyorum, bir söz vermedim."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Çökme oranı son sürümde binde üçe düştü, önceki sürümde binde yedi buçuktu. Yani belirgin bir iyileşme var. Kalan çökmelerin çoğu tek bir kütüphaneden geliyor, onu güncellemeyi düşünüyoruz ama henüz karar vermedik."
+    },
+    {
+      "speaker": "Can",
+      "text": "Geçen ay başlattığımız A/B testi sonuçsuz kaldı, istatistiksel anlamlılığa ulaşamadık. Örneklem küçüktü. Yani ne kazandık ne kaybettik diyebiliriz; testi uzatmak da bir seçenek ama bu konuda bugün bir sonuca varmadık."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Bütçe tarafında bir güncelleme: bu çeyrek için ek headcount yok. Yani mevcut ekiple devam ediyoruz. Bu bir bilgilendirme, karar değil; kararı üst yönetim geçen ay almış zaten."
+    },
+    {
+      "speaker": "Can",
+      "text": "Dashboard'u Looker'dan taşımayı düşünüyoruz ama bu daha araştırma aşamasında. Hiçbir şeye karar vermedik, sadece opsiyonlara bakıyorum. Belki iki hafta sonra bir öneri getiririm."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Push notification'ları Ali yapsa mı? Ali izinde bu hafta. Yani şu an kimse üstlenmedi, ben de alamam çünkü onboarding işi var. Bunu Ali dönünce konuşalım."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Veritabanı migration planı için bir downtime penceresi lazım. Gece iki ile dört arası düşünüyorum ama henüz kesinleşmedi, önce trafik verisine bakacağız. Karar vermedik yani."
+    },
+    {
+      "speaker": "Murat",
+      "text": "Test datası tarafında fixture'ları yeniledik. Artık her koşuda temiz veritabanı ile başlıyoruz, bu da flaky testlerin bir kısmını çözecek gibi duruyor ama emin değilim."
+    },
+    {
+      "speaker": "Selin",
+      "text": "Bu hafta beş kullanıcı görüşmesi yaptım. Ortak şikâyet, uygulamanın ilk açılışta ne işe yaradığını anlatmaması. Yani onboarding'in ilk ekranı değer önerisini anlatmalı, sadece izin istememeli."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Arama indeksi yeniden yazımı konusuna dönersek, dediğim gibi sprint sonuna kadar ben bitireceğim. Segment bazlı invalidation tasarımını da bugün yazıp paylaşırım. Yani o iş bende, değişen bir şey yok."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Şey, toplantının başında aldığımız e-posta doğrulama kararını geri alıyoruz. Deniz'in verdiği drop-off rakamlarından sonra düşündüm, bu sprint yapmayacağız, o kararı iptal ettik. Telefon doğrulamayı düzeltmek daha öncelikli."
+    },
+    {
+      "speaker": "Can",
+      "text": "SLA'yı kırk sekiz saatten yirmi dört saate indirmeli miyiz? Bunu bugün karara bağlamadık, açık bir soru olarak kalsın. Destek ekibinin görüşünü almadan karar vermek doğru olmaz."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Kapanış: önceki çeyrek raporunu geçen hafta tamamladık, o iş bitti, kimsenin yapacağı bir şey kalmadı. Haftaya aynı saatte görüşürüz. Teşekkürler herkese."
+    }
+  ],
+  "expected_actions": 3,
+  "forbidden_action_terms": [
+    "push",
+    "cohort",
+    "e-posta doğrulama",
+    "çeyrek rapor",
+    "headcount",
+    "looker"
+  ],
+  "expected_owners": [
+    "Ece",
+    "Selin",
+    "Murat"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "arama",
+        "indeks"
+      ],
+      "owner": "Ece",
+      "due_text": "sprint sonuna kadar"
+    },
+    {
+      "title_terms": [
+        "figma"
+      ],
+      "owner": "Selin",
+      "due_text": "perşembeye kadar"
+    },
+    {
+      "title_terms": [
+        "regression"
+      ],
+      "owner": "Murat",
+      "due_text": "haftaya"
+    }
+  ],
+  "required_decision_terms": [
+    [
+      "canary"
+    ],
+    [
+      "e-posta doğrulama",
+      "iptal"
+    ]
+  ]
+}
