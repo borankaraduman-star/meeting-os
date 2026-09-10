@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from meeting_os import intelligence
 from meeting_os.intelligence import analyze_rows,locate_quote,CATEGORIES
-from meeting_os.evaluation import check_fixture_analysis
+from meeting_os.evaluation import check_fixture_analysis,fixture_rows
 from meeting_os.metrics import normalize
 from meeting_os.openrouter import OpenRouterClient,validate_analysis_model,ANALYSIS_DEFAULT_MODEL
 
@@ -198,7 +198,7 @@ def main(argv=None):
     try:
         for path in paths:
             case=json.loads(path.read_text())
-            rows=[{'id':i+1,'start':i*10.,'end':i*10.+9,'source':'system','speaker':'S'+str(i),'speaker_name':s['speaker'],'text':s['text'],'flags':[]} for i,s in enumerate(case['segments'])]
+            rows=fixture_rows(case)   # a fixture segment marked "source":"mic" becomes an owner row with no speaker_name
             recorder.reset();before=dict(spend);started=time.monotonic()
             try:
                 result=analyze_rows(rows,llm,glossary=case.get('glossary'),owner=case.get('owner'))   # a fixture may carry a (possibly poisoned) glossary, like a team folder would

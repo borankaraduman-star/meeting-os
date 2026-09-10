@@ -1,0 +1,77 @@
+{
+  "title": "Kurgu test — Mikrofon sahibi ve hoparlör yankısı",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip, ürün veya toplantı değildir. Bu vakada toplantıyı kaydeden kişi kendi mikrofonundan konuşur: mikrofon satırlarının speaker_name'i yoktur, etiket 'Ben' yer tutucusudur ve kim olduğunu yalnızca `owner` söyler. Bir mikrofon satırı da hoparlörden gelen bir meslektaş cümlesinin yankısıdır ve possible_echo ile işaretlidir.",
+  "owner": "Elif Kaya",
+  "segments": [
+    {
+      "speaker": "Nazlı Erdoğan",
+      "text": "Günaydın. Bugün üç başlığımız var: kapasite raporu, API dokümanı ve fiyatlandırma tablosu. Her başlıkta beş dakikayı geçmeyelim lütfen."
+    },
+    {
+      "source": "mic",
+      "speaker": "Ben",
+      "text": "Kapasite tarafında rakamlar hazır. Ben yarın kapasite raporunu göndereceğim, böylece herkes aynı sayılara baksın."
+    },
+    {
+      "speaker": "Tolga Bayraktar",
+      "text": "Ben API dokümanını salı günü güncelleyeceğim. Eksik kalan iki uç noktayı da ekleyeceğim, kimseyi beklemeye gerek yok."
+    },
+    {
+      "source": "mic",
+      "speaker": "Ben",
+      "flags": ["possible_echo"],
+      "text": "Ben API dokümanını salı günü güncelleyeceğim."
+    },
+    {
+      "speaker": "Nazlı Erdoğan",
+      "text": "Şunu karara bağladık: mobil sürümü bundan sonra iki haftada bir yayınlayacağız. Bu bir karar, öneri değil; herkes not alsın."
+    },
+    {
+      "speaker": "Kerem Doğan",
+      "text": "Belki birisi rakip analizi çıkarsa iyi olur. Ama bu sadece bir öneri; kimse üstlenmedi, bu hafta kimsenin vakti yok."
+    },
+    {
+      "source": "mic",
+      "speaker": "Ben",
+      "text": "Yeni fiyatlandırma tablosunu cuma gününe kadar bitiririm, sonra hep birlikte üstünden geçeriz."
+    },
+    {
+      "speaker": "Kerem Doğan",
+      "text": "Sunucu taşıma işini geçen hafta tamamladık, o iş bitti; kimsenin yapacağı bir şey kalmadı."
+    },
+    {
+      "speaker": "Nazlı Erdoğan",
+      "text": "Kapanış: başka açık madde yok. Haftaya aynı saatte görüşürüz, teşekkürler herkese."
+    }
+  ],
+  "expected_actions": 3,
+  "forbidden_action_terms": [
+    "rakip analizi",
+    "sunucu taşıma"
+  ],
+  "expected_owners": [
+    "Elif Kaya",
+    "Elif Kaya",
+    "Tolga Bayraktar"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": ["kapasite", "rapor"],
+      "owner": "Elif Kaya",
+      "due_text": "yarın"
+    },
+    {
+      "title_terms": ["doküman"],
+      "owner": "Tolga Bayraktar",
+      "due_text": "salı günü"
+    },
+    {
+      "title_terms": ["fiyatlandırma"],
+      "owner": "Elif Kaya",
+      "due_text": "cuma gününe kadar"
+    }
+  ],
+  "required_decision_terms": [
+    ["iki haftada bir"]
+  ]
+}
