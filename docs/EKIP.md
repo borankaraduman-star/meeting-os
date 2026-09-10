@@ -43,19 +43,50 @@ kurulan Mac'ler aynı ekiptir.**
 - **Sunucu kapalıyken hiçbir şey kaybolmaz.** Uygulama her şeyi önce yerel aynaya
   (`~/Library/Application Support/MeetingOS/team/`) yazar ve oradan okur; bağlantı gelince eşitlenir. Kurulum
   durumu kartındaki **Ekip bilgi tabanı** satırı son eşitlemeyi ya da “bulut şu an erişilemiyor” bilgisini söyler.
-- **Farklı bir OpenRouter anahtarıyla kurulan bir Mac** aynı ekibe tek satırla katılır. Ekipteki bir Mac'te
-  `.venv/bin/python -m meeting_os team invite` komutu bu satırı basar; yeni Mac'te çalıştırılır:
 
-  ```sh
-  git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git ~/meeting-os && \
-    MEETING_OS_TEAM=<belirteç> sh ~/meeting-os/scripts/install.sh
-  ```
+#### Ekibe katılmak: bir bağlantı, bir tıklama (1.2.68+)
 
-  Belirteç bir paroladır: **depoya, bir kanala, bir bilete yazılmaz**; kurulu bir Mac'te
-  `meeting_os team join <belirteç>` ile sonradan da girilebilir. Durum: `meeting_os team status`, elle eşitleme:
-  `meeting_os team sync`.
-- **Ekip klasörü hâlâ çalışıyor.** Ayarlar → Sesler ve sözlük → **Ekip klasörü**'nde bir klasör seçiliyse o kazanır
-  (aynı ağdaki bir NAS'ı yeğleyen ekipler için); bulut yalnız hiçbir klasör seçilmemişken devreye girer.
+**Terminal gerekmez.** Ekipteki herhangi bir Mac davet üretir, davet gönderilir, alan kişi tıklar. Hepsi bu.
+
+**Gönderen (Boran ya da ekipten biri):**
+
+1. Ayarlar (⌘,) → **Sesler ve sözlük → Ekip**.
+2. **Davet bağlantısını kopyala**. Ekip arkadaşınızın kendi OpenRouter anahtarı yoksa önce
+   **“OpenRouter anahtarımı da ekle (ekip arkadaşı anahtar girmez)”** kutusunu işaretleyin — o zaman o kişinin
+   bulut kullanımı **sizin** hesabınızdan ödenir.
+3. Bağlantıyı Slack, WhatsApp ya da e-postayla gönderin. Bağlantıyı kabul etmeyen bir uygulama varsa
+   **Davet dosyasını kaydet…** ile aynı daveti `Meeting OS Daveti.meetingos-invite` dosyası olarak kaydedip
+   dosyayı gönderin.
+
+**Alan kişi:**
+
+- Bağlantıya **tıklar** (`meetingos://join…`): Meeting OS açılır, “Ekibe katıldınız · ekip `a1b2c3` · 3 Mac”
+  penceresi çıkar, ekibin sözlüğü, öğretilen kelimeleri ve ses profilleri arka planda iner.
+- Ya da davet dosyasını **çift tıklar** — aynı sonuç.
+- Ya da bağlantıyı kopyalayıp uygulamanın **açılış ekranındaki** “Davet bağlantısını buraya yapıştırın”
+  alanına yapıştırıp **Katıl** der. Uygulama zaten açıksa: Ayarlar → Sesler ve sözlük → Ekip →
+  **Davet yapıştır…**.
+
+Davette anahtar da varsa o kişi OpenRouter anahtarı adımını **hiç görmez**. **Zaten anahtarı olan bir Mac'te
+davetteki anahtar kullanılmaz:** var olan anahtarın üzerine hiçbir zaman yazılmaz.
+
+> **Davet bir paroladır.** Ekip belirtecini (ve varsa anahtarı) taşır: **depoya, bir kanala, bir bilete
+> yazılmaz** — doğrudan o kişiye gönderilir. Yanlış kişiye gittiyse OpenRouter anahtarını
+> <https://openrouter.ai/keys> adresinden iptal edin; ekip belirteci anahtardan türediği için yeni anahtarla
+> ekip kimliği de yenilenir.
+
+**Gelişmiş (terminal):** aynı işler komut satırından da yapılır —
+`.venv/bin/python -m meeting_os team invite [--with-key]` daveti basar (bağlantı, dosya içeriği ve eski kurulum
+satırı birlikte), `meeting_os team join <bağlantı | dosya yolu | belirteç>` katılır, `meeting_os team status`
+durumu, `meeting_os team sync` elle eşitlemeyi verir. Hiç kurulu olmayan bir Mac'te kurulum satırı hâlâ
+çalışır: `MEETING_OS_TEAM=<belirteç> sh ~/meeting-os/scripts/install.sh`.
+- **Ekip klasörü hâlâ çalışıyor.** Ayarlar → Sesler ve sözlük → **Ekip → Gelişmiş → Ekip klasörü seç…**'de bir
+  klasör seçiliyse o kazanır (aynı ağdaki bir NAS'ı yeğleyen ekipler için); bulut yalnız hiçbir klasör
+  seçilmemişken devreye girer.
+- **Ne paylaştığınızı kart söyler.** Ekip kartının ilk satırı her zaman **etkin hedefi** yazar: “Ekip bulutu ·
+  `a1b2c3` · 3 Mac · son eşitleme 14:20”, “Ekip klasörü · ~/Ekip” ya da “Kapalı”. Sözlük, kelime ve profil
+  anahtarları hedef ne olursa olsun çalışır; yalnız hiçbir hedef yokken kapalıdır (1.2.68'e kadar bulut
+  açıkken de kapalı görünüyorlardı).
 
 ### Ekip bilgisi — ekip klasörüne ne yazılır, nasıl kapatılır
 

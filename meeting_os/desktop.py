@@ -295,6 +295,20 @@ def dispatch(request, db=None):
         E.sweep(base)   # crash reports and the updater's last verdict, watermarked: cheap enough to ride every read
         limit=request.get('limit');limit=limit if type(limit) is int and 0<limit<=200 else 5
         return {'errors':E.entries(base,limit=limit)[::-1],'summary':E.summary(base,limit=limit)}
+    # An invite has to work on a Mac that has never recorded anything, and joining must not depend on a
+    # database that may be the very thing that is broken. Same reason as the error journal above.
+    if request.get('action') in ('team_invite','team_join','team_status'):
+        from . import team_cloud as TC
+        from .reports import load_settings
+        action=request['action'];base=data_folder(db)
+        if action=='team_invite':
+            include=request.get('include_key') is True
+            payload=TC.invite_payload(base,include_key=include)
+            if payload.get('error'): return payload
+            return {'url':TC.invite_url(base,include_key=include),'text':TC.invite_file_text(base,include_key=include),
+                    'team_id_short':TC.team_id_short(payload['team']),'with_key':'key' in payload}
+        if action=='team_join': return TC.accept_invite(base,request.get('invite'))
+        return TC.status(base,load_settings(base))
     with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as store:
         action=request['action']
         if action=='openrouter_models':

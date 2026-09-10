@@ -24,6 +24,8 @@ enum SheetChrome {
         "Görevi düzenle",
         "Taslağı düzenle",
         "Kelimeyi düzelt",
+        "Ekibe katıl",
+        "Ekip daveti",
     ]
     static func cleanSample(name:String)->String {
         let n=name.trimmingCharacters(in:.whitespacesAndNewlines)

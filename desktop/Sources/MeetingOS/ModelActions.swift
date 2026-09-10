@@ -291,8 +291,72 @@ extension Model {
         var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
         let settings=await UNUserNotificationCenter.current().notificationSettings()
         checks.append(SetupStatus.notificationCheck(settings))
-        if let r=try? await request(["action":"setup_status"]) { checks+=SetupStatus.serviceChecks(r,repo:runtime.repo,divergedNotice:update?.divergedNotice ?? "") }
+        if let r=try? await request(["action":"setup_status"]) {
+            checks+=SetupStatus.serviceChecks(r,repo:runtime.repo,divergedNotice:update?.divergedNotice ?? "")
+            // The same answer, read once more as the one line Ayarlar → Ekip opens with — and as the flag that
+            // decides whether the three share switches mean anything at all.
+            teamTarget=TeamInvite.target(r,home:NSHomeDirectory())
+            teamConfigured=teamTarget.kind == .cloud
+        }
         setupChecks=checks
+    }
+
+    // MARK: - Ekip daveti
+    /// Whether this Mac is in a team at all. One tiny bridge call with no database behind it, so the welcome
+    /// screen can ask it on a Mac that has never recorded anything.
+    func loadTeamStatus() async {
+        guard let r=try? await request(["action":"team_status"]) else { return }
+        teamConfigured=r["configured"] as? Bool ?? false
+    }
+    /// The invite, on the pasteboard. With `includeKey` the teammate never meets the OpenRouter key step —
+    /// which also means the link now carries a password that pays Boran's bill, so the confirmation says so.
+    func copyInviteLink(includeKey:Bool) async {
+        do {
+            let r=try await request(["action":"team_invite","include_key":includeKey])
+            if let message=r["error"] as? String { self.error=message; return }
+            let link=r["url"] as? String ?? ""
+            guard !link.isEmpty else { self.error="Davet bağlantısı oluşturulamadı"; return }
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(link,forType:.string)
+            activity=(r["with_key"] as? Bool)==true
+                ? "Davet bağlantısı kopyalandı · OpenRouter anahtarınız da içinde: yalnız güvendiğiniz kişiye gönderin"
+                : "Davet bağlantısı kopyalandı · ekip \(r["team_id_short"] as? String ?? "")"
+        } catch { self.error=error.localizedDescription }
+    }
+    /// The same invite as a file, for the chat apps that swallow a custom scheme. Written where the user says.
+    func saveInviteFile(includeKey:Bool) async {
+        do {
+            let r=try await request(["action":"team_invite","include_key":includeKey])
+            if let message=r["error"] as? String { self.error=message; return }
+            let text=r["text"] as? String ?? ""
+            guard !text.isEmpty else { self.error="Davet dosyası oluşturulamadı"; return }
+            let panel=NSSavePanel(); panel.nameFieldStringValue=TeamInvite.fileName
+            if let type=UTType(TeamInvite.uti) ?? UTType(filenameExtension:TeamInvite.fileExtension) { panel.allowedContentTypes=[type] }
+            guard panel.runModal() == .OK, let url=panel.url else { return }
+            try text.write(to:url,atomically:true,encoding:.utf8)
+            activity="Davet dosyası kaydedildi · "+url.lastPathComponent
+        } catch { self.error=error.localizedDescription }
+    }
+    /// The whole join: a link, the text of an invite file, or a bare token — the bridge decides which. The
+    /// answer becomes the confirmation sheet, and the setup card is refreshed so the team row stops lying.
+    func joinTeam(_ invite:String) async {
+        guard let payload=TeamInvite.payload(invite) else { return }
+        do {
+            let r=try await request(["action":"team_join","invite":payload])
+            teamJoin=TeamInvite.outcome(r)
+            await loadSetupStatus()
+            if teamJoin?.ok==true { await syncTeamKnowledge() }   // the mirror is filled; this is what puts it in the database
+        } catch { teamJoin=TeamJoinOutcome(ok:false,line:error.localizedDescription) }
+    }
+    /// A `meetingos://join?…` click or a `.meetingos-invite` double click, from the AppKit delegate.
+    func handleIncoming(urls:[URL]) {
+        for url in urls {
+            if TeamInvite.isJoinURL(url) {
+                showMainWindow(); Task { await joinTeam(url.absoluteString) }; return
+            }
+            if TeamInvite.isInviteFile(url), let text=try? String(contentsOf:url,encoding:.utf8) {
+                showMainWindow(); Task { await joinTeam(text) }; return
+            }
+        }
     }
 
     /// Send one task to Apple Reminders; asks for reminders access on first use.

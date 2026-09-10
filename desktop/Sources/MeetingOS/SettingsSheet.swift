@@ -57,29 +57,7 @@ struct SettingsSheet:View {
                 Divider()
                 }
                 if group=="sesler" { LearnedWordsSection(model:model); Divider() }
-                if group=="sesler" {
-                Text("Ekip klasörü").font(.headline)
-                HStack(spacing:8) {
-                    Text(model.reportSettings.teamDir.isEmpty ? "Seçilmedi" : model.reportSettings.teamDir.replacingOccurrences(of:NSHomeDirectory(),with:"~"))
-                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button("Seç…") { pickTeamDir() }.accessibilityIdentifier("pickTeamDirButton")
-                    if !model.reportSettings.teamDir.isEmpty {
-                        Button("Kaldır") { model.reportSettings.teamDir=""; Task { await model.saveReportSettings() } }.accessibilityIdentifier("clearTeamDirButton")
-                    }
-                }
-                Toggle("Sözlüğü ekip klasörüyle paylaş (yerel sözlük her zaman öncelikli)",isOn:$model.reportSettings.shareGlossary)
-                    .onChange(of:model.reportSettings.shareGlossary) { _ in Task { await model.saveReportSettings() } }
-                    .disabled(model.reportSettings.teamDir.isEmpty)
-                Toggle("Öğretilen kelimeleri ekiple paylaş (ekip klasörü)",isOn:$model.reportSettings.shareWords)
-                    .onChange(of:model.reportSettings.shareWords) { _ in Task { await model.saveReportSettings() } }
-                    .disabled(model.reportSettings.teamDir.isEmpty).accessibilityIdentifier("shareWordsToggle")
-                Toggle("Ses profillerimi ekiple paylaş (kişi adı + ses vektörü; ses kaydı değil)",isOn:$model.reportSettings.shareProfiles)
-                    .onChange(of:model.reportSettings.shareProfiles) { _ in Task { await model.saveReportSettings() } }
-                    .disabled(model.reportSettings.teamDir.isEmpty).accessibilityIdentifier("shareProfilesToggle")
-                Text("Kapalıyken yalnız bu Mac tanır. Açınca ekip klasörüne yazılır; ekip arkadaşları bu kişileri ilk toplantıda tanır.").font(.caption2).foregroundStyle(.secondary)
-                Text("Ortak bir klasör (paylaşılan disk, Drive, Dropbox) seçin: ekip klasörü ortak bilgi tabanıdır — sözlük, öğretilen kelimeler ve ses profilleri (kişi adı + ses vektörü) ekipçe birikir, teşhis raporları da kişisel klasör yerine oraya yazılır. Ses kaydı, transkript, toplantı adı ve toplantı numarası bu klasöre hiç girmez.").font(.caption2).foregroundStyle(.secondary)
-                }
+                if group=="sesler" { TeamSection(model:model); Divider() }
                 if group=="sistem" {
                 if let cost=model.cost, let month=cost["month"] as? [String:Any], let all=cost["all"] as? [String:Any] {
                     VStack(alignment:.leading,spacing:6) {
@@ -215,12 +193,129 @@ struct SettingsSheet:View {
     }
     /// Folded from the five sections that shipped earlier; a value stored back then must still open a section.
     var group:String { SettingsSections.normalize(section) }
+}
+
+/// Ayarlar → Sesler ve sözlük → **Ekip**. One card, and its first line is the honest answer to the only
+/// question that matters here: where does what I teach this Mac actually go?
+///
+/// Until 1.2.67 this card was called "Ekip klasörü" and showed "Seçilmedi" while the team cloud was quietly
+/// sharing everything — and the three share switches were greyed out because they followed `team_dir`, which
+/// the cloud leaves empty (Codex, 10 Sep 2026, P0 #1). They follow the EFFECTIVE target now: cloud, folder,
+/// or nothing at all.
+///
+/// Inviting is the other half. A teammate cannot be asked to open a terminal, so the invite is a link they
+/// click or a file they double click; the folder picker survives for the one team that keeps its knowledge on
+/// a NAS, folded away under "Gelişmiş".
+struct TeamSection:View {
+    @ObservedObject var model:Model
+    /// Off by default and never remembered: the key pays Boran's OpenRouter bill, so putting it in a link has
+    /// to be a decision taken each time, not a box that stayed ticked from last week.
+    @State private var includeKey=false
+    @State private var pasting=false
+    @State private var advanced=false
+    var body:some View {
+        VStack(alignment:.leading,spacing:8) {
+            Text("Ekip").font(.headline)
+            HStack(alignment:.top,spacing:8) {
+                Circle().fill(model.teamTarget.sharing ? MeetingStyle.accent : Color.secondary).frame(width:8,height:8).padding(.top,5)
+                Text(model.teamTarget.line).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("teamTargetLine")
+                Spacer(minLength:8)
+                Button("Şimdi eşitle") { Task { await model.syncTeamKnowledge(); await model.loadSetupStatus() } }
+                    .controlSize(.small).disabled(!model.teamTarget.sharing).accessibilityIdentifier("syncTeamNowButton")
+            }
+            HStack(spacing:8) {
+                Button("Davet bağlantısını kopyala") { Task { await model.copyInviteLink(includeKey:includeKey) } }.accessibilityIdentifier("copyInviteLinkButton")
+                Button("Davet dosyasını kaydet…") { Task { await model.saveInviteFile(includeKey:includeKey) } }.accessibilityIdentifier("saveInviteFileButton")
+                Button("Davet yapıştır…") { pasting=true }.accessibilityIdentifier("pasteInviteButton")
+            }
+            Toggle("OpenRouter anahtarımı da ekle (ekip arkadaşı anahtar girmez)",isOn:$includeKey)
+                .font(.caption).accessibilityIdentifier("inviteIncludeKeyToggle")
+            Text("Davet bağlantısını Slack ya da WhatsApp’tan gönderin: ekip arkadaşınız tıklayınca Meeting OS açılır ve ekibe katılır — terminal gerekmez. Bağlantıyı almayan bir uygulama için “Davet dosyasını kaydet…” aynı daveti dosya olarak verir. **Davet bir paroladır:** kanala, bilete ya da depoya yazılmaz. Anahtarı da eklerseniz o kişinin bulut kullanımı sizin OpenRouter hesabınızdan ödenir.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            Divider()
+            Toggle("Sözlüğü ekiple paylaş (yerel sözlük her zaman öncelikli)",isOn:$model.reportSettings.shareGlossary)
+                .onChange(of:model.reportSettings.shareGlossary) { _ in Task { await model.saveReportSettings() } }
+                .disabled(!model.teamTarget.sharing).accessibilityIdentifier("shareGlossaryToggle")
+            Toggle("Öğretilen kelimeleri ekiple paylaş",isOn:$model.reportSettings.shareWords)
+                .onChange(of:model.reportSettings.shareWords) { _ in Task { await model.saveReportSettings() } }
+                .disabled(!model.teamTarget.sharing).accessibilityIdentifier("shareWordsToggle")
+            Toggle("Ses profillerimi ekiple paylaş (kişi adı + ses vektörü; ses kaydı değil)",isOn:$model.reportSettings.shareProfiles)
+                .onChange(of:model.reportSettings.shareProfiles) { _ in Task { await model.saveReportSettings() } }
+                .disabled(!model.teamTarget.sharing).accessibilityIdentifier("shareProfilesToggle")
+            Text("Kapalıyken yalnız bu Mac tanır. Açıkken ekiple paylaşılır; ekip arkadaşlarınız bu kişileri ilk toplantıda tanır. Ses kaydı, transkript, toplantı adı ve toplantı numarası hiçbir zaman paylaşılmaz.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            DisclosureGroup("Gelişmiş",isExpanded:$advanced) {
+                VStack(alignment:.leading,spacing:6) {
+                    HStack(spacing:8) {
+                        Text(model.reportSettings.teamDir.isEmpty ? "Ekip klasörü seçilmedi" : model.reportSettings.teamDir.replacingOccurrences(of:NSHomeDirectory(),with:"~"))
+                            .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button("Ekip klasörü seç…") { pickTeamDir() }.controlSize(.small).accessibilityIdentifier("pickTeamDirButton")
+                        if !model.reportSettings.teamDir.isEmpty {
+                            Button("Kaldır") { model.reportSettings.teamDir=""; Task { await model.saveReportSettings(); await model.loadSetupStatus() } }.controlSize(.small).accessibilityIdentifier("clearTeamDirButton")
+                        }
+                    }
+                    Text("Ekibin bilgi tabanını kendi diskinizde tutmak istiyorsanız (NAS, paylaşılan disk, Dropbox) buradan bir klasör seçin: seçili bir klasör buluta her zaman baskındır. Seçmezseniz bir şey yapmanız gerekmez — bulut kendiliğinden çalışır.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                }.padding(.top,4)
+            }.font(.caption)
+        }
+        .sheet(isPresented:$pasting) { InvitePasteSheet(model:model,open:$pasting) }
+        .task { if model.setupChecks.isEmpty { await model.loadSetupStatus() } }
+    }
     /// Read-write folder picker; the backend refuses a path it cannot see, so the field reverts on failure.
-    func pickTeamDir() {
+    private func pickTeamDir() {
         let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.canChooseFiles=false;panel.allowsMultipleSelection=false;panel.prompt="Seç"
         guard panel.runModal() == .OK, let url=panel.url else { return }
         model.reportSettings.teamDir=url.path
-        Task { await model.saveReportSettings() }
+        Task { await model.saveReportSettings(); await model.loadSetupStatus() }
+    }
+}
+
+/// "Davet yapıştır…": the way in for a teammate whose chat app turned the link into plain text. Ayarlar closes
+/// behind it so the join confirmation — a sheet on the main window — has the screen to itself.
+struct InvitePasteSheet:View {
+    @ObservedObject var model:Model
+    @Binding var open:Bool
+    @State private var text=""
+    @FocusState private var focused:Bool
+    var body:some View {
+        VStack(alignment:.leading,spacing:12) {
+            Text("Size gönderilen davet bağlantısını yapıştırın. Davet dosyası aldıysanız dosyanın içeriğini de yapıştırabilirsiniz — ya da dosyayı doğrudan çift tıklayın.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            TextField("meetingos://join?team=…",text:$text).textFieldStyle(.roundedBorder).focused($focused)
+                .accessibilityIdentifier("invitePasteField").onSubmit { join() }
+            HStack {
+                Spacer()
+                Button("Katıl") { join() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    .disabled(TeamInvite.payload(text)==nil).accessibilityIdentifier("invitePasteJoinButton")
+            }
+        }.padding(20).sheetChrome(title:"Ekibe katıl") { open=false }.frame(width:520)
+        .onAppear { focused=true }
+    }
+    private func join() {
+        guard let payload=TeamInvite.payload(text) else { return }
+        open=false; model.showSettings=false
+        // The settings sheet has to be gone before the confirmation sheet is asked for: two sheets on the same
+        // presenter at the same moment means the second one silently never appears.
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.35) { Task { await model.joinTeam(payload) } }
+    }
+}
+
+/// What a join came back with. The same sheet for both answers: a team joined, or the sentence saying why not.
+struct TeamJoinSheet:View {
+    @ObservedObject var model:Model
+    let outcome:TeamJoinOutcome
+    var body:some View {
+        VStack(alignment:.leading,spacing:12) {
+            Label(outcome.line,systemImage:outcome.ok ? "checkmark.circle" : "exclamationmark.triangle")
+                .font(.callout).foregroundStyle(outcome.ok ? Color.primary : Color.red)
+                .fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("teamJoinOutcome")
+            Text(outcome.ok ? "Ekibin sözlüğü, öğretilen kelimeleri ve ses profilleri arka planda bu Mac’e iniyor. Bir sonraki toplantınızda ekip arkadaşlarınızın adlandırdığı kişiler kendiliğinden tanınır." : "Davet bağlantısını gönderen kişiden yeniden isteyin; bağlantının tamamı kopyalanmış olmalı.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            HStack { Spacer(); Button("Tamam") { model.teamJoin=nil }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction) }
+        }.padding(20).sheetChrome(title:"Ekip daveti") { model.teamJoin=nil }.frame(width:480)
     }
 }
 
