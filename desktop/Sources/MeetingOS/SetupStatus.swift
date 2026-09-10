@@ -77,6 +77,16 @@ enum SetupStatus {
     /// Bridge answer → checks for the pieces the Python side owns. `repo` names the checkout in the signing fix
     /// (empty → the relative path); `divergedNotice` is `UpdateInfo.divergedNotice`, passed in so the setup card
     /// and the sidebar never disagree about a branch that cannot be updated.
+    /// The shared knowledge base (profiles, words, glossary) needs a folder every teammate can reach. A Mac with no
+    /// team folder and no iCloud Drive silently shares nothing — say so here instead.
+    static func teamRootCheck(_ r:[String:Any])->SetupCheck {
+        let kind=r["team_root_kind"] as? String ?? "none"; let root=r["team_root"] as? String ?? ""
+        switch kind {
+        case "team": return SetupCheck(id:"team",title:"Ekip klasörü",state:.ok,hint:"ortak bilgi tabanı: "+root)
+        case "icloud": return SetupCheck(id:"team",title:"Ekip klasörü",state:.optional,hint:"seçilmedi · iCloud Drive kullanılıyor (yalnız kendi Mac’leriniz arasında; ekip için Ayarlar → Sistem → Ekip klasörü)")
+        default: return SetupCheck(id:"team",title:"Ekip klasörü",state:.missing,hint:"yok · iCloud Drive kapalı ve ekip klasörü seçilmedi: profiller, kelimeler ve raporlar paylaşılmıyor · Ayarlar → Sistem → Ekip klasörü")
+        }
+    }
     static func serviceChecks(_ r:[String:Any],repo:String="",divergedNotice:String="")->[SetupCheck] {
         let key=r["api_key"] as? Bool ?? false
         let keychain=r["api_key_keychain"] as? Bool ?? false
@@ -97,6 +107,7 @@ enum SetupStatus {
             SetupCheck(id:"key",title:"OpenRouter anahtarı",state:keyState,hint:keyHint),
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
             SetupCheck(id:"signing",title:"İmzalama izni",state:signing ? .ok : .missing,hint:signing ? "verildi" : signingFix(repo:repo)),
+            teamRootCheck(r),
             SetupCheck(id:"update",title:"Sürüm",
                        state:diverged ? .missing : (!updateError.isEmpty ? .optional : (behind==0 ? .ok : .missing)),
                        hint:diverged ? divergedLine : (!updateError.isEmpty ? "kontrol edilemedi · "+updateError : (behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"))),

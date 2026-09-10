@@ -9,13 +9,13 @@ final class SetupStatusTests: XCTestCase {
     }
     func testServiceChecksReadBridgeAnswer() {
         let c=SetupStatus.serviceChecks(["api_key":true,"glossary_terms":300,"glossary_shared":true,"update_behind":0,"signing_partition":true])
-        XCTAssertEqual(c.map(\.id),["key","glossary","signing","update","reports"])
-        XCTAssertEqual(c.map(\.state),[.ok,.ok,.ok,.ok,.optional]); XCTAssertTrue(c[1].hint.contains("300 terim"))
+        XCTAssertEqual(c.map(\.id),["key","glossary","signing","team","update","reports"])
+        XCTAssertEqual(c.map(\.state),[.ok,.ok,.ok,.missing,.ok,.optional])   // no team root in this answer → missing; XCTAssertTrue(c[1].hint.contains("300 terim"))
         let d=SetupStatus.serviceChecks([:])
-        XCTAssertEqual(d.map(\.state),[.missing,.optional,.missing,.ok,.optional])
+        XCTAssertEqual(d.map(\.state),[.missing,.optional,.missing,.missing,.ok,.optional])
         XCTAssertEqual(SetupStatus.reportsCheck(["reports_on":true,"reports_writable":true,"reports_written":3]).hint,"Açık · 3 rapor iCloud Drive’da")
         XCTAssertEqual(SetupStatus.reportsCheck(["reports_on":true,"reports_writable":false,"reports_dir":"/x"]).state,.missing)
-        XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":3])[3].hint,"3 değişiklik geride · kenar çubuğundan güncelleyin")
+        XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":3])[4].hint,"3 değişiklik geride · kenar çubuğundan güncelleyin")
     }
     /// P1-4: the signing partition is the step that silently stops every update on a second Mac.
     func testSigningRowCarriesTheOneLineFix() {
@@ -37,11 +37,11 @@ final class SetupStatusTests: XCTestCase {
     /// P0-4: the setup card and the sidebar must say the same thing about a branch that cannot be updated.
     func testDivergedBranchReplacesTheUpToDateRow() {
         let info=UpdateInfo.parse(["available":false,"diverged":true,"ahead":2])
-        let row=SetupStatus.serviceChecks(["update_behind":0],divergedNotice:info.divergedNotice)[3]
+        let row=SetupStatus.serviceChecks(["update_behind":0],divergedNotice:info.divergedNotice)[4]
         XCTAssertEqual(row.state,.missing)
         XCTAssertEqual(row.hint,info.divergedNotice)
         XCTAssertTrue(row.hint.hasPrefix(UpdateInfo.divergedMessage))
         // The bridge's own flag is enough when the sidebar has not checked yet.
-        XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":0,"update_diverged":true,"update_hint":"Dal ayrıştı"])[3].hint,"Dal ayrıştı")
+        XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":0,"update_diverged":true,"update_hint":"Dal ayrıştı"])[4].hint,"Dal ayrıştı")
     }
 }

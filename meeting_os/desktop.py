@@ -622,7 +622,12 @@ def dispatch(request, db=None):
             anchor=folder
             while not anchor.exists() and anchor.parent!=anchor: anchor=anchor.parent   # mkdir(parents=True) creates the rest on first write
             writable=bool(rs.get('share_reports')) and os.access(anchor,os.W_OK)
-            return {'api_key':has_key,'api_key_keychain':key_in_keychain,'signing_partition':signing_partition,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
+            # Where the team's shared knowledge (profiles, words, glossary) goes: the picked team folder, else iCloud
+            # Drive. A Mac with neither writes nothing and never says so — this row is the one place that does.
+            from .team_knowledge import shared_root
+            team_root=shared_root(rs, data)
+            return {'team_root':str(team_root) if team_root else '','team_root_kind':('team' if rs.get('team_dir') else ('icloud' if team_root else 'none')),
+                    'api_key':has_key,'api_key_keychain':key_in_keychain,'signing_partition':signing_partition,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
                     'update_diverged':bool(update.get('diverged')),'update_ahead':int(update.get('ahead') or 0),
                     'update_hint':str(update.get('hint') or ''),'update_error':update_error,
                     'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder)}

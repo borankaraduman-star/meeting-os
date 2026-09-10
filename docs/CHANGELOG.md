@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 70 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 71 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.66](#v1266) | 2026-09-10 22:21 | Meeting OS 1.2.66 — "Ekip klasörü" satırı: paylaşım nereye gidiyor, gitmiyorsa neden |
 | [v1.2.65](#v1265) | 2026-09-10 22:03 | Meeting OS 1.2.65 — ekipteki hata ve çökmeler tek yerde toplanır |
 | [v1.2.64](#v1264) | 2026-09-10 21:51 | Meeting OS 1.2.64 — Kontrol'de onaylanan sözlük düzeltmesi bir daha sorulmaz |
 | [v1.2.63](#v1263) | 2026-09-10 21:45 | Meeting OS 1.2.63 — ekip klasörü ortak bilgi tabanı: profiller ve kelimeler herkeste birikir |
@@ -90,6 +91,15 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1266"></a>
+### Meeting OS 1.2.66 — "Ekip klasörü" satırı: paylaşım nereye gidiyor, gitmiyorsa neden
+
+2026-09-10 22:21 · yerel not · GitHub sürüm sayfası yok
+
+Diğer Mac'te iCloud Drive klasörü olmadığı için ortak bilgi tabanı sessizce yazılmıyordu (nabız da gitmiyordu).
+- Ayarlar → Sistem → Kurulum durumu'na "Ekip klasörü" satırı: seçili ekip klasörü (yeşil), seçilmemişse "iCloud Drive kullanılıyor (yalnız kendi Mac'leriniz arasında; ekip için Ekip klasörü seçin)", ikisi de yoksa kırmızı "profiller, kelimeler ve raporlar paylaşılmıyor".
+- Köprü `setup_status` → `team_root`, `team_root_kind` (team | icloud | none).
 
 <a id="v1265"></a>
 ### Meeting OS 1.2.65 — ekipteki hata ve çökmeler tek yerde toplanır
