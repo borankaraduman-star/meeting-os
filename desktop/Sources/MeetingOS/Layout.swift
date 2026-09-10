@@ -21,6 +21,10 @@ struct MeetingContent:View {
         .sheet(item:$m.editRow) { row in EditSegmentSheet(model:m,row:row) }
         .sheet(isPresented:$m.showSettings) { SettingsSheet(model:m) }
         .sheet(isPresented:$m.showShare) { ShareSheet(model:m) }
+        // An invite link clicked in Slack, or a `.meetingos-invite` file double clicked in Finder, lands as a
+        // confirmation on the main window. Gated on the settings sheet being closed: two sheets on one presenter
+        // means the second never appears, and the paste field inside Ayarlar closes it before joining.
+        .sheet(item:Binding(get:{ m.showSettings ? nil : m.teamJoin },set:{ m.teamJoin=$0 })) { outcome in TeamJoinSheet(model:m,outcome:outcome) }
     }
 }
 

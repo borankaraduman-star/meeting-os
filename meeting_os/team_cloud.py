@@ -34,6 +34,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,6 +56,12 @@ HEARTBEAT_FILE = 'heartbeat.json'
 
 TOKEN_SALT = 'meetingos-team-v1:'
 TOKEN_RE = re.compile(r'^[0-9a-fA-F]{32,128}$')
+INVITE_SCHEME = 'meetingos'      # registered in the app's Info.plist; a click on the link opens Meeting OS
+INVITE_HOST = 'join'
+INVITE_SUFFIX = '.meetingos-invite'
+INVITE_VERSION = 1
+INVITE_FILE_NAME = 'Meeting OS Daveti' + INVITE_SUFFIX
+KEY_RE = re.compile(r'^[A-Za-z0-9._:-]{8,400}$')    # an OpenRouter key (sk-or-v1-…): no spaces, nothing to quote
 HOST_RE = re.compile(r'^[A-Za-z0-9._-]{1,64}$')
 REPORT_RE = re.compile(r'^[A-Za-z0-9._-]{1,120}\.json$')
 PRIVATE_MODE = 0o600
@@ -142,6 +149,146 @@ def invite_line(data_dir):
     line = ('git clone -b v0.1 https://github.com/borankaraduman-star/meeting-os.git ~/meeting-os && '
             f'MEETING_OS_TEAM={tok} sh ~/meeting-os/scripts/install.sh')
     return {'token': tok, 'team_id_short': team_id_short(tok), 'line': line}
+
+
+# ---------------------------------------------------------------- invite
+
+# Joining a team without a terminal (Boran, 10 Sep 2026: "kullanacak insanlar terminal yazamaz").
+#
+# An invite is one payload in two envelopes: a `meetingos://join?…` LINK anybody can send on Slack or WhatsApp,
+# and a `.meetingos-invite` FILE for the places a custom scheme does not survive. Both carry the same thing —
+# the team token, the server address when it is not the default, and (only if the sender ticks the box) the
+# OpenRouter key, so a teammate who was given one never meets the key step at all.
+#
+# The token and the key are passwords: an invite goes to a person, never into a repo, a ticket or a channel.
+
+
+def _key_path(data_dir):
+    return Path(data_dir) / KEY_FILE
+
+
+def read_key(data_dir):
+    """This Mac's OpenRouter key, or ''. Only the file the app already wrote — Python never asks the Keychain."""
+    try: key = _key_path(data_dir).read_text(encoding='utf-8').strip()
+    except (OSError, ValueError): return ''
+    return key if key and not any(c.isspace() for c in key) else ''
+
+
+def _write_key(data_dir, key):
+    """0600, O_NOFOLLOW, never over an existing file — the caller checks, this is the second lock on the door."""
+    data = Path(data_dir); data.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
+    path = _key_path(data)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, PRIVATE_MODE)
+    try: os.write(fd, (key.strip() + '\n').encode('utf-8'))
+    finally: os.close(fd)
+    try: path.chmod(PRIVATE_MODE)
+    except OSError: pass
+    return path
+
+
+def invite_payload(data_dir, include_key=False):
+    """What an invite carries: `{v, team, url?, key?}`. The address is only ever written down when it is NOT the
+    default, so an invite stays short and a team that never moved server has nothing to get wrong. The key is
+    included only when the sender asked for it AND this Mac actually has one."""
+    tok = token(data_dir)
+    if not tok:
+        return {'error': 'Bu Mac’te ekip belirteci yok (önce OpenRouter anahtarını girin)'}
+    payload = {'v': INVITE_VERSION, 'team': tok}
+    try:
+        from .reports import load_settings
+        base = url(load_settings(data_dir))
+    except Exception: base = DEFAULT_URL
+    if base and base != DEFAULT_URL: payload['url'] = base
+    if include_key:
+        key = read_key(data_dir)
+        if key: payload['key'] = key
+    return payload
+
+
+def invite_url(data_dir, include_key=False):
+    """`meetingos://join?team=…[&url=…][&key=…]`, percent-encoded. '' when this Mac has no team to give away."""
+    payload = invite_payload(data_dir, include_key=include_key)
+    if payload.get('error'): return ''
+    query = [(name, payload[name]) for name in ('team', 'url', 'key') if payload.get(name)]
+    return f'{INVITE_SCHEME}://{INVITE_HOST}?' + urllib.parse.urlencode(query, quote_via=urllib.parse.quote)
+
+
+def invite_file_text(data_dir, include_key=False):
+    """The body of a `.meetingos-invite` file: the same payload as JSON, for mail and chat apps that eat links."""
+    payload = invite_payload(data_dir, include_key=include_key)
+    if payload.get('error'): return ''
+    return json.dumps(payload, ensure_ascii=False, indent=2) + '\n'
+
+
+def _safe_url(raw):
+    """A team address is https, full stop — a bearer token must never travel in the clear. Loopback over http is
+    the one exception, and only for a test server on this very Mac."""
+    text = (raw or '').strip()
+    if not text: return None
+    parsed = urllib.parse.urlsplit(text)
+    host = (parsed.hostname or '').lower()
+    if parsed.scheme == 'https' and host: return text.rstrip('/')
+    if parsed.scheme == 'http' and host in ('127.0.0.1', 'localhost', '::1'): return text.rstrip('/')
+    return ''   # '' means "there was an address and it is not acceptable"; None means "there was none"
+
+
+def parse_invite(text_or_url):
+    """A link, the JSON of an invite file, or a bare token — whatever the user pasted. Returns the payload or
+    `{'error': …}`; it never raises and it never trusts a field it did not validate."""
+    raw = (text_or_url or '').strip() if isinstance(text_or_url, str) else ''
+    if not raw: return {'error': 'Davet boş'}
+    payload = {'v': INVITE_VERSION}
+    if raw.lower().startswith(INVITE_SCHEME + '://'):
+        parsed = urllib.parse.urlsplit(raw)
+        if (parsed.netloc or '').lower() != INVITE_HOST: return {'error': 'Bu bağlantı bir ekip daveti değil'}
+        fields = urllib.parse.parse_qs(parsed.query)
+        payload['team'] = (fields.get('team') or [''])[0].strip()
+        for name in ('url', 'key'):
+            value = (fields.get(name) or [''])[0].strip()
+            if value: payload[name] = value
+    elif TOKEN_RE.match(raw):
+        payload['team'] = raw
+    else:
+        try: data = json.loads(raw)
+        except ValueError: return {'error': 'Davet bağlantısı ya da davet dosyası gerekir'}
+        if not isinstance(data, dict): return {'error': 'Davet dosyası okunamadı'}
+        payload['team'] = str(data.get('team') or '').strip()
+        for name in ('url', 'key'):
+            value = data.get(name)
+            if isinstance(value, str) and value.strip(): payload[name] = value.strip()
+    if not TOKEN_RE.match(payload['team']): return {'error': 'Davetteki ekip belirteci geçersiz'}
+    payload['team'] = payload['team'].lower()
+    if 'url' in payload:
+        safe = _safe_url(payload['url'])
+        if not safe: return {'error': 'Davetteki adres güvenli değil (https gerekir)'}
+        payload['url'] = safe
+    # A malformed key is dropped rather than refused: the team is still joinable, and the teammate simply meets
+    # the key step they would have met without an invite.
+    if 'key' in payload and not KEY_RE.match(payload['key']): payload.pop('key')
+    return payload
+
+
+def accept_invite(data_dir, text_or_url):
+    """One click on an invite: write `team.token`, take the key only if the invite carries one and this Mac has
+    none, remember a non-default address, then sync. NEVER raises — the caller is a URL handler, and a bad paste
+    has to come back as a sentence, not a crash."""
+    try:
+        payload = parse_invite(text_or_url)
+        if payload.get('error'): return payload
+        data = Path(data_dir)
+        joined = join(data, payload['team'])
+        key_written = False
+        if payload.get('key') and not _key_path(data).exists():
+            try:
+                _write_key(data, payload['key']); key_written = True
+            except OSError: key_written = False   # an existing key file wins; a full disk is not a failed join
+        if payload.get('url'):
+            from .reports import save_settings
+            save_settings(data, {'team_url': payload['url']})
+        return {'joined': True, 'team_id_short': joined['team_id_short'], 'key_written': key_written,
+                'synced': sync(data)}
+    except Exception as exc:
+        return {'error': f'Davet uygulanamadı ({type(exc).__name__})'}
 
 
 # ---------------------------------------------------------------- state

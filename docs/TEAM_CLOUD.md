@@ -101,12 +101,38 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
   pull_words + pull_profiles (aynadan oku). `desktop.share_profiles` (adlandırma sonrası) publish'ten sonra
   `sync_async`.
 - `setup_status`: `team_root_kind` → `'cloud'` (yeni), `team_cloud: {url, host, team_id_short, last_ok, last_error,
-  hosts}`; Swift `teamRootCheck`: cloud + last_ok → `.ok` "ekip bulutu · N Mac · son eşitleme HH:MM"; cloud +
-  last_error → `.optional` "bulut şu an erişilemiyor (…); yerel bilgi korunuyor, bağlanınca eşitlenir"; cloud
-  henüz hiç denenmemiş → `.optional` "ekip bulutu · ilk eşitleme bekleniyor".
+  hosts}`; Swift `teamRootCheck`: cloud + last_error → `.optional` "bulut şu an erişilemiyor (…)" (varsa
+  "· son başarılı eşitleme HH:MM", yoksa "; yerel bilgi korunuyor, bağlanınca eşitlenir") — **hata, eski bir
+  `last_ok`'i bastırır**; cloud + yalnız last_ok → `.ok` "ekip bulutu · N Mac · son eşitleme HH:MM"; cloud henüz
+  hiç denenmemiş → `.optional` "ekip bulutu · ilk eşitleme bekleniyor".
 - Nabız (`build_heartbeat`): `team_cloud: {last_ok, last_error, hosts}`.
-- CLI `python -m meeting_os team status|sync|invite|join <token>`; `invite` token'ı ve ekip arkadaşına
-  gönderilecek tek satırı basar (`git clone -b v0.1 … && MEETING_OS_TEAM=<token> sh scripts/install.sh`).
+
+### Davet (1.2.68): terminalsiz katılma
+
+Ekibe katılmanın tek yolu kurulum satırıydı; "kullanacak insanlar terminal yazamaz" (Boran, 10 Eyl 2026). Aynı
+yük artık iki zarfla taşınıyor — bir **bağlantı** ve bir **dosya** — ve ikisi de aynı `accept_invite`'a düşüyor.
+
+- Yük: `{"v":1,"team":<token>,"url":<varsayılan değilse team_url>,"key":<istenirse openrouter.key>}`.
+- `invite_payload(data_dir, include_key=False)` / `invite_url(...)` → `meetingos://join?team=…[&url=…][&key=…]`
+  (yüzde kodlu) / `invite_file_text(...)` → `Meeting OS Daveti.meetingos-invite` içeriği (JSON). Token yoksa
+  `invite_payload` `{'error': …}`, ötekiler `''`.
+- `parse_invite(text)`: bağlantı **ya da** JSON **ya da** çıplak token. Doğrulama: token 32–128 onaltılık; adres
+  `https` (yalnız `127.0.0.1`/`localhost` için `http`, test sunucusu); anahtar `[A-Za-z0-9._:-]{8,400}` — anahtar
+  bozuksa **düşürülür**, davet yine de geçerlidir.
+- `accept_invite(data_dir, text)`: `join` (0600 `team.token`) → anahtar **yalnız** davette varsa **ve** Mac'te
+  `openrouter.key` **yoksa** yazılır (`O_EXCL`; var olan anahtar asla ezilmez) → `team_url` `save_settings` ile →
+  `sync`. Dönüş `{joined, team_id_short, key_written, synced}`; hiçbir girdide yükselmez, hata Türkçe tek cümle.
+- Köprü (veritabanı açmadan, `error_report` gibi): `team_invite {include_key}` → `{url, text, team_id_short,
+  with_key}`, `team_join {invite}` → `accept_invite`, `team_status` → `status`.
+- Uygulama: Info.plist'te `CFBundleURLTypes` (`meetingos`) + `CFBundleDocumentTypes`/`UTExportedTypeDeclarations`
+  (`local.boran.meeting-os.invite`, `public.json`); `AppDelegate.application(_:open:)` → `Model.handleIncoming`
+  → `team_join` → `TeamJoinSheet`. Swift tarafındaki saf yardımcılar `TeamInvite` (yük **ayrıştırılmaz**, yalnız
+  URL tanıma + etkin hedef satırı + sonuç cümlesi).
+- Ayarlar → Sesler ve sözlük → **Ekip**: ilk satır etkin hedef (`TeamInvite.target`), davet kopyala/kaydet/yapıştır,
+  "Şimdi eşitle"; üç paylaşım anahtarı artık `team_dir` yerine **etkin hedefe** bakar (Codex P0 #1); ekip klasörü
+  "Gelişmiş" altında.
+- CLI `python -m meeting_os team status|sync|invite [--with-key]|join <bağlantı | dosya yolu | belirteç>`;
+  `invite` bağlantıyı, dosya içeriğini ve eski kurulum satırını birlikte basar.
 - `scripts/install.sh`: `MEETING_OS_TEAM` doluysa `team.token` yazar (0600); 6/6 çıktısında ekip durumunu söyler.
 - Belgeler: EKIP.md (ekip bilgisi buluta gider, kurulum gerekmez; kim görür), TWO_MAC_WORKFLOW.md (iCloud artık
   şart değil), KULLANIM.md.
@@ -115,6 +141,9 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
 
 - Python: `tests/test_team_cloud.py` (yerel test sunucusuyla uçtan uca: iki sahte host, kelime/profil/rapor
   yükle-indir, `forget` yayılımı, ağ yokken sessiz hata, ayna kökü çözümü, token türetimi, `save_settings` `_mirror`
-  düşürür) + mevcut `test_team_knowledge`/`test_desktop`/`test_glossary`/`test_reports` yeşil.
+  düşürür) + `InviteTests` (bağlantı/dosya gidiş-dönüşü, anahtarın asla ezilmemesi, bozuk davetin cümleye dönmesi,
+  çıplak token, köprünün üç eylemi) + mevcut `test_team_knowledge`/`test_desktop`/`test_glossary`/`test_reports` yeşil.
+- Swift: `TeamInviteTests` (join bağlantısı ile transkriptin `meetingos://word` bağlantısını ayırma, davet dosyası
+  uzantısı, etkin hedef satırı, katılma sonucu cümlesi) + `SetupStatusTests` (hata eski `last_ok`'i bastırır).
 - Canlı: bu Mac 1.2.67 ile açılınca `team_sync` → sunucuda `profiles/Boran-MacBook-Air.jsonl` + `reports/…/heartbeat.json`;
   diğer Mac güncellenince aynı ekipte görünür (`index.hosts` 2), profilleri buraya iner.

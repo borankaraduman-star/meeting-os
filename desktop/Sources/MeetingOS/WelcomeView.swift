@@ -6,10 +6,29 @@ struct WelcomeView:View {
     /// The name field is the one thing this screen must not let anybody walk past: a recording started without
     /// it files this Mac's own voice under nobody. ⌃⌥R and the buttons send the caret back here.
     @FocusState private var nameFocused:Bool
+    /// A teammate who was sent an invite has nothing to set up: they paste the link here and the app joins the
+    /// team, key included when the sender ticked the box. Shown only while this Mac has neither a key nor a
+    /// team — a second Mac of Boran's, or a colleague on day one.
+    @State private var invite=""
+    private var needsInvite:Bool { OpenRouterCredential.cached()==nil && !model.teamConfigured }
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
             Text("Hoş geldiniz").font(.system(size:27,weight:.bold,design:.rounded))
             Text("Meeting OS Zoom toplantılarını kaydeder, bulutta Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
+            if needsInvite {
+                VStack(alignment:.leading,spacing:8) {
+                    Text("Ekipten davet aldınız mı?").font(.headline)
+                    HStack(spacing:10) {
+                        TextField("Davet bağlantısını buraya yapıştırın",text:$invite)
+                            .textFieldStyle(.roundedBorder).frame(width:320)
+                            .accessibilityIdentifier("welcomeInviteField")
+                            .onSubmit { join() }
+                        Button("Katıl") { join() }.buttonStyle(.borderedProminent)
+                            .disabled(TeamInvite.payload(invite)==nil).accessibilityIdentifier("welcomeInviteJoinButton")
+                    }
+                    Text("Ekip arkadaşınızın gönderdiği `meetingos://join…` bağlantısını yapıştırın: ekibin sözlüğü, kelimeleri ve ses profilleri bu Mac’e iner. Davette OpenRouter anahtarı da varsa aşağıdaki anahtar adımını hiç görmezsiniz.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                }.padding(16).meetingCard().frame(maxWidth:640).accessibilityIdentifier("welcomeInvite")
+            }
             HStack(spacing:10) {
                 Text("Adınız").font(.callout)
                 TextField("Adınızı yazın",text:$model.reportSettings.userName)
@@ -38,6 +57,12 @@ struct WelcomeView:View {
         // A form, not a notice: the column is centred in the window but stays top-aligned and left-read,
         // because vertical centring would move the name field under the caret as the steps grow.
         }.padding(32).readingColumn(700).frame(maxHeight:.infinity,alignment:.top).accessibilityIdentifier("welcome")
+        .task { await model.loadTeamStatus() }   // one tiny bridge call: does this Mac belong to a team yet?
+    }
+    private func join() {
+        guard let payload=TeamInvite.payload(invite) else { return }
+        invite=""
+        Task { await model.joinTeam(payload) }
     }
     func step(_ n:String,_ title:String,_ text:String)->some View {
         HStack(alignment:.top,spacing:12) {

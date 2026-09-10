@@ -90,8 +90,13 @@ enum SetupStatus {
             let macs=max((cloud["hosts"] as? [Any])?.count ?? 0,1)
             let lastOK=cloud["last_ok"] as? String ?? ""
             let lastError=cloud["last_error"] as? String ?? ""
+            // An error outranks an older success: a Mac that synced this morning and has been failing since
+            // lunch used to read "son eşitleme 09:14" and nothing else (Codex, 10 Sep 2026, P1 #8 note).
+            if !lastError.isEmpty {
+                let since=lastOK.isEmpty ? "" : " · son başarılı eşitleme "+syncClock(lastOK)
+                return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"bulut şu an erişilemiyor (\(lastError))"+(since.isEmpty ? "; yerel bilgi korunuyor, bağlanınca eşitlenir" : since))
+            }
             if !lastOK.isEmpty { return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.ok,hint:"ekip bulutu · \(macs) Mac · son eşitleme "+syncClock(lastOK)) }
-            if !lastError.isEmpty { return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"bulut şu an erişilemiyor (\(lastError)); yerel bilgi korunuyor, bağlanınca eşitlenir") }
             return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"ekip bulutu · ilk eşitleme bekleniyor")
         case "team": return SetupCheck(id:"team",title:"Ekip klasörü",state:.ok,hint:"ortak bilgi tabanı: "+root)
         case "icloud": return SetupCheck(id:"team",title:"Ekip klasörü",state:.optional,hint:"seçilmedi · iCloud Drive kullanılıyor (yalnız kendi Mac’leriniz arasında; ekip için Ayarlar → Sistem → Ekip klasörü)")

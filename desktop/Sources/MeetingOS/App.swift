@@ -627,6 +627,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     func focusMemorySearch() { tab="memory"; memoryFocusToken+=1 }
     @Published var cost:[String:Any]?
     @Published var setupChecks:[SetupCheck]=[]
+    /// Where the team's knowledge actually goes (Ayarlar → Ekip reads it), whether this Mac is in a team at all
+    /// (the welcome screen reads that), and the answer of the last join — which IS the confirmation sheet.
+    @Published var teamTarget=TeamTarget.off
+    @Published var teamConfigured=false
+    @Published var teamJoin:TeamJoinOutcome?
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false
     /// Per-second recording state lives on its own object: the panel and the menu bar observe it, the main
@@ -1094,6 +1099,13 @@ func statusLabel(_ status:String)->String {
             if action==ZoomNotifier.startAction || action==UNNotificationDefaultActionIdentifier, let m=Self.model, !m.recording { m.beginRecording(); m.showMainWindow() }
             completionHandler()
         }
+    }
+    /// A click on a `meetingos://join?…` invite link, or a double click on a `.meetingos-invite` file. Both
+    /// arrive here: an app with an AppKit delegate that implements this never sees SwiftUI's `onOpenURL`, so
+    /// this is the app's one and only door for URLs from outside. The transcript's own `meetingos://word`
+    /// links never leave the process and never reach it.
+    func application(_ application:NSApplication,open urls:[URL]) {
+        Self.model?.handleIncoming(urls:urls)
     }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
         Self.model?.saveUserNameOnQuit()

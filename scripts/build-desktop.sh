@@ -35,6 +35,25 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>NSRemindersFullAccessUsageDescription</key><string>Meeting OS seçtiğiniz görevi Apple Hatırlatıcılar’a ekler; başka hiçbir şey okumaz veya değiştirmez.</string>
 <key>NSRemindersUsageDescription</key><string>Meeting OS seçtiğiniz görevi Apple Hatırlatıcılar’a ekler; başka hiçbir şey okumaz veya değiştirmez.</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>CFBundleURLTypes</key><array><dict>
+<key>CFBundleURLName</key><string>Meeting OS</string>
+<key>CFBundleTypeRole</key><string>Viewer</string>
+<key>CFBundleURLSchemes</key><array><string>meetingos</string></array>
+</dict></array>
+<key>CFBundleDocumentTypes</key><array><dict>
+<key>CFBundleTypeName</key><string>Meeting OS daveti</string>
+<key>CFBundleTypeRole</key><string>Viewer</string>
+<key>LSHandlerRank</key><string>Owner</string>
+<key>LSItemContentTypes</key><array><string>local.boran.meeting-os.invite</string></array>
+</dict></array>
+<key>UTExportedTypeDeclarations</key><array><dict>
+<key>UTTypeIdentifier</key><string>local.boran.meeting-os.invite</string>
+<key>UTTypeDescription</key><string>Meeting OS daveti</string>
+<key>UTTypeConformsTo</key><array><string>public.json</string></array>
+<key>UTTypeTagSpecification</key><dict>
+<key>public.filename-extension</key><array><string>meetingos-invite</string></array>
+</dict>
+</dict></array>
 </dict></plist>
 PLIST
 xattr -cr "$app"

@@ -45,6 +45,12 @@ final class SetupStatusTests: XCTestCase {
         let down=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["last_error":"URLError: bağlanılamadı","hosts":["mac-a"]]])
         XCTAssertEqual(down.state,.optional)
         XCTAssertEqual(down.hint,"bulut şu an erişilemiyor (URLError: bağlanılamadı); yerel bilgi korunuyor, bağlanınca eşitlenir")
+        // An outage outranks an older success: a Mac that synced this morning and has been failing since noon
+        // used to show only "son eşitleme 09:14" (Codex, 10 Sep 2026, P1 #8 note).
+        let stale=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["last_ok":"2026-09-10T06:14:00+00:00","last_error":"URLError: bağlanılamadı","hosts":["mac-a","mac-b"]]])
+        XCTAssertEqual(stale.state,.optional)
+        XCTAssertTrue(stale.hint.hasPrefix("bulut şu an erişilemiyor (URLError: bağlanılamadı) · son başarılı eşitleme "))
+        XCTAssertEqual(stale.hint.count,"bulut şu an erişilemiyor (URLError: bağlanılamadı) · son başarılı eşitleme ".count+5)
         let first=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":[String:Any]()])
         XCTAssertEqual(first.state,.optional); XCTAssertEqual(first.hint,"ekip bulutu · ilk eşitleme bekleniyor")
         // The folder answers are untouched: a picked folder still wins and a Mac with neither still says so.

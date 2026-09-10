@@ -460,5 +460,143 @@ class HeartbeatTests(CloudFixture):
         self.assertIn('hosts', answer['team_cloud'])
 
 
+class InviteTests(CloudFixture):
+    """Joining without a terminal: the invite a teammate is sent, and what clicking it does.
+
+    Everything a person touches goes through `accept_invite`, so this is where the rules live: the token is
+    hex or it is refused, the address is https or it is refused, and an OpenRouter key already on the Mac is
+    never, under any circumstance, replaced by one that arrived in a link."""
+
+    def blank(self, name):
+        """A Mac with nothing: no key, no token, no settings — a colleague on the morning of day one."""
+        data = self.tmp / name; data.mkdir()
+        return data
+
+    def test_the_link_and_the_file_carry_the_same_invite(self):
+        a = self.mac('a')
+        payload = TC.invite_payload(a.data)
+        self.assertEqual(payload['v'], 1)
+        self.assertEqual(payload['team'], TC.token(a.data))
+        self.assertEqual(payload['url'], self.url)          # not the default, so the invite has to say where
+        self.assertNotIn('key', payload)                    # the box was not ticked
+        link = TC.invite_url(a.data)
+        self.assertTrue(link.startswith('meetingos://join?'))
+        self.assertIn('team=' + TC.token(a.data), link)
+        self.assertNotIn(self.KEY, link)
+        self.assertEqual(TC.parse_invite(link), payload)
+        self.assertEqual(TC.parse_invite(TC.invite_file_text(a.data)), payload)
+        self.assertEqual(json.loads(TC.invite_file_text(a.data)), payload)
+        # The default server is left out on purpose: an invite says nothing it does not have to.
+        b = self.mac('b', url='')
+        self.assertNotIn('url', TC.invite_payload(b.data))
+        self.assertEqual(TC.invite_url(b.data), 'meetingos://join?team=' + TC.token(b.data))
+        # A Mac with no team has no invite to give, and says so instead of handing out an empty one.
+        self.assertIn('error', TC.invite_payload(self.blank('bos')))
+        self.assertEqual(TC.invite_url(self.blank('bos2')), '')
+        self.assertEqual(TC.invite_file_text(self.blank('bos3')), '')
+
+    def test_a_click_on_the_link_joins_the_team_and_pulls_what_it_knows(self):
+        a = self.mac('a')
+        with a.host():
+            mid = a.store.create_meeting('a'); self.segment(a.store, mid, 'Jiraa üzerinden ilerliyoruz.')
+            cm.teach(a.store, mid, 'Jiraa', 'Jira', a.data)
+            a.sync()
+        newcomer = self.blank('yeni')
+        with self.hosted('yeni'):
+            result = TC.accept_invite(newcomer, TC.invite_url(a.data))
+        self.assertTrue(result['joined'])
+        self.assertEqual(result['team_id_short'], TC.team_id_short(TC.token(a.data)))
+        self.assertFalse(result['key_written'])
+        self.assertNotIn('error', result['synced'])
+        self.assertEqual(TC.token(newcomer), TC.token(a.data))
+        self.assertEqual((newcomer / 'team.token').stat().st_mode & 0o777, 0o600)
+        self.assertEqual(reports.load_settings(newcomer)['team_url'], self.url)
+        # The teammate's word is already on this Mac, in the mirror the rest of the app reads as a team folder.
+        self.assertIn('Jira', (TC.mirror_dir(newcomer) / TC.WORDS_FILE).read_text(encoding='utf-8'))
+
+    def test_the_invite_file_works_exactly_like_the_link(self):
+        a = self.mac('a')
+        path = self.tmp / TC.INVITE_FILE_NAME
+        path.write_text(TC.invite_file_text(a.data), encoding='utf-8')
+        newcomer = self.blank('dosyayla')
+        with self.hosted('dosyayla'):
+            result = TC.accept_invite(newcomer, path.read_text(encoding='utf-8'))
+        self.assertTrue(result['joined'])
+        self.assertEqual(TC.token(newcomer), TC.token(a.data))
+        self.assertTrue(path.name.endswith(TC.INVITE_SUFFIX))
+
+    def test_the_key_travels_only_when_asked_and_never_lands_on_one(self):
+        a = self.mac('a')
+        with_key = TC.invite_payload(a.data, include_key=True)
+        self.assertEqual(with_key['key'], self.KEY)
+        self.assertIn('key=', TC.invite_url(a.data, include_key=True))
+        # A Mac with no key of its own takes the one in the invite: that teammate never meets the key step.
+        newcomer = self.blank('anahtarsiz')
+        with self.hosted('anahtarsiz'):
+            result = TC.accept_invite(newcomer, TC.invite_url(a.data, include_key=True))
+        self.assertTrue(result['key_written'])
+        self.assertEqual((newcomer / 'openrouter.key').read_text(encoding='utf-8').strip(), self.KEY)
+        self.assertEqual((newcomer / 'openrouter.key').stat().st_mode & 0o777, 0o600)
+        # …and a Mac that HAS a key keeps it. Overwriting one would move somebody else's bill onto this account.
+        mine = self.mac('benim', key='sk-or-v1-benimki')
+        with mine.host():
+            again = TC.accept_invite(mine.data, TC.invite_url(a.data, include_key=True))
+        self.assertTrue(again['joined'])
+        self.assertFalse(again['key_written'])
+        self.assertEqual((mine.data / 'openrouter.key').read_text(encoding='utf-8').strip(), 'sk-or-v1-benimki')
+
+    def test_a_bad_invite_is_a_sentence_and_never_an_exception(self):
+        newcomer = self.blank('kotu')
+        good = TC.token(self.mac('a').data)
+        for junk in ('', '   ', 'merhaba', 'meetingos://word?seg=1&i=2&w=a', 'meetingos://join?team=xyz',
+                     'meetingos://join?team=' + 'f' * 200, '{"team":"kisa"}', '{"v":1}', '[]', '{',
+                     'meetingos://join?team=%s&url=http://evil.example' % good,
+                     '{"team":"%s","url":"ftp://x"}' % good, None, 17):
+            answer = TC.accept_invite(newcomer, junk)
+            self.assertIn('error', answer, junk)
+            self.assertTrue(answer['error'] and len(answer['error']) < 120, junk)
+        self.assertFalse((newcomer / 'team.token').exists())
+        self.assertFalse((newcomer / 'openrouter.key').exists())
+        # A key that is not key-shaped is dropped; the team is still joined, the teammate just types their own.
+        payload = json.dumps({'v': 1, 'team': good, 'key': 'boşluklu anahtar'})
+        with self.hosted('kotu'):
+            answer = TC.accept_invite(newcomer, payload)
+        self.assertTrue(answer['joined']); self.assertFalse(answer['key_written'])
+        self.assertFalse((newcomer / 'openrouter.key').exists())
+
+    def test_a_bare_token_is_accepted_too(self):
+        a = self.mac('a')
+        newcomer = self.blank('cıplak')
+        with self.hosted('ciplak'):
+            answer = TC.accept_invite(newcomer, TC.token(a.data).upper())
+        self.assertTrue(answer['joined'])
+        self.assertEqual(TC.token(newcomer), TC.token(a.data))
+
+    def test_the_bridge_hands_the_app_a_link_a_file_and_a_join(self):
+        from meeting_os.desktop import dispatch
+        a = self.mac('a')
+        db = a.data / 'meeting-os.sqlite'
+        invite = dispatch({'action': 'team_invite'}, db)
+        self.assertEqual(invite['url'], TC.invite_url(a.data))
+        self.assertEqual(invite['text'], TC.invite_file_text(a.data))
+        self.assertEqual(invite['team_id_short'], TC.team_id_short(TC.token(a.data)))
+        self.assertFalse(invite['with_key'])
+        self.assertNotIn(self.KEY, invite['url'] + invite['text'])
+        keyed = dispatch({'action': 'team_invite', 'include_key': True}, db)
+        self.assertTrue(keyed['with_key']); self.assertIn(self.KEY, keyed['text'])
+        # A Mac with no team: the bridge answers with the reason, it does not raise at the app.
+        blank = self.blank('bridge-bos')
+        self.assertIn('error', dispatch({'action': 'team_invite'}, blank / 'meeting-os.sqlite'))
+        # …and the join, on a folder with no database at all.
+        with self.hosted('bridge-bos'):
+            joined = dispatch({'action': 'team_join', 'invite': invite['url']}, blank / 'meeting-os.sqlite')
+            status = dispatch({'action': 'team_status'}, blank / 'meeting-os.sqlite')
+        self.assertTrue(joined['joined'])
+        self.assertEqual(joined['team_id_short'], invite['team_id_short'])
+        self.assertTrue(status['configured'])
+        self.assertEqual(status['team_id_short'], invite['team_id_short'])
+        self.assertIn('error', dispatch({'action': 'team_join', 'invite': 'saçma'}, blank / 'meeting-os.sqlite'))
+
+
 if __name__ == '__main__':
     unittest.main()
