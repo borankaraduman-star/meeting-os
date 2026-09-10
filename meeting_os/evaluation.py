@@ -18,6 +18,25 @@ def score_analysis(analysis,reference):
     return {'true_positive':tp,'false_positive':fp,'false_negative':fn,'action_precision':tp/len(predicted) if predicted else None,'action_recall':tp/len(expected) if expected else None,'action_f1':2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else None,'owner_accuracy_on_matched':owner/tp if tp else None,'due_text_accuracy_on_matched':due/tp if tp else None,'unsupported_summary_fraction':len(unsupported)/len(summary) if summary else None,'human_adjudicated':True,'notes':'Match semantically equivalent tasks by human review. Null means no denominator; never interpret as 100%.'}
 
 
+def fixture_rows(case):
+    """Transcript rows for an analysis fixture, the way the pipeline would hand them to analyze_rows.
+
+    A segment is system audio unless it says `"source": "mic"`. A microphone segment becomes the row
+    cloud_finalize actually writes: no `speaker_name` at all and the label in `speaker` — the 'Ben'
+    placeholder until Settings knows the name — so `row_person`/`validate_record` have to resolve it
+    through the fixture's own `owner`. `flags` carry pipeline doubt (`possible_echo`) into the fixture.
+    """
+    rows=[]
+    for index,segment in enumerate(case['segments']):
+        mic=(segment.get('source') or 'system')=='mic'
+        rows.append({'id':index+1,'start':index*10.,'end':index*10.+9,
+                     'source':'mic' if mic else 'system',
+                     'speaker':segment['speaker'] if mic else 'S'+str(index),
+                     'speaker_name':None if mic else segment['speaker'],
+                     'text':segment['text'],'flags':list(segment.get('flags') or [])})
+    return rows
+
+
 def check_fixture_analysis(result, case):
     """Lexical regression gates only; these are NOT semantic adjudication.
 

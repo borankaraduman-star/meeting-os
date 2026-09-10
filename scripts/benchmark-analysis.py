@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from meeting_os.llm import LocalLLM
 from meeting_os.intelligence import analyze_rows
-from meeting_os.evaluation import check_fixture_analysis
+from meeting_os.evaluation import check_fixture_analysis,fixture_rows
 p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--case');p.add_argument('--internal-worker',action='store_true',help=argparse.SUPPRESS);args=p.parse_args()
 paths=[path for path in sorted((Path(__file__).resolve().parents[1]/'tests/fixtures/analysis').glob('*.json')) if not args.case or path.stem==args.case]
 if not paths:p.error('No matching analysis fixture; no model loaded')
@@ -21,9 +21,9 @@ def logged(*a,**k):
  return raw
 model.complete=logged
 for path in paths:
- case=json.loads(path.read_text());rows=[{'id':i+1,'start':i*10.,'end':i*10.+9,'source':'system','speaker':'S'+str(i),'speaker_name':s['speaker'],'text':s['text'],'flags':[]} for i,s in enumerate(case['segments'])];started=time.monotonic()
+ case=json.loads(path.read_text());rows=fixture_rows(case);started=time.monotonic()
  try:
-  result=analyze_rows(rows,model)
+  result=analyze_rows(rows,model,glossary=case.get('glossary'),owner=case.get('owner'))
   checks={'valid_evidence_schema':True,**check_fixture_analysis(result,case)}
   item={'case':path.stem,'checks':checks,'passed':all(checks.values()),'result':result}
  except Exception as exc:item={'case':path.stem,'passed':False,'error':str(exc)}
