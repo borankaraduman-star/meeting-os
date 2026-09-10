@@ -121,7 +121,7 @@ def evidence_stats(result,rows):
 class Recorder:
     """Wraps validate_record to see the model's raw claims before verification discards them."""
     def __init__(self):self.reset()
-    def reset(self):self.raw_quotes=self.exact=self.repaired=self.unusable=0;self.raw_actions=self.raw_owners=self.raw_dues=0;self.batches=0
+    def reset(self):self.raw_quotes=self.exact=self.repaired=self.unusable=0;self.raw_actions=self.raw_owners=self.raw_dues=0;self.kept_owners=self.kept_dues=0;self.batches=0
     def wrap(self,original):
         def wrapper(record,rows):
             self.batches+=1;by_id={r['id']:r['text'] for r in rows}
@@ -141,17 +141,20 @@ class Recorder:
                         elif quote in source:self.exact+=1
                         elif locate_quote(quote,source) is not None:self.repaired+=1
                         else:self.unusable+=1
-            return original(record,rows)
+            verified=original(record,rows)
+            # counted here, not on the final record: de-duplication also removes actions, and that is not an abstention
+            self.kept_owners+=sum(1 for a in verified['actions'] if a.get('owner'))
+            self.kept_dues+=sum(1 for a in verified['actions'] if a.get('due_text'))
+            return verified
         return wrapper
     def report(self,result):
-        owners=sum(1 for a in result.get('actions',[]) if a.get('owner'))
-        dues=sum(1 for a in result.get('actions',[]) if a.get('due_text'))
         return {'raw_quotes':self.raw_quotes,'verbatim':self.exact,'repaired':self.repaired,'unusable':self.unusable,
                 'verbatim_ratio':round(self.exact/self.raw_quotes,3) if self.raw_quotes else None,
                 'verified_ratio':round((self.exact+self.repaired)/self.raw_quotes,3) if self.raw_quotes else None,
                 'validate_calls':self.batches,'model_actions':self.raw_actions,
-                'model_owners':self.raw_owners,'kept_owners':owners,'abstained_owners':self.raw_owners-owners,
-                'model_dues':self.raw_dues,'kept_dues':dues,'abstained_dues':self.raw_dues-dues}
+                'model_owners':self.raw_owners,'verified_owners':self.kept_owners,'abstained_owners':self.raw_owners-self.kept_owners,
+                'model_dues':self.raw_dues,'verified_dues':self.kept_dues,'abstained_dues':self.raw_dues-self.kept_dues,
+                'final_actions':len(result.get('actions',[]))}
 
 
 def main(argv=None):

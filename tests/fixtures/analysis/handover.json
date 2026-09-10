@@ -131,7 +131,7 @@
       "text": "Kapanış: önceki çeyrek raporunu geçen hafta tamamladık, o iş bitti, kimsenin yapacağı bir şey kalmadı. Haftaya aynı saatte görüşürüz. Teşekkürler herkese."
     }
   ],
-  "expected_actions": 3,
+  "expected_actions": 4,
   "forbidden_action_terms": [
     "push",
     "cohort",
@@ -141,6 +141,7 @@
     "looker"
   ],
   "expected_owners": [
+    "Ece",
     "Ece",
     "Selin",
     "Murat"
@@ -167,6 +168,13 @@
       ],
       "owner": "Murat",
       "due_text": "haftaya"
+    },
+    {
+      "title_terms": [
+        "invalidation"
+      ],
+      "owner": "Ece",
+      "due_text": "bugün"
     }
   ],
   "required_decision_terms": [

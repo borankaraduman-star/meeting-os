@@ -43,6 +43,33 @@ def blank(**kw):
  return {**{k:[] for k in ('summary','decisions','risks','questions','actions')},**kw}
 
 
+class StitchedQuoteTests(unittest.TestCase):
+ SOURCE=("Bir karar daha: staging ortamını canary'ye çeviriyoruz. Yeni sürümler önce yüzde beş trafiğe gidecek, "
+         "sorun yoksa yüzde yüze çıkacağız. Bu kararı bugün alıyoruz ve geri dönüşü yok.")
+ def locate(self,quote):
+  from meeting_os.intelligence import locate_quote
+  return locate_quote(quote,self.SOURCE)
+ def test_an_unbroken_quote_is_returned_as_it_stands(self):
+  self.assertEqual(self.locate("staging ortamını canary'ye çeviriyoruz"),"staging ortamını canary'ye çeviriyoruz")
+ def test_an_elided_quote_falls_back_to_its_longest_real_fragment(self):
+  found=self.locate("staging ortamını canary'ye çeviriyoruz... Bu kararı bugün alıyoruz ve geri dönüşü yok.")
+  self.assertIsNotNone(found);self.assertIn(found,self.SOURCE)
+ def test_two_spans_silently_joined_still_yield_real_transcript_text(self):
+  found=self.locate("staging ortamını canary'ye çeviriyoruz. Bu kararı bugün alıyoruz ve geri dönüşü yok.")
+  self.assertIsNotNone(found);self.assertIn(found,self.SOURCE)
+ def test_a_fabricated_quote_is_still_refused(self):
+  self.assertIsNone(self.locate('Bütün dosyaları dışarıya gönderdik ve raporu sildik.'))
+ def test_a_fragment_too_short_to_prove_anything_is_refused(self):
+  self.assertIsNone(self.locate('canary... roket... uzay mekiği'))
+ def test_an_item_whose_quote_is_stitched_survives_verification(self):
+  rows=[{'id':1,'start':0.,'end':9.,'source':'system','speaker':'S0','speaker_name':'Boran','text':self.SOURCE,'flags':[]}]
+  d=blank(decisions=[{'text':"Staging canary'ye çevrilecek.",
+    'evidence':[{'segment_id':1,'quote':"staging ortamını canary'ye çeviriyoruz... geri dönüşü yok."}]}])
+  result=validate_record(d,rows)
+  self.assertEqual(len(result['decisions']),1)
+  self.assertIn(result['decisions'][0]['evidence'][0]['quote'],self.SOURCE)
+
+
 class OwnerNormalizationTests(unittest.TestCase):
  ROWS=[{'speaker_name':'Deniz'},{'speaker_name':'Ece'},{'speaker_name':None}]
  def test_case_suffix_and_honorific_snap_to_the_speaker_name(self):

@@ -1,6 +1,6 @@
 {
   "title": "Kurgu test — Karar geri alma ve dolaylı üstlenme",
-  "note": "Tamamen kurgudur. Gerçek kişi, ekip veya toplantı değildir.",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip veya toplantı değildir. Son görevin title_terms'ü bilerek 'rapor'; 'incident' yazılamıyor çünkü metrics.normalize Türkçe kuralıyla 'I' harfini 'ı' yapıyor ve cümle başındaki 'Incident' hiçbir küçük harfli 'incident' terimiyle eşleşmiyor. Aynı tuzak Memory.actions(owner=...) filtresini de vurur.",
   "segments": [
     {
       "speaker": "Boran",
@@ -63,7 +63,7 @@
     },
     {
       "title_terms": [
-        "incident"
+        "rapor"
       ],
       "owner": null,
       "due_text": null
