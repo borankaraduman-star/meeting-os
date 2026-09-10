@@ -6,6 +6,7 @@ With a recording folder: read that folder's journal and check the chunks it anno
 deleted once the cloud transcript is complete, so a finished meeting reports its assembled *-full.* files instead.
 """
 import json
+import os
 import sys
 from pathlib import Path
 import subprocess
@@ -49,9 +50,21 @@ def summarize(kind, results):
           + ('no clipping' if clip == 0 else 'CLIPPING PRESENT'))
 
 
+def capture_binary(root):
+    """The helper to exercise. MEETING_OS_CAPTURE_BIN points this at a plain `swift build` product, so the
+    check can run without the signed app bundle (building one needs codesign, which not every session has)."""
+    override = os.environ.get('MEETING_OS_CAPTURE_BIN')
+    if override:
+        path = Path(override).expanduser()
+        if not path.is_file(): raise SystemExit(f'MEETING_OS_CAPTURE_BIN yok: {path}')
+        return path
+    return root/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture'
+
+
 def self_test(root):
+    binary = capture_binary(root)
     with tempfile.TemporaryDirectory() as t:
-        run = subprocess.run([str(root/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture'), '--self-test', '--output', t], capture_output=True, text=True, check=True)
+        run = subprocess.run([str(binary), '--self-test', '--output', t], capture_output=True, text=True, check=True)
         events = [json.loads(line) for line in run.stdout.splitlines()]
         assert {e['source'] for e in events} == {'mic', 'system'}
         results = []
@@ -64,7 +77,7 @@ def self_test(root):
             results.append(report(event['source'], event['path'], want_pcm16=True))
         assert not list(Path(t).glob('*.partial.wav'))
         summarize('chunks', results)
-    print('Native capture self-test: separate sources, PCM_16, timing and finalized WAVs passed.')
+    print(f'Native capture self-test ({binary}): separate sources, PCM_16, timing and finalized WAVs passed.')
 
 
 def recording(directory):

@@ -110,8 +110,9 @@ uygulamanın veri politikası geçerlidir. Codex ve Claude abonelikleri API
 kredisi olarak kullanılmaz.
 
 **Hafıza** tüm tamamlanmış toplantılarda anahtar kelime arar. **Kayıtlardan
-yanıtla** en fazla 12 ilgili bölümle yerel, alıntılı bir yanıt üretir. Yeterli
-kaynak yoksa yanıt vermekten kaçınır. Arama sözcük tabanlıdır; anlamca benzer
+yanıtla** en fazla 12 ilgili bölümü yerelde seçer; alıntılı yanıtı varsayılan
+bulut modunda OpenRouter analiz modeli yazar (yerel model seçiliyse yerel model).
+Yeterli kaynak yoksa yanıt vermekten kaçınır. Arama sözcük tabanlıdır; anlamca benzer
 ama farklı kelimelerle yazılmış bütün kayıtları bulma garantisi yoktur.
 
 **Dışa aktar → Özet ve görevler** paylaşmaya hazır yerel Markdown üretir.
@@ -137,13 +138,18 @@ içindedir. 3–5 kendi toplantınız için [benchmark rehberi](docs/BENCHMARK.m
 
 Ses kaydedici transkripsiyondan bağımsız çalışır, kapanmış WAV parçalarını kendi
 kalıcı günlüğüne yazar. Python işlemi kesilse bile tamamlanmış ses parçaları
-**Son transkripti oluştur / Kurtar** ile işlenebilir. Ani sistem kapanışında henüz
+kurtarma şeridindeki **Bulutta yazıya çevir** / **Yerel modelle tamamla**
+düğmeleriyle işlenebilir. Ani sistem kapanışında henüz
 kapanmamış son parça kurtarılamayabilir. Uygulamadan normal çıkış, sürmekte olan
 kaydın kapanmasını ve son işlemin tamamlanmasını bekler.
 
 Arayüzde kayıt üst sınırı 4 saattir. WAV kayıt yaklaşık 2 GB/saat alan
-kullanabilir; boş disk alanını buna göre ayırın. Kaydedici 1,2 GB altında
-başlamaz, yaklaşık 1 GB kaldığında kapanmış parçaları koruyarak durur. Kulaklık kullanımı önerilir:
+kullanabilir; boş disk alanını buna göre ayırın. Kaydedici 600 MB altında
+başlamaz. Durma eşiği sabit değildir: kayıt uzadıkça birleştirme için gereken
+yer kadar büyür (kaynak başına saniyede 64 KB + 200 MB, taban 400 MB); bu
+eşiğin altında kapanmış parçalar korunarak durur. Boş alan bu eşiğin üç katının
+ya da 3 GB’ın (hangisi büyükse) altına inince yalnız `low_disk` uyarısı yazılır,
+kayıt sürer. Kulaklık kullanımı önerilir:
 akustik echo cancellation yoktur; hoparlör sesi mikrofona geri girerse çift
 metin/konuşmacı karışıklığı olabilir. Diğer uygulamaların sistem sesi de alınır.
 Ekran kareleri saklanmaz. Çakışan konuşmaların tüm kelimelerini kurtarma,
@@ -222,6 +228,14 @@ scripts/build-capture.sh
 scripts/build-desktop.sh
 ```
 
+Test ortamı değişkenleri:
+
+- `MEETING_OS_TEST_IGNORE_PRESSURE=1` — `resources.check_pressure` bellek baskısı kapısını atlar; meşgul bir
+  Mac'te testin sonucunu o an açık olan başka uygulamalar belirlemesin diye. Yalnız testler içindir:
+  `diagnostics` bu değişkeni **dinlemez**, çünkü "bellek baskısı normal" diyen bir rapor makineyi anlatmalıdır.
+- `MEETING_OS_CAPTURE_BIN=<yol>` — `scripts/verify-capture.py --self-test` bu ikiliyi çalıştırır; verilmezse
+  `build/MeetingCapture.app` kullanılır. `swift build` çıktısını imzalamadan denemek için.
+
 Uygulama yerel ad-hoc imzalıdır; başka Mac’lere notarize edilmiş tek dosya
 kurulum paketi değildir. App bundle bu yerel çalışma ortamını kullanır; proje ve
 runtime klasörlerini silmeyin. Veri/üçüncü taraf kaynakları
@@ -257,7 +271,7 @@ Ağır komutlar ayrı süreçlerde bellek baskısı ve süreç grubu belleği iz
 
 Kapak kapalıyken dahili mikrofon donanımsal olarak kapanır; uygulama bu durumu gösterir. Kapağı açın veya harici mikrofon kullanın.
 
-16 GB Mac'te özet/görev analizi otomatik başlamaz; Analiz sekmesinden isteğe bağlı çalıştırılır ve bellek korumasına tabidir. Bu bilgisayarın mevcut yükünde büyük özet modeli bellek baskısına takıldı; küçük model kalite testini geçmediği için varsayılan yapılmadı.
+Varsayılan bulut modunda transkript bitince özet/görev analizi kendiliğinden başlar (bu Mac’te model yüklenmez). Yerel yazıya çevirme seçiliyse 16 GB ve altı Mac'te otomatik başlamaz; **Özet** sekmesinden isteğe bağlı çalıştırılır ve bellek korumasına tabidir. Bu bilgisayarın mevcut yükünde büyük özet modeli bellek baskısına takıldı; küçük model kalite testini geçmediği için varsayılan yapılmadı.
 
 [Bu Mac'te ölçülen sonuçlar](docs/RELIABILITY_1.0.5.md).
 
@@ -307,7 +321,7 @@ Ayarlar sayfasındaki **Bulut maliyeti** kartı OpenRouter’ın her parça içi
 
 ### Zoom’da elle dokunmadan kayıt (isteğe bağlı)
 
-Ayarlar → Kayıt sırasında → **Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat** açıkken Zoom toplantı penceresi 10 saniye boyunca açık kalınca kayıt başlar (bildirim gelir), pencere kapanıp 60 saniye geri gelmezse kendiliğinden başlayan kayıt bitirilir. Elle başlatılan kayıtlar hiçbir zaman kendiliğinden bitirilmez; iş sürerken yeni kayıt başlatılmaz. Varsayılan kapalı.
+Ayarlar → Kayıt sırasında → **Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat** açıkken Zoom toplantı penceresi 10 saniye boyunca açık kalınca kayıt başlar (bildirim gelir), pencere kapanıp 5 dakika geri gelmezse kendiliğinden başlayan kayıt bitirilir (ekran paylaşımı ve Space geçişleri pencereyi dakikalarca gizleyebilir). Elle başlatılan kayıtlar hiçbir zaman kendiliğinden bitirilmez; iş sürerken yeni kayıt başlatılmaz. Varsayılan kapalı.
 
 ### Takvim bağlamı (isteğe bağlı)
 

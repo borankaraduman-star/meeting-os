@@ -311,7 +311,7 @@ class UserNameTests(unittest.TestCase):
     def test_the_name_is_validated_and_nobody_is_the_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp)
-            self.assertEqual(reports.load_settings(data)['user_name'],reports.DEFAULT_USER_NAME)
+            self.assertEqual(reports.load_settings(data)['user_name'],'')   # the value, not the constant: DEFAULT_USER_NAME==DEFAULT_USER_NAME proved nothing
             self.assertEqual(reports.settings_owner(data),'')   # no settings file: this Mac belongs to nobody yet
             self.assertNotIn('Boran',(reports.DEFAULT_USER_NAME,reports.settings_owner(data)))
             self.assertEqual(reports.save_settings(data,{'user_name':'  Ayşe Yılmaz  '})['user_name'],'Ayşe Yılmaz')

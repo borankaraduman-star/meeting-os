@@ -370,7 +370,9 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         'speakers': speakers, 'review_queue': kinds, 'analysis': analysis_summary, 'scorecard': identity_report(store), 'errors': _errors(Path(data_dir) / 'last-job.log'),
     }
     if include_text:
-        report['transcript'] = [{'start': r['start'], 'speaker': r.get('speaker_name') or r['speaker'], 'text': r.get('text')} for r in rows]
+        from .intelligence import row_label
+        owner = settings_owner(data_dir)
+        report['transcript'] = [{'start': r['start'], 'speaker': row_label(r, owner), 'text': r.get('text')} for r in rows]
     return report
 
 

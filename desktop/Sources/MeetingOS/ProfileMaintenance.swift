@@ -30,8 +30,11 @@ struct IdentityCandidate:Identifiable, Equatable {
 /// "Why did it think this was Ayşe?" — scores against every saved person, with the thresholds that decide.
 struct IdentityExplanation:Equatable {
     let candidates:[IdentityCandidate]; let threshold:Double; let margin:Double; let suggest:Double; let seconds:Double; let reason:String
+    /// `explain_identity` sends threshold/margin/suggest on every branch; these stand in only for an answer from
+    /// an older bridge that did not. They are a last resort, never a second opinion about what the bars are.
+    static let legacyThreshold=0.87, legacyMargin=0.05, legacySuggest=0.83
     static func parse(_ d:[String:Any])->IdentityExplanation {
-        IdentityExplanation(candidates:(d["candidates"] as? [[String:Any]] ?? []).map(IdentityCandidate.init),threshold:d["threshold"] as? Double ?? 0.87,margin:d["margin"] as? Double ?? 0.05,suggest:d["suggest"] as? Double ?? 0.83,seconds:d["seconds"] as? Double ?? 0,reason:d["reason"] as? String ?? "")
+        IdentityExplanation(candidates:(d["candidates"] as? [[String:Any]] ?? []).map(IdentityCandidate.init),threshold:d["threshold"] as? Double ?? legacyThreshold,margin:d["margin"] as? Double ?? legacyMargin,suggest:d["suggest"] as? Double ?? legacySuggest,seconds:d["seconds"] as? Double ?? 0,reason:d["reason"] as? String ?? "")
     }
     /// The bar this person actually had to clear: their own when corrections have moved it, otherwise the global one.
     func bar(for c:IdentityCandidate)->Double { c.thresholdUsed>0 ? c.thresholdUsed : threshold }

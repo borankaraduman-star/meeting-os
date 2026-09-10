@@ -85,6 +85,20 @@ class OwnerNormalizationTests(unittest.TestCase):
   rows=[{'id':1,'start':0.,'end':8.,'source':'mic','speaker':'mic:S0','speaker_name':'Boran','text':"Bu işi Deniz üstlendi, hotfix'i o deploy edecek.",'flags':[]}]
   d=blank(actions=[{'title':'Hotfix deploy','owner':"Deniz'in",'due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
   self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Deniz')
+ def test_owner_spelled_without_its_diacritics_still_clears_the_evidence_gate(self):
+  # `metrics.normalize` keeps ö/o apart, so "Gokhan" never matched the quote's "Gökhan" and the owner was
+  # dropped. The gate uses `memory.owner_key` semantics now: one person, however the name is typed.
+  rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gökhan','text':'Gökhan sunumu cuma günü hazırlayacak.','flags':[]}]
+  d=blank(actions=[{'title':'Sunumu hazırla','owner':'Gokhan','due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
+  self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Gokhan')   # kept, not abstained; canonical_owner still returns the model's own spelling
+  # The same gate through the speaker side: a first-person commitment by a row whose name is spelled the other way.
+  rows2=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gokhan','text':'Ben sunumu cuma günü hazırlayacağım.','flags':[]}]
+  d2=blank(actions=[{'title':'Sunumu hazırla','owner':'Gökhan','due_text':None,'evidence':[{'segment_id':1,'quote':rows2[0]['text']}]}])
+  self.assertEqual(validate_record(d2,rows2)['actions'][0]['owner'],'Gökhan')
+ def test_an_owner_no_spelling_of_which_appears_in_the_evidence_is_still_dropped(self):
+  rows=[{'id':1,'start':0.,'end':8.,'source':'system','speaker':'S1','speaker_name':'Gökhan','text':'Sunumu cuma günü hazırlayacağız.','flags':[]}]
+  d=blank(actions=[{'title':'Sunumu hazırla','owner':'Cem','due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
+  self.assertIsNone(validate_record(d,rows)['actions'][0]['owner'])
 
 
 class DedupeTests(unittest.TestCase):

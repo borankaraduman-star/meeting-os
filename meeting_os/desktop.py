@@ -14,13 +14,16 @@ def timestamp(t, sep=','):
     return f'{hours:02}:{minutes:02}:{seconds:02}{sep}{ms:03}'
 
 
-def export_text(rows, kind):
+def export_text(rows, kind, owner=None):
+    """`owner` is reports.settings_owner: without it a microphone row exports as its raw label ("Ben")."""
+    from .intelligence import row_label
+    label=lambda r: row_label(r,owner)
     if kind=='json':
         return json.dumps([{k:v for k,v in r.items() if k not in ('embedding','embedding_model')} for r in rows],ensure_ascii=False,indent=2)
     if kind=='srt':
         if any(r['start'] is None or r['end'] is None for r in rows):raise ValueError('SRT için başlangıç ve bitiş zamanları gerekir; metin veya JSON olarak dışa aktarın.')
-        return '\n\n'.join(f"{i+1}\n{timestamp(r['start'])} --> {timestamp(r['end'])}\n{r['speaker_name'] or r['speaker']}: {r['text']}" for i,r in enumerate(rows))+'\n'
-    return '\n\n'.join(f"**{timestamp(r['start'], '.') if r['start'] is not None else 'Zaman belirtilmemiş'} · {r['speaker_name'] or r['speaker']}**\n\n{r['text']}" for r in rows)+'\n'
+        return '\n\n'.join(f"{i+1}\n{timestamp(r['start'])} --> {timestamp(r['end'])}\n{label(r)}: {r['text']}" for i,r in enumerate(rows))+'\n'
+    return '\n\n'.join(f"**{timestamp(r['start'], '.') if r['start'] is not None else 'Zaman belirtilmemiş'} · {label(r)}**\n\n{r['text']}" for r in rows)+'\n'
 
 
 def capture_state(metadata, include_signal=False):
@@ -44,8 +47,9 @@ def capture_state(metadata, include_signal=False):
     for key in ('restarts','relaunches','wakes','gap_seconds','wake_gap_seconds'):
         if health[key]: result[key]=health[key]
     # The helper writes a line per chunk, so the journal's own mtime is the cheapest honest "still alive?".
+    # Explicitly null when unknown: a missing key and "0 seconds ago" must never look the same to the app.
     try: result['last_event_age']=round(max(0.0,time.time()-path.stat().st_mtime),1)
-    except OSError: pass
+    except OSError: result['last_event_age']=None
     low=[e for e in events if e.get('event')=='low_disk']
     if low: result['low_disk_bytes']=low[-1].get('free_bytes')
     if include_signal:
@@ -356,11 +360,12 @@ def dispatch(request, db=None):
         if action=='delete_sample': store.delete_sample(request['sample']); return {'deleted':True}
         if action=='rename_profile': return store.rename_profile(request['name'],request['new_name'])
         if action=='explain_identity':
-            rows=[r for r in store.segments(request['meeting']) if r['speaker']==request['speaker'] and r.get('embedding')]
-            if not rows: return {'candidates':[],'reason':'Bu konuşmacı için ses vektörü yok (3 saniyeden kısa veya henüz işlenmedi)'}
             from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid
+            bars={'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD}   # the app writes its sentence against these, so both branches carry them
+            rows=[r for r in store.segments(request['meeting']) if r['speaker']==request['speaker'] and r.get('embedding')]
+            if not rows: return {'candidates':[],'reason':'Bu konuşmacı için ses vektörü yok (3 saniyeden kısa veya henüz işlenmedi)',**bars}
             model=rows[0]['embedding_model'];centroid=linked_centroid(rows,model)   # the same vector the pipeline scored
-            return {'candidates':store.explain_identity(centroid,model,base=IDENTITY_THRESHOLD),'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD,'seconds':round(sum(r['end']-r['start'] for r in rows),1)}
+            return {'candidates':store.explain_identity(centroid,model,base=IDENTITY_THRESHOLD),**bars,'seconds':round(sum(r['end']-r['start'] for r in rows),1)}
         if action in ('update_check','update_start','update_status'):
             from . import updater
             if action=='update_check': return updater.check(ROOT)
@@ -561,12 +566,17 @@ def dispatch(request, db=None):
             except Exception: signing_partition=False
             data=DATA_DIR if db is None else Path(db).parent
             entries=G.load(data,ROOT); paths=[p for p in G.sources(data) if p.is_file()]
-            behind=0
+            update={}
             if db is None:
                 try:
                     from .updater import check
-                    behind=int((check(ROOT) or {}).get('behind') or 0)
-                except Exception: behind=0
+                    update=check(ROOT) or {}
+                except Exception as exc: update={'error':f'Güncelleme kontrolü yapılamadı ({type(exc).__name__})'}
+            try: behind=int(update.get('behind') or 0)
+            except (TypeError,ValueError): behind=0
+            # A failed check is not "güncel": the app has to be able to tell "up to date" from "could not tell".
+            # A diverged branch has its own error text and its own card line, so it is not reported twice.
+            update_error='' if update.get('diverged') else str(update.get('error') or '')
             from .reports import load_settings,host_dir
             rs=load_settings(data); folder=host_dir(rs); written=len(list(folder.glob('*.json'))) if folder.is_dir() else 0
             import os
@@ -574,6 +584,8 @@ def dispatch(request, db=None):
             while not anchor.exists() and anchor.parent!=anchor: anchor=anchor.parent   # mkdir(parents=True) creates the rest on first write
             writable=bool(rs.get('share_reports')) and os.access(anchor,os.W_OK)
             return {'api_key':has_key,'api_key_keychain':key_in_keychain,'signing_partition':signing_partition,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
+                    'update_diverged':bool(update.get('diverged')),'update_ahead':int(update.get('ahead') or 0),
+                    'update_hint':str(update.get('hint') or ''),'update_error':update_error,
                     'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder)}
         if action=='cost_report':
             # Real OpenRouter charges: transcription per audio piece, analysis per chat completion.
@@ -646,13 +658,15 @@ def dispatch(request, db=None):
                     lines+=['- '+item['text']+(' ('+(item.get('note') or 'geri alındı')+')' if item.get('superseded') else '')]
                     lines+=['  - Kaynak #'+str(e['segment_id'])+' ('+timestamp(e['start'],'.')+'): '+e['quote'] for e in item['evidence']]
             lines+=['\n## Görevler']
+            from .memory import RETIRED,state_label
             for t in memory.actions(meeting=request['meeting']):
-                if t['state']=='superseded': continue   # a task a newer analysis of this meeting no longer states
-                lines+=['- '+t['title']+' | '+(t['owner'] or 'Belirsiz')+' | '+(t['due_text'] or 'Tarih yok')+' | '+t['state']+(' | GÜNCEL DEĞİL' if t['stale'] else '')]
+                if t['state'] in RETIRED: continue   # superseded by a newer analysis, or removed by hand: neither is a task any more
+                lines+=['- '+t['title']+' | '+(t['owner'] or 'Belirsiz')+' | '+(t['due_text'] or 'Tarih yok')+' | '+state_label(t['state'])+(' | GÜNCEL DEĞİL' if t['stale'] else '')]
             Path(request['path']).write_text('\n'.join(lines),encoding='utf-8');return {'path':request['path']}
         if action=='export':
             rows=store.segments(request['meeting'])
-            path=Path(request['path']); path.write_text(export_text(rows,request['format']))
+            from .reports import store_owner
+            path=Path(request['path']); path.write_text(export_text(rows,request['format'],store_owner(store)))
             return {'path':str(path)}
         if action=='vocabulary':
             from . import glossary as G

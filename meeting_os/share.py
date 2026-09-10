@@ -3,9 +3,8 @@ Read-only — stored segments, names and analyses are never changed; masking hap
 import re
 from datetime import datetime, timezone
 from .intelligence import REVERSED_NOTE
-from .memory import Memory, RETIRED
+from .memory import Memory, RETIRED, STATE_LABELS
 
-STATE_LABELS = {'open': 'açık', 'in_progress': 'devam ediyor', 'done': 'tamamlandı', 'dismissed': 'kaldırıldı', 'superseded': 'yenilendi'}
 _TURKISH = dict.fromkeys('iİıI', 'iİıI')   # STT output mixes dotted/dotless forms; for redaction, matching all four is the safe side
 # First names that are also everyday Turkish words. Case-insensitive masking turned "can sıkıntısı" into
 # "Kişi A sıkıntısı"; for these, only a capitalised occurrence is treated as the person.

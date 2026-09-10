@@ -8,6 +8,12 @@ STOPWORDS={'ve','bir','bu','şu','o','ne','kaç','mi','mı','mu','mü','ile','i�
 
 
 RETIRED=('dismissed','superseded')   # a task the user removed by hand, or one a newer analysis of the same meeting left behind
+# The Turkish word for every task state, in one place: the digest, the share preview and the analysis export
+# used to keep their own copies, and an export that printed the raw 'in_progress' was the proof they drifted.
+STATE_LABELS={'open':'açık','in_progress':'devam ediyor','done':'tamamlandı','dismissed':'kaldırıldı','superseded':'yenilendi'}
+
+def state_label(state):
+    return STATE_LABELS.get(state,state)
 
 def owner_key(name):
     """Loose match for a person's name: case, İ/I/ı and diacritics do not separate "İlker", "Ilker" and "ilker".

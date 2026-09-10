@@ -1,8 +1,23 @@
-import tempfile, unittest
+import contextlib, tempfile, unittest
+from unittest import mock
 from pathlib import Path
 from meeting_os import probe
 
-class ProbeTests(unittest.TestCase):
+
+class SandboxedProbe(unittest.TestCase):
+    """No test may look at the real Mac or shell out. `SIGNING_MARKER` points at a temp path (the real one
+    belongs to whoever runs the suite) and `subprocess.run` is stubbed, so `keychain_item_exists` can never
+    reach `/usr/bin/security` and no probe can start the recorder helper."""
+    def setUp(self):
+        self.stack = contextlib.ExitStack(); self.addCleanup(self.stack.close)
+        self.home = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
+        self.marker = self.home/'signing-partition.ok'
+        self.stack.enter_context(mock.patch.object(probe,'SIGNING_MARKER',self.marker))
+        self.subprocess_run = self.stack.enter_context(
+            mock.patch.object(probe.subprocess,'run',side_effect=AssertionError('a test must never shell out')))
+
+
+class ProbeTests(SandboxedProbe):
     def test_empty_data_dir_reports_only_environment_gaps(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
@@ -24,17 +39,14 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(probe.summary_line({'ok':True,'warnings':[],'failed':[]}),'Öz-test temiz')
 
 
-class SigningPartitionTests(unittest.TestCase):
+class SigningPartitionTests(SandboxedProbe):
     """The marker scripts/fix-signing-prompts.sh leaves behind. Missing marker = update.sh refuses before it even
     merges, so this Mac can take no new version at all; nothing here may ever shell out to `security`."""
     def _with_marker(self, exists):
-        import contextlib, unittest.mock
-        tmp = tempfile.TemporaryDirectory()
-        marker = Path(tmp.name)/'signing-partition.ok'
-        if exists: marker.write_text('ABCDEF0123 granted 2026-09-10 10:00:00\n')
-        patch = unittest.mock.patch.object(probe,'SIGNING_MARKER',marker)
-        stack = contextlib.ExitStack(); stack.enter_context(tmp); stack.enter_context(patch)
-        return stack
+        """The marker itself; the temp path and the subprocess stub come from SandboxedProbe."""
+        if exists: self.marker.write_text('ABCDEF0123 granted 2026-09-10 10:00:00\n')
+        elif self.marker.exists(): self.marker.unlink()
+        return contextlib.nullcontext()
     def test_missing_marker_is_an_error_with_an_absolute_command(self):
         with self._with_marker(False):
             item = probe.signing_partition_item('/Users/x/meeting-os')
@@ -108,7 +120,10 @@ class NightlyCheckTests(unittest.TestCase):
         import json
         from datetime import datetime, timezone, timedelta
         from meeting_os import reports
-        with tempfile.TemporaryDirectory() as tmp:
+        # `daily_probe` runs the real `probe.run` against the real checkout, which starts the recorder helper's
+        # self-test if it happens to be built. What is under test here is the cache, not the probe.
+        fake={'ok':True,'failed':[],'warnings':[],'at':datetime.now(timezone.utc).isoformat()}
+        with mock.patch.object(probe,'run',return_value=fake) as ran, tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp); (data/'settings.json').write_text('{"share_reports": false}')
             first=reports.daily_probe(data, now=datetime.now(timezone.utc))
             self.assertIn('summary',first); self.assertTrue((data/reports.PROBE_CACHE).exists())
@@ -116,6 +131,7 @@ class NightlyCheckTests(unittest.TestCase):
             self.assertEqual(reports.daily_probe(data)['summary'],'cached')
             later=reports.daily_probe(data, now=datetime.now(timezone.utc)+timedelta(hours=25))
             self.assertNotEqual(later['summary'],'cached')
+            self.assertEqual(ran.call_count,2)   # once for the first run, once when the cache expired
     def test_alerts_from_heartbeats(self):
         from datetime import datetime, timezone, timedelta
         from meeting_os.reports import alerts

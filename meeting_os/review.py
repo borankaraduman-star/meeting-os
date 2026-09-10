@@ -1,17 +1,20 @@
 """Critical review queue: the few places a person should listen to instead of reading a whole transcript."""
 import json
 from .insights import first_evidence
+from .intelligence import row_label
 from .memory import Memory, RETIRED
+from .reports import store_owner
 
 
 def review_queue(store, mid, data_dir=None):
     rows=store.segments(mid)
+    owner=store_owner(store)   # the mic label is a person: read raw, every queue item about the user said "Ben"
     items=[]
     seen_clusters=set()
     for r in rows:
         metrics=r.get('metrics') or {};identity=metrics.get('identity') or {};cluster=metrics.get('cluster')
         excerpt=(r.get('text') or '')[:120]
-        base={'segment_id':r['id'],'start':r['start'],'speaker':r.get('speaker_name') or r.get('speaker'),'text':excerpt}
+        base={'segment_id':r['id'],'start':r['start'],'speaker':row_label(r,owner),'text':excerpt}
         if identity.get('suggested') and not r.get('speaker_name'):
             if (r['speaker'],'suggest') in seen_clusters: continue
             seen_clusters.add((r['speaker'],'suggest'))
@@ -36,13 +39,13 @@ def review_queue(store, mid, data_dir=None):
     labels={'important':'Önemli an','decision':'Karar anı','task':'Bana görev','later':'Sonra bak'}
     for marker in meta.get('markers') or []:
         secs=marker.get('seconds',0);near=min(rows,key=lambda r:abs((r['start'] or 0)-secs)) if rows else None
-        items.append({'segment_id':near['id'] if near else None,'start':secs,'speaker':(near or {}).get('speaker_name') or (near or {}).get('speaker'),'text':(near or {}).get('text','')[:120],
+        items.append({'segment_id':near['id'] if near else None,'start':secs,'speaker':row_label(near or {},owner),'text':(near or {}).get('text','')[:120],
                       'kind':'marker','severity':0,'reason':f"Kayıt sırasında ⌘M ile işaretledin: {labels.get(marker.get('kind'),'Önemli an')}",'marker':marker.get('kind')})
     by_id={r['id']:r for r in rows}
     for sg in (meta.get('glossary_suggestions') or [])[:40]:
         row=by_id.get(sg.get('segment_id'))
         if not row or sg.get('original') not in (row.get('text') or ''): continue
-        items.append({'segment_id':row['id'],'start':row['start'],'speaker':row.get('speaker_name') or row.get('speaker'),'text':row['text'][:120],'kind':'glossary','severity':2,
+        items.append({'segment_id':row['id'],'start':row['start'],'speaker':row_label(row,owner),'text':row['text'][:120],'kind':'glossary','severity':2,
                       'reason':f"Sözlük: “{sg['original']}” muhtemelen “{sg['replacement']}”"+(f" · {sg['reason']}" if sg.get('reason') else (' · yerel eşleme, model doğrulamadı' if sg.get('source')=='local' else '')),
                       'original':sg['original'],'replacement':sg['replacement'],'verified':sg.get('source')=='llm'})
     from .correction_memory import word_candidates
@@ -51,7 +54,7 @@ def review_queue(store, mid, data_dir=None):
     for word in word_candidates(store,mid,data_dir):
         row=by_id.get(word['segment_id'])
         if not row: continue
-        items.append({'segment_id':row['id'],'start':row['start'],'speaker':row.get('speaker_name') or row.get('speaker'),'text':(row.get('text') or '')[:120],'kind':'word','severity':2,
+        items.append({'segment_id':row['id'],'start':row['start'],'speaker':row_label(row,owner),'text':(row.get('text') or '')[:120],'kind':'word','severity':2,
                       'reason':f"Kelime: “{word['original']}” muhtemelen “{word['replacement']}” · "+('öğretilen kelime' if word['source']=='taught' else 'sözlük terimi'),
                       'original':word['original'],'replacement':word['replacement'],'count':word['count']})
     memory=Memory(store)

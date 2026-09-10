@@ -83,6 +83,9 @@ enum SetupStatus {
         let glossary=r["glossary_terms"] as? Int ?? 0
         let shared=r["glossary_shared"] as? Bool ?? false
         let behind=r["update_behind"] as? Int ?? 0
+        // The check itself failed (no network, no git): unknown, not up to date. Optional, because a Mac that
+        // cannot reach GitHub is not broken — it just cannot answer this question right now.
+        let updateError=r["update_error"] as? String ?? ""
         let signing=r["signing_partition"] as? Bool ?? false
         // Either side may notice the divergence first: the bridge's own flag, or the update check the sidebar ran.
         let diverged=(r["update_diverged"] as? Bool ?? false) || !divergedNotice.isEmpty
@@ -94,7 +97,9 @@ enum SetupStatus {
             SetupCheck(id:"key",title:"OpenRouter anahtarı",state:keyState,hint:keyHint),
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
             SetupCheck(id:"signing",title:"İmzalama izni",state:signing ? .ok : .missing,hint:signing ? "verildi" : signingFix(repo:repo)),
-            SetupCheck(id:"update",title:"Sürüm",state:diverged ? .missing : (behind==0 ? .ok : .missing),hint:diverged ? divergedLine : (behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin")),
+            SetupCheck(id:"update",title:"Sürüm",
+                       state:diverged ? .missing : (!updateError.isEmpty ? .optional : (behind==0 ? .ok : .missing)),
+                       hint:diverged ? divergedLine : (!updateError.isEmpty ? "kontrol edilemedi · "+updateError : (behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"))),
             reportsCheck(r),
         ]
     }

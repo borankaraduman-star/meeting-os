@@ -211,12 +211,15 @@ class EchoAnalysisTests(unittest.TestCase):
             store.add_segment(mid,Segment(0,10,'Karar yarın rapor çıkacak','mic','Boran',flags=['possible_echo']))
             store.status(mid,'complete')
             seen={}
-            def fake_analyze(rows,*a,**k): seen['rows']=rows; raise RuntimeError('stop here')
-            with patch.object(assistant,'analyze_rows',fake_analyze,create=True):
-                src=Path(assistant.__file__).read_text()
-            self.assertIn("'possible_echo' not in r['flags']",src)
-            rows=[r for r in store.display_segments(mid) if 'possible_echo' not in r['flags']]
-            self.assertEqual([r['source'] for r in rows],['system']);store.close()
+            def fake_analyze(rows,*a,**k):
+                seen['rows']=rows
+                raise RuntimeError('stop here')
+            class Llm: model_id='fixture'
+            with patch.object(assistant,'analyze_rows',fake_analyze):
+                with self.assertRaises(RuntimeError): assistant.analyze(store,mid,Llm())
+            self.assertEqual([r['source'] for r in seen['rows']],['system'])   # the echoed mic row never reaches the model
+            self.assertNotIn('possible_echo',[f for r in seen['rows'] for f in r['flags']])
+            store.close()
 
 class BackchannelClient(FakeClient):
     def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):

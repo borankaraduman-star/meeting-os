@@ -52,6 +52,15 @@ class AssistantTests(unittest.TestCase):
   self.assertEqual(assistant.draft(self.s,d['id'])['text'],'Elle düzenlenen taslak');self.assertEqual(self.s.db.execute('SELECT count(*) FROM draft_edits').fetchone()[0],1)
  def test_summary_export_contains_tasks_and_sources(self):
   path=Path(self.tmp.name)/'summary.md';dispatch({'action':'export_analysis','meeting':self.mid,'path':str(path)},self.path);self.assertIn('PRD',path.read_text());self.assertIn('Görevler',path.read_text())
+ def test_summary_export_writes_turkish_states_and_leaves_out_every_retired_task(self):
+  from meeting_os.memory import RETIRED
+  dispatch({'action':'action_update','task':self.task['id'],'changes':{'state':'in_progress'}},self.path)
+  path=Path(self.tmp.name)/'states.md';dispatch({'action':'export_analysis','meeting':self.mid,'path':str(path)},self.path)
+  text=path.read_text();self.assertIn('devam ediyor',text);self.assertNotIn('in_progress',text)
+  for state in RETIRED:   # 'dismissed' used to survive the export; only 'superseded' was skipped
+   with self.s.db: self.s.db.execute('UPDATE tasks SET state=? WHERE id=?',(state,self.task['id']))   # 'superseded' is written by a new analysis, not by the user
+   dispatch({'action':'export_analysis','meeting':self.mid,'path':str(path)},self.path)
+   self.assertNotIn('PRD taslağını hazırla',path.read_text(),state)
  def test_draft_cache_and_progress_do_not_waste_model_calls(self):
   llm=FakeLLM();d=assistant.prepare(self.s,self.task['id'],llm);self.mem.update_action(self.task['id'],{'state':'in_progress'});d2=assistant.prepare(self.s,self.task['id'],llm);self.assertEqual(d['id'],d2['id']);self.assertEqual(llm.calls,1)
  def test_fabricated_draft_date_is_rejected(self):

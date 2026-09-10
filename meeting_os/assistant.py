@@ -38,16 +38,17 @@ def analyze(store,mid,llm=None,force=False):
     digest=mem.current_hash(mid)   # staleness is judged on the whole transcript, not on the filtered analysis input
     from .glossary import load as load_glossary, analysis_context
     from .cli import DATA_DIR, ROOT
-    glossary=analysis_context(load_glossary(DATA_DIR,ROOT))
+    data=Path(store.path).parent if getattr(store,'path',None) else DATA_DIR   # the store's own folder: tests never touch the real data dir
+    glossary=analysis_context(load_glossary(data,ROOT))
     from .reports import settings_owner
-    owner=settings_owner(Path(store.path).parent if getattr(store,'path',None) else DATA_DIR)   # a cloud mic row carries the label in `speaker`; only Settings knows who 'Ben' is
+    owner=settings_owner(data)   # a cloud mic row carries the label in `speaker`; only Settings knows who 'Ben' is
     with usage_context(store,mid):
         result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner)
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
     auto_title(store,mid,result)
     from .reports import write_meeting_report
     from . import __version__
-    write_meeting_report(store,mid,Path(store.path).parent if getattr(store,'path',None) else DATA_DIR,version=__version__)   # the store's own folder: tests never touch the real data dir
+    write_meeting_report(store,mid,data,version=__version__)
     return saved
 
 
