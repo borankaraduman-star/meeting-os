@@ -743,3 +743,7 @@ Boran (canlı kullanım): “toplantıyı sil butonu hâlâ yok solda” → `Si
 ## 2026-09-10 21:35 — 1.2.59: ortalı boş durumlar, ✕, Geri
 
 Boran (canlı kullanım): “boş tablerde uyarı ortalı değil, genişletince/küçültünce kötü” → ajan `center` `f0ee9f8`: `CenteredNotice` + `NoticeMetrics` + `.noticeArea()/.inlineNoticeArea()/.readingColumn()` (Transkript, Özet, Görevlerim, Kontrol, Hafıza ×3, karne, Ara (daha önce boş ekran), Welcome 700 pt sütun; şeritler sarar); “ayarları açınca çarpı yok” → ajan `close` `059c6a1`: `SheetChrome.swift` (`SheetCloseButton` Esc + gizli ⌘W, `.sheetChrome`, `.popoverChrome`), 7 sayfa + popover, Ayarlar kromu ScrollView dışında, `SettingsSections.sheetHeight` ekran sınırı; “geri butonu olmalı” → ajan `back` `88aa001`: `NavHistory` (cap 20), `willSet` tabanlı atlama sınıflandırması, `reveal` → `flashReveal`, `BackButton` sekme şeridinde, Git menüsü ⌘[; benim: Kontrol “Görevlerim’de aç” `navigate {}`. Çakışma: ActionsView (readingColumn + sheetChrome) birleşim. Swift 211. Uygulama 1.2.59 ile yeniden başladı.
+
+## 2026-09-10 21:45 — 1.2.60: ekran kaydı izni açıklaması
+
+Boran: “bu uygulama ekran erişim izni de mi istiyor, neden?” → cevap: ScreenCaptureKit sistem sesi için; yalnız ses akışı, kare yok. `SetupStatus.serviceChecks` “Ekran kaydı (toplantı sesi)” satırının ipucu her iki durumda nedeni söylüyor. Swift 211.
