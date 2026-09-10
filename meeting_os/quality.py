@@ -56,13 +56,23 @@ def reference_set(store):
     return items
 
 
+def _pinned(store):
+    """(meeting, segment id) of every piece the user moved to someone else with "Yalnız bu bölüm": the model was
+    right about the cluster, so such a piece must not stand in for the cluster's verdict."""
+    out=set()
+    for r in store.db.execute("SELECT meeting,speaker FROM corrections WHERE speaker LIKE 'segment:%' AND json_extract(feedback,'$.pin')=1"):
+        try: out.add((r['meeting'],int(r['speaker'].split(':',1)[1])))
+        except ValueError: pass
+    return out
+
 def identity_report(store):
     """Per cluster: what the voiceprint said vs what the user finally called it."""
     corrected={(r['meeting'],r['speaker']):r['name'] for r in store.db.execute('SELECT meeting,speaker,name FROM corrections WHERE speaker NOT LIKE ? ORDER BY created',('segment:%',))}
+    pinned=_pinned(store)
     seen=set();auto_ok=auto_wrong=suggest_ok=suggest_wrong=missed=unnamed=0
-    for row in store.db.execute("SELECT meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
+    for row in store.db.execute("SELECT id,meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
         p=json.loads(row['payload']);m=p.get('metrics') or {};cl=m.get('cluster')
-        if cl is None or (row['meeting'],cl) in seen: continue
+        if cl is None or (row['meeting'],cl) in seen or (row['meeting'],row['id']) in pinned: continue   # a pinned piece is not the cluster's verdict
         seen.add((row['meeting'],cl));ident=m.get('identity') or {}
         auto=ident.get('name');suggested=ident.get('suggested');final=corrected.get((row['meeting'],row['speaker'])) or row['speaker_name']
         if auto:
@@ -127,13 +137,13 @@ def learning_progress(store, weeks=6):
         w=week_of.get(mid)
         if w is None: return None
         return rows.setdefault(w,{'week':w,'meetings':set(),'clusters':0,'auto':0,'auto_wrong':0,'suggested':0,'suggested_ok':0,'named_by_user':0,'unnamed':0,'text_edits':0,'words':0})
-    seen=set()
-    for row in store.db.execute("SELECT meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
+    seen=set();pinned=_pinned(store)
+    for row in store.db.execute("SELECT id,meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
         b=bucket(row['meeting'])
         if b is None: continue
         p=json.loads(row['payload']);m=p.get('metrics') or {};cl=m.get('cluster')
         b['words']+=len(_words(p.get('text') or ''));b['meetings'].add(row['meeting'])
-        if cl is None or (row['meeting'],cl) in seen: continue
+        if cl is None or (row['meeting'],cl) in seen or (row['meeting'],row['id']) in pinned: continue
         seen.add((row['meeting'],cl));ident=m.get('identity') or {};b['clusters']+=1
         final=(corrected.get((row['meeting'],row['speaker'])) or (row['speaker_name'],None))[0]
         if ident.get('name'):

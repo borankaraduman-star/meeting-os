@@ -487,3 +487,34 @@ class SegmentOnlyCorrectionTests(unittest.TestCase):
         rows={r['id']:r for r in db.segments(mid)}
         self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe','Ali','Ayşe'])
         db.close(); tmp.cleanup()
+    def test_cluster_naming_after_a_pin_convicts_nobody_and_undo_keeps_the_pin(self):
+        tmp,db,mid,ids=self._meeting()
+        db.correct_segment_only(mid,ids[1],'Ali')
+        db.correct(mid,'system:S1','Ayşe Yılmaz')
+        self.assertEqual(db.db.execute("SELECT count(*) FROM rejections WHERE name='Ali'").fetchone()[0],0)
+        self.assertEqual(db.db.execute("SELECT previous_name FROM corrections WHERE speaker='system:S1' ORDER BY id DESC LIMIT 1").fetchone()[0],'Ayşe')
+        db.undo_correction(mid)   # undoes the cluster naming, not the pin
+        rows={r['id']:r for r in db.segments(mid)}
+        self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe','Ali','Ayşe'])
+        db.undo_correction(mid)   # now the pin itself
+        rows={r['id']:r for r in db.segments(mid)}
+        self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe','Ayşe','Ayşe'])
+        self.assertEqual(db.profile_samples('Ali'),[])
+        db.close(); tmp.cleanup()
+    def test_pin_does_not_block_automatic_identification_of_the_rest(self):
+        tmp=tempfile.TemporaryDirectory(); db=Store(Path(tmp.name)/'db'); mid=db.create_meeting('test')
+        voice=self._voice(1)
+        db.enroll('Kerem',voice,'m',20)
+        other=self._voice(7)   # the mis-assigned piece really is another voice
+        ids=[db.add_segment(mid,Segment(i*10,i*10+8,f'söz {i}','system','system:S1',metrics={'cluster':'0:S1'},flags=['cloud_diarization'],embedding=(other if i==0 else voice),embedding_model='m')) for i in range(3)]
+        db.correct_segment_only(mid,ids[0],'Ali')
+        db.resuggest(mid)
+        rows={r['id']:r for r in db.segments(mid)}
+        self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ali','Kerem','Kerem'])
+        db.close(); tmp.cleanup()
+    def test_enroll_segment_does_not_pin(self):
+        tmp,db,mid,ids=self._meeting()
+        db.enroll_segment(mid,ids[0],'Ayşe')
+        db.correct(mid,'system:S1','Ayşe Yılmaz')
+        self.assertEqual({r['speaker_name'] for r in db.segments(mid)},{'Ayşe Yılmaz'})
+        db.close(); tmp.cleanup()

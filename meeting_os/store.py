@@ -90,8 +90,7 @@ class Store:
     def correct(self, mid, speaker, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
-        rows=[r for r in self.segments(mid) if r['speaker']==speaker]
-        if not rows: raise ValueError('Speaker not found in meeting')
+        rows=self._cluster_rows(mid, speaker)
         created=datetime.now(timezone.utc).isoformat()
         with self.db:
             previous=self._previous_label(rows)
@@ -233,10 +232,19 @@ class Store:
     def _pinned_segments(self, mid):
         """Segments the user corrected one by one: a later naming of their cluster must not write over them."""
         ids=set()
-        for r in self.db.execute("SELECT speaker FROM corrections WHERE meeting=? AND speaker LIKE 'segment:%'",(mid,)):
+        for r in self.db.execute("SELECT speaker FROM corrections WHERE meeting=? AND speaker LIKE 'segment:%' AND json_extract(feedback,'$.pin')=1",(mid,)):
             try: ids.add(int(r['speaker'].split(':',1)[1]))
             except ValueError: pass
         return ids
+    def _cluster_rows(self, mid, speaker):
+        """The rows a cluster naming judges and learns from: the cluster minus the pieces the user pinned to someone
+        else. Keeping a pinned piece in this set made the next naming record the pinned person as the cluster's
+        previous label (undo then painted the whole speaker with it) and file a rejection against him."""
+        rows=[r for r in self.segments(mid) if r['speaker']==speaker]
+        if not rows: raise ValueError('Speaker not found in meeting')
+        pinned=self._pinned_segments(mid)
+        kept=[r for r in rows if r['id'] not in pinned]
+        return kept or rows
     def _set_cluster_name(self, mid, speaker, name):
         """Name every segment of a cluster except the pinned ones (must run inside the caller's transaction)."""
         pinned=sorted(self._pinned_segments(mid))
@@ -262,9 +270,11 @@ class Store:
             sample=None
             if learnable and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,r['embedding_model'],provenance)).fetchone():
                 sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,r['embedding_model'],json.dumps(unit(r['embedding'])),duration,provenance)).lastrowid
+            mark=f'{mid}:segment:{sid}@{created}'
             if previous and fold_name(previous)!=fold_name(name):
-                self.db.execute('UPDATE samples SET deleted_by=? WHERE provenance=? AND name=? AND deleted_by IS NULL',(f'{mid}:segment:{sid}@{created}',provenance,previous))
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,f'segment:{sid}',name,created,previous,self._with_sample(None,sample)))
+                self.db.execute('UPDATE samples SET deleted_by=? WHERE provenance=? AND name=? AND deleted_by IS NULL',(mark,provenance,previous))
+            hidden=[r['id'] for r in self.db.execute('SELECT id FROM samples WHERE deleted_by=?',(mark,))]
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,f'segment:{sid}',name,created,previous,json.dumps({'pin':True,'sample_id':sample,'hidden':hidden})))
         return {'labeled':1,'profile_saved':sample is not None,'seconds':duration,'previous':previous}
     def correct_segment(self, mid, sid, name):
         name = name.strip()
@@ -330,8 +340,7 @@ class Store:
         """Name every segment of a diarized speaker cluster and save one voice sample from the cluster's embedded segments."""
         name=name.strip()
         if not name: raise ValueError('Name cannot be empty')
-        rows=[r for r in self.segments(mid) if r['speaker']==speaker]
-        if not rows: raise ValueError('Speaker not found in meeting')
+        rows=self._cluster_rows(mid, speaker)
         voiced=[r for r in rows if r.get('embedding') and (r['end']-r['start']>=3 or (r.get('metrics') or {}).get('cluster_embedding')) and 'speaker_ambiguous' not in r['flags']]
         model=voiced[0]['embedding_model'] if voiced else None
         vectors=[unit(r['embedding']) for r in voiced if r['embedding_model']==model]
@@ -355,9 +364,10 @@ class Store:
         rejection that naming created disappear, the samples it hid come back, and the correction row is removed
         so quality stats do not count it. Restoring skips a sample whose slot has since been refilled, so undo
         can never leave the same voice stored twice."""
-        row=self.db.execute("SELECT * FROM corrections WHERE meeting=? AND speaker NOT LIKE 'segment:%' ORDER BY id DESC LIMIT 1",(mid,)).fetchone()
+        row=self.db.execute("SELECT * FROM corrections WHERE meeting=? AND (speaker NOT LIKE 'segment:%' OR json_extract(feedback,'$.pin')=1) ORDER BY id DESC LIMIT 1",(mid,)).fetchone()
         if not row: raise ValueError('Geri alınacak adlandırma yok')
         speaker,name,previous=row['speaker'],row['name'],row['previous_name']
+        if speaker.startswith('segment:'): return self._undo_pin(mid, row)
         try: feedback=json.loads(row['feedback'] or 'null') or {}
         except ValueError: feedback={}
         with self.db:
@@ -375,6 +385,21 @@ class Store:
             self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
         # The cluster is open again (or back to its old name): what the rest of the meeting can be has changed.
         return {'speaker':speaker,'name':name,'previous':previous,**self.resuggest(mid)}
+    def _undo_pin(self, mid, row):
+        """Take back a "Yalnız bu bölüm" correction: the piece gets its old label, the sample it stored goes, the
+        sample it hid comes back, and the correction row disappears so the piece is no longer pinned."""
+        sid=int(row['speaker'].split(':',1)[1]); previous=row['previous_name']
+        try: feedback=json.loads(row['feedback'] or 'null') or {}
+        except ValueError: feedback={}
+        with self.db:
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(previous,mid,sid))
+            if feedback.get('sample_id') is not None: self.db.execute('DELETE FROM samples WHERE id=?',(feedback['sample_id'],))
+            for hid in feedback.get('hidden') or []:
+                self.db.execute("""UPDATE samples SET deleted_by=NULL WHERE id=? AND NOT EXISTS(
+                    SELECT 1 FROM samples live WHERE live.name=samples.name AND live.model IS samples.model
+                      AND live.provenance=samples.provenance AND live.deleted_by IS NULL)""",(hid,))
+            self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
+        return {'speaker':row['speaker'],'name':row['name'],'previous':previous,'segment':sid,**self.resuggest(mid)}
     def _retry_workspace_rows(self, mid, tables):
         if 'retry_workspaces' not in tables: return []
         return [dict(r) for r in self.db.execute('SELECT w.attempt,w.root,w.name,w.device,w.inode FROM retry_workspaces w JOIN retry_attempts a ON a.id=w.attempt WHERE a.meeting=?', (mid,))]
@@ -561,8 +586,10 @@ class Store:
         for r in self.segments(mid):
             if (r.get('metrics') or {}).get('cluster') is not None: speakers.setdefault((r['source'],r['speaker']),[]).append(r)
         scored=[]
+        pinned=self._pinned_segments(mid)
         for members in speakers.values():
-            if any(r.get('speaker_name') for r in members): continue
+            members=[r for r in members if r['id'] not in pinned]   # a pinned piece belongs to someone else: it neither blocks nor takes the cluster's name
+            if not members or any(r.get('speaker_name') for r in members): continue
             model=next((r['embedding_model'] for r in members if r.get('embedding')),None)
             centroid=linked_centroid(members,model) if model else None
             if centroid is not None: scored.append((members,self.identify(centroid,model,IDENTITY_THRESHOLD,IDENTITY_MARGIN)))

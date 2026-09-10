@@ -737,6 +737,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// The same button stops what it started; ⌘. stops from anywhere. Boran, 10 Sep 2026: "play tuşuna basınca stop yok".
     func stopPlayback() { player?.stop(); player=nil; playback.key=nil }
+    /// The glyph goes back to ▶ the moment the file ends, even when the span asked for more than the file has.
+    private lazy var playbackEnd=PlaybackEnd { [weak self] p in Task { @MainActor in if self?.player===p { self?.stopPlayback() } } }
     /// One span of one meeting's audio. Takes the metadata rather than reading `meeting`, so the settings sheet
     /// can preview a turn from a meeting that is not the open one.
     func play(source:String,start rowStart:Double,seconds:Double,metadata:[String:Any],key:String) {
@@ -753,9 +755,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 }
             }
             guard let path=path else { throw NSError(domain:"MeetingOS",code:1,userInfo:[NSLocalizedDescriptionKey:"Ses dosyası bulunamadı"]) }
-            player?.stop(); let p=try AVAudioPlayer(contentsOf:URL(fileURLWithPath:path)); player=p; p.currentTime=start; p.play(); playback.key=key
+            stopPlayback(); let p=try AVAudioPlayer(contentsOf:URL(fileURLWithPath:path)); player=p; p.delegate=playbackEnd; p.currentTime=start; p.play(); playback.key=key
             Task { try? await Task.sleep(for:.seconds(max(0.1,seconds))); if self.player===p { self.stopPlayback() } }
-        } catch { self.error=error.localizedDescription }
+        } catch { stopPlayback(); self.error=error.localizedDescription }
     }
 }
 
@@ -799,7 +801,7 @@ func statusLabel(_ status:String)->String {
                 Button("Kontrol") { model.tab="review" }.keyboardShortcut("4",modifiers:.command)
                 Button("Hafıza") { model.tab="memory" }.keyboardShortcut("5",modifiers:.command)
                 Divider()
-                Button("Dinlemeyi durdur") { model.stopPlayback() }.keyboardShortcut(".",modifiers:.command)
+                Button("Dinlemeyi durdur") { model.stopPlayback() }.keyboardShortcut(".",modifiers:.command).disabled(model.editRow != nil || model.showSettings)   // ⌘. stays "cancel" while a sheet is up
             }
         }
         MenuBarExtra { QuickMenu(model:model) } label: {

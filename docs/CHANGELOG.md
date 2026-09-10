@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 46 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 47 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.42](#v1242) | 2026-09-10 15:20 | Meeting OS 1.2.42 — kurulumda/güncellemede parola penceresi kalmadı; “Yalnız bu bölüm” ikinci görüşle sağlamlaştı |
 | [v1.2.41](#v1241) | 2026-09-10 14:40 | Meeting OS 1.2.41 — dinlemeyi durdur; “Yalnız bu bölüm” düzeltmesi |
 | [v1.2.40](#v1240) | 2026-09-10 14:05 | Meeting OS 1.2.40 — Anahtar Zinciri pencereleri bitti; ⌘M işaretleri düzeldi |
 | [v1.2.39](#v1239) | 2026-09-10 12:04 | Meeting OS 1.2.39 — Keychain'e yalnız uygulama dokunur; yankı süzgeci kendi sesinizi silmiyor |
@@ -66,6 +67,23 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1242"></a>
+### Meeting OS 1.2.42 — kurulumda/güncellemede parola penceresi kalmadı; “Yalnız bu bölüm” ikinci görüşle sağlamlaştı
+
+2026-09-10 15:20 · yerel not · GitHub sürüm sayfası yok
+
+**Kurulum ve güncelleme (tur 9 denetimi: 4 P0, 7 P1, 3 P2)**
+- İmzalama anahtarına kalıcı izin adımı artık **her** kurulumda çalışır (sertifika Xcode'dan ya da önceki bir denemeden gelse de); sessizce atlanmaz, başarısızsa kurulumun sonunda kutulu uyarı.
+- Başarılı izin `signing-partition.ok` işareti bırakır; Öz-test ve `doctor` eksikse uyarır; `update.sh` işaret yoksa derlemeye girmeden durur ve ne yapılacağını yazar (uygulama kapalıyken arka planda parola penceresi açılmaz). **Kurulu Mac'lerde ilk güncelleme bir kez** `sh ~/meeting-os/scripts/fix-signing-prompts.sh` ister.
+- Kurulum anahtarı Keychain'in yanında uygulamanın 0600 dosyasına da yazar: yeni kurulumda uygulama Keychain'e hiç gitmez, Kurulum durumu kartı kırmızı yanmaz.
+- Ayarlar ekranı Keychain'i okumaz (yalnız dosya); anahtar okuma kilitli (iki eşzamanlı köprü çağrısı iki pencere açamaz); reddedilen erişim tek satırla söylenir, tekrar sormaz.
+- `git fetch` 120 sn bekçi ve parola sormaz; başarısız imzalama derleme artığı bırakmaz; belgeler (EKIP, KULLANIM, OPENROUTER, README) yaşam döngüsündeki gerçek pencerelerle bire bir.
+
+**“Yalnız bu bölüm” (ikinci görüş: 1 P0, 2 P1)**
+- Sabitlenen bölüm kümenin defterinden düşüldü: sonraki küme adlandırması onu “önceki isim” saymaz (⌘Z bütün konuşmacıyı o kişiye boyamıyordu → düzeltildi), o kişiye ret yazmaz, otomatik tanıma kümenin geri kalanı için çalışmaya devam eder.
+- ⌘Z bölüm düzeltmesini de geri alır (etiket, örnek, gizlenen örnek). Karne bölüm düzeltmesini modelin hatası saymaz. Kişi kartından alınan temiz örnekler bölümü sabitlemez.
+- Çalma bitince ▶ hemen geri döner; ⌘. bir sayfa açıkken “vazgeç” olarak kalır; bölüm seçici ⌘F filtresinden etkilenmez.
 
 <a id="v1241"></a>
 ### Meeting OS 1.2.41 — dinlemeyi durdur; “Yalnız bu bölüm” düzeltmesi
