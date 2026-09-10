@@ -114,7 +114,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             self.sleptAt=nil
             await self.refresh()
         } }
-        Task { await refresh() }
+        Task { await loadReportSettings(); await refresh() }
     }
     var meeting:Meeting? { meetings.first { $0.id==selected } }
     @Published var showEchoRows=false { didSet { rebuildBlocks() } }
@@ -301,6 +301,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if let was=continuitySeen, let line=RecordingContinuity.notice(from:was,to:seen) { recorder.recordingNotice=line; activity=line }
                 continuitySeen=seen
             }
+            // The name is asked for the moment we know it is missing, not at the record button: a Zoom call is
+            // the worst place to discover a recording will not start. Once per launch, and only once there is
+            // something to file the voice against.
+            if settingsLoaded, !namePromptedOnLaunch, !hasUserName, !meetings.isEmpty {
+                namePromptedOnLaunch=true; activity=Model.nameRequiredMessage; promptForUserName()
+            }
             if !restoredOnLaunch {
                 restoredOnLaunch=true
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
@@ -381,6 +387,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         // full of "Ben" that nobody can attribute later, so the name is asked for once, here, and never guessed.
         // The prompt itself belongs to the caller: hands-free Zoom re-evaluates every few seconds and must
         // state the reason without reopening a sheet under the user's hands.
+        // "No name" and "the name has not been read yet" look identical from here, and refusing a recording over
+        // the second one loses a meeting the user was ready to have. Settings first, then the name.
+        guard settingsLoaded else { startRefusal=Model.settingsLoadingMessage; return false }
         guard hasUserName else { startRefusal=Model.nameRequiredMessage; return false }
         stopPlayback()   // never play audio into the room during a recording
         guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
@@ -704,7 +713,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     static let nameRequiredMessage="Önce adınızı yazın: kayıtta sizin sesiniz bu adla etiketlenir · Ayarlar → Genel"
     /// Why the last `start()` refused, so the caller does not paper over the reason with a different one.
     var startRefusal:String?
+    /// Said instead of "type your name" while the bridge has not answered yet: an unread setting is not a missing one.
+    static let settingsLoadingMessage="Ayarlar yükleniyor · bir saniye sonra yeniden deneyin"
     var settingsLoaded=false
+    /// Asked once per launch, from the poll, when there are meetings but still no owner name.
+    var namePromptedOnLaunch=false
+    /// The owner name has to be known before the first ⌃⌥R, not six hours later when the update poll runs.
+    /// Called from `init`'s first task and again by every update check.
+    func loadReportSettings() async {
+        guard let r=try? await request(["action":"report_settings"]) else { return }
+        reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName; settingsLoaded=true
+    }
     var nameRefusalNotified=false   // hands-free Zoom: say "type your name" once per Zoom session, as a notification
     /// Bumped when a refused recording (or the settings sheet) should put the caret in the name field.
     @Published var userNameFocusToken=0
@@ -724,6 +743,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         guard !next.isEmpty, !NameFold.same(previous,next) else { return }
         activity=touched>0 ? "Adınız \(next) · önceki \(touched) toplantıdaki sesiniz yeniden etiketlendi" : "Adınız \(next) · kayıtlarda sesiniz bu adla etiketlenecek"
         await refresh()
+    }
+    /// ⌘Q with the settings sheet open used to drop a name that had been typed but never submitted: the field
+    /// saves on ⏎ and on `onDisappear`, and neither runs when the process is going away. This is synchronous on
+    /// purpose — an async Task would not outlive `applicationShouldTerminate`.
+    func saveUserNameOnQuit() {
+        guard showSettings, settingsLoaded else { return }
+        let typed=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !typed.isEmpty, !NameFold.same(typed,storedUserName) else { return }
+        var changes=reportSettings.changes; changes["user_name"]=typed
+        _=try? invoke(runtime,["action":"report_settings_set","changes":changes])
+        storedUserName=typed
     }
     /// Open the field that is missing and put the caret in it: the welcome screen when there are no meetings
     /// yet, Ayarlar → Genel otherwise.
@@ -745,16 +775,22 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func checkForUpdates(force:Bool=false) async {
         if !force, let last=lastUpdateCheck, Date().timeIntervalSince(last) < 60*60 { return }   // on launch, on activation, at most hourly
         lastUpdateCheck=Date()
-        if let status=try? await request(["action":"update_status"]), let state=status["state"] as? String, let msg=status["message"] as? String, state != "running", UserDefaults.standard.string(forKey:"lastShownUpdate") != (status["time"] as? String ?? "") {
-            UserDefaults.standard.set(status["time"] as? String ?? "",forKey:"lastShownUpdate"); activity=(state=="done" ? "Güncelleme tamam · " : "Güncelleme başarısız · ")+msg
+        if let status=try? await request(["action":"update_status"]), let state=status["state"] as? String {
+            let msg=status["message"] as? String ?? "", stamp=status["time"] as? String ?? ""
+            if let line=UpdateStatusLine.line(state:state,message:msg,time:stamp), UserDefaults.standard.string(forKey:"lastShownUpdate") != stamp {
+                UserDefaults.standard.set(stamp,forKey:"lastShownUpdate"); activity=line
+                // A failed update is not a passing sidebar line: nothing else will ever mention it again.
+                if state=="failed" { notifyDone("Güncelleme başarısız",msg.isEmpty ? line : msg) }
+            }
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
-        if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName; settingsLoaded=true }
-        if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
+        await loadReportSettings()
+        if reportSettings.autoUpdate, update?.canUpdate==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
     func startUpdate() {
         guard job==nil, !recording, !updating else { return }
+        if let u=update, u.diverged { activity=u.divergedNotice; return }   // scripts/update.sh would refuse the fast-forward anyway
         if recordProcess != nil { activity="Önceki kayıt kapanıyor · birkaç saniye sonra güncelleyin"; return }   // the updater would wait 60 s on the draining helper and abort
         if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
@@ -869,6 +905,7 @@ func statusLabel(_ status:String)->String {
         }
     }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
+        Self.model?.saveUserNameOnQuit()
         guard let m=Self.model, m.job != nil || m.recordProcess != nil else { return .terminateNow }
         m.requestedQuit=true
         if m.recording { m.stop() }

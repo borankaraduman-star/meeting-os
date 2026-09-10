@@ -61,14 +61,14 @@ struct SidebarView:View {
                 .accessibilityIdentifier("recordButton")
                 .accessibilityLabel(RecoveryPresentation.recordingLabel(recording:model.recording,jobKind:model.jobKind))
                 if model.zoomMeetingOpen && !model.recording { Label("Zoom toplantısı açık · ⌃⌥R ile kaydı başlat",systemImage:"video.fill").font(.caption).foregroundStyle(MeetingStyle.accent) }
-                if model.update?.available != true {
+                if model.update?.canUpdate != true {
                     HStack(spacing:6) {
                         Text(UpdateInfo.sidebarLine(version:UpdateInfo.appVersion,info:model.update)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                         Spacer()
                         Button("Güncelleme ara") { Task { await model.checkForUpdates(force:true) } }.controlSize(.mini).disabled(model.busy || model.recording).help("Yeni sürüm var mı diye bakar; varsa burada “Güncelle ve yeniden başlat” çıkar").accessibilityIdentifier("checkUpdateButton")
                     }.padding(.horizontal,4).accessibilityIdentifier("versionRow")
                 }
-                if let u=model.update, u.available {
+                if let u=model.update, u.canUpdate {
                     VStack(alignment:.leading,spacing:6) {
                         Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)
                         Button(model.updating ? "Güncelleniyor…" : (model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")) { model.startUpdate() }.controlSize(.small).disabled(model.zoomMeetingOpen || model.busy || model.recording || model.updating).accessibilityIdentifier("updateButton")

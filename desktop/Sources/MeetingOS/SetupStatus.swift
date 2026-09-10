@@ -68,16 +68,33 @@ enum SetupStatus {
         if !writable { return SetupCheck(id:"reports",title:"Teşhis raporları",state:.missing,hint:"iCloud Drive klasörü yok ya da yazılamıyor: \(r["reports_dir"] as? String ?? "")") }
         return SetupCheck(id:"reports",title:"Teşhis raporları",state:.ok,hint:written==0 ? "Açık · henüz rapor yazılmadı (ilk tamamlanan toplantıdan sonra)" : "Açık · \(written) rapor iCloud Drive’da")
     }
-    /// Bridge answer → checks for the pieces the Python side owns.
-    static func serviceChecks(_ r:[String:Any])->[SetupCheck] {
+    /// The one-line fix for a Mac that has never granted the codesign Keychain partition: without it every
+    /// update stops on an unanswerable password prompt, in a Terminal nobody is watching.
+    static func signingFix(repo:String)->String {
+        let script=repo.isEmpty ? "scripts/fix-signing-prompts.sh" : repo+"/scripts/fix-signing-prompts.sh"
+        return "Güncelleme başlamadan durur · Terminal’de bir kez: sh "+script
+    }
+    /// Bridge answer → checks for the pieces the Python side owns. `repo` names the checkout in the signing fix
+    /// (empty → the relative path); `divergedNotice` is `UpdateInfo.divergedNotice`, passed in so the setup card
+    /// and the sidebar never disagree about a branch that cannot be updated.
+    static func serviceChecks(_ r:[String:Any],repo:String="",divergedNotice:String="")->[SetupCheck] {
         let key=r["api_key"] as? Bool ?? false
+        let keychain=r["api_key_keychain"] as? Bool ?? false
         let glossary=r["glossary_terms"] as? Int ?? 0
         let shared=r["glossary_shared"] as? Bool ?? false
         let behind=r["update_behind"] as? Int ?? 0
+        let signing=r["signing_partition"] as? Bool ?? false
+        // Either side may notice the divergence first: the bridge's own flag, or the update check the sidebar ran.
+        let diverged=(r["update_diverged"] as? Bool ?? false) || !divergedNotice.isEmpty
+        let divergedLine=divergedNotice.isEmpty ? UpdateInfo.divergedText(ahead:r["update_ahead"] as? Int ?? 0,hint:r["update_hint"] as? String ?? "") : divergedNotice
+        // A key that lives only in the Keychain is not missing: the app copies it into the file the first time it reads it.
+        let keyState:SetupCheck.State = key ? .ok : (keychain ? .optional : .missing)
+        let keyHint = key ? "anahtar dosyasında kayıtlı (openrouter.key)" : (keychain ? "Anahtar Keychain’de; uygulama bir kez okuyunca dosyaya alınır" : "OpenRouter ile yazıya çevirmede istenir; Ayarlar → Sistem → OpenRouter anahtarı")
         return [
-            SetupCheck(id:"key",title:"OpenRouter anahtarı",state:key ? .ok : .missing,hint:key ? "anahtar dosyasında kayıtlı (openrouter.key)" : "OpenRouter ile yazıya çevirmede istenir; Ayarlar → Sistem → OpenRouter anahtarı"),
+            SetupCheck(id:"key",title:"OpenRouter anahtarı",state:keyState,hint:keyHint),
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
-            SetupCheck(id:"update",title:"Sürüm",state:behind==0 ? .ok : .missing,hint:behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"),
+            SetupCheck(id:"signing",title:"İmzalama izni",state:signing ? .ok : .missing,hint:signing ? "verildi" : signingFix(repo:repo)),
+            SetupCheck(id:"update",title:"Sürüm",state:diverged ? .missing : (behind==0 ? .ok : .missing),hint:diverged ? divergedLine : (behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin")),
             reportsCheck(r),
         ]
     }
