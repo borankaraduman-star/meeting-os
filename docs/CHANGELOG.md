@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 71 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 72 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.67](#v1267) | 2026-09-10 23:10 | v1.2.67 — Ekip bulutu: sıfır kurulumlu ortak bilgi tabanı; her düzeltme öğrenir |
 | [v1.2.66](#v1266) | 2026-09-10 22:21 | Meeting OS 1.2.66 — "Ekip klasörü" satırı: paylaşım nereye gidiyor, gitmiyorsa neden |
 | [v1.2.65](#v1265) | 2026-09-10 22:03 | Meeting OS 1.2.65 — ekipteki hata ve çökmeler tek yerde toplanır |
 | [v1.2.64](#v1264) | 2026-09-10 21:51 | Meeting OS 1.2.64 — Kontrol'de onaylanan sözlük düzeltmesi bir daha sorulmaz |
@@ -91,6 +92,21 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1267"></a>
+### v1.2.67 — Ekip bulutu: sıfır kurulumlu ortak bilgi tabanı; her düzeltme öğrenir
+
+2026-09-10 23:10 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "bunların hepsini sen yapmalısın; ekip arkadaşlarımın uygulama açılırken bir şey yapmasını isteyemem, sistem full hazır olmalı."
+
+- **Ekip bulutu.** Profiller, öğretilen kelimeler, sözlük, nabız ve tanılama raporları artık iCloud'a ya da seçilen bir klasöre değil, Boran'ın kendi sunucusundaki küçük bir eşitleme servisine gider (`https://hermes-vps.tail2d8c7e.ts.net/meetingos`, TLS Tailscale Funnel, systemd, günlük yedek). Ekip kimliği OpenRouter anahtarından türetilir: aynı anahtarla kurulan her Mac aynı ekiptir, **kimse hiçbir şey seçmez**. Farklı anahtarla kurulan bir Mac için `MEETING_OS_TEAM=<token> sh scripts/install.sh` ya da `python -m meeting_os team join <token>`; token'ı `python -m meeting_os team invite` verir. Seçilmiş bir "Ekip klasörü" varsa o kazanmaya devam eder; iCloud yedek olarak kalır.
+- Uygulama yerel bir aynayla (`Application Support/MeetingOS/team/`) çalışır: sunucu ulaşılamazsa hiçbir şey kaybolmaz, bağlanınca eşitlenir. Her Mac yalnız kendi dosyalarını yükler, diğerlerininkini indirir; yarış yok. Ağ çağrıları hızlı köprüde değil arka planda (adlandırma/öğretme) ya da saatlik bakımda ve açılışta (yavaş köprü); bağlantı 5 sn, tur 20 sn. Kurulum kartında "Ekip klasörü" satırı: "ekip bulutu · N Mac · son eşitleme HH:MM" ya da "bulut şu an erişilemiyor; yerel bilgi korunuyor".
+- Gizlilik klasörle aynı: ad + ses vektörü, kelimeler, sözlük, raporlar (`share_text` kapalıysa metin yok), redakte hata günlüğü. Ses, transkript, toplantı başlığı yok. `docs/TEAM_CLOUD.md`, `server/README.md`.
+- **Her düzeltme öğrenir.** "Yalnız bu bölüm" artık yalnız doğru kişiye örnek vermekle kalmıyor: yanlış kişi için o ses "bu o değil" diye kaydediliyor (bir daha ona eşleşmez) ve yanlış kişinin küme profili o parça olmadan yeniden hesaplanıyor (profili yabancı sesten arınıyor). ⌘Z ikisini de geri alır. Düz satıra "Adlandır" da temiz ≥6 sn bölümden ses öğreniyor; "Dinledim" kutusu gerekmiyor.
+- **İsimler sese göre sıralı.** Adlandırma penceresindeki isim çipleri artık alfabetik değil: pencere açılınca ses karşılaştırılır, en benzeyen isim başa gelir; altında not.
+- Testler: Python 865 (yeni: sunucu 17, bulut istemcisi 17, düzeltme öğrenimi 3, düz adlandırma 1, isim sırası 1), Swift 228. Sunucu canlı denendi: yetkisiz 401, başkasının dosyası 403, yaz/oku/sil 200, Funnel yolu `/v1/…` olarak iletiyor.
+- Canlı doğrulanmadı: iki Mac'in aynı ekipte buluşması (diğer Mac güncellenince), kurulum kartı satırı.
 
 <a id="v1266"></a>
 ### Meeting OS 1.2.66 — "Ekip klasörü" satırı: paylaşım nereye gidiyor, gitmiyorsa neden
