@@ -653,7 +653,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
     func startUpdate() {
-        guard job==nil, !recording, recordProcess==nil, !updating else { return }   // the helper drains after a stop; the updater would wait 60 s and abort
+        guard job==nil, !recording, !updating else { return }
+        if recordProcess != nil { activity="Önceki kayıt kapanıyor · birkaç saniye sonra güncelleyin"; return }   // the updater would wait 60 s on the draining helper and abort
         if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
         Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
