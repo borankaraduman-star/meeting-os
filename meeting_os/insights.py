@@ -19,7 +19,7 @@ def first_evidence(item):
 def payload_items(store, memory, key):
     """One flat list of `key` items (decisions, questions, risks…) from every meeting's latest analysis,
     newest meeting first, each with its meeting and its first source."""
-    return [{'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'text': i.get('text') or '', 'evidence': first_evidence(i)}
+    return [{'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'text': i.get('text') or '', 'evidence': first_evidence(i), 'superseded': bool(i.get('superseded'))}
             for m, latest in latest_analyses(store, memory) for i in (latest.get('payload') or {}).get(key, [])]
 
 
