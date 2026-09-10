@@ -37,7 +37,6 @@ struct ShareOptions:Equatable {
     @State var loading=false
     var body:some View {
         VStack(alignment:.leading,spacing:14) {
-            Text("Paylaşım önizlemesi").font(.title2.bold())
             Text("Önizleme bu Mac’te hazırlanır; kayıtlı metin, isimler ve analiz değişmez. Maskeleme konuşmacı adlarını ve sözlükteki kişileri yalnız dışa verilen metinde “Kişi A, Kişi B…” yapar.").font(.caption).foregroundStyle(.secondary)
             HStack(spacing:18) {
                 Toggle("İsimleri maskele",isOn:$options.maskNames).accessibilityIdentifier("shareMaskToggle")
@@ -51,10 +50,11 @@ struct ShareOptions:Equatable {
                 if loading { ProgressView().controlSize(.small) }
                 Text(failure.isEmpty ? status : ErrorPresentation.summary(failure)).font(.caption).foregroundStyle(failure.isEmpty ? Color.secondary : Color.red).lineLimit(2)
                 Spacer()
-                Button("Kapat") { model.showShare=false }.keyboardShortcut(.cancelAction).accessibilityIdentifier("shareCloseButton")
                 Button("Dosyaya kaydet…") { Task { await save() } }.buttonStyle(.borderedProminent).disabled(loading || model.selected==nil || !failure.isEmpty).accessibilityIdentifier("shareSaveButton")
             }
-        }.padding(24).frame(width:640,height:560)
+        }.padding(.horizontal,24).padding(.top,16).padding(.bottom,24).frame(maxHeight:.infinity)
+        .sheetChrome(title:"Paylaşım önizlemesi") { model.showShare=false }
+        .frame(width:640,height:600)
         .task(id:options) { await refresh() }
     }
     func refresh() async {

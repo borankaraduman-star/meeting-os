@@ -28,7 +28,6 @@ struct EditSegmentSheet:View {
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
             HStack(alignment:.firstTextBaseline) {
-                Text("Konuşanı adlandır").font(.title2.bold())
                 Text(String(format:"%02d:%02d",Int(row.start)/60,Int(row.start)%60)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 Spacer()
                 if !textOnly && !model.recording { Button { model.play(row) } label: { PlayGlyph(playback:model.playback,key:"row:\(row.id)",text:"Dinle") }.controlSize(.small) }
@@ -46,7 +45,7 @@ struct EditSegmentSheet:View {
             }
             Text(cluster ? "“Adlandır ve öğren” bu toplantıdaki bütün “\(row.speaker)” bölümlerine bu adı verir ve sesi öğrenir. Yalnız bir cümle yanlış kişiye gittiyse “Yalnız bu bölüm”: sadece o bölüm değişir, geri kalanı ve kişinin profili olduğu gibi kalır, bölüm temizse doğru kişinin profili ondan öğrenir." : (textOnly ? "Bu toplantı yalnızca metin içerir; isim yalnız bu bölüme yazılır." : "İsim bu bölüme yazılır. Sesi öğrenmesi için “Gelişmiş” altında temiz ses onayı verin.")).font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button("Vazgeç") { model.editRow=nil }.keyboardShortcut(.cancelAction).accessibilityIdentifier("cancelEditButton")
+                Button("Vazgeç") { model.editRow=nil }.accessibilityIdentifier("cancelEditButton")
                 Spacer()
                 if cluster { Button("Yalnız bu toplantıda") { Task { await model.saveSpeaker(enroll:false) } }.disabled(name.isEmpty) }
                 if cluster { Button("Yalnız bu bölüm") { Task { await model.saveSegmentOnly(target ?? row) } }.disabled(name.isEmpty).help("Sadece bu bölüm bu kişiye ait; konuşmacının geri kalanı doğru").accessibilityIdentifier("segmentOnlyButton") }
@@ -92,7 +91,9 @@ struct EditSegmentSheet:View {
                 }.padding(.top,8)
             }.font(.callout)
             if !model.error.isEmpty { Text(ErrorPresentation.summary(model.error)).foregroundStyle(.red).font(.caption) }
-        }.padding(24).frame(width:520)
+        }.padding(.horizontal,24).padding(.top,14).padding(.bottom,24)
+        .sheetChrome(title:"Konuşanı adlandır") { model.editRow=nil }
+        .frame(width:520)
     }
     /// One word, one correction: the model call also teaches it, so the sheet just closes on success.
     private func learnWord() async {

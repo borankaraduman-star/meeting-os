@@ -167,11 +167,10 @@ struct WordFixPopover:View {
     private var ready:Bool { !model.busy && !trimmed.isEmpty && trimmed != fix.original }
     var body:some View {
         VStack(alignment:.leading,spacing:10) {
-            Text("Kelimeyi düzelt").font(.headline)
             Text("“\(fix.original)”").font(.callout).foregroundStyle(.secondary).lineLimit(1)
             TextField("doğrusu",text:$replacement).textFieldStyle(.roundedBorder).focused($focused).accessibilityIdentifier("wordFixField")
             HStack(spacing:8) {
-                Button("Vazgeç") { model.wordFix=nil }.keyboardShortcut(.cancelAction).accessibilityIdentifier("wordFixCancelButton")
+                Button("Vazgeç") { model.wordFix=nil }.accessibilityIdentifier("wordFixCancelButton")
                 Spacer(minLength:8)
                 Button("Düzelt ve öğret") { Task { await model.learnClickedWord(fix,replacement:trimmed) } }
                     .disabled(!ready).help("Bu toplantıdaki bütün geçişleri düzeltir ve kelimeyi öğrenir").accessibilityIdentifier("wordFixLearnButton")
@@ -180,7 +179,8 @@ struct WordFixPopover:View {
                     .help("Sadece bu cümledeki bu kelime değişir").accessibilityIdentifier("wordFixHereButton")
             }
             Text("Enter “Yalnız burada”yı çalıştırır; öğretmek her yerde ve sonraki toplantılarda geçerlidir.").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-        }.padding(16).frame(width:320)
+        }.popoverChrome(title:"Kelimeyi düzelt") { model.wordFix=nil }
+        .padding(16).frame(width:320)
         .onAppear {
             replacement=fix.original
             focused=true
