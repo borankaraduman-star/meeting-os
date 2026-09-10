@@ -23,15 +23,29 @@ enum OpenRouterCredential {
     /// In-process memo: even if the cache file cannot be written, the Keychain is consulted at most once per app run —
     /// never once per 2-second poll, which is what produced an endless queue of dialogs on an updated Mac.
     private static var memo:String?; private static var keychainAsked=false
+    /// `read()` is called from the concurrent bridge queue as well as from the main thread; unlocked statics let two
+    /// callers both see `keychainAsked==false` and both open a dialog. One lock guards memo/keychainAsked/lastError.
+    private static let lock=NSLock()
+    /// Set when the Keychain refused for a reason other than "no such item" (errSecUserCanceled, errSecInteractionNotAllowed…).
+    /// The Settings row then asks for the key once, in text; nothing prompts again on its own.
+    private static var lastError:String?
+    static var accessDenied:Bool { lock.lock(); defer { lock.unlock() }; return lastError != nil }
     /// Unit tests never open a Keychain dialog: the test bundle reads only the environment and the cache file.
     static let underTest=ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil || ProcessInfo.processInfo.environment["MEETING_OS_NO_KEYCHAIN"] != nil
     static func read()->String? {
+        lock.lock(); defer { lock.unlock() }
         if let v=memo { return v }
         if let v=cached() { memo=v; return v }
         guard !keychainAsked, !underTest else { return nil }   // xctest asking the Keychain queued four "xctest wants…" dialogs on 10 Sep 2026
         keychainAsked=true
         var q=query; q[kSecReturnData as String]=true; q[kSecMatchLimit as String]=kSecMatchLimitOne
-        var item:CFTypeRef?; guard SecItemCopyMatching(q as CFDictionary,&item)==errSecSuccess, let data=item as? Data, let s=String(data:data,encoding:.utf8) else { return nil }
+        var item:CFTypeRef?
+        let status=SecItemCopyMatching(q as CFDictionary,&item)
+        guard status==errSecSuccess else {
+            if status != errSecItemNotFound { lastError="Anahtar Zinciri erişimi reddedildi (\(status))." }
+            return nil
+        }
+        guard let data=item as? Data, let s=String(data:data,encoding:.utf8) else { return nil }
         let v=s.trimmingCharacters(in:.whitespacesAndNewlines); if v.isEmpty { return nil }
         memo=v; cache(v); return v   // one Keychain dialog per Mac, not one per update
     }
@@ -39,14 +53,18 @@ enum OpenRouterCredential {
     static func save(_ key:String) throws {
         let value=key.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !value.isEmpty,!value.contains(where:{$0.isWhitespace}) else { throw failure("Geçerli bir OpenRouter API anahtarı girin.") }
-        memo=value; keychainAsked=false; cache(value)   // the file is what runs the product; the Keychain copy is the backup that survives a data-folder wipe
+        lock.lock(); memo=value; keychainAsked=false; lastError=nil; lock.unlock()
+        cache(value)   // the file is what runs the product; the Keychain copy is the backup that survives a data-folder wipe
         var attributes=query;attributes[kSecValueData as String]=Data(value.utf8)
         attributes[kSecAttrAccessible as String]=kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         var status=SecItemAdd(attributes as CFDictionary,nil)
         if status==errSecDuplicateItem { status=SecItemUpdate(query as CFDictionary,[kSecValueData as String:Data(value.utf8)] as CFDictionary) }
         guard status==errSecSuccess else { throw failure("Anahtar macOS Anahtar Zinciri’ne kaydedilemedi (\(status)).") }
     }
-    static func forget() { memo=nil; keychainAsked=false; try? FileManager.default.removeItem(at:cacheURL); SecItemDelete(query as CFDictionary) }
+    static func forget() {
+        lock.lock(); memo=nil; keychainAsked=false; lastError=nil; lock.unlock()
+        try? FileManager.default.removeItem(at:cacheURL); SecItemDelete(query as CFDictionary)
+    }
     static func failure(_ message:String)->NSError { NSError(domain:"MeetingOS.OpenRouter",code:1,userInfo:[NSLocalizedDescriptionKey:message]) }
 }
 

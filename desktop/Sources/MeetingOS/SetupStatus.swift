@@ -75,7 +75,7 @@ enum SetupStatus {
         let shared=r["glossary_shared"] as? Bool ?? false
         let behind=r["update_behind"] as? Int ?? 0
         return [
-            SetupCheck(id:"key",title:"OpenRouter anahtarı",state:key ? .ok : .missing,hint:key ? "Keychain’de kayıtlı" : "OpenRouter ile yazıya çevirmede istenir; Keychain’e bir kez kaydedilir"),
+            SetupCheck(id:"key",title:"OpenRouter anahtarı",state:key ? .ok : .missing,hint:key ? "anahtar dosyasında kayıtlı (openrouter.key)" : "OpenRouter ile yazıya çevirmede istenir; Ayarlar → Sistem → OpenRouter anahtarı"),
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
             SetupCheck(id:"update",title:"Sürüm",state:behind==0 ? .ok : .missing,hint:behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"),
             reportsCheck(r),

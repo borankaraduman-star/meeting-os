@@ -14,7 +14,7 @@ Ekran görüntüleri 1.2.37 arayüzünden alınmıştır; yalnız panel, karne v
 
 1. GitHub `borankaraduman-star/meeting-os` → v0.1 dalı. Yeni bir Mac ya da ekip arkadaşı: `git clone -b v0.1 … && sh scripts/install.sh`, adım adım [EKIP.md](EKIP.md). İkinci Mac için `docs/TWO_MAC_WORKFLOW.md`.
 2. Uygulamayı açın, **Ayarlar (⌘,) → Sistem → Kurulum durumu** kartına bakın: mikrofon, ekran kaydı (sistem sesi bununla alınır), bildirim, takvim, hatırlatıcı izinleri; OpenRouter anahtarı; sözlük; sürüm; teşhis rapor klasörü. Kırmızı madde: kayıt ya da güncelleme onsuz çalışmaz; **İzin iste** hiç sorulmamışsa macOS’a sordurur, **Ayarları aç** reddedilmiş izin için ilgili Sistem Ayarları bölmesini açar.
-3. OpenRouter anahtarı **Ayarlar → Sistem → OpenRouter anahtarı** satırından girilir (ilk bulut işleminde de istenir) ve Keychain’e bir kez kaydedilir.
+3. OpenRouter anahtarı **Ayarlar → Sistem → OpenRouter anahtarı** satırından girilir (ilk bulut işleminde de istenir). `scripts/install.sh` sırasında verildiyse zaten kayıtlıdır ve hiçbir Anahtar Zinciri penceresi çıkmaz: anahtar uygulamanın klasöründe yalnız size açık bir dosyada (`openrouter.key`, 0600) durur, yedeği Anahtar Zinciri’ndedir. Anahtarı bu dosya olmadan (daha önce kurulmuş bir Mac’te) devralırken macOS **bir kez** “Meeting OS anahtar zincirine erişmek istiyor” diye sorar — Ayarlar → Sistem ilk açıldığında ya da ilk işte; **Her Zaman İzin Ver** deyin, sonraki açılışlar ve güncellemeler Anahtar Zinciri’ne dokunmaz.
 4. Sözlük: Slack agent çıktısı `glossary.jsonl` iCloud Drive `MeetingOS-Shared/` altında; bütün Mac’ler okur (bkz. bölüm 9).
 
 ## 2. Kayıt

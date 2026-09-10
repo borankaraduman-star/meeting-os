@@ -74,10 +74,6 @@ if [ ! -f build/signing-identity.json ] && [ -z "${MEETING_OS_SIGNING_IDENTITY:-
       ) || echo "Sertifika kendiliğinden oluşturulamadı; aşağıdaki elle adımı uygulayın." >&2
     fi
     rm -rf "$certdir"
-    # Without a partition list codesign asks for the keychain password on EVERY signing (each build and each
-    # update) and "Always Allow" never sticks — that was the dialog storm of 10 Sep 2026. One password now, in
-    # the terminal, fixes it for good. scripts/fix-signing-prompts.sh does the same on an already-installed Mac.
-    /bin/sh "$(dirname "$0")/fix-signing-prompts.sh" || true
     identities="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | grep -c ') [0-9A-F]\{40\} ' || true)"
   fi
   if [ "$identities" != 1 ]; then
@@ -93,6 +89,14 @@ CERT
     exit 1
   fi
 fi
+
+# Without a partition list codesign asks for the keychain password on EVERY signing (each build and each update)
+# and "Always Allow" never sticks — that was the dialog storm of 10 Sep 2026. This runs on every install, not just
+# on the Mac where this script created the certificate: an Xcode "Apple Development" identity, a leftover trusted
+# certificate, MEETING_OS_SIGNING_IDENTITY or a second run over an existing build/signing-identity.json all need the
+# same grant. It is idempotent and exits quietly when the Mac has no signing identity at all.
+SIGNING_PARTITION_FAILED=''
+if ! /bin/sh "$(dirname "$0")/fix-signing-prompts.sh"; then SIGNING_PARTITION_FAILED=1; fi
 
 echo '2/6 · Python ortamı, modeller ve uygulama derlemesi (ilk seferde birkaç GB indirir)'
 /bin/sh scripts/setup.sh 2>&1 | tee installation.log
@@ -135,7 +139,13 @@ elif [ -t 0 ]; then
     *)
       # Anahtar `security -i` girdisinden okunur; komut satırında geçmediği için `ps` çıktısında görünmez.
       printf 'add-generic-password -U -s %s -a openrouter -w %s\n' "$KEYCHAIN_SERVICE" "$key" | /usr/bin/security -i >/dev/null
-      echo '  Anahtar macOS Anahtar Zinciri’ne kaydedildi.' ;;
+      # The file is what actually runs the product: the app and every Python job read it and never touch the
+      # Keychain, so a fresh install shows no "Meeting OS wants to use your keychain" dialog at all. The Keychain
+      # copy stays as the backup that survives a wipe of the data folder.
+      mkdir -p "$DATA"; chmod 700 "$DATA" 2>/dev/null || true
+      keytmp="$DATA/openrouter.key.tmp.$$"
+      ( umask 077; printf '%s\n' "$key" > "$keytmp" ) && chmod 600 "$keytmp" && mv -f "$keytmp" "$DATA/openrouter.key" || rm -f "$keytmp"
+      echo '  Anahtar uygulamanın anahtar dosyasına (openrouter.key, yalnız size açık) ve yedek olarak macOS Anahtar Zinciri’ne kaydedildi.' ;;
   esac
 else
   echo '  Etkileşimli değil; anahtar sorulmadı. Uygulama ilk bulut işleminde soracak.'
@@ -155,3 +165,19 @@ Sırada üç adım var:
 
 Ekip rehberi: docs/EKIP.md
 NEXT
+if [ -n "$SIGNING_PARTITION_FAILED" ]; then
+  cat >&2 <<'SIGNING'
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ DİKKAT · İmzalama anahtarına kalıcı izin verilemedi                        │
+│                                                                            │
+│ Bu adım atlanırsa her derleme ve her güncellemede "codesign anahtar        │
+│ zincirinizdeki anahtarı kullanmak istiyor" penceresi çıkar ve              │
+│ "Her Zaman İzin Ver" tutmaz. Terminal'de bir kez şunu çalıştırın ve        │
+│ Mac parolanızı girin:                                                      │
+│                                                                            │
+│     sh ~/meeting-os/scripts/fix-signing-prompts.sh                         │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+SIGNING
+fi

@@ -192,10 +192,20 @@ sh ~/meeting-os/scripts/install.sh
 
 `scripts/install.sh` eksik araçları kurar, `scripts/setup.sh` ile ortamı hazırlar, adınızı ve OpenRouter anahtarınızı sorar, `doctor` ile bitirir; tekrar çalıştırılabilir. `Meeting OS.command` çift tıklanınca uygulama kuruluysa açar, değilse aynı betiği çağırır.
 
+Uygulama sabit bir kod imzasıyla derlenir, bu yüzden kurulum **iki kez parola sorar**: (1) Mac’te hiç kod imzalama
+sertifikası yoksa betik “Meeting OS Local” adıyla kendinden imzalı bir tane oluşturur ve macOS penceresinde ona
+güvenmek için parola ister; (2) terminalde, imzalama anahtarına kalıcı izin vermek için (`security
+set-key-partition-list`). İkinci adım sertifikanın nereden geldiğine bakmaksızın her kurulumda çalışır ve giriş
+(login) anahtar zincirindeki bütün imzalama anahtarlarına uygulanır. Atlanırsa her derleme ve her güncellemede
+“codesign anahtarı kullanmak istiyor” penceresi çıkar ve “Her Zaman İzin Ver” tutmaz; o durumda bir kez
+`sh ~/meeting-os/scripts/fix-signing-prompts.sh` çalıştırın. Başarılı olunca
+`~/Library/Application Support/MeetingOS/signing-partition.ok` yazılır; `scripts/update.sh` ve `doctor` buna bakar.
+
 macOS 15+, Apple Silicon, Xcode Command Line Tools, Python 3.12 ve ffmpeg gerekir.
 ZIP kullanıyorsanız açıp kaynak klasörünü iCloud dışında yerel bir dizine yerleştirin.
-Yeni Mac’te OpenRouter anahtarını uygulamadaki **OpenRouter ile ses aç** penceresinden bir kez
-kaydedin (anahtar o Mac’in Anahtar Zinciri’nde kalır); ses profilleri ve toplantılar Mac’e özeldir,
+Yeni Mac’te OpenRouter anahtarı kurulum sırasında sorulur; sonradan girmek için uygulamada
+**Ayarlar (⌘,) → Sistem → OpenRouter anahtarı** satırını kullanın (anahtar o Mac’in `openrouter.key`
+dosyasında ve yedek olarak Anahtar Zinciri’nde kalır); ses profilleri ve toplantılar Mac’e özeldir,
 taşınmaz.
 `Meeting OS.command` dosyasını çift tıklayın; eksik Homebrew/Python/ffmpeg araçlarını
 kurmaya yönlendirir ve ardından `scripts/setup.sh` çalıştırır.

@@ -194,7 +194,12 @@ def main(supervised=False):
             raise SystemExit(probe_main(['--network'] if args.network else []) if not args.json else probe_main(['--json']+(['--network'] if args.network else [])))
         if args.command=='doctor':
             import platform, importlib.util
+            from .probe import signing_partition_item
+            signing=signing_partition_item()
+            # stderr, so `doctor` keeps printing one parseable JSON document on stdout.
+            if not signing['ok']: print(signing['detail'],file=sys.stderr)
             output({'python':sys.version.split()[0],'machine':platform.machine(),'macos':platform.mac_ver()[0],
+                'signing_partition':signing['ok'],
                 'capture_binary':(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture').exists(),
                 'ffmpeg':which('ffmpeg'),'whisper_cpp':str(ROOT/'build/whisper-cpp/bin/whisper-cli') if (ROOT/'build/whisper-cpp/bin/whisper-cli').exists() else which('whisper-cli'),
                 'offline':os.environ['HF_HUB_OFFLINE'],

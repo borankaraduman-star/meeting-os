@@ -177,7 +177,9 @@ struct SettingsSheet:View {
 /// merely want to paste a key. Same Keychain item, same save path — one compact row in Ayarlar → Sistem.
 struct OpenRouterKeyRow:View {
     @State private var key=""
-    @State private var stored=OpenRouterCredential.read() != nil
+    /// Never `read()` here: a view initializer runs on every re-init of the settings sheet, and `read()` may open a
+    /// Keychain dialog. The key file is the source of truth the app actually uses; the row only needs to know it exists.
+    @State private var stored=OpenRouterCredential.cached() != nil
     @State private var message=""
     var body:some View {
         VStack(alignment:.leading,spacing:4) {
@@ -187,14 +189,18 @@ struct OpenRouterKeyRow:View {
                     .textFieldStyle(.roundedBorder).frame(width:240).accessibilityIdentifier("openRouterKeyField")
                     .onSubmit { save() }
                 Button("Kaydet") { save() }.disabled(key.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty).accessibilityIdentifier("saveOpenRouterKeyButton")
-                if stored { Label("Keychain’de kayıtlı",systemImage:"checkmark.circle").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("openRouterKeyStored") }
+                if stored { Label("Anahtar kayıtlı",systemImage:"checkmark.circle").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("openRouterKeyStored") }
             }
-            Text(message.isEmpty ? "Anahtar yalnızca macOS Anahtar Zinciri’nde durur; kayıtlıysa yeniden girmeniz gerekmez." : message).font(.caption2).foregroundStyle(.secondary)
+            if !stored && OpenRouterCredential.accessDenied {
+                Text("Anahtar Zinciri erişimi reddedildi; anahtarı buraya yeniden girin.").font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("openRouterKeyDenied")
+            }
+            Text(message.isEmpty ? "Anahtar bu Mac’te yalnız size açık bir dosyada (openrouter.key) durur, yedeği macOS Anahtar Zinciri’ndedir; kayıtlıysa yeniden girmeniz gerekmez." : message).font(.caption2).foregroundStyle(.secondary)
         }
     }
     private func save() {
-        do { try OpenRouterCredential.save(key); key=""; stored=true; message="Anahtar Anahtar Zinciri’ne kaydedildi." }
+        do { try OpenRouterCredential.save(key); key=""; message="Anahtar kaydedildi." }
         catch { message=error.localizedDescription }
+        stored=OpenRouterCredential.cached() != nil   // reflects what save() actually wrote, not what it intended to
     }
 }
 
