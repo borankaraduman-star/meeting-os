@@ -67,35 +67,23 @@ class OpenRouterTests(unittest.TestCase):
             client=self.client(value)
             with self.assertRaises(OpenRouterError):client.transcribe(b'RIFF','wav',model='openai/gpt-transcribe',consent=True)
 
-    def test_credential_resolution_does_not_search_other_apps(self):
+    def test_credential_resolution_never_touches_the_keychain(self):
+        """Environment first, then the 0600 file the app wrote; Python never runs `security` (a Terminal-spawned
+        process asking the Keychain produced an endless queue of dialogs on 10 Sep 2026)."""
+        import tempfile
+        from pathlib import Path
+        from meeting_os import openrouter
         with patch.dict('os.environ',{'OPENROUTER_API_KEY':'env-secret'},clear=True), patch('subprocess.run') as run:
             self.assertEqual(read_api_key(),'env-secret');run.assert_not_called()
-        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
-            run.return_value.returncode=44;run.return_value.stdout=''
-            with self.assertRaises(OpenRouterError):read_api_key()
-            self.assertEqual(run.call_args.args[0][0],'/usr/bin/security')
-            self.assertIn('local.boran.meeting-os.openrouter',run.call_args.args[0])
-
-    def test_keychain_prompt_timeout_and_denial_are_distinguished(self):
-        import subprocess
-        from meeting_os.openrouter import KEYCHAIN_TIMEOUT
-        self.assertGreaterEqual(KEYCHAIN_TIMEOUT,120)  # user must have time to answer the macOS access prompt
-        with patch.dict('os.environ',{},clear=True), patch('subprocess.run',side_effect=subprocess.TimeoutExpired('security',KEYCHAIN_TIMEOUT)):
-            with self.assertRaises(OpenRouterError) as caught:read_api_key()
-            self.assertIn('zaman aşımı',str(caught.exception));self.assertNotIn('eksik',str(caught.exception))
-        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
-            run.return_value.returncode=44;run.return_value.stdout='';run.return_value.stderr='security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.'
-            with self.assertRaises(OpenRouterError) as caught:read_api_key()
-            self.assertIn('eksik',str(caught.exception))
-        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
-            run.return_value.returncode=36;run.return_value.stdout='';run.return_value.stderr='security: SecKeychainItemCopyContent: User interaction is not allowed.'
-            with self.assertRaises(OpenRouterError) as caught:read_api_key()
-            self.assertIn('reddedildi',str(caught.exception));self.assertNotIn('eksik',str(caught.exception))
-        with patch.dict('os.environ',{},clear=True), patch('subprocess.run') as run:
-            run.return_value.returncode=0;run.return_value.stdout='sk-or-secret\n';run.return_value.stderr=''
-            self.assertEqual(read_api_key(),'sk-or-secret')
-            self.assertEqual(run.call_args.kwargs['timeout'],KEYCHAIN_TIMEOUT)
-
+        with tempfile.TemporaryDirectory() as tmp:
+            cache=Path(tmp)/'openrouter.key'
+            with patch.dict('os.environ',{},clear=True), patch.object(openrouter,'KEY_CACHE',cache), patch('subprocess.run') as run:
+                with self.assertRaises(OpenRouterError) as caught:read_api_key()
+                self.assertIn('uygulamasını bir kez açın',str(caught.exception));run.assert_not_called()
+                cache.write_text('file-secret\n')
+                self.assertEqual(read_api_key(),'file-secret');run.assert_not_called()
+                cache.write_text('bad key\n')
+                with self.assertRaises(OpenRouterError):read_api_key()
     def test_diarization_request_and_segment_parsing(self):
         from meeting_os.openrouter import parse_segments, diarization_options
         self.assertEqual(diarization_options('deepgram/nova-3'),{'deepgram':{'diarize':True}});self.assertIsNone(diarization_options('openai/gpt-transcribe'))

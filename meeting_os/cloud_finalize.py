@@ -92,14 +92,14 @@ def pieces(duration, length):
 
 
 ECHO_HOP=800            # 50 ms RMS envelope
-ECHO_THRESHOLD=0.5      # measured: speaker bleed 0.72–0.88, unrelated speech 0.07
+ECHO_THRESHOLD=0.8      # measured: speaker bleed 0.72–0.88, unrelated speech 0.07
 
 def _envelope(x):
     n=len(x)//ECHO_HOP
     if n==0: return np.zeros(0,dtype='float32')
     return np.sqrt((x[:n*ECHO_HOP].reshape(n,ECHO_HOP)**2).mean(axis=1))
 
-def envelope_correlation(mic, system, max_lag=20):
+def envelope_correlation(mic, system, max_lag=8):
     """Peak normalized correlation of 50 ms loudness envelopes within ±1 s. Waveform correlation fails
     (room acoustics and clock offsets); loudness envelopes still line up when the mic only hears the speakers."""
     em=_envelope(mic);es=_envelope(system)
@@ -217,7 +217,7 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     for source in sorted(sources):
         info=sf.info(sources[source])
         if info.samplerate!=16000 or info.channels!=1 or not 0<info.duration<=14400: raise ValueError('Ses mono 16 kHz ve en fazla dört saat olmalı')
-        piece_length=FINE_PIECE_SECONDS if source=='mic' else length   # the mic is never diarized; short windows let echo be skipped per window
+        piece_length=length   # the mic gets the same long pieces: 30 s cuts chopped the user's own words 119 times an hour and starved the ASR of context
         for index,(a,b) in enumerate(pieces(info.duration,piece_length)): plan.append((source,a,b,index))
     counts={s:sum(1 for p in plan if p[0]==s) for s in sources}
     signature=digest_files([sources[s] for s in sorted(sources)])

@@ -67,12 +67,14 @@ class DesktopTests(unittest.TestCase):
   from unittest.mock import patch
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'meeting-os.sqlite';Store(db).close();(Path(tmp)/'vocabulary.txt').write_text('PMD\n')
+   from meeting_os import openrouter
+   cache=Path(tmp)/'openrouter.key';cache.write_text('k\n')
    class R:returncode=0;stdout='Test-Mac\n';stderr=''
-   with patch('subprocess.run',return_value=R()):r=dispatch({'action':'setup_status'},db)
+   with patch('subprocess.run',return_value=R()),patch.object(openrouter,'KEY_CACHE',cache):r=dispatch({'action':'setup_status'},db)
    self.assertEqual((r['api_key'],r['glossary_terms']>=1,r['glossary_shared'],r['update_behind']),(True,True,False,0))
    self.assertEqual((r['reports_on'],r['reports_writable'],r['reports_written']),(True,True,0))
-   class F:returncode=44;stdout='';stderr=''
-   with patch('subprocess.run',return_value=F()):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])
+   cache.unlink()
+   with patch('subprocess.run',return_value=R()),patch.object(openrouter,'KEY_CACHE',cache):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])   # the key file the app wrote is the only signal; `security` is never run
  def test_archive_converts_full_wav_to_flac_and_housekeeping_respects_retention(self):
   import numpy as np, soundfile as sf
   from meeting_os import reports

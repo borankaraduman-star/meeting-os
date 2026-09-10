@@ -95,23 +95,17 @@ KEY_CACHE = Path.home() / 'Library/Application Support/MeetingOS/openrouter.key'
 
 
 def read_api_key():
+    """Environment first (the app hands the key to every job), then the 0600 file the app wrote after its single
+    Keychain read. Python never calls `security`: a Terminal-spawned process asking the Keychain is exactly what
+    produced an endless queue of "security wants to use your keychain" dialogs on 10 Sep 2026."""
     key = os.environ.get('OPENROUTER_API_KEY', '').strip()
     if not key:
         try: key = KEY_CACHE.read_text(encoding='utf-8').strip()
         except OSError: key = ''
     if not key:
-        try:
-            result = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE,
-                                     '-a', 'openrouter', '-w'], capture_output=True, text=True, timeout=KEYCHAIN_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise OpenRouterError('macOS Anahtar Zinciri erişim onayı zaman aşımına uğradı. İşlemi tekrar başlatıp çıkan soruda “Her Zaman İzin Ver” seçin.') from None
-        except OSError:
-            raise OpenRouterError('macOS Anahtar Zinciri okunamadı. Uygulamadaki OpenRouter ayarlarına API anahtarını yeniden kaydedin.') from None
-        if result.returncode == 0: key = result.stdout.strip()
-        elif 'could not be found' not in (result.stderr or ''):
-            raise OpenRouterError('macOS Anahtar Zinciri erişimi reddedildi veya okunamadı. İşlemi tekrar başlatıp erişime izin verin ya da anahtarı yeniden kaydedin.')
-    if not key or any(c.isspace() for c in key):
-        raise OpenRouterError('OpenRouter anahtarı eksik. Uygulamadaki OpenRouter ayarlarına API anahtarını kaydedin.')
+        raise OpenRouterError('OpenRouter anahtarı bulunamadı. Meeting OS uygulamasını bir kez açın (Ayarlar → Sistem → OpenRouter anahtarı); anahtar uygulamanın klasörüne alınır.')
+    if any(c.isspace() for c in key):
+        raise OpenRouterError('OpenRouter anahtarı bozuk görünüyor; Ayarlar → Sistem → OpenRouter anahtarı ile yeniden kaydedin.')
     return key
 
 

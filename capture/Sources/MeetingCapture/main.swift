@@ -285,7 +285,7 @@ func run() async throws {
         }
         sigint.resume(); sigterm.resume(); timer.resume()
     }
-    try await stream.stopCapture()
+    try? await stream.stopCapture()   // a stream that already died throws here; the chunk in progress must still be flushed
     try capture.finish()
     if let error = capture.getFailure() { throw error }
     emit(["event":"stopped"])

@@ -58,7 +58,7 @@ def run(root, data_dir, *, network=False, timeout=8):
     try:
         from .openrouter import KEYCHAIN_SERVICE
         from .openrouter import KEY_CACHE
-        has_key = KEY_CACHE.is_file() or subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', KEYCHAIN_SERVICE], capture_output=True, timeout=5).returncode == 0
+        has_key = KEY_CACHE.is_file()   # the app owns the Keychain; Python only ever looks at the file it wrote
     except Exception: has_key = False
     items.append(_item('api_key', has_key, 'OpenRouter anahtarı Keychain’de' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
     try:
