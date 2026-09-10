@@ -57,6 +57,7 @@ struct SettingsSheet:View {
                 }
                 Divider()
                 }
+                if group=="sesler" { LearnedWordsSection(model:model); Divider() }
                 if group=="sesler" {
                 Text("Ekip klasörü").font(.headline)
                 HStack(spacing:8) {
@@ -179,6 +180,31 @@ struct SettingsSheet:View {
         guard panel.runModal() == .OK, let url=panel.url else { return }
         model.reportSettings.teamDir=url.path
         Task { await model.saveReportSettings() }
+    }
+}
+
+/// The words the user taught (and the ones the app learned from repeated edits), with one way out per row.
+/// Loaded only when the section appears: nothing here rides the two-second poll.
+struct LearnedWordsSection:View {
+    @ObservedObject var model:Model
+    var body:some View {
+        VStack(alignment:.leading,spacing:6) {
+            HStack { Text("Öğrenilen kelimeler").font(.headline); Spacer(); Button("Yenile") { Task { await model.loadWordRules() } }.controlSize(.small).accessibilityIdentifier("refreshWordRules") }
+            if model.wordRules.isEmpty {
+                Text("Henüz öğrenilen kelime yok. Düzelt penceresinde bir kelimeyi düzeltin.").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("wordRulesEmpty")
+            } else {
+                VStack(alignment:.leading,spacing:4) {
+                    ForEach(model.wordRules) { rule in
+                        HStack(spacing:8) {
+                            Text(rule.line).font(.caption).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            Button("Unut") { Task { await model.forgetWord(rule.original) } }.controlSize(.mini).help("Bu kelime bir daha kendiliğinden düzeltilmez").accessibilityIdentifier("forgetWord-\(rule.original)")
+                        }
+                    }
+                }.padding(12).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("wordRulesList")
+            }
+            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda yakın yazımlar da kendiliğinden düzeltilir. “Unut” kuralı kaldırır.").font(.caption2).foregroundStyle(.secondary)
+        }.task { if model.wordRules.isEmpty { await model.loadWordRules() } }
     }
 }
 

@@ -71,7 +71,7 @@ extension Model {
         if let r=try? await request(["action":"review_debt","days":7]) {
             debt=(r["items"] as? [[String:Any]] ?? []).map(DebtItem.init)
             let counts=r["counts"] as? [String:Int] ?? [:]
-            let names=["unnamed_speaker":"isimsiz konuşmacı","suggested_name":"isim onayı","glossary":"sözlük","task_owner":"sahipsiz görev","short_match":"kısa eşleşme","ambiguous":"çakışma","marker":"işaret"]
+            let names=["unnamed_speaker":"isimsiz konuşmacı","suggested_name":"isim onayı","glossary":"sözlük","task_owner":"sahipsiz görev","short_match":"kısa eşleşme","ambiguous":"çakışma","marker":"işaret","word":"kelime"]
             debtSummary=counts.sorted { $0.value>$1.value }.map { "\($0.value) \(names[$0.key] ?? $0.key)" }.joined(separator:", ")
         }
     }
@@ -169,6 +169,51 @@ extension Model {
     func deleteWeakSample(_ id:Int) async {
         do { _=try await request(["action":"delete_sample","sample":id]); activity="Zayıf ses örneği silindi"; await loadMaintenance(); await refresh() } catch { self.error=error.localizedDescription }
     }
+    // MARK: - Kelimeyi bir kez düzelt, uygulama öğrensin
+    /// One sentence for both entry points, so the promise reads the same wherever the word was taught.
+    static func wordLearnedLine(original:String,replacement:String,fixes:Int)->String {
+        "“\(original)” → “\(replacement)” · bu toplantıda \(fixes) yerde düzeltildi · öğrenildi; sonraki kayıtlarda yakın yazımlar da düzeltilir"
+    }
+    /// Teach one word from the segment editor: every occurrence in this meeting is fixed now, and the rule
+    /// is remembered so near-miss spellings in later meetings correct themselves.
+    func learnWord(original:String,replacement:String) async {
+        guard let mid=selected else { return }
+        let from=original.trimmingCharacters(in:.whitespacesAndNewlines), to=replacement.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !from.isEmpty, !to.isEmpty, from != to else { return }
+        do { let r=try await request(["action":"learn_word","meeting":mid,"original":from,"replacement":to])
+            editRow=nil
+            activity=Model.wordLearnedLine(original:from,replacement:to,fixes:r["fixes"] as? Int ?? r["segments"] as? Int ?? 0)
+            await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// The same teaching, started from a Kontrol item rather than the segment editor.
+    func applyWord(_ item:ReviewItem) async {
+        guard let mid=selected, !item.original.isEmpty, !item.replacement.isEmpty else { return }
+        do { let r=try await request(["action":"word_apply","meeting":mid,"original":item.original,"replacement":item.replacement])
+            activity=Model.wordLearnedLine(original:item.original,replacement:item.replacement,fixes:r["fixes"] as? Int ?? r["segments"] as? Int ?? 0)
+            await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// "Bu doğru": the suspicious word was spelled right all along; drop the item without touching the text.
+    func dismissWord(_ item:ReviewItem) async {
+        guard let mid=selected, !item.original.isEmpty else { return }
+        do { _=try await request(["action":"word_dismiss","meeting":mid,"original":item.original]); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// Ayarlar → Sesler ve sözlük opens the learned-word list; nothing loads it on the poll.
+    func loadWordRules() async {
+        guard let r=try? await request(["action":"word_rules"]) else { return }
+        wordRules=(r["rules"] as? [[String:Any]] ?? []).map(WordRule.init)
+    }
+    func forgetWord(_ original:String) async {
+        guard !original.isEmpty else { return }
+        do { let r=try await request(["action":"forget_word","original":original])
+            let segments=r["segments"] as? Int ?? 0, meetings=r["meetings"] as? Int ?? 0
+            activity="“\(original)” unutuldu · artık kendiliğinden düzeltilmez"+(segments>0 ? " · \(meetings) toplantıda \(segments) bölüm geri alındı" : "")
+            await loadWordRules()
+            if segments>0 { await refresh() } }
+        catch { self.error=error.localizedDescription }
+    }
     func rejectRule(_ original:String) async {
         guard !original.isEmpty else { return }
         do { _=try await request(["action":"reject_rule","original":original]); activity="Kural kapatıldı · “\(original)” artık kendiliğinden düzeltilmez"; await loadMaintenance() } catch { self.error=error.localizedDescription }
@@ -224,4 +269,18 @@ extension Model {
         do { let r=try await request(["action":"storage_cleanup","days":cleanupDays,"dry_run":false]); activity="Eski sesler temizlendi · \((r["meetings"] as? [[String:Any]])?.count ?? 0) toplantı, \(StorageReport.format(bytes:r["bytes"] as? Int ?? 0)) boşaldı · transkriptler duruyor"; cleanupPreview=nil; storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse) }
         catch { self.error=error.localizedDescription }
     }
+}
+
+/// One learned word: what the user (or the app, after repeated edits) decided the right spelling is.
+struct WordRule:Identifiable, Equatable {
+    let original:String; let replacement:String; let source:String; let count:Int; let meetings:Int; let created:String; let vocabularyAdded:Bool
+    var id:String { original }
+    init(_ d:[String:Any]) {
+        original=d["original"] as? String ?? ""; replacement=d["replacement"] as? String ?? ""
+        source=d["source"] as? String ?? ""; count=d["count"] as? Int ?? 0; meetings=d["meetings"] as? Int ?? 0
+        created=d["created"] as? String ?? ""; vocabularyAdded=d["vocabulary_added"] as? Bool ?? false
+    }
+    /// "taught" is a word the user corrected by hand; "learned" is one the app inferred from repeats.
+    var sourceLabel:String { source=="taught" ? "öğretildi" : "öğrenildi" }
+    var line:String { "“\(original)” → “\(replacement)” · \(sourceLabel) · \(meetings) toplantı" }
 }
