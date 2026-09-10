@@ -151,6 +151,25 @@ else
   echo '  Etkileşimli değil; anahtar sorulmadı. Uygulama ilk bulut işleminde soracak.'
 fi
 
+# Ekip bilgi tabanı: ekip kimliği normalde OpenRouter anahtarından türer, yani aynı anahtarla kurulan Mac'ler
+# kendiliğinden aynı ekiptir. Başka bir anahtarla kurulan bir Mac aynı ekibe MEETING_OS_TEAM belirteciyle katılır.
+if [ -n "${MEETING_OS_TEAM:-}" ]; then
+  team_token="${MEETING_OS_TEAM:-}"
+  case "$team_token" in
+    *[!0-9A-Fa-f]*) echo '  Ekip belirteci onaltılık değil; yazılmadı. Ekip bilgisi OpenRouter anahtarından türeyecek.' >&2 ;;
+    *)
+      if [ "${#team_token}" -ge 32 ] && [ "${#team_token}" -le 128 ]; then
+        mkdir -p "$DATA"; chmod 700 "$DATA" 2>/dev/null || true
+        teamtmp="$DATA/team.token.tmp.$$"
+        ( umask 077; printf '%s\n' "$team_token" > "$teamtmp" ) && chmod 600 "$teamtmp" && mv -f "$teamtmp" "$DATA/team.token" \
+          && echo '  Ekip belirteci kaydedildi (team.token, yalnız size açık); bu Mac o ekibin ortak bilgi tabanına bağlanacak.' \
+          || { rm -f "$teamtmp"; echo '  Ekip belirteci yazılamadı; ekip bilgisi OpenRouter anahtarından türeyecek.' >&2; }
+      else
+        echo '  Ekip belirteci 32–128 onaltılık karakter olmalı; yazılmadı.' >&2
+      fi ;;
+  esac
+fi
+
 echo '5/6 · Kurulum denetimi'
 "$PY" -m meeting_os doctor || echo '  Doctor uyarı verdi; ayrıntı yukarıda. Uygulama yine de açılabilir.'
 
@@ -162,6 +181,10 @@ Sırada üç adım var:
   1. Uygulamayı açın: "Meeting OS.command" dosyasını çift tıklayın (kurulan uygulama: build/Meeting OS.app).
   2. İlk kayıtta macOS Mikrofon ve Ekran/Sistem Sesi izinlerini verin. Eksik izinler Ayarlar (⌘,) → Kurulum durumu kartında kırmızı görünür; oradan tek tıkla istenir.
   3. Kaydı başlatıp bitirmek için her yerden ⌃⌥R.
+
+Ekip bilgi tabanı (isimler, öğretilen kelimeler, sözlük) kendiliğinden bağlanır: ayarlanacak bir şey,
+seçilecek bir klasör yok. Aynı OpenRouter anahtarıyla kurulan Mac'ler aynı ekiptir; öğrenilenler
+arka planda eşitlenir, sunucu kapalıyken her şey yerelden çalışmaya devam eder.
 
 Ekip rehberi: docs/EKIP.md
 NEXT

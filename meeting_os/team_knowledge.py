@@ -370,17 +370,33 @@ def team_summary(store):
 
 # ---------------------------------------------------------------- one call for the app
 
-def sync(store, data_dir, words=True, profiles=True, settings=None):
+def sync(store, data_dir, words=True, profiles=True, settings=None, cloud=True):
     """Publish what this Mac learned, then read back what the others did — in that order, and pulling right after
     publishing, so two people correcting the same meeting at the same time converge inside one pass instead of
-    waiting an hour. Never raises: a share on an unmounted folder must not fail the teach the user just did."""
+    waiting an hour. Never raises: a share on an unmounted folder must not fail the teach the user just did.
+
+    With the team cloud the shared folder is a local mirror, so the network pass belongs exactly in the middle:
+    publish writes this Mac's files into the mirror, `team_cloud.sync` exchanges them with the team, and pull
+    reads back a mirror that already carries what the others learned. `cloud=False` skips the network entirely —
+    the fast bridge hooks (naming a voice) do their own `sync_async` instead of waiting for a round trip."""
     from .reports import load_settings
     if settings is None: settings = load_settings(data_dir)
     out = {}
     if words:
-        try: out['words'] = {**publish_words(store, settings, data_dir), **pull_words(store, settings, data_dir)}
+        try: out['words'] = publish_words(store, settings, data_dir)
         except (OSError, ValueError) as exc: out['words_error'] = type(exc).__name__
     if profiles:
-        try: out['profiles'] = {**publish_profiles(store, settings, data_dir), **pull_profiles(store, settings, data_dir)}
+        try: out['profiles'] = publish_profiles(store, settings, data_dir)
+        except (OSError, ValueError) as exc: out['profiles_error'] = type(exc).__name__
+    if cloud:
+        try:
+            from . import team_cloud
+            if team_cloud.configured(settings, data_dir): out['cloud'] = team_cloud.sync(data_dir, settings)
+        except Exception as exc: out['cloud_error'] = type(exc).__name__   # `sync` swallows its own; this is belt and braces
+    if words and 'words' in out:
+        try: out['words'] = {**out['words'], **pull_words(store, settings, data_dir)}
+        except (OSError, ValueError) as exc: out['words_error'] = type(exc).__name__
+    if profiles and 'profiles' in out:
+        try: out['profiles'] = {**out['profiles'], **pull_profiles(store, settings, data_dir)}
         except (OSError, ValueError) as exc: out['profiles_error'] = type(exc).__name__
     return out

@@ -82,10 +82,32 @@ enum SetupStatus {
     static func teamRootCheck(_ r:[String:Any])->SetupCheck {
         let kind=r["team_root_kind"] as? String ?? "none"; let root=r["team_root"] as? String ?? ""
         switch kind {
+        case "cloud":
+            // Zero setup: the team is whoever installed with the same OpenRouter key, and the mirror the app
+            // reads is kept in step with the server in the background. Nothing here is ever a failure — an
+            // unreachable server costs nothing locally, so the worst case is "optional", never "missing".
+            let cloud=r["team_cloud"] as? [String:Any] ?? [:]
+            let macs=max((cloud["hosts"] as? [Any])?.count ?? 0,1)
+            let lastOK=cloud["last_ok"] as? String ?? ""
+            let lastError=cloud["last_error"] as? String ?? ""
+            if !lastOK.isEmpty { return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.ok,hint:"ekip bulutu · \(macs) Mac · son eşitleme "+syncClock(lastOK)) }
+            if !lastError.isEmpty { return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"bulut şu an erişilemiyor (\(lastError)); yerel bilgi korunuyor, bağlanınca eşitlenir") }
+            return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"ekip bulutu · ilk eşitleme bekleniyor")
         case "team": return SetupCheck(id:"team",title:"Ekip klasörü",state:.ok,hint:"ortak bilgi tabanı: "+root)
         case "icloud": return SetupCheck(id:"team",title:"Ekip klasörü",state:.optional,hint:"seçilmedi · iCloud Drive kullanılıyor (yalnız kendi Mac’leriniz arasında; ekip için Ayarlar → Sistem → Ekip klasörü)")
         default: return SetupCheck(id:"team",title:"Ekip klasörü",state:.missing,hint:"yok · iCloud Drive kapalı ve ekip klasörü seçilmedi: profiller, kelimeler ve raporlar paylaşılmıyor · Ayarlar → Sistem → Ekip klasörü")
         }
+    }
+    /// `2026-09-10T21:40:03.512345+00:00` → `00:40` in the user's own time zone. Python writes microseconds,
+    /// which ISO8601DateFormatter refuses, so they are cut before parsing; an unparseable stamp falls back to
+    /// the UTC clock inside the string rather than to nothing.
+    static func syncClock(_ iso:String)->String {
+        var text=iso
+        if let dot=text.firstIndex(of:"."), let end=text[dot...].firstIndex(where:{ $0=="+" || $0=="-" || $0=="Z" }) { text.removeSubrange(dot..<end) }
+        let parser=ISO8601DateFormatter(); parser.formatOptions=[.withInternetDateTime]
+        guard let date=parser.date(from:text) else { return String(iso.dropFirst(11).prefix(5)) }
+        let clock=DateFormatter(); clock.dateFormat="HH:mm"
+        return clock.string(from:date)
     }
     static func serviceChecks(_ r:[String:Any],repo:String="",divergedNotice:String="")->[SetupCheck] {
         let key=r["api_key"] as? Bool ?? false
