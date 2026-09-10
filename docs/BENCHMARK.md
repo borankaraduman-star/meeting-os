@@ -205,3 +205,9 @@ Düşünen modeller için istemci `temperature`'ı düşürüp `reasoning.effort
 uçları `enum` içinde `null` kabul etmediği için şema `anyOf` oldu. Gizlilik notu: analiz metni artık DeepSeek modelini
 barındıran sağlayıcıya gider; istek `data_collection: deny` ile yalnız veriyi saklamayan/eğitimde kullanmayan
 sağlayıcılara yönlendirilir (OpenRouter yönlendirme kuralı), gpt-4.1-mini'de de aynı kural geçerliydi.
+
+**DeepSeek V4.1 Flash neden değil (11 Eylül 02:20, Boran'ın sorusu):** üç denemede (ikisi varsayılan yönlendirme, biri
+`allow_fallbacks: true` ile 8 sağlayıcıya açık) 10 senaryodan toplam 1 geçti; 43 × HTTP 429 "temporarily rate-limited
+upstream" ve bozuk yanıtlar. Fiyatı ($0,15/$0,60) ve tek geçen senaryodaki hızı (16 sn) cazip; OpenRouter'daki sunumu
+düzelince yeniden ölçülmeli (`--model deepseek/deepseek-v4.1-flash`). Yedek sağlayıcı açmak da kurtarmadı; kalite
+tutarlılığı için istek tek sağlayıcıya bağlı kaldı (`allow_fallbacks: false`).
