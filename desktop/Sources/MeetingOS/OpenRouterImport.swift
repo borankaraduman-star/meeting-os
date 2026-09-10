@@ -20,25 +20,31 @@ enum OpenRouterCredential {
         try? Data((value+"\n").utf8).write(to:cacheURL,options:.atomic)
         try? FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:cacheURL.path)
     }
+    /// In-process memo: even if the cache file cannot be written, the Keychain is consulted at most once per app run —
+    /// never once per 2-second poll, which is what produced an endless queue of dialogs on an updated Mac.
+    private static var memo:String?; private static var keychainAsked=false
     static func read()->String? {
-        if let v=cached() { return v }
+        if let v=memo { return v }
+        if let v=cached() { memo=v; return v }
+        guard !keychainAsked else { return nil }
+        keychainAsked=true
         var q=query; q[kSecReturnData as String]=true; q[kSecMatchLimit as String]=kSecMatchLimitOne
         var item:CFTypeRef?; guard SecItemCopyMatching(q as CFDictionary,&item)==errSecSuccess, let data=item as? Data, let s=String(data:data,encoding:.utf8) else { return nil }
         let v=s.trimmingCharacters(in:.whitespacesAndNewlines); if v.isEmpty { return nil }
-        cache(v); return v   // one Keychain dialog per Mac, not one per update
+        memo=v; cache(v); return v   // one Keychain dialog per Mac, not one per update
     }
     static func environment()->[String:String] { read().map { ["OPENROUTER_API_KEY":$0] } ?? [:] }
     static func save(_ key:String) throws {
         let value=key.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !value.isEmpty,!value.contains(where:{$0.isWhitespace}) else { throw failure("Geçerli bir OpenRouter API anahtarı girin.") }
-        cache(value)   // the file is what runs the product; the Keychain copy is the backup that survives a data-folder wipe
+        memo=value; keychainAsked=false; cache(value)   // the file is what runs the product; the Keychain copy is the backup that survives a data-folder wipe
         var attributes=query;attributes[kSecValueData as String]=Data(value.utf8)
         attributes[kSecAttrAccessible as String]=kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         var status=SecItemAdd(attributes as CFDictionary,nil)
         if status==errSecDuplicateItem { status=SecItemUpdate(query as CFDictionary,[kSecValueData as String:Data(value.utf8)] as CFDictionary) }
         guard status==errSecSuccess else { throw failure("Anahtar macOS Anahtar Zinciri’ne kaydedilemedi (\(status)).") }
     }
-    static func forget() { try? FileManager.default.removeItem(at:cacheURL); SecItemDelete(query as CFDictionary) }
+    static func forget() { memo=nil; keychainAsked=false; try? FileManager.default.removeItem(at:cacheURL); SecItemDelete(query as CFDictionary) }
     static func failure(_ message:String)->NSError { NSError(domain:"MeetingOS.OpenRouter",code:1,userInfo:[NSLocalizedDescriptionKey:message]) }
 }
 
