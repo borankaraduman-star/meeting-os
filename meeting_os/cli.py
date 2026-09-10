@@ -156,6 +156,7 @@ def parser():
     wd=sub.add_parser('words',help='Öğretilen kelimeler: bir kez düzelt, benzer yazımlar da düzelsin'); wd.add_argument('action',choices=['teach','forget','list']); wd.add_argument('original',nargs='?'); wd.add_argument('replacement',nargs='?'); wd.add_argument('--meeting')
     rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir, user_name, team_dir, share_glossary, share_words, share_profiles, audio_retention_days')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
+    er=sub.add_parser('errors',help='Bu Mac’in yerel hata günlüğü: hatalar ve çökmeler'); er.add_argument('action',choices=['list','clear']); er.add_argument('--limit',type=int,default=20)
     dc=sub.add_parser('document',help='Meeting → PRD / bug report / customer request / Claude Code prompt'); dc.add_argument('--meeting',required=True); dc.add_argument('--kind',choices=['prd','bug','customer','claude'],default='prd'); dc.add_argument('--output',type=Path); dc.add_argument('--openrouter-model',default='openai/gpt-4.1-mini')
     sub.add_parser('mcp')
     return p
@@ -185,7 +186,7 @@ def main(supervised=False):
             return
         if args.command=='diagnostics':
             from .diagnostics import collect,export_report
-            report=collect(args.output.parent if args.output else ROOT,args.progress)
+            report=collect(args.output.parent if args.output else ROOT,args.progress,Path(args.db).parent)
             if args.output:
                 export_report(args.output,report);output({'diagnostics_saved':True})
             else:output(report)
@@ -288,6 +289,14 @@ def main(supervised=False):
                 if args.action=='summarize':
                     summary=reports.summarize(reports.report_root(reports.load_settings(DATA_DIR)))
                     for a in summary.get('alerts') or []: print(('✘ ' if a['level']=='error' else '! ' if a['level']=='warning' else '· ')+a['line'],file=sys.stderr)
+                    for host,h in sorted((summary.get('hosts') or {}).items()):
+                        journal=(h.get('heartbeat') or {}).get('error_journal')
+                        journal=journal if isinstance(journal,dict) else {}
+                        counts=journal.get('last_24h') if isinstance(journal.get('last_24h'),dict) else {}
+                        if not counts and not journal.get('crashes_24h'): continue
+                        kinds=', '.join(f'{k} {v}' for k,v in sorted(counts.items()))
+                        last=next((e.get('message') for e in (journal.get('last') or []) if isinstance(e,dict) and e.get('message')),'')
+                        print(f'  {host} · hata günlüğü (24s): {kinds or "yok"} · çökme {journal.get("crashes_24h") or 0}'+(f' · en son: {last}' if last else ''),file=sys.stderr)
                     output(summary)
                 elif args.action=='heartbeat':
                     from . import __version__
@@ -305,6 +314,13 @@ def main(supervised=False):
                     if not args.meeting: raise ValueError('--meeting gerekli')
                     from . import __version__
                     output({'path':reports.write_meeting_report(store,args.meeting,DATA_DIR,version=__version__)})
+            elif args.command=='errors':
+                from . import errors as E
+                base=Path(args.db).parent
+                if args.action=='clear': output({'cleared':E.clear(base)})
+                else:
+                    E.sweep(base)   # crash reports and the updater's last verdict before the list is printed
+                    output({'errors':E.entries(base,limit=args.limit)[::-1],'summary':E.summary(base)})
             elif args.command=='update':
                 from . import updater
                 output(updater.check(ROOT) if args.action=='check' else (updater.start(ROOT,DATA_DIR) if args.action=='start' else updater.status(DATA_DIR)))
@@ -428,6 +444,14 @@ def main(supervised=False):
     except (Exception,KeyboardInterrupt) as exc:
         from .supervisor import ChildFailure, JobMemoryLimitError
         from .resources import MemoryPressureError, ResourceProbeError
+        # A job that dies here leaves a line in last-job.log the next job overwrites. The journal keeps it.
+        # A user cancel is not a fault, and a ChildFailure was already recorded by the child that raised it.
+        if not isinstance(exc,(KeyboardInterrupt,ChildFailure)):
+            try:
+                from .errors import record
+                record('job',f'{type(exc).__name__}: {exc}',data_dir=Path(args.db).parent,
+                       context={'command':getattr(args,'command',None),'supervised':bool(supervised)})
+            except Exception: pass
         if isinstance(exc,(MemoryPressureError,ResourceProbeError,JobMemoryLimitError)):
             print(f'Meeting OS: {exc}',file=sys.stderr); raise SystemExit(75)
         if isinstance(exc,ChildFailure):raise SystemExit(exc.code if exc.code>0 else 1)

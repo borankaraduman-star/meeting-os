@@ -250,6 +250,16 @@ def _errors(log_path, limit=8):
     return out[-limit:]
 
 
+def error_journal(data_dir):
+    """The local error journal (errors.jsonl), summarised for the heartbeat: how many of each kind in the
+    last day, the newest few messages, how many crashes. Redacted where it is written; `redact_paths` runs
+    over the whole heartbeat as well. Never raises — observability must not break the app."""
+    try:
+        from . import errors
+        return errors.summary(data_dir)
+    except Exception: return None
+
+
 def recording_line(beat):
     """One line for a recording that is happening right now: 'kayıt sürüyor · 41 dk · son parça 4 sn önce'."""
     if not isinstance(beat, dict): return None
@@ -486,6 +496,7 @@ def build_heartbeat(store, data_dir, *, app=None):
         'memory_pressure': _memory_pressure(), 'thermal': _thermal(), 'load_average': load,
         'recording': read_recording_heartbeat(host_dir(load_settings(data_dir))),   # a meeting being taped right now
         'errors': _errors(data/'last-job.log', limit=5),
+        'error_journal': error_journal(data),   # errors.jsonl: crashes, failed jobs, cloud/capture faults nobody reported
         'cloud_blocked': store.db.execute("SELECT count(*) FROM meetings WHERE status!='complete' AND json_extract(metadata,'$.cloud_error.kind') IN ('auth','credit')").fetchone()[0],
         'probe': daily_probe(data),
         # What this Mac takes from the shared knowledge base and what it puts back in. Counts only: no name, no word.
@@ -589,7 +600,8 @@ def summarize(report_dir, limit=30):
                                     'update_status': beat.get('update_status'), 'signing_partition': beat.get('signing_partition'),
                                     'probe': beat.get('probe'), 'cloud_blocked': beat.get('cloud_blocked'), 'errors': len(beat.get('errors') or []),
                                     'team_profiles': beat.get('team_profiles'), 'team_words': beat.get('team_words'),
-                                    'shared_profiles': beat.get('shared_profiles'), 'shared_words': beat.get('shared_words')}
+                                    'shared_profiles': beat.get('shared_profiles'), 'shared_words': beat.get('shared_words'),
+                                    'error_journal': beat.get('error_journal')}
     for path in sorted(root.glob('*/'+RECORDING_HEARTBEAT_FILE)):   # a Mac that is in a meeting right now says so
         beat = read_recording_heartbeat(path)
         if not beat: continue
@@ -605,6 +617,7 @@ LOW_DISK_BYTES = 3*1024**3
 
 
 RETENTION_WARNING_DAYS = 3
+ERROR_JOURNAL_ALERT = 5   # journal entries in a day before the fleet view says something is wrong here
 
 
 def audio_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DAYS):
@@ -678,5 +691,18 @@ def alerts(hosts, *, now=None):
         rec = h.get('recording') or {}
         age = rec.get('last_chunk_age_seconds')
         if isinstance(age, (int, float)) and age > 60: out.append({'host': host, 'level': 'error', 'key': 'recording', 'line': f'{host}: kayıt sürüyor ama son parça {int(age)} sn önce · yardımcı takılmış olabilir'})
+        # The journal block was written by another Mac, possibly a newer or a broken one: every shape is checked
+        # rather than trusted, because one malformed heartbeat must not take the whole fleet view down.
+        journal = beat.get('error_journal') if isinstance(beat.get('error_journal'), dict) else {}
+        newest = next((e.get('message') for e in (journal.get('last') or []) if isinstance(e, dict) and e.get('message')), None)
+        crashes = journal.get('crashes_24h')
+        if isinstance(crashes, int) and not isinstance(crashes, bool) and crashes > 0:
+            out.append({'host': host, 'level': 'error', 'key': 'crash',
+                        'line': f'{host}: son 24 saatte {crashes} çökme · {newest or "ayrıntı Ayarlar → Sistem → Hatalar"}'})
+        counts = journal.get('last_24h') if isinstance(journal.get('last_24h'), dict) else {}
+        counted = sum(v for v in counts.values() if isinstance(v, int) and not isinstance(v, bool))
+        if counted >= ERROR_JOURNAL_ALERT:
+            out.append({'host': host, 'level': 'warning', 'key': 'error_journal',
+                        'line': f'{host}: son 24 saatte {counted} hata kaydı' + (f' · en son: {newest}' if newest else '')})
         if h.get('errors'): out.append({'host': host, 'level': 'note', 'key': 'errors', 'line': f'{host}: son raporlarda {h["errors"]} hata satırı'})
     return out

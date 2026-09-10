@@ -72,7 +72,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { willSet { noteNavChange() } didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; wordFix=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { willSet { noteNavChange() } didSet { guard search != oldValue else { return }; focusedSegment=nil; pendingEvidence=nil; scheduleSearchRebuild() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { willSet { noteNavChange() } didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; wordFix=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { willSet { noteNavChange() } didSet { guard search != oldValue else { return }; focusedSegment=nil; pendingEvidence=nil; scheduleSearchRebuild() } }; @Published var title=""
+    /// Every failure the user is shown lands here, from fifty different call sites. That makes it the one
+    /// place the error journal can be fed without threading a report call through all of them: a new,
+    /// non-empty banner is one recorded event (throttled, so a poll that fails every two seconds is still one).
+    @Published var error="" { didSet { if error != oldValue, !error.isEmpty { report(error) } } }
+    /// Journal state for Ayarlar → Sistem → Hatalar. Loaded on launch, hourly, and when the sheet opens.
+    @Published var errorEntries:[ErrorEntry]=[]; @Published var errorCounts:[String:Int]=[:]; @Published var errorCrashes=0
+    var errorThrottle=ErrorReportThrottle()
     @Published var activity="Hazır · ⌃⌥R ile kayıt başlat"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -127,6 +134,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             await self.refresh()
         } }
         Task { await loadReportSettings(); await refresh() }
+        Task { await loadErrors() }   // macOS wrote a crash report while the app was dead; nothing ever read one
     }
     var meeting:Meeting? { meetings.first { $0.id==selected } }
     @Published var showEchoRows=false { didSet { rebuildBlocks() } }
@@ -421,7 +429,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                     guard let self=self else { return }
                     if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; try? FileManager.default.removeItem(at:progress) }
                     else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobLowPriority=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; JobSleepGuard.end(); try? FileManager.default.removeItem(at:progress) }
-                    if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
+                    if process.terminationStatus != 0 && !self.jobCanceled {
+                        // Before the banner, so the throttle credits this to `job` rather than to the `ui` echo.
+                        self.report(jobError,kind:"job",context:["command":args.first ?? "job","exit":Int(process.terminationStatus)])
+                        self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage
+                    }
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
                     // Quitting is not the moment to start an upload: the queued meetings keep their audio and the
                     // idle queue picks them up on the next launch. Popping here would begin a job we cannot finish.

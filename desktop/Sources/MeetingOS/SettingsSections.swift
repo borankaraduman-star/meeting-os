@@ -6,7 +6,7 @@ import Foundation
 enum SettingsSections {
     static let all=["genel","sesler","sistem"]
     /// Height per section as before: the sheet is as tall as its own content, clamped to the screen.
-    static let heights=["genel":540,"sesler":940,"sistem":760]
+    static let heights=["genel":540,"sesler":940,"sistem":900]   // Sistem grew a Hatalar card in 1.2.63
     static func normalize(_ raw:String)->String {
         if all.contains(raw) { return raw }
         switch raw {
