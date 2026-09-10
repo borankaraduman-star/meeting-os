@@ -751,3 +751,7 @@ Boran: “bu uygulama ekran erişim izni de mi istiyor, neden?” → cevap: Scr
 ## 2026-09-10 21:55 — 1.2.61: konuşma payı varsayılan açık
 
 Boran: “kimin ne kadar konuştuğu istatistiği iyiydi, hâlâ görebilmeliyim” → Özet’te `showTalkShare` `@AppStorage("summaryTalkShareOpen")` varsayılan true, toplantı değişince sıfırlanmıyor. Swift 211.
+
+## 2026-09-10 22:05 — 1.2.62: göze batmama modu
+
+Boran: “ekran paylaşan biri kayıt alıyorsa diğerleri ikonu/paneli görmemeli” → ajan `discreet` `08c0253`: `DiscreetMode.swift` (saf kurallar), `ZoomWatch.sharing` (paylaşım çubuğu pencere adı eşleşmeleri), `Model.discreetMode` (UserDefaults, varsayılan açık), `updateRecorderPanel()` (kayıt && panel açık && !(discreet && sharing)), `applyWindowPrivacy()` (ana pencere `sharingType .none`, NSPanel hariç), `MenuBarLabel` kayıtta boştaki ile aynı, bildirimler paylaşımda kuyrukta; Ayarlar → Genel anahtarı. Swift 226. Canlı doğrulanmadı: Zoom paylaşım penceresi adı, paylaşımda ana pencerenin boş görünmesi. Ekip bilgi tabanı ajanı (kelimeler + profiller, ikisi de varsayılan açık, sürekli eşitleme) sürüyor → 1.2.63.
