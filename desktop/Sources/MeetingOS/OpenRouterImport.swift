@@ -23,10 +23,12 @@ enum OpenRouterCredential {
     /// In-process memo: even if the cache file cannot be written, the Keychain is consulted at most once per app run —
     /// never once per 2-second poll, which is what produced an endless queue of dialogs on an updated Mac.
     private static var memo:String?; private static var keychainAsked=false
+    /// Unit tests never open a Keychain dialog: the test bundle reads only the environment and the cache file.
+    static let underTest=ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil || ProcessInfo.processInfo.environment["MEETING_OS_NO_KEYCHAIN"] != nil
     static func read()->String? {
         if let v=memo { return v }
         if let v=cached() { memo=v; return v }
-        guard !keychainAsked else { return nil }
+        guard !keychainAsked, !underTest else { return nil }   // xctest asking the Keychain queued four "xctest wants…" dialogs on 10 Sep 2026
         keychainAsked=true
         var q=query; q[kSecReturnData as String]=true; q[kSecMatchLimit as String]=kSecMatchLimitOne
         var item:CFTypeRef?; guard SecItemCopyMatching(q as CFDictionary,&item)==errSecSuccess, let data=item as? Data, let s=String(data:data,encoding:.utf8) else { return nil }
