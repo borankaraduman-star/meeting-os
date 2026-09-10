@@ -405,6 +405,20 @@ class DesktopTests(unittest.TestCase):
    s=Store(db);row=s.segments(mid)[0]
    self.assertEqual(row['text'],'Meşhed');self.assertEqual(row['original_text'],'Meşet');self.assertEqual(row['embedding'],[1.,0.]);self.assertEqual(s.profiles(),[]);s.close()
 
+ def test_plain_label_learns_the_voice_from_a_clean_long_segment(self):
+  # "Adlandır" on a plain (non-cluster) row: a clean ≥6 s piece feeds the person's profile; a 4 s piece only gets the label.
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'db'; s=Store(db); mid=s.create_meeting('Öğren',{'paths':{'system':'/tmp/a.wav'}})
+   long=s.add_segment(mid,Segment(0,8,'Uzun temiz konuşma.','system','S0',embedding=[1.,0.],embedding_model='test'))
+   short=s.add_segment(mid,Segment(9,13,'Kısa.','system','S1',embedding=[0.,1.],embedding_model='test'))
+   s.status(mid,'complete');s.close()
+   r=dispatch({'action':'label','meeting':mid,'segment':long,'name':'İpek'},db)
+   self.assertTrue(r['saved']);self.assertTrue(r['profile_saved'])
+   r=dispatch({'action':'label','meeting':mid,'segment':short,'name':'Ali'},db)
+   self.assertTrue(r['saved']);self.assertFalse(r['profile_saved'])
+   s=Store(db);rows={x['id']:x['speaker_name'] for x in s.segments(mid)}
+   self.assertEqual((rows[long],rows[short]),('İpek','Ali'));self.assertEqual([p['name'] for p in s.profiles()],['İpek']);s.close()
+
  def test_desktop_rejects_edits_to_processing_meeting(self):
   with tempfile.TemporaryDirectory() as tmp:
    db=Path(tmp)/'db';s=Store(db);mid=s.create_meeting('Still working')

@@ -48,7 +48,7 @@ struct EditSegmentSheet:View {
                     ForEach(siblings) { r in Text("\(r.time) · \(String(r.text.prefix(60)))").tag(r.id) }
                 }.pickerStyle(.menu).controlSize(.small)
             }
-            Text(cluster ? "“Adlandır ve öğren” bu toplantıdaki bütün “\(row.speaker)” bölümlerine bu adı verir ve sesi öğrenir. Yalnız bir cümle yanlış kişiye gittiyse “Yalnız bu bölüm”: sadece o bölüm değişir, geri kalanı ve kişinin profili olduğu gibi kalır, bölüm temizse doğru kişinin profili ondan öğrenir." : (textOnly ? "Bu toplantı yalnızca metin içerir; isim yalnız bu bölüme yazılır." : "İsim bu bölüme yazılır. Sesi öğrenmesi için “Gelişmiş” altında temiz ses onayı verin.")).font(.caption).foregroundStyle(.secondary)
+            Text(cluster ? "“Adlandır ve öğren” bu toplantıdaki bütün “\(row.speaker)” bölümlerine bu adı verir ve sesi öğrenir. Yalnız bir cümle yanlış kişiye gittiyse “Yalnız bu bölüm”: sadece o bölüm değişir, geri kalanı ve kişinin profili olduğu gibi kalır, bölüm temizse doğru kişinin profili ondan öğrenir." : (textOnly ? "Bu toplantı yalnızca metin içerir; isim yalnız bu bölüme yazılır." : "İsim bu bölüme yazılır; bölüm en az 6 sn temiz tek kişilik konuşmaysa kişinin ses profili de bundan öğrenir. Kısa ya da karışık bölümde yalnız isim kaydedilir.")).font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Vazgeç") { model.editRow=nil }.accessibilityIdentifier("cancelEditButton")
                 Spacer()

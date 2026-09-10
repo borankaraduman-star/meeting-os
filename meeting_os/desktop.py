@@ -377,7 +377,13 @@ def dispatch(request, db=None):
             share_profiles(store,db)
             return {**result,**store.resuggest(request['meeting'])}
         if action=='label':
-            store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}
+            # A plain segment naming learns too (Boran, 10 Sep 2026: "ileriye yönelik kazanım için düzeltiyorum"): the
+            # same rule as "Yalnız bu bölüm" — a clean, single-speaker piece of at least SEGMENT_SAMPLE_SECONDS becomes
+            # a voice sample of the named person, a sample this piece had fed into the wrong name is hidden, and a
+            # short or unclean piece only gets the label. No "Dinledim" toggle needed for the everyday case.
+            result=store.correct_segment_only(request['meeting'],int(request['segment']),request['name'])
+            if result.get('profile_saved'): share_profiles(store,db)
+            return {'saved':True,**result}
         if action=='edit_text':
             store.correct_text(request['meeting'],int(request['segment']),request['text']); return {'saved':True}
         if action=='enroll':
