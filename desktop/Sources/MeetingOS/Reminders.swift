@@ -32,4 +32,19 @@ enum RemindersBridge {
         r.calendar=list
         try store.save(r,commit:true)
     }
+    /// Deleting a meeting takes its hand-offs with it: every incomplete reminder whose note names this meeting.
+    /// Only reminders this app wrote (note starts with "Meeting OS · ") are touched; completed ones stay as history.
+    static func remove(meetingTitle:String,done:@escaping (Int)->Void) {
+        guard authorized, !meetingTitle.isEmpty else { done(0); return }
+        let marker="Meeting OS · \(meetingTitle)"
+        let predicate=store.predicateForIncompleteReminders(withDueDateStarting:nil,ending:nil,calendars:nil)
+        store.fetchReminders(matching:predicate) { reminders in
+            var removed=0
+            for r in reminders ?? [] where (r.notes ?? "").hasPrefix(marker) {
+                if (try? store.remove(r,commit:false)) != nil { removed+=1 }
+            }
+            if removed>0 { try? store.commit() }
+            DispatchQueue.main.async { done(removed) }
+        }
+    }
 }

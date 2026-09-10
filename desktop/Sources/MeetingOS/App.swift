@@ -447,6 +447,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             _=try await request(["action":"delete_meeting","meeting":meeting.id])
             if selected==meeting.id { selected=nil;rows=[] }
             activity="Toplantı silindi · Ses profilleri korundu"
+            RemindersBridge.remove(meetingTitle:meeting.title) { [weak self] n in if n>0 { self?.activity="Toplantı silindi · \(n) hatırlatıcı da kaldırıldı · Ses profilleri korundu" } }   // the hand-offs in Reminders go with the meeting
             await refresh()
         } catch { self.error=error.localizedDescription }
     }
