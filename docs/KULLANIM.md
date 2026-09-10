@@ -6,7 +6,7 @@ Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi Op
 
 *Ana pencere. Sol: Yeni kayıt, sürüm satırı (Güncelleme ara), toplantı araması, tarih grupları; altta Son durum kartı, Ayarlar ve ⋯ menüsü. Sağ: başlık, özet şeridi (tarih · süre · kişi), sekmeler ve rozetler, konuşmada ara, İsimler kartı, okuma görünümü.*
 
-Ekran görüntüleri 1.2.28 dönemine ait; etiketler için metin esas alınmalıdır.
+Ekran görüntüleri 1.2.37 arayüzünden alınmıştır; yalnız panel, karne ve Ayarlar görselleri daha eski (etiketler metinde günceldir).
 
 ---
 
