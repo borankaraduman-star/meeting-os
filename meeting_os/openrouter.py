@@ -195,8 +195,9 @@ class OpenRouterClient:
         if hint and supports_prompt(model): payload['prompt']=str(hint)[:1000]   # glossary spelling hint; ignored by providers that do not read it
         options=diarization_options(model) if diarize else None
         if diarize and options is None:raise OpenRouterError('Seçilen model konuşmacı ayrımı sunmuyor; model otomatik değiştirilmedi.')
+        payload['provider']={'data_collection':'deny'}   # every audio piece, mic included, asks the provider not to keep it
         if options:
-            payload['response_format']='verbose_json';payload['timestamp_granularities']=['segment'];payload['provider']={'options':options,'data_collection':'deny'}
+            payload['response_format']='verbose_json';payload['timestamp_granularities']=['segment'];payload['provider']['options']=options
         result=self._post('audio/transcriptions',payload,timeout=timeout)
         if not isinstance(result.get('text'),str):raise OpenRouterError('OpenRouter transkript metni döndürmedi.')
         usage=result.get('usage') or {}

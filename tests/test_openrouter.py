@@ -110,10 +110,10 @@ class OpenRouterTests(unittest.TestCase):
         client=OpenRouterClient(api_key='k',transport=transport)
         out=client.transcribe(b'OggS','ogg',model='deepgram/nova-3',consent=True,diarize=True,timeout=600)
         body=captured['body'];self.assertEqual(body['response_format'],'verbose_json');self.assertEqual(body['timestamp_granularities'],['segment'])
-        self.assertEqual(body['provider'],{'options':{'deepgram':{'diarize':True}}});self.assertEqual(body['language'],'tr');self.assertEqual(captured['timeout'],600)
+        self.assertEqual(body['provider'],{'options':{'deepgram':{'diarize':True}},'data_collection':'deny'});self.assertEqual(body['language'],'tr');self.assertEqual(captured['timeout'],600)
         self.assertEqual(out['segments'],[{'start':0.0,'end':1.0,'text':'a','speaker':'0'},{'start':1.0,'end':2.0,'text':'b','speaker':'1'}])
         with self.assertRaises(OpenRouterError):client.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True,diarize=True)
-        plain=client.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True);self.assertNotIn('segments',plain);self.assertNotIn('provider',captured['body'])
+        plain=client.transcribe(b'OggS','ogg',model='openai/gpt-transcribe',consent=True);self.assertNotIn('segments',plain);self.assertEqual(captured['body']['provider'],{'data_collection':'deny'})
         for bad in ([{'start':-1,'end':1,'text':'x'}],[{'start':2,'end':1,'text':'x'}],[{'start':0,'end':1,'text':5}],'nope'):
             with self.assertRaises(OpenRouterError):parse_segments(bad)
         self.assertEqual(parse_segments(None),[]);self.assertEqual(parse_segments([{'start':0,'end':1,'text':' x ','speaker':True}])[0]['speaker'],None)

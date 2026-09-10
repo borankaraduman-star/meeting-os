@@ -288,22 +288,31 @@ class Store:
             self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
         # The cluster is open again (or back to its old name): what the rest of the meeting can be has changed.
         return {'speaker':speaker,'name':name,'previous':previous,**self.resuggest(mid)}
-    def _sweep_retry_workspaces(self, mid, tables):
-        """A crashed retry leaves full mic/system WAVs in a temp workspace outside the data dir; the rows that
-        point at it are about to go, so the directories must go first (must run inside the caller's transaction)."""
-        if 'retry_workspaces' not in tables: return
-        import shutil
-        rows = self.db.execute('SELECT w.root, w.name FROM retry_workspaces w JOIN retry_attempts a ON a.id=w.attempt WHERE a.meeting=?', (mid,)).fetchall()
-        for root, name in rows:
+    def _retry_workspace_rows(self, mid, tables):
+        if 'retry_workspaces' not in tables: return []
+        return [dict(r) for r in self.db.execute('SELECT w.attempt,w.root,w.name,w.device,w.inode FROM retry_workspaces w JOIN retry_attempts a ON a.id=w.attempt WHERE a.meeting=?', (mid,))]
+    @staticmethod
+    def _remove_retry_workspaces(rows):
+        """A crashed retry leaves full mic/system WAVs in a temp workspace outside the data dir. Removed with the
+        module's hardened remover (inode identity, uid, 0700, whitelisted names, no symlinks) AFTER the
+        transaction: slow file I/O never holds the write lock, and a refusal is reported, not swallowed."""
+        import os
+        from .retry_workspaces import _remove
+        removed, kept = [], []
+        for row in rows:
             try:
-                path = Path(root) / name
-                if isinstance(name, str) and name.startswith('meeting-os-retry-') and path.is_dir() and not path.is_symlink(): shutil.rmtree(path, ignore_errors=True)
-            except (OSError, TypeError): pass
+                root_fd = os.open(row['root'], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try: _remove(root_fd, row); removed.append(str(Path(row['root']) / row['name']))
+                finally: os.close(root_fd)
+            except (OSError, ValueError, TypeError) as exc:
+                if not isinstance(exc, FileNotFoundError): kept.append(f"{row.get('name')}: {type(exc).__name__}")
+        return removed, kept
     def delete_meeting(self, mid):
         """Remove one meeting and every row derived from it. Voice profiles are kept. Returns metadata for file cleanup."""
         row=self.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
         if not row: raise ValueError('Toplantı bulunamadı')
         tables={r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        workspaces=self._retry_workspace_rows(mid, tables)   # read now, remove after the commit
         with self.db:
             if 'tasks' in tables:
                 if 'drafts' in tables:
@@ -314,15 +323,17 @@ class Store:
                     self.db.execute('DELETE FROM task_edits WHERE task IN (SELECT id FROM tasks WHERE meeting=?)',(mid,))
                 self.db.execute('DELETE FROM tasks WHERE meeting=?',(mid,))
             if 'retry_attempts' in tables:
-                self._sweep_retry_workspaces(mid, tables)
                 for t in ('retry_segments','retry_workspaces'):
                     if t in tables: self.db.execute(f'DELETE FROM {t} WHERE attempt IN (SELECT id FROM retry_attempts WHERE meeting=?)',(mid,))
                 self.db.execute('DELETE FROM retry_attempts WHERE meeting=?',(mid,))
             for t in ('analyses','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','segments'):
                 if t in tables: self.db.execute(f'DELETE FROM {t} WHERE meeting=?',(mid,))
             self.db.execute('DELETE FROM meetings WHERE id=?',(mid,))
-        try: return json.loads(row['metadata']) or {}
-        except (TypeError,ValueError): return {}
+        removed, kept = self._remove_retry_workspaces(workspaces)
+        try: meta=json.loads(row['metadata']) or {}
+        except (TypeError,ValueError): meta={}
+        if removed or kept: meta['retry_workspaces']={'removed':removed,'kept':kept}   # the caller reports leftovers instead of hiding them
+        return meta
     def profiles(self):
         return [dict(r) for r in self.db.execute('SELECT name,model,count(*) samples,sum(duration) seconds FROM samples WHERE deleted_by IS NULL GROUP BY name,model')]
     def delete_profile(self, name):

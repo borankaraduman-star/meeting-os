@@ -131,7 +131,7 @@ struct OpenRouterImportView:View {
         let result=model.dataDir.appendingPathComponent("openrouter-\(UUID().uuidString).json")
         let args:[String]
         var registration:[String:Any]?   // digest of the picked file; only a fresh import owns the new meeting
-        if let resume, let meeting=model.meetings.first(where:{ $0.id==resume }) { args=CloudTranscription.resumeArguments(meeting:meeting,model:selectedModel,output:result.path) }
+        if let resume, let meeting=model.meetings.first(where:{ $0.id==resume }) { model.jobTitle=""; args=CloudTranscription.resumeArguments(meeting:meeting,model:selectedModel,output:result.path) }
         else if let path {
             model.jobTitle=title.isEmpty ? "OpenRouter toplantısı":title
             args=CloudTranscription.importArguments(path:path.path,title:title.isEmpty ? "OpenRouter toplantısı":title,model:selectedModel,output:result.path)

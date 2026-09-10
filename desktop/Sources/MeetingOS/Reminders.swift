@@ -37,10 +37,11 @@ enum RemindersBridge {
     static func remove(meetingTitle:String,done:@escaping (Int)->Void) {
         guard authorized, !meetingTitle.isEmpty else { done(0); return }
         let marker="Meeting OS · \(meetingTitle)"
-        let predicate=store.predicateForIncompleteReminders(withDueDateStarting:nil,ending:nil,calendars:nil)
+        let list=store.defaultCalendarForNewReminders().map { [$0] }   // only the list this app writes to
+        let predicate=store.predicateForIncompleteReminders(withDueDateStarting:nil,ending:nil,calendars:list)
         store.fetchReminders(matching:predicate) { reminders in
             var removed=0
-            for r in reminders ?? [] where (r.notes ?? "").hasPrefix(marker) {
+            for r in reminders ?? [] where (r.notes ?? "").split(separator:"\n",maxSplits:1,omittingEmptySubsequences:false).first.map(String.init)==marker {   // exact first line: "Sync" must not take "Sync retro" with it
                 if (try? store.remove(r,commit:false)) != nil { removed+=1 }
             }
             if removed>0 { try? store.commit() }
