@@ -574,3 +574,55 @@ class TaskOwnerRenameTests(unittest.TestCase):
             sample = db.profile_samples('Ali')[0]
             self.assertEqual((sample['meeting_title'], sample['meeting']), ('toplantı silindi', None))
             db.close()
+
+
+class OwnerFollowsUndoTests(unittest.TestCase):
+    """Second opinion on 1.2.47: a rename+undo must not strand tasks on a name nobody said."""
+    def _voice(self, seed):
+        import random
+        rnd=random.Random(seed); return [rnd.uniform(-1,1) for _ in range(8)]
+    def _db(self):
+        tmp=tempfile.TemporaryDirectory(); db=Store(Path(tmp.name)/'db'); mid=db.create_meeting('test')
+        sid=db.add_segment(mid,Segment(0,12,'raporu ben göndereceğim','system','system:S1',metrics={'cluster':'0:S1'},flags=['cloud_diarization'],embedding=self._voice(1),embedding_model='m'))
+        from meeting_os.memory import Memory
+        mem=Memory(db)
+        mem.save_analysis(mid,mem.current_hash(mid),'m',{'summary':[],'decisions':[],'risks':[],'questions':[],'actions':[{'title':'Raporu gönder','owner':'Konuşmacı 2','due_text':None,'evidence':[{'segment_id':sid,'quote':'raporu ben göndereceğim','start':0,'speaker':'Konuşmacı 2'}]}]})
+        db.db.execute("UPDATE tasks SET owner='Konuşmacı 2'"); db.db.commit()
+        return tmp,db,mid,sid,mem
+    def _owner(self,db): return db.db.execute('SELECT owner FROM tasks').fetchone()[0]
+    def test_undo_moves_the_owner_back_and_redo_moves_it_again(self):
+        tmp,db,mid,sid,mem=self._db()
+        db.correct(mid,'system:S1','Ayşe'); db.db.execute("UPDATE tasks SET owner='Ayşe'"); db.db.commit()   # named, then re-analysed: the task is Ayşe's
+        db.correct(mid,'system:S1','Zeynep'); self.assertEqual(self._owner(db),'Zeynep')
+        db.undo_correction(mid); self.assertEqual(self._owner(db),'Ayşe')
+        db.correct(mid,'system:S1','Zeynep'); self.assertEqual(self._owner(db),'Zeynep')
+        db.close(); tmp.cleanup()
+    def test_an_empty_re_analysis_does_not_retire_open_tasks(self):
+        tmp,db,mid,sid,mem=self._db()
+        mem.save_analysis(mid,mem.current_hash(mid),'m',{'summary':[],'decisions':[],'risks':[],'questions':[],'actions':[]})
+        self.assertEqual(db.db.execute("SELECT state FROM tasks").fetchone()[0],'open')
+        mem.save_analysis(mid,mem.current_hash(mid),'m',{'summary':[],'decisions':[],'risks':[],'questions':[],'actions':[{'title':'Raporu yolla','owner':None,'due_text':None,'evidence':[{'segment_id':sid,'quote':'raporu ben göndereceğim','start':0,'speaker':'S1'}]}]})
+        states=sorted(r[0] for r in db.db.execute("SELECT state FROM tasks"))
+        self.assertEqual(states,['open','superseded'])
+        db.close(); tmp.cleanup()
+    def test_marking_done_is_not_an_edit(self):
+        tmp,db,mid,sid,mem=self._db()
+        tid=db.db.execute('SELECT id FROM tasks').fetchone()[0]
+        mem.update_action(tid,{'state':'done'})
+        self.assertEqual(db.db.execute('SELECT user_edited FROM tasks').fetchone()[0],0)
+        mem.update_action(tid,{'title':'Raporu gönder (yarın)'})
+        self.assertEqual(db.db.execute('SELECT user_edited FROM tasks').fetchone()[0],1)
+        db.close(); tmp.cleanup()
+    def test_mic_owner_rename_moves_only_relabelled_meetings(self):
+        tmp=tempfile.TemporaryDirectory(); db=Store(Path(tmp.name)/'db')
+        a=db.create_meeting('A'); b=db.create_meeting('B')
+        db.add_segment(a,Segment(0,5,'ben yaparım','mic','Ali'))
+        sid=db.add_segment(b,Segment(0,5,'ben yaparım','system','system:S1',speaker_name='Ali'))
+        from meeting_os.memory import Memory
+        mem=Memory(db)
+        for mid,seg in ((a,None),(b,sid)):
+            mem.save_analysis(mid,mem.current_hash(mid),'m',{'summary':[],'decisions':[],'risks':[],'questions':[],'actions':[{'title':'İş','owner':'Ali','due_text':None,'evidence':[{'segment_id':seg or 1,'quote':'ben yaparım','start':0,'speaker':'Ali'}]}]})
+        r=db.rename_mic_owner('Ali','Ali Yılmaz')
+        owners={row[0]:row[1] for row in db.db.execute('SELECT meeting,owner FROM tasks')}
+        self.assertEqual((owners[a],owners[b],r['tasks']),('Ali Yılmaz','Ali',1))
+        db.close(); tmp.cleanup()

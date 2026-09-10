@@ -119,6 +119,7 @@ def build_scorecard(store, start=None, end=None, owner=None):
               'superseded_decisions': sum(c['superseded_decisions'] for c in cards),
               'risks': sum(c['counts']['risks'] for c in cards), 'tasks': sum(1 for t in memory.actions() if t.get('meeting') in ids and t.get('state') not in RETIRED),
               'cost': round(sum(c['cost'] for c in cards), 4), 'analysis_cost': round(sum(c['analysis_cost'] or 0.0 for c in cards), 4),
-              'analysis_cost_known': all(c['analysis_cost_known'] for c in cards), 'analysis_estimated': any(c['analysis_estimated'] for c in cards), 'speakers': top}
+              'analysis_cost_known': all(c['analysis_cost_known'] for c in cards), 'analysis_estimated': any(c['analysis_estimated'] for c in cards), 'speakers': top,
+              'unanalyzed': sum(1 for c in cards if not c.get('analyzed')), 'empty': not cards}
     # An empty window is a real answer and the app has to say "bu dönemde toplantı yok" instead of drawing zeros.
     return {'period': period, 'meetings': cards, 'empty': not cards}

@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 52 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 53 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.48](#v1248) | 2026-09-10 22:50 | Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez |
 | [v1.2.47](#v1247) | 2026-09-10 21:40 | Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst |
 | [v1.2.46](#v1246) | 2026-09-10 19:40 | Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir |
 | [v1.2.45](#v1245) | 2026-09-10 18:40 | Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz |
@@ -72,6 +73,20 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1248"></a>
+### Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez
+
+2026-09-10 22:50 · yerel not · GitHub sürüm sayfası yok
+
+1.2.47'ye ikinci görüş (2 P0, 6 P1):
+- **Boş dönen yeniden analiz açık görevleri gizliyordu (P0):** "Özeti yenile" sonrası model hiç görev çıkarmazsa eski görevlerin hepsi görünmez oluyordu. Artık eski görevler yalnız yeni analiz en az bir görev ürettiğinde emekli edilir; "devam ediyor"/"tamamlandı" işaretli görevler her zaman kalır.
+- **⌘Z görev sahiplerini geri taşımıyordu (P0):** adlandırma geri alınınca görevler olmayan bir isimde kalıyor, yeniden adlandırma da kurtaramıyordu. Geri alma (küme ve tek bölüm) sahipleri de geri taşır.
+- Ayarlar'da ad değişince yalnız yeniden etiketlenen toplantıların görevleri taşınır (aynı ilk adı taşıyan bir meslektaşın görevine dokunulmaz). Kişi kartından yeniden adlandırma da görevleri taşır.
+- "Tamamlandı" işaretlemek görevi "elle düzenlendi" saymaz; yalnız başlık/sahip/vade değişikliği sayar.
+- Mikrofon satırından çıkan birinci tekil söz (olası yankı) sahibe atanır ama "kontrol edin" işaretiyle.
+- Karnede "N toplantı analiz edilmedi" satırı gerçekten çıkıyor (alan köprüde eksikti). Eski "Boran"/"Ben" mikrofon etiketleri ad zaten varken de süpürülür.
+- EKIP: analiz istemine mikrofon satırlarında kendi adınızın gittiği yazıldı.
 
 <a id="v1247"></a>
 ### Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst

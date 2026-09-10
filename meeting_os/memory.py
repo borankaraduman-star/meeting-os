@@ -123,7 +123,10 @@ class Memory:
             # differently writes a NEW row and the old one stayed open forever: the same promise counted twice in
             # the digest and the karne. What this analysis did not restate is retired, never deleted — a task the
             # user touched (edited, closed, dismissed) is theirs and survives.
-            self.db.execute("UPDATE tasks SET state='superseded',updated=? WHERE meeting=? AND analysis IS NOT NULL AND analysis<? AND user_edited=0 AND state IN ('open','in_progress')",(now(),mid,aid))
+            # …but only when this analysis actually restated the meeting's commitments: an analysis that came back with
+            # no actions (a thin model answer, an over-strict quote check) must not sweep every open task out of sight.
+            if record.get('actions'):
+                self.db.execute("UPDATE tasks SET state='superseded',updated=? WHERE meeting=? AND analysis IS NOT NULL AND analysis<? AND user_edited=0 AND state='open'",(now(),mid,aid))   # in_progress/done: the user touched it, it stays
         return self.latest(mid)
     def set_due_date(self,tid,due_date):
         """Store an approved calendar date (ISO, or None to clear) inside the task payload; due_text stays as the source said it."""
@@ -156,7 +159,10 @@ class Memory:
                 if key=='title' and not (changes[key] or '').strip():raise ValueError('Görev başlığı boş olamaz')
         old=self.task(tid)
         with self.db:
-            self.db.execute('UPDATE tasks SET '+','.join(k+'=?' for k in changes)+',user_edited=1,updated=? WHERE id=?',(*changes.values(),now(),tid))
+            # Ticking "tamamlandı" is not an edit: only a changed title/owner/due makes the task the user's own wording
+            # (which renames and re-analyses then leave alone). A state change keeps following the transcript.
+            edited=1 if set(changes)&{'title','owner','due_text'} else None
+            self.db.execute('UPDATE tasks SET '+','.join(k+'=?' for k in changes)+',user_edited=COALESCE(?,user_edited),updated=? WHERE id=?',(*changes.values(),edited,now(),tid))
             self.db.execute('INSERT INTO task_edits(task,previous,replacement,created) VALUES(?,?,?,?)',(tid,json.dumps(old,ensure_ascii=False),json.dumps(changes,ensure_ascii=False),now()))
         return self.task(tid)
     def search(self,query,limit=20,speaker=None,owner=None):

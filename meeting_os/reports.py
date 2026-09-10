@@ -107,8 +107,9 @@ def owner_rename_targets(old, new):
     old = (old or '').strip(); new = (new or '').strip()
     if not new: return []
     targets = [old] if old and old != new else []
-    if not old or old in LEGACY_MIC_LABELS:
-        targets += [name for name in LEGACY_MIC_LABELS if name != new and name not in targets]
+    # The legacy labels are swept every time: a Mac that already had a name can still carry 'Boran'/'Ben' mic rows
+    # from meetings recorded before the name was typed, and those words are the owner's own.
+    targets += [name for name in LEGACY_MIC_LABELS if name != new and name not in targets]
     return targets
 
 

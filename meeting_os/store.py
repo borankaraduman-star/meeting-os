@@ -381,6 +381,7 @@ class Store:
         except ValueError: feedback={}
         with self.db:
             self._set_cluster_name(mid, speaker, previous)
+            if previous: self._move_task_owners(name, previous, mid)   # ⌘Z takes the tasks back too, or they strand on a name nobody said
             mark=self.naming_mark(mid, speaker, row['created'] or '')
             if 'sample_id' in feedback:
                 if feedback['sample_id'] is not None: self.db.execute('DELETE FROM samples WHERE id=?',(feedback['sample_id'],))
@@ -402,6 +403,7 @@ class Store:
         except ValueError: feedback={}
         with self.db:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(previous,mid,sid))
+            if previous: self._move_task_owners(row['name'], previous, mid, segments={sid})
             if feedback.get('sample_id') is not None: self.db.execute('DELETE FROM samples WHERE id=?',(feedback['sample_id'],))
             for hid in feedback.get('hidden') or []:
                 self.db.execute("""UPDATE samples SET deleted_by=NULL WHERE id=? AND NOT EXISTS(
@@ -574,7 +576,9 @@ class Store:
                     for key in ('name', 'settled', 'suggested', 'candidate'):
                         if identity.get(key) == old: identity[key] = new
                 self.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), r['id']))
-            tasks = self._move_task_owners(old, new, None)   # the owner's own tasks carry the old label in every meeting
+            # Only the meetings whose mic rows were relabelled: a colleague who shares the owner's first name in some
+            # other meeting keeps their own tasks.
+            tasks = sum(self._move_task_owners(old, new, m) or 0 for m in sorted(meetings))
         return {'meetings': len(meetings), 'segments': len(rows), 'tasks': tasks, 'meeting_ids': sorted(meetings)}
     def rename_profile(self, name, new_name):
         """Rename a person; renaming onto an existing person merges the samples. Segment names follow."""
@@ -587,6 +591,7 @@ class Store:
             n = self.db.execute('UPDATE samples SET name=? WHERE name=? AND deleted_by IS NULL', (new_name, name)).rowcount
             self.db.execute('UPDATE rejections SET name=? WHERE name=?', (new_name, name))
             self.db.execute('UPDATE segments SET speaker_name=? WHERE speaker_name=?', (new_name, name))
+            self._move_task_owners(name, new_name, None)   # the person's tasks follow the rename, as they do from the transcript side
             for column in ('confirmed', 'wrong'):   # undo reads these names back, so they follow the person too
                 self.db.execute(f"UPDATE corrections SET feedback=json_set(feedback,'$.{column}',?) WHERE json_extract(feedback,'$.{column}')=?", (new_name, name))
             old = self.db.execute('SELECT confirmed,wrong FROM profile_stats WHERE name=?', (name,)).fetchone()

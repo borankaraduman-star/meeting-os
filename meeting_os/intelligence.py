@@ -165,7 +165,10 @@ def validate_record(record,rows,mic_owner=None):
                     # "Ben … paylaşacağım" from a named speaker is that person's commitment.
                     first=[r for r in selected if row_person(r,mic_owner) and re.search(r'\b(ben|bende|\w+(?:acağım|eceğim|ırım|irim|arım|erim))\b',normalize(r['text']))]
                     names={row_person(r,mic_owner) for r in first}
-                    if len(names)==1:owner=row_person(first[0],mic_owner)
+                    if len(names)==1:
+                        owner=row_person(first[0],mic_owner)
+                        # A mic row can carry an unflagged echo of a colleague: the attribution stands, marked for a look.
+                        if all(r.get('source')=='mic' for r in first):item['needs_review']=True
                 if any('speaker_ambiguous' in r.get('flags',[]) for r in selected):owner=None
                 due=due.strip() if isinstance(due,str) and due.strip() and due in quotes else None
                 # Marking every single task for review marked none of them: the badge said nothing and people
