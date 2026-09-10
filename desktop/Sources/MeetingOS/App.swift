@@ -713,14 +713,12 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         let previous=storedUserName.trimmingCharacters(in:.whitespacesAndNewlines)
         let next=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines)
         reportSettings.userName=next
-        await saveReportSettings()
+        // The bridge relabels earlier meetings itself when the name changes (`report_settings_set` → renamed_meetings);
+        // a second explicit rename would only ever find 0 rows and hide the real count.
+        let touched=await saveReportSettings()
         guard !next.isEmpty, !NameFold.same(previous,next) else { return }
-        do {
-            let r=try await request(["action":"rename_mic_owner","old":previous.isEmpty ? "Ben" : previous,"new":next])
-            let touched=r["meetings"] as? Int ?? 0
-            activity=touched>0 ? "Adınız \(next) · önceki \(touched) toplantıdaki sesiniz yeniden etiketlendi" : "Adınız \(next) · kayıtlarda sesiniz bu adla etiketlenecek"
-            await refresh()
-        } catch { self.error=error.localizedDescription }
+        activity=touched>0 ? "Adınız \(next) · önceki \(touched) toplantıdaki sesiniz yeniden etiketlendi" : "Adınız \(next) · kayıtlarda sesiniz bu adla etiketlenecek"
+        await refresh()
     }
     /// Open the field that is missing and put the caret in it: the welcome screen when there are no meetings
     /// yet, Ayarlar → Genel otherwise.
@@ -757,8 +755,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
         Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
     }
-    func saveReportSettings() async {
-        do { let r=try await request(["action":"report_settings_set","changes":reportSettings.changes]); reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName } catch { self.error=error.localizedDescription }
+    /// Returns how many earlier meetings the bridge relabelled when the owner name changed (0 otherwise).
+    @discardableResult func saveReportSettings() async -> Int {
+        do { let r=try await request(["action":"report_settings_set","changes":reportSettings.changes]); reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName; return r["renamed_meetings"] as? Int ?? 0 } catch { self.error=error.localizedDescription; return 0 }
     }
     func loadGlossarySummary() async {
         guard let r=try? await request(["action":"glossary_summary"]) else { return }

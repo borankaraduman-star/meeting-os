@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 47 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 48 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.43](#v1243) | 2026-09-10 16:20 | Meeting OS 1.2.43 — ilk gerçek toplantı: ad, maliyet, bekleme süresi |
 | [v1.2.42](#v1242) | 2026-09-10 15:20 | Meeting OS 1.2.42 — kurulumda/güncellemede parola penceresi kalmadı; “Yalnız bu bölüm” ikinci görüşle sağlamlaştı |
 | [v1.2.41](#v1241) | 2026-09-10 14:40 | Meeting OS 1.2.41 — dinlemeyi durdur; “Yalnız bu bölüm” düzeltmesi |
 | [v1.2.40](#v1240) | 2026-09-10 14:05 | Meeting OS 1.2.40 — Anahtar Zinciri pencereleri bitti; ⌘M işaretleri düzeldi |
@@ -67,6 +68,29 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1243"></a>
+### Meeting OS 1.2.43 — ilk gerçek toplantı: ad, maliyet, bekleme süresi
+
+2026-09-10 16:20 · yerel not · GitHub sürüm sayfası yok
+
+Tur 10 denetimi (“ekip arkadaşının ilk gerçek toplantısından sonraki 10 dakika”): 2 P0, 9 P1, 6 P2 → uygulandı.
+
+**Adınız (P0)**
+- Karşılama ekranı artık “Boran” ile dolu gelmiyor; ad yazılmadan kayıt başlamıyor (kısayol dahil) ve alan işaretleniyor. Ad sonradan değişirse önceki toplantılardaki mikrofon sesiniz de yeniden etiketlenir (“önceki N toplantı”), özetleri bayat düşer.
+- Ad yokken mikrofon satırları “Ben (siz)” görünür. “Bana ait” filtresi Python ile aynı ad katlamasını kullanır (Ayse = Ayşe, Ilker = İlker).
+
+**Analiz maliyeti (P0)**
+- Adlandırmalar 20 sn içinde tek bir yeniden analizde birleşir; iş sürerken gelen adlandırma bittikten sonra bir kez koşar. “Yalnız bu bölüm” analizi yeniden koşturmaz; Özet sekmesinde “İsim değişti · Özeti yenile” rozeti çıkar.
+- Her analiz çağrısının kullanımı kaydedilir (OpenRouter `usage`; yoksa tahmin ve “tahmini” etiketi). Ayarlar → Sistem maliyet kartında “Analiz · N çağrı”, karnede ve raporlarda analiz maliyeti.
+
+**İlk 10 dakika (P1)**
+- Durum satırında kalan süre tahmini (“≈8 dk kaldı”); yazıya çevirme sürerken Mac boşta uykuya girmez; kayıt düğmesi iş sürerken gri kalmaz (kayıt ayrı yuvada); ⌘Z öneri onayı ve bölüm düzeltmesinden sonra da çalışır ve yeniden analiz boyunca kapanmaz.
+- İlk toplantıda İsimler kartı bir cümleyle durumu söyler (profil yok; adları bir kez yazın). Sistem sesi boş olan toplantı artık “Konuşma bulunmadı” demez; başlıkta mikrofon sahibi de sayılır.
+- Görevlerde “Kaynak ses belirsiz” yalnız gerçekten belirsizse; atılan alıntı/madde sayısı rapor ve köprüde. Paylaşılan klasöre giden dosyalarda ev dizini yolu maskelenir. Kısa örnekle kaydedilen profil süresini söyler (“12 sn”, 6 sn altı uyarı).
+- Belgeler: dışarı kendiliğinden çıkanların tam listesi, 45 dk toplantı için 10–20 dk dürüst süre, ad kurulum adımı, maliyet rakamları tutarlı, ⌘. kısayol listesinde, raporlarda başlık/isim yalnız transkript paylaşımı açıkken.
+
+Güncelleme: `sh scripts/update.sh` ya da uygulamadan; kurulu Mac'lerde ilk seferinde bir kez `sh ~/meeting-os/scripts/fix-signing-prompts.sh` istenebilir.
 
 <a id="v1242"></a>
 ### Meeting OS 1.2.42 — kurulumda/güncellemede parola penceresi kalmadı; “Yalnız bu bölüm” ikinci görüşle sağlamlaştı
