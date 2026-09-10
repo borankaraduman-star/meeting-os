@@ -27,7 +27,7 @@ struct NamesCard:View {
                 ForEach(items) { item in
                     HStack(spacing:8) {
                         Button { if let seg=item.segment { model.reveal(segment:seg) } } label: { Label(item.speaker.isEmpty ? item.speakerKey : item.speaker,systemImage:"text.quote").lineLimit(1) }.buttonStyle(.plain).foregroundStyle(.secondary).frame(width:150,alignment:.leading).help(item.text)
-                        if let seg=item.segment, !model.recording, model.rows.contains(where:{ $0.id==seg }) { Button { if let row=model.rows.first(where:{ $0.id==seg }) { model.play(row) } } label: { Image(systemName:"play.circle") }.buttonStyle(.plain).help("Bu sesi dinle") }
+                        if let seg=item.segment, !model.recording, model.rows.contains(where:{ $0.id==seg }) { Button { if let row=model.rows.first(where:{ $0.id==seg }) { model.play(row) } } label: { PlayGlyph(playback:model.playback,key:"row:\(seg)") }.buttonStyle(.plain).help("Bu sesi dinle · durdurmak için yine tıklayın") }
                         if !item.suggested.isEmpty {
                             Button("“\(item.suggested)” onayla") { Task { await model.confirmReview(item) } }.buttonStyle(.borderedProminent).controlSize(.small).disabled(model.busy).accessibilityIdentifier("namesConfirm-\(item.speakerKey)")
                         }

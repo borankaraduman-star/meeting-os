@@ -66,7 +66,7 @@ struct TranscriptRow:View, Equatable {
             if canPlay {
             Button { model.play(row) } label:{
                 VStack(spacing:8) {
-                    Image(systemName:"play.circle.fill").font(.title2).foregroundStyle(MeetingStyle.accent)
+                    PlayGlyph(playback:model.playback,key:"row:\(row.id)",idle:"play.circle.fill",font:.title2)
                     Text(row.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }.frame(width:48)
             }
@@ -129,7 +129,7 @@ struct TranscriptBlockView:View, Equatable {
             if canPlay {
                 Button { model.play(block.lead) } label:{
                     HStack(spacing:4) {
-                        Image(systemName:"play.fill").font(.caption2).foregroundStyle(MeetingStyle.accent)
+                        PlayGlyph(playback:model.playback,key:"row:\(block.lead.id)",idle:"play.fill",font:.caption2)
                         Text(block.lead.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }.frame(width:48,alignment:.leading)
                 }.buttonStyle(.plain).help("Bu paragrafı dinle").accessibilityIdentifier("playBlock-\(block.id)").padding(.top,continued ? 2 : 3)

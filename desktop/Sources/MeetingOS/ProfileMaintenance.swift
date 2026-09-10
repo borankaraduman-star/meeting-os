@@ -105,7 +105,7 @@ struct CleanSamplePicker:View {
                             Text(c.text).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength:8)
-                        if !model.recording { Button { model.playCandidate(c) } label: { Image(systemName:"play.circle") }.buttonStyle(.plain).help("Bu bölümü dinle") }
+                        if !model.recording { Button { model.playCandidate(c) } label: { PlayGlyph(playback:model.playback,key:"cand:\(c.id):\(c.meeting):\(c.start)") }.buttonStyle(.plain).help("Bu bölümü dinle · durdurmak için yine tıklayın") }
                         Button("Bu bölümü örnek yap") { Task { await model.enrollCandidate(c,name:name); candidates=await model.loadCleanCandidates(name) } }.controlSize(.small).disabled(model.busy)
                     }
                 }

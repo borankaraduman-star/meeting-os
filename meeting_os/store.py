@@ -98,7 +98,7 @@ class Store:
             self._reject_previous(mid, speaker, rows, name, created)
             feedback=self._with_sample(self._record_feedback(rows, name), None)   # `correct` stores no voice sample
             self._settle_identity(mid, rows, name)
-            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?', (name, mid, speaker))
+            self._set_cluster_name(mid, speaker, name)
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)', (mid, speaker, name, created, previous, feedback))
     @staticmethod
     def naming_mark(mid, speaker, created=''):
@@ -229,6 +229,43 @@ class Store:
         # person the user had *confirmed* harder to match than one he had never judged. Only `wrong` raises.
         floor=min(base,self.PERSON_THRESHOLD_FLOOR)
         return min(self.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, floor)+0.02*wrong)
+    SEGMENT_SAMPLE_SECONDS=6   # the app's own bar for a clean single-speaker voice sample
+    def _pinned_segments(self, mid):
+        """Segments the user corrected one by one: a later naming of their cluster must not write over them."""
+        ids=set()
+        for r in self.db.execute("SELECT speaker FROM corrections WHERE meeting=? AND speaker LIKE 'segment:%'",(mid,)):
+            try: ids.add(int(r['speaker'].split(':',1)[1]))
+            except ValueError: pass
+        return ids
+    def _set_cluster_name(self, mid, speaker, name):
+        """Name every segment of a cluster except the pinned ones (must run inside the caller's transaction)."""
+        pinned=sorted(self._pinned_segments(mid))
+        if pinned:
+            self.db.execute(f"UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=? AND id NOT IN ({','.join('?'*len(pinned))})",(name,mid,speaker,*pinned))
+        else:
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
+    def correct_segment_only(self, mid, sid, name):
+        """One piece of a cluster belongs to someone else (Boran, 10 Sep 2026: "sadece o parça yanlış"). The rest of
+        the cluster keeps its name, nobody is convicted and no rejection is filed — the cluster as a whole was right.
+        The piece becomes a voice sample of the named person when it is clean, single-speaker speech of at least
+        SEGMENT_SAMPLE_SECONDS, so the profile learns from it; a short or unclean piece only gets the label. A sample
+        this very piece had earlier fed into the wrong person is hidden. The piece is pinned: later cluster namings skip it."""
+        name=name.strip()
+        if not name: raise ValueError('Name cannot be empty')
+        rows=[r for r in self.segments(mid) if r['id']==sid]
+        if not rows: raise ValueError('Segment not found in meeting')
+        r=rows[0]; duration=r['end']-r['start']; previous=r.get('speaker_name')
+        learnable=bool(r.get('embedding')) and duration>=self.SEGMENT_SAMPLE_SECONDS and not self.UNCLEAN_FLAGS.intersection(r['flags'])
+        provenance=f'{mid}:{sid}'; created=datetime.now(timezone.utc).isoformat()
+        with self.db:
+            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(name,mid,sid))
+            sample=None
+            if learnable and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,r['embedding_model'],provenance)).fetchone():
+                sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,r['embedding_model'],json.dumps(unit(r['embedding'])),duration,provenance)).lastrowid
+            if previous and fold_name(previous)!=fold_name(name):
+                self.db.execute('UPDATE samples SET deleted_by=? WHERE provenance=? AND name=? AND deleted_by IS NULL',(f'{mid}:segment:{sid}@{created}',provenance,previous))
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,f'segment:{sid}',name,created,previous,self._with_sample(None,sample)))
+        return {'labeled':1,'profile_saved':sample is not None,'seconds':duration,'previous':previous}
     def correct_segment(self, mid, sid, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
@@ -306,7 +343,7 @@ class Store:
             self._reject_previous(mid, speaker, rows, name, created)
             feedback=self._record_feedback(rows, name)
             self._settle_identity(mid, rows, name)
-            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(name,mid,speaker))
+            self._set_cluster_name(mid, speaker, name)
             sample=None
             if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
@@ -324,7 +361,7 @@ class Store:
         try: feedback=json.loads(row['feedback'] or 'null') or {}
         except ValueError: feedback={}
         with self.db:
-            self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND speaker=?',(previous,mid,speaker))
+            self._set_cluster_name(mid, speaker, previous)
             mark=self.naming_mark(mid, speaker, row['created'] or '')
             if 'sample_id' in feedback:
                 if feedback['sample_id'] is not None: self.db.execute('DELETE FROM samples WHERE id=?',(feedback['sample_id'],))

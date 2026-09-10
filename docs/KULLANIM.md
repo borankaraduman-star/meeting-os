@@ -1,4 +1,4 @@
-# Meeting OS — Kullanım kılavuzu (1.2.40)
+# Meeting OS — Kullanım kılavuzu (1.2.41)
 
 Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Kendiliğinden dışarı çıkanlar: kayıt bitince ses ve transkript OpenRouter’a, her toplantıdan sonra sayısal teşhis raporu (başlık ve konuşmacı adları dahil) iCloud’daki ya da ekip klasörüne, altı saatte bir güncelleme kontrolü GitHub’a gider. Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir (Hatırlatıcılar’a eklediğiniz görevler iCloud’la eşitlenir).
 
@@ -62,7 +62,7 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 ## 4. Kenar çubuğu
 
 - **Yeni kayıt** (⌘R; her yerden ⌃⌥R) en üstte. **Toplantı adı alanı** yalnız işe yaradığı anda görünür: hiçbir toplantı seçili değilken sıradaki kaydı adlandırır, hâlâ “9 Eyl 2026 14:05” gibi bir zaman damgası adı taşıyan bir toplantı seçiliyken o toplantıyı yeniden adlandırır (⏎). Kayıt sürerken ya da bir iş dönerken gizlidir; adı her zaman başlıktaki kalem düğmesinden de değiştirebilirsiniz.
-- **Sürüm satırı:** tek satır — “Sürüm 1.2.40 · güncel” ve mini **Güncelleme ara**; yeni sürüm varsa “Güncelle ve yeniden başlat” (Zoom açıkken “Güncelleme toplantı bitince”).
+- **Sürüm satırı:** tek satır — “Sürüm 1.2.41 · güncel” ve mini **Güncelleme ara**; yeni sürüm varsa “Güncelle ve yeniden başlat” (Zoom açıkken “Güncelleme toplantı bitince”).
 - **Toplantılar** Bugün / Dün / Bu hafta / Daha eski gruplarında; satırda “40 dk · 4 kişi” ya da “Konuşma bulunmadı” ve “Bugün 14:05” gibi saat.
 - **Arama** başlık, tarih ve konuşmacı adında eşleşir.
 - Sağ tık → **Toplantıyı sil…** (ses, transkript, rapor birlikte silinir; ses profilleri kalır).
@@ -89,7 +89,8 @@ Bu adımlar sırasında Mac’te model yüklenmez ve bellek baskısı olsa da bu
 - Konuşmacı adına tıklayın → menü: ses profilleri, takvim katılımcıları, “Yeni isim…”. Seçim o kişinin bütün paragraflarını adlandırır ve profili kaydeder.
 - **Konuşanı adlandır** tek alan, tek eylem: ismi yazın, “Adlandır ve öğren”. Metin düzeltme, temiz ses onayı (bu bölümden profil kaydeder) ve **Neden bu isim?** (tek cümle; puanlar ipucunda) **Gelişmiş** altındadır.
 - Kümeyi profil kaydetmeden adlandırmak isterseniz **Yalnız bu toplantıda** düğmesini kullanın: isim bu toplantının bütün bölümlerine yazılır, ses profili oluşmaz.
-- ▶ paragrafı dinletir. **⌘F** bu konuşmada arar; Esc temizler.
+- Konuşmacı doğru ama **tek bir cümle** başka birine aitse **Yalnız bu bölüm**: sadece o bölüm yeni adı alır, konuşmacının geri kalanı ve profili olduğu gibi kalır, kimse “yanlış” sayılmaz; bölüm en az 6 sn temiz konuşmaysa doğru kişinin profili ondan öğrenir. Paragraf birden çok bölümden oluşuyorsa hangi bölüm olduğunu üstteki menüden seçin. Sonraki küme adlandırmaları bu bölümü atlar.
+- ▶ paragrafı dinletir; çalarken aynı düğme ■ olur ve durdurur, **⌘.** her yerden durdurur. **⌘F** bu konuşmada arar; Esc temizler.
 - Mikrofon yankısı bölümleri gizlidir; üstteki satırdan gösterilebilir.
 
 ### Özet (⌘2)

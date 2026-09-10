@@ -332,6 +332,11 @@ def dispatch(request, db=None):
             # automatic name also drops samples and adds a rejection.
             return {**result,**store.resuggest(request['meeting'])}
         if action=='undo_correction': return store.undo_correction(request['meeting'])
+        if action=='label_segment':
+            # One piece of a named cluster belongs to someone else: only that piece changes, nobody is convicted,
+            # the piece feeds the named person's profile when it is clean enough; unnamed clusters are re-scored.
+            result=store.correct_segment_only(request['meeting'],int(request['segment']),request['name'])
+            return {**result,**store.resuggest(request['meeting'])}
         if action=='label':
             store.correct_segment(request['meeting'],int(request['segment']),request['name']); return {'saved':True}
         if action=='edit_text':

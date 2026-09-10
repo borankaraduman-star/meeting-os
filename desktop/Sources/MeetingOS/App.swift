@@ -88,6 +88,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var requestedQuit=false
     @Published var jobKind:String?; @Published var jobCanceled=false
     @Published var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
+    let playback=PlaybackState()   // which span is playing; observed only by the play buttons, not the transcript layout
     init() {
         let url=Bundle.main.resourceURL!.appendingPathComponent("runtime.json")
         runtime=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
@@ -342,6 +343,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// Returns false when the previous helper is still draining: the caller must not claim a recording started.
     @discardableResult func start()->Bool {
+        stopPlayback()   // never play audio into the room during a recording
         guard recordProcess==nil else { return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
@@ -440,6 +442,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             editRow=nil
             if enroll { activity=((result["profile_saved"] as? Bool)==true ? "Konuşmacı adlandırıldı · Ses profili kaydedildi, sonraki toplantılarda otomatik tanınır" : "Konuşmacı adlandırıldı · Yeterli temiz ses olmadığı için profil kaydedilmedi")+adaptationNote(result) } else { activity="Konuşmacı yalnız bu toplantıda adlandırıldı"+adaptationNote(result) }
             canUndoNaming=true
+            await refresh(); await loadReview(); refreshSummaryIfNamesDone()
+        } catch { self.error=error.localizedDescription }
+    }
+    /// One piece of a named cluster belongs to someone else: only that piece changes, the cluster keeps its name,
+    /// nobody is convicted, and the right person's profile learns from the piece when it is clean enough.
+    func saveSegmentOnly(_ target:Row) async {
+        guard let mid=selected else { return }
+        let name=editName.trimmingCharacters(in:.whitespaces); guard !name.isEmpty else { return }
+        do {
+            let r=try await request(["action":"label_segment","meeting":mid,"segment":target.id,"name":name])
+            editRow=nil
+            activity=(r["profile_saved"] as? Bool)==true ? "Yalnız bu bölüm “\(name)” oldu · ses profili bu bölümden öğrendi" : "Yalnız bu bölüm “\(name)” oldu · bölüm kısa ya da karışık olduğu için profil öğrenmedi"
             await refresh(); await loadReview(); refreshSummaryIfNamesDone()
         } catch { self.error=error.localizedDescription }
     }
@@ -616,7 +630,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     func playCandidate(_ c:CleanCandidate) {
         guard let m=meetings.first(where:{ $0.id==c.meeting }) else { error="Bu bölümün toplantısı bulunamadı"; return }
-        play(source:c.source,start:c.start,seconds:c.seconds,metadata:m.metadata)
+        play(source:c.source,start:c.start,seconds:c.seconds,metadata:m.metadata,key:"cand:\(c.id):\(c.meeting):\(c.start)")
     }
     func renameProfile(_ name:String,to newName:String) async {
         do { let r=try await request(["action":"rename_profile","name":name,"new_name":newName]); activity=(r["merged"] as? Bool)==true ? "“\(name)” → “\(newName)” birleştirildi" : "“\(name)” → “\(newName)” yeniden adlandırıldı"; await refresh() } catch { self.error=error.localizedDescription }
@@ -719,12 +733,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
     func play(_ row:Row) {
         guard let m=meeting else { return }
-        play(source:row.source,start:row.start,seconds:row.end-row.start,metadata:m.metadata)
+        play(source:row.source,start:row.start,seconds:row.end-row.start,metadata:m.metadata,key:"row:\(row.id)")
     }
+    /// The same button stops what it started; ⌘. stops from anywhere. Boran, 10 Sep 2026: "play tuşuna basınca stop yok".
+    func stopPlayback() { player?.stop(); player=nil; playback.key=nil }
     /// One span of one meeting's audio. Takes the metadata rather than reading `meeting`, so the settings sheet
     /// can preview a turn from a meeting that is not the open one.
-    func play(source:String,start rowStart:Double,seconds:Double,metadata:[String:Any]) {
+    func play(source:String,start rowStart:Double,seconds:Double,metadata:[String:Any],key:String) {
         guard !recording else { return }   // never play audio into the room during a recording
+        if playback.key==key { stopPlayback(); return }
         do {
             var path=(metadata["paths"] as? [String:String])?[source]; var start=rowStart
             if path==nil, let dir=metadata["capture_dir"] as? String {
@@ -736,8 +753,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 }
             }
             guard let path=path else { throw NSError(domain:"MeetingOS",code:1,userInfo:[NSLocalizedDescriptionKey:"Ses dosyası bulunamadı"]) }
-            player?.stop(); let p=try AVAudioPlayer(contentsOf:URL(fileURLWithPath:path)); player=p; p.currentTime=start; p.play()
-            Task { try? await Task.sleep(for:.seconds(max(0.1,seconds))); if self.player===p { p.stop() } }
+            player?.stop(); let p=try AVAudioPlayer(contentsOf:URL(fileURLWithPath:path)); player=p; p.currentTime=start; p.play(); playback.key=key
+            Task { try? await Task.sleep(for:.seconds(max(0.1,seconds))); if self.player===p { self.stopPlayback() } }
         } catch { self.error=error.localizedDescription }
     }
 }
@@ -781,6 +798,8 @@ func statusLabel(_ status:String)->String {
                 Button("Görevlerim") { model.tab="actions" }.keyboardShortcut("3",modifiers:.command)
                 Button("Kontrol") { model.tab="review" }.keyboardShortcut("4",modifiers:.command)
                 Button("Hafıza") { model.tab="memory" }.keyboardShortcut("5",modifiers:.command)
+                Divider()
+                Button("Dinlemeyi durdur") { model.stopPlayback() }.keyboardShortcut(".",modifiers:.command)
             }
         }
         MenuBarExtra { QuickMenu(model:model) } label: {

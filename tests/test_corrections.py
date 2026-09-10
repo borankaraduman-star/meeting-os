@@ -447,3 +447,43 @@ class RenameHistoryTests(unittest.TestCase):
             self.assertEqual(db.segments(mid)[0]['speaker_name'],'Ayşe')
             db.close()
 
+
+
+class SegmentOnlyCorrectionTests(unittest.TestCase):
+    """Boran, 10 Sep 2026: one piece of a voice went to the wrong person. Fixing that piece must not rename the
+    cluster, must not convict anybody, and must teach the profile of the right person."""
+    def _voice(self, seed):
+        import random
+        rnd=random.Random(seed); return [rnd.uniform(-1,1) for _ in range(8)]
+    def _meeting(self):
+        tmp=tempfile.TemporaryDirectory(); db=Store(Path(tmp.name)/'db'); mid=db.create_meeting('test')
+        ids=[db.add_segment(mid,Segment(i*10,i*10+8,f'söz {i}','system','system:S1',metrics={'cluster':'0:S1'},flags=['cloud_diarization'],embedding=self._voice(i),embedding_model='m')) for i in range(3)]
+        db.enroll_speaker(mid,'system:S1','Ayşe')
+        return tmp,db,mid,ids
+    def test_only_that_piece_changes_and_the_right_person_learns(self):
+        tmp,db,mid,ids=self._meeting()
+        result=db.correct_segment_only(mid,ids[1],'Ali')
+        rows={r['id']:r for r in db.segments(mid)}
+        self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe','Ali','Ayşe'])
+        self.assertTrue(result['profile_saved']); self.assertEqual(result['previous'],'Ayşe')
+        self.assertEqual([s['provenance'] for s in db.profile_samples('Ali')],[f'{mid}:{ids[1]}'])
+        self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)   # the cluster as a whole was right
+        self.assertEqual(len(db.profile_samples('Ayşe')),1)   # Ayşe keeps her cluster sample
+        db.close(); tmp.cleanup()
+    def test_short_or_unclean_piece_gets_only_the_label(self):
+        tmp,db,mid,ids=self._meeting()
+        short=db.add_segment(mid,Segment(40,43,'kısa','system','system:S1',metrics={'cluster':'0:S1'},flags=['cloud_diarization'],embedding=self._voice(9),embedding_model='m'))
+        result=db.correct_segment_only(mid,short,'Ali')
+        self.assertFalse(result['profile_saved']); self.assertEqual(db.profile_samples('Ali'),[])
+        self.assertEqual({r['id']:r['speaker_name'] for r in db.segments(mid)}[short],'Ali')
+        db.close(); tmp.cleanup()
+    def test_later_cluster_naming_skips_the_pinned_piece(self):
+        tmp,db,mid,ids=self._meeting()
+        db.correct_segment_only(mid,ids[1],'Ali')
+        db.correct(mid,'system:S1','Ayşe Yılmaz')
+        rows={r['id']:r for r in db.segments(mid)}
+        self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe Yılmaz','Ali','Ayşe Yılmaz'])
+        db.undo_correction(mid)
+        rows={r['id']:r for r in db.segments(mid)}
+        self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe','Ali','Ayşe'])
+        db.close(); tmp.cleanup()

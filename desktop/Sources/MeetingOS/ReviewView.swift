@@ -72,7 +72,7 @@ struct ReviewView:View {
                     HStack(spacing:10) {
                         if let seg=item.segment {
                             Button("Bölüme git") { model.reveal(segment:seg) }.accessibilityIdentifier("reviewGo-\(item.id)")
-                            if model.rows.contains(where:{ $0.id==seg }) { Button("Dinle") { if let row=model.rows.first(where:{ $0.id==seg }) { model.play(row) } } }
+                            if model.rows.contains(where:{ $0.id==seg }) { Button { if let row=model.rows.first(where:{ $0.id==seg }) { model.play(row) } } label: { PlayGlyph(playback:model.playback,key:"row:\(seg)",text:"Dinle") } }
                         }
                         if item.kind=="suggested_name", !item.suggested.isEmpty {
                             Button("“\(item.suggested)” olarak onayla") { Task { await model.confirmReview(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).accessibilityIdentifier("reviewConfirm-\(item.id)")
