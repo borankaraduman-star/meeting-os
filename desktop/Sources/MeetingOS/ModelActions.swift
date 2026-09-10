@@ -107,7 +107,11 @@ extension Model {
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
                 // One retention setting deletes a whole week of recordings on the same day; the warning comes first,
                 // while marking a meeting "Sesi koru" (or widening the setting) can still save it.
-                if let warning=(r["retention_warning"] as? [String:Any])?["line"] as? String { activity=warning }
+                // Said once per countdown step (3 → 2 → 1 → 0 days), not every hour: the status line belongs to what the user just did.
+                if let w=r["retention_warning"] as? [String:Any], let line=w["line"] as? String {
+                    let key="retentionWarned:\(w["days_left"] as? Int ?? -1):\(w["meetings"] as? Int ?? 0)"
+                    if !UserDefaults.standard.bool(forKey:key) { UserDefaults.standard.set(true,forKey:key); activity=line }
+                }
                 else if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
             }
         }

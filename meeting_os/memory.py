@@ -75,7 +75,8 @@ def match_score(terms,text):
     return score_and_hits(terms,text)[0]
 
 def _title_tokens(text):
-    return {w for w in normalize(text or '').split() if len(w)>2}
+    # Short tokens are dropped as noise — except numbers: "10 Ekim" and "15 Ekim" are two different deadlines.
+    return {w for w in normalize(text or '').split() if len(w)>2 or any(c.isdigit() for c in w)}
 
 def dedupe_actions(actions,threshold=0.8):
     """One analysis that promised the same thing twice is one commitment, not two.
@@ -92,9 +93,17 @@ def dedupe_actions(actions,threshold=0.8):
         for index,(other,other_tokens) in enumerate(kept):
             if owner_key(item.get('owner'))!=owner_key(other.get('owner')):continue
             union=tokens|other_tokens
-            same=len(tokens&other_tokens)/len(union)>=threshold if union else normalize(item.get('title') or '')==normalize(other.get('title') or '')
+            # A Jaccard verdict over three tokens is a coin toss; short titles must match exactly.
+            same=len(tokens&other_tokens)/len(union)>=threshold if len(union)>=4 else normalize(item.get('title') or '')==normalize(other.get('title') or '')
             if not same:continue
-            if len(item.get('evidence') or [])>len(other.get('evidence') or []):kept[index]=(item,tokens)
+            winner,loser=(item,other) if len(item.get('evidence') or [])>len(other.get('evidence') or []) else (other,item)
+            # Merge, never drop: the loser's quotes, a deadline the winner lacked, and a trace of what was folded in.
+            seen={(e.get('segment_id'),e.get('quote')) for e in winner.get('evidence') or []}
+            winner['evidence']=list(winner.get('evidence') or [])+[e for e in loser.get('evidence') or [] if (e.get('segment_id'),e.get('quote')) not in seen]
+            if not (winner.get('due_text') or '').strip() and (loser.get('due_text') or '').strip():winner['due_text']=loser['due_text']
+            if not (winner.get('owner') or '').strip() and (loser.get('owner') or '').strip():winner['owner']=loser['owner']
+            winner.setdefault('merged_from',[]).append(loser.get('title'))
+            kept[index]=(winner,tokens|other_tokens)
             break
         else:kept.append((item,tokens))
     return [item for item,_ in kept]
@@ -144,7 +153,7 @@ class Memory:
                 stable=json.dumps([mid,normalize(item['title']),[(e['segment_id'],e['quote']) for e in item['evidence']]],ensure_ascii=False,sort_keys=True)
                 tid=hashlib.sha256(stable.encode()).hexdigest()[:20]
                 self.db.execute('''INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,created,updated) VALUES(?,?,?,?,?,?,?,'open',?,?,?)
-                ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=excluded.payload,title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
+                ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=json_patch(excluded.payload,json_object('due_date',json_extract(tasks.payload,'$.due_date'),'superseded_by',json_extract(tasks.payload,'$.superseded_by'),'continues',json_extract(tasks.payload,'$.continues'))),title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
             # A task id is the hash of its title and its quotes, so a re-analysis that words the same commitment
             # differently writes a NEW row and the old one stayed open forever: the same promise counted twice in
             # the digest and the karne. What this analysis did not restate is retired, never deleted — a task the

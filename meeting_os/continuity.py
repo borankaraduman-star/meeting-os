@@ -130,6 +130,7 @@ def supersede(store, old_id, new_id):
     if old_id == new_id: raise ValueError('Bir görev kendisiyle birleştirilmez')
     memory = Memory(store)
     old = memory.task(old_id); new = memory.task(new_id)
+    if (new.get('payload') or {}).get('superseded_by') == old_id: raise ValueError('Bu iki görev zaten birleştirilmiş (ters yönde)')   # A→B then B→A would dismiss both
     with store.db:
         op = old['payload']; op['superseded_by'] = new_id
         np_ = new['payload']; np_['continues'] = old_id

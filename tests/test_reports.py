@@ -612,7 +612,7 @@ class AudioRetentionWarningTests(unittest.TestCase):
             self.assertIsNone(reports.audio_retention_warning(s, 90))         # nothing is close
             warning = reports.audio_retention_warning(s, 30)
             self.assertEqual((warning['meetings'], warning['retention_days'], warning['days_left']), (1, 30, 1))
-            self.assertIn('1 kaydın sesi 3 gün içinde silinecek (30 gün)', warning['line'])
+            self.assertIn('1 kaydın sesi yarın silinecek (30 gün)', warning['line'])   # the countdown, not the trigger window
             self.assertIn('Sesi koru', warning['line']); s.close()
 
     def test_a_recording_whose_audio_is_already_gone_is_not_counted(self):

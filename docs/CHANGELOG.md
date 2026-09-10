@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 55 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 56 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.51](#v1251) | 2026-09-11 00:50 | Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez |
 | [v1.2.50](#v1250) | 2026-09-10 23:55 | Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı |
 | [v1.2.49](#v1249) | 2026-09-10 23:20 | Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür |
 | [v1.2.48](#v1248) | 2026-09-10 22:50 | Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez |
@@ -75,6 +76,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1251"></a>
+### Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez
+
+2026-09-11 00:50 · yerel not · GitHub sürüm sayfası yok
+
+1.2.50'ye ikinci görüş (3 P0, 4 P1):
+- **Maske gerilemesi (P0):** 1.2.50 sahibin adını yalnız mikrofon satırı varsa maskeliyordu; mikrofonsuz toplantılarda (bu Mac'te 3 tanesi) "Boran'a soralım" açıkta kalıyordu. Artık sahibin adı her zaman maskelenir; yalnız ortak kelime olan adlar (Can, Deniz…) için katılım şartı var.
+- **Kopya birleştirme (P0):** yalnız rakamı farklı görevler ("10 Ekim" / "15 Ekim", "5 gün" / "7 gün") tek göreve iniyordu. Rakamlar artık ayırt edici; 4 kelimeden kısa başlıklar yalnız birebir eşleşir; birleşince kanıtlar, vade ve sahip birleştirilir ve "merged_from" izi kalır.
+- **Yeniden analiz (P0, eski):** aynı analiz yeniden kaydedilince onaylanan vade tarihi ve "aynı görev" bağlantıları siliniyordu; artık korunur.
+- Ses silme uyarısı gerçek geri sayımı söyler ("bugün" / "yarın" / "N gün içinde"); diskte sesi olmayan toplantıları saymaz; Son durum satırını her saat değil, geri sayım adımı başına bir kez alır.
+- Kararlar başlığı görünen listeyi sayar (arama/limit ile uyumlu); "(kısmi)" yalnız fiyatlı çağrı varsa; "Aynı görev" iki yönde uygulanamaz.
+- Kıyas betiğinden sabit kişisel ad kaldırıldı; mikrofon sahibi yolu için fikstür henüz yok (kıyas bu yolu sınamaz).
 
 <a id="v1250"></a>
 ### Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı

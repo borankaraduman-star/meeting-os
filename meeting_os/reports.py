@@ -591,6 +591,7 @@ def audio_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DA
         except (TypeError, ValueError): continue
         if row['status'] != 'complete' or meta.get('keep') is True or meta.get('cloud_error'): continue
         if meta.get('audio_removed') or not (meta.get('paths') or meta.get('capture_dir')): continue   # its audio is already gone
+        if not any(Path(p).exists() for p in ([*(meta.get('paths') or {}).values()] if isinstance(meta.get('paths'), dict) else []) + [meta.get('capture_dir') or '']): continue   # nothing on disk → cleanup skips it too
         try: created = datetime.fromisoformat(row['created'])
         except (TypeError, ValueError): continue
         if created.tzinfo is None: created = created.replace(tzinfo=timezone.utc)
@@ -599,8 +600,9 @@ def audio_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DA
         if oldest is None or created < oldest: oldest = created
     if not count: return None
     left = max(0, int((oldest + timedelta(days=days) - now).total_seconds() // 86400))
+    when = 'bugün' if left == 0 else ('yarın' if left == 1 else f'{left} gün içinde')
     return {'meetings': count, 'retention_days': days, 'days_left': left, 'within_days': int(ahead),
-            'line': f'{count} kaydın sesi {int(ahead)} gün içinde silinecek ({days} gün); saklamak için toplantının “Sesi koru” anahtarını açın '
+            'line': f'{count} kaydın sesi {when} silinecek ({days} gün); saklamak için toplantının “Sesi koru” anahtarını açın '
                     'ya da Ayarlar → Sistem → Gelişmiş → Eski toplantıların sesi'}
 
 

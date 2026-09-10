@@ -83,7 +83,7 @@ struct SettingsSheet:View {
                         }
                         // `analysis_unpriced` meetings were analysed before their calls were recorded: the sum is real
                         // but incomplete, so it is shown with "(kısmi)" rather than hidden behind an em dash.
-                        SmallMetric(value:cost["analysis_cost"] == nil || ((cost["analysis_calls"] as? Int ?? 0)==0 && (cost["analysis_cost_known"] as? Bool)==false) ? "—" : String(format:"$%.2f",cost["analysis_cost"] as? Double ?? 0),label:"Analiz · \(cost["analysis_calls"] as? Int ?? 0) çağrı"+((cost["analysis_estimated"] as? Bool)==true ? " (tahmini)" : "")+((cost["analysis_unpriced"] as? Int ?? 0)>0 ? " (kısmi)" : ""),icon:"text.badge.checkmark").accessibilityIdentifier("analysisCost")
+                        SmallMetric(value:cost["analysis_cost"] == nil || ((cost["analysis_calls"] as? Int ?? 0)==0 && (cost["analysis_cost_known"] as? Bool)==false) ? "—" : String(format:"$%.2f",cost["analysis_cost"] as? Double ?? 0),label:"Analiz · \(cost["analysis_calls"] as? Int ?? 0) çağrı"+((cost["analysis_estimated"] as? Bool)==true ? " (tahmini)" : "")+((cost["analysis_unpriced"] as? Int ?? 0)>0 && (cost["analysis_calls"] as? Int ?? 0)>0 ? " (kısmi)" : ""),icon:"text.badge.checkmark").accessibilityIdentifier("analysisCost")
                         Text("OpenRouter’ın bildirdiği transkript ücretleri (≈ $0.10/saat MAI-Transcribe 2) ve özet/görev analizi çağrıları"+((cost["analysis_estimated"] as? Bool)==true ? " (analiz tutarı model fiyatından tahmin edilir)" : "")+". Yankı olarak atlanan parçalar ücretlendirilmez.").font(.caption2).foregroundStyle(.secondary)
                     }
                 }

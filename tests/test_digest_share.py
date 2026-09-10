@@ -202,3 +202,41 @@ class CommonWordNameTests(unittest.TestCase):
   masker=NameMasker([['Can'],['İpek']])
   self.assertEqual(masker.mask('Can bunu yapacak, can sıkıntısı yok, CANLI yayın'),'Kişi A bunu yapacak, can sıkıntısı yok, CANLI yayın')
   self.assertEqual(masker.mask('ipek bir kumaş, İpek geldi'),'Kişi B bir kumaş, Kişi B geldi')   # an ordinary name still matches either case
+
+
+class SecondOpinion1250Tests(unittest.TestCase):
+    def test_owner_is_masked_even_when_they_only_listened(self):
+        from meeting_os.share import NameMasker, name_groups
+        rows=[{'source':'system','speaker':'S1','speaker_name':'Elif','text':'Bunu Boran\u2019a soralım.'}]
+        m=NameMasker(name_groups(rows,None,'Boran'))
+        self.assertNotIn('Boran',m.mask('Bunu Boran\u2019a soralım.'))
+    def test_everyday_word_owner_still_needs_a_mic_row(self):
+        from meeting_os.share import NameMasker, name_groups
+        rows=[{'source':'system','speaker':'S1','speaker_name':'Elif','text':'Can sıkıntısı yok.'}]
+        m=NameMasker(name_groups(rows,None,'Can'))
+        self.assertEqual(m.mask('Can sıkıntısı yok.'),'Can sıkıntısı yok.')
+    def test_dedupe_keeps_deadlines_apart_and_merges_evidence(self):
+        from meeting_os.memory import dedupe_actions
+        a={'title':"Raporu 10 Ekim'e kadar bitir",'owner':'Ayşe','evidence':[{'segment_id':1,'quote':'x'}]}
+        b={'title':"Raporu 15 Ekim'e kadar bitir",'owner':'Ayşe','evidence':[{'segment_id':2,'quote':'y'}]}
+        self.assertEqual(len(dedupe_actions([a,b])),2)
+        c={'title':'Eğitim almak isteyenlere telefon numaralarını vermek ve aramak','owner':None,'due_text':None,'evidence':[{'segment_id':1,'quote':'x'},{'segment_id':3,'quote':'z'}]}
+        d={'title':'Eğitim almak isteyenlere telefon numaralarını vermek ve aramak lütfen','owner':None,'due_text':'yarın','evidence':[{'segment_id':2,'quote':'y'}]}
+        out=dedupe_actions([c,d])
+        self.assertEqual(len(out),1); self.assertEqual(len(out[0]['evidence']),3); self.assertEqual(out[0]['due_text'],'yarın'); self.assertEqual(out[0]['merged_from'],[d['title']])
+    def test_re_analysis_keeps_the_approved_due_date_and_links(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.types import Segment
+        from meeting_os.memory import Memory
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t'); sid=db.add_segment(mid,Segment(0,5,'raporu yarın göndereceğim','mic','Ayşe'))
+            mem=Memory(db)
+            rec={'summary':[],'decisions':[],'risks':[],'questions':[],'actions':[{'title':'Raporu gönder','owner':'Ayşe','due_text':'yarın','evidence':[{'segment_id':sid,'quote':'raporu yarın göndereceğim','start':0,'speaker':'Ayşe'}]}]}
+            mem.save_analysis(mid,mem.current_hash(mid),'m',rec)
+            tid=db.db.execute('SELECT id FROM tasks').fetchone()[0]
+            mem.set_due_date(tid,'2026-09-20')
+            mem.save_analysis(mid,mem.current_hash(mid),'m',rec)   # the same analysis again
+            self.assertEqual(mem.task(tid)['payload'].get('due_date'),'2026-09-20')
+            db.close()

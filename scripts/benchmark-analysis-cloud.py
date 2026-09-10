@@ -20,7 +20,6 @@ from meeting_os.metrics import normalize
 from meeting_os.openrouter import OpenRouterClient,validate_analysis_model,ANALYSIS_DEFAULT_MODEL
 
 FIXTURES=Path(__file__).resolve().parents[1]/'tests/fixtures/analysis'
-OWNER='Boran'   # the Mac's owner in a fixture run: without it analyze_rows never takes the mic-owner path (canonical_owner, "Ben … yapacağım")
 PRICING={   # USD per million tokens, from openrouter.ANALYSIS_MODELS; only for an estimate in the scorecard
  'openai/gpt-4.1-mini':(0.40,1.60),
  'openai/gpt-4o-mini':(0.15,0.60),
@@ -202,7 +201,7 @@ def main(argv=None):
             rows=[{'id':i+1,'start':i*10.,'end':i*10.+9,'source':'system','speaker':'S'+str(i),'speaker_name':s['speaker'],'text':s['text'],'flags':[]} for i,s in enumerate(case['segments'])]
             recorder.reset();before=dict(spend);started=time.monotonic()
             try:
-                result=analyze_rows(rows,llm,glossary=case.get('glossary'),owner=case.get('owner') or OWNER)   # a fixture may carry a (possibly poisoned) glossary, like a team folder would
+                result=analyze_rows(rows,llm,glossary=case.get('glossary'),owner=case.get('owner'))   # a fixture may carry a (possibly poisoned) glossary, like a team folder would
                 checks={'valid_evidence_schema':True,**check_fixture_analysis(result,case)}
                 leaks,elsewhere=forbidden_leaks(result,case['forbidden_action_terms'])
                 item={'case':path.stem,'checks':checks,'passed':all(checks.values()),

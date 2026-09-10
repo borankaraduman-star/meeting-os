@@ -97,7 +97,9 @@ def name_groups(rows, glossary, owner=None):
     A meeting where they did speak already carries their label, so nothing is lost."""
     from .intelligence import row_person
     rows = list(rows)
-    spoke = any((r.get('source') or '') == 'mic' for r in rows)
+    # The owner is always a person to redact; only an everyday-word name (Can, Deniz…) additionally needs proof
+    # that they took part, or "Can sıkıntısı" turns into "Kişi A sıkıntısı" for nothing.
+    spoke = any((r.get('source') or '') == 'mic' for r in rows) or (owner or '').strip().casefold() not in COMMON_WORDS
     groups = []; seen = set()
     for r in rows + ([{'speaker_name': owner}] if spoke else []):
         name = (row_person(r, owner) or '').strip()
