@@ -1,0 +1,77 @@
+{
+  "title": "Kurgu test — Karar geri alma ve dolaylı üstlenme",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip veya toplantı değildir. Son görevin title_terms'ü bilerek 'rapor'; 'incident' yazılamıyor çünkü metrics.normalize Türkçe kuralıyla 'I' harfini 'ı' yapıyor ve cümle başındaki 'Incident' hiçbir küçük harfli 'incident' terimiyle eşleşmiyor. Aynı tuzak Memory.actions(owner=...) filtresini de vurur.",
+  "segments": [
+    {
+      "speaker": "Boran",
+      "text": "Şey, geçen hafta staging ortamını tamamen kapatmaya karar vermiştik ya, hani o karar. Bugün onu geri alıyoruz; staging açık kalacak, kapatmayacağız."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Tamam, anlaşıldı. Ben de rollout dokümanını haftaya salıya kadar güncelleyeceğim."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Ben release notlarını yazmayacağım, onu geçen sprint zaten bitirmiştik."
+    },
+    {
+      "speaker": "Can",
+      "text": "Ali canary trafiğini yüzde beşten yüzde yirmiye çıkarsa mı? Ali bugün toplantıda yok, kimse onun adına söz veremez."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Deniz dedi ki, ben hotfix'i bu akşam deploy edeceğim. Yani hotfix'i Deniz üstlendi, netleşti."
+    },
+    {
+      "speaker": null,
+      "text": "Ben de ııı, şey, incident raporunu yazarım ama net bir tarih veremem şu an."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Peki SLA'yı kırk sekiz saatten yirmi dört saate indirecek miyiz? Bunu bugün cevaplayamıyoruz, açık kaldı."
+    },
+    {
+      "speaker": "Boran",
+      "text": "Bir de arama tarafında p95 gecikme üç virgül dört saniye. Bu, churn oranını yukarı çekebilir."
+    }
+  ],
+  "expected_actions": 3,
+  "forbidden_action_terms": [
+    "canary",
+    "release not",
+    "staging"
+  ],
+  "expected_owners": [
+    "Deniz",
+    "Deniz",
+    null
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "rollout"
+      ],
+      "owner": "Deniz",
+      "due_text": "haftaya salıya kadar"
+    },
+    {
+      "title_terms": [
+        "hotfix"
+      ],
+      "owner": "Deniz",
+      "due_text": "bu akşam"
+    },
+    {
+      "title_terms": [
+        "rapor"
+      ],
+      "owner": null,
+      "due_text": null
+    }
+  ],
+  "required_decision_terms": [
+    [
+      "staging"
+    ]
+  ]
+}
