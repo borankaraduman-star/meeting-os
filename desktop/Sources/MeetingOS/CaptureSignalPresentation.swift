@@ -29,7 +29,19 @@ public enum CaptureSignalPresentation {
 
         let missingPreview = (capture["preview"] as? [String: Any])?["has_known_failures"] as? Bool == true
         let warning = missingPreview ? "\nCanlı metin eksik" : ""
-        return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)" + warning
+        // The disk line only exists once the helper has journalled `low_disk`, so an ordinary meeting reads exactly as before.
+        let disk = lowDisk(capture).map { "\n" + $0 } ?? ""
+        return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)" + warning + disk
+    }
+
+    /// "Disk azalıyor · 1,2 GB boş · kayıt 69 dk sonra durabilir" — built from the helper's `low_disk` journal
+    /// line, which the bridge surfaces as `low_disk_bytes`. A number of minutes is the only form of this warning
+    /// anyone can act on: "disk is filling up" during a meeting tells the user nothing about whether to stop.
+    /// nil whenever the helper has not warned, so nothing is invented from a missing reading.
+    public static func lowDisk(_ capture: [String: Any]) -> String? {
+        guard let raw = extractDouble(capture["low_disk_bytes"]), raw.isFinite, raw >= 0 else { return nil }
+        let free = Int(min(raw, 1e15))
+        return "Disk azalıyor · \(StorageReport.format(bytes: free)) boş · kayıt \(DiskSpace.minutesLeft(freeBytes: free)) dk sonra durabilir"
     }
 
     /// Compact state for the floating panel dots: "ok", "silent", "stale" or "unknown".

@@ -26,6 +26,21 @@ enum ZoomWatch {
         return (home,false)
     }
     static func current(strict:Bool=false)->Bool { let st=state(); return st.strict || (!strict && st.open) }
+    /// The same reading, with the expensive half off the main actor. The window list can hold hundreds of
+    /// entries and was walked on the main thread every two seconds for the whole of a Zoom recording — the one
+    /// stretch where the main thread also owns the transcript's layout. Only the running-app list stays here;
+    /// the walk hops to a utility queue and comes back as two Bools, so stop detection keeps its cadence.
+    @MainActor static func stateAsync() async -> (open:Bool,strict:Bool,running:Bool) {
+        let running=Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        guard running.contains(bundle) else { return (false,false,false) }
+        let f:(open:Bool,strict:Bool) = await withCheckedContinuation { cont in
+            DispatchQueue.global(qos:.utility).async {
+                let list=(CGWindowListCopyWindowInfo([.optionAll,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]]) ?? []   // all Spaces: a full-screen Keynote must not hide the meeting
+                cont.resume(returning:flags(windows:list,runningBundles:running))
+            }
+        }
+        return (f.open,f.strict,true)
+    }
     /// Scan cadence. Every sixth second is enough for the menu bar and the Zoom reminder; hands-free recording is
     /// the one caller that must see a meeting window open or close quickly, and only while Zoom is running.
     static func shouldScan(tick:Int,autoRecord:Bool,zoomRunning:Bool)->Bool { (autoRecord && zoomRunning) || tick%3==0 }

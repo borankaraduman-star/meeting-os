@@ -4,10 +4,15 @@ struct TranscriptView:View {
     @ObservedObject var model:Model
     var body:some View {
         ScrollViewReader { proxy in ScrollView {
-            // Plain VStack: LazyVStack's height estimation oscillated with long wrapped paragraphs and
-            // pinned the main thread at 100% CPU after scrolling or renaming a speaker. Meetings have
-            // at most a few hundred rows, so eager layout is cheap and deterministic.
-            VStack(alignment:.leading,spacing:(model.readingMode && model.search.isEmpty) ? 2 : 20) {
+            // LazyVStack: a day-long meeting is 1200+ rows and an eager stack laid out every one of them on
+            // open, on every rename and on every poll that published a row. The oscillation the eager stack was
+            // put here to avoid came from unpinned wrapped-text heights, not from laziness — every paragraph and
+            // every row keeps fixedSize(horizontal:false,vertical:true) on its text, and no row contains a
+            // GeometryReader, so each item's height is a pure function of its own content and estimates converge.
+            // Both ForEach bodies carry stable ids (block.id / row.id are segment ids, not offsets), which is also
+            // what keeps the reveal path working: scrollTo(anchor) below resolves an id the lazy stack has not
+            // built yet, because ScrollViewReader matches ids rather than materialised views.
+            LazyVStack(alignment:.leading,spacing:(model.readingMode && model.search.isEmpty) ? 2 : 20) {
                 let hiddenEcho=CloudTranscription.hiddenEchoCount(model.rows)
                 let marks=Markers.parse(model.meeting?.metadata ?? [:])   // once per body, not once per paragraph
                 NamesCard(model:model).padding(.bottom,10)
@@ -41,7 +46,7 @@ struct TranscriptView:View {
                     }
                     if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 } else {
-                    let rows=model.filteredRows
+                    let rows=model.visibleRows   // filtered once per rebuild, not once per body pass
                     ForEach(rows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit).equatable().id(row.id) }
                     if rows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
                 }

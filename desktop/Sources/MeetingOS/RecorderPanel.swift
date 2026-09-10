@@ -24,16 +24,32 @@ struct RecorderPanelView:View {
     @ObservedObject var model:Model
     @ObservedObject var recorder:RecorderState
     init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
+    /// Disk first, then a survived interruption, then the meeting title.
+    var noticeText:String {
+        if !recorder.lowDiskNotice.isEmpty { return recorder.lowDiskNotice }
+        if !recorder.recordingNotice.isEmpty { return recorder.recordingNotice }
+        return model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle
+    }
+    var noticeStyle:AnyShapeStyle {
+        if !recorder.lowDiskNotice.isEmpty { return AnyShapeStyle(.red) }
+        return recorder.recordingNotice.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange)
+    }
+    /// The truncated line always has its whole text one hover away.
+    var noticeHelp:String {
+        if !recorder.lowDiskNotice.isEmpty { return recorder.lowDiskNotice }
+        return recorder.recordingNotice.isEmpty ? model.recordingTitle : recorder.recordingNotice
+    }
     var body:some View {
         HStack(spacing:10) {
             Circle().fill(.red).frame(width:10,height:10)
             Text(recorder.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
             // The meeting is in progress: a line about a survived interruption replaces the title in place —
-            // no notification, no sound, nothing that moves or asks for attention.
-            Text(recorder.recordingNotice.isEmpty ? (model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle) : recorder.recordingNotice)
-                .font(.caption).foregroundStyle(recorder.recordingNotice.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
-                .lineLimit(1).truncationMode(.tail).frame(maxWidth:110,alignment:.leading)
-                .help(recorder.recordingNotice.isEmpty ? model.recordingTitle : recorder.recordingNotice)
+            // no notification, no sound, nothing that moves or asks for attention. A disk running out outranks
+            // both, because it is the one warning the user can still act on before the recording stops itself.
+            // The panel keeps its fixed 400×56 frame; the slot widens into the spacer instead of growing the window.
+            Text(noticeText).font(.caption).foregroundStyle(noticeStyle)
+                .lineLimit(1).truncationMode(.tail).frame(maxWidth:recorder.lowDiskNotice.isEmpty ? 110 : 210,alignment:.leading)
+                .help(noticeHelp)
             SignalDot(label:"Mik",state:recorder.captureDots["mic"] ?? "unknown")
             SignalDot(label:"Sis",state:recorder.captureDots["system"] ?? "unknown")
             if model.markerCount>0 { Text("⌘M \(model.markerCount)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary).help("İşaretlenen an sayısı") }
