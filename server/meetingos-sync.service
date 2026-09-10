@@ -1,0 +1,41 @@
+[Unit]
+Description=Meeting OS team sync server
+Documentation=https://github.com/boran/meeting-os/blob/v0.1/docs/TEAM_CLOUD.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=meetingos
+Group=meetingos
+ExecStart=/usr/bin/python3 /opt/meetingos-sync/sync_server.py --root /var/lib/meetingos-sync
+Restart=always
+RestartSec=3
+
+# state directory (/var/lib/meetingos-sync, 0700, owned by meetingos)
+StateDirectory=meetingos-sync
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/meetingos-sync
+UMask=0077
+
+# hardening
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/var/lib/meetingos-sync
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+# access log goes to the journal: journalctl -u meetingos-sync
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meetingos-sync
+
+[Install]
+WantedBy=multi-user.target
