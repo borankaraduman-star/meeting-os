@@ -187,8 +187,8 @@ def capture_block(directory, duration_seconds=0.0):
             if kind == 'gap': gaps += 1
             elif kind == 'chunk' and isinstance(event.get('source'), str):
                 announced[event['source']] = announced.get(event['source'], 0) + 1
-        from .capture_metrics import capture_health
-        health = capture_health(events)
+        from .capture_metrics import journal_counters
+        health = journal_counters(journal)   # counted over the whole journal; `gaps` below stays the tail's own count
         expected = math.ceil(float(duration_seconds or 0)/CHUNK_SECONDS)
         # restarts/relaunches/wakes are how the owner sees, after the fact, that the recording survived something.
         return {'chunk_files': chunks, 'announced_chunks': announced, 'expected_chunks': expected, 'chunk_seconds': CHUNK_SECONDS,

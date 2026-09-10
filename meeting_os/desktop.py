@@ -37,8 +37,8 @@ def capture_state(metadata, include_signal=False):
         if e.get('event') in ('started','chunk','restarted'): state='capturing'
         elif e.get('event') in ('error','stopped'):state=e['event']
     result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
-    from .capture_metrics import capture_health
-    health=capture_health(events)
+    from .capture_metrics import journal_counters
+    health=journal_counters(path)   # the whole journal: these lines fall out of the 64 KB tail on a long meeting
     # What the owner needs to see during and after a meeting: the stream was rebuilt, the whole helper was
     # replaced, the Mac slept — and how many seconds that cost. Zeros stay out of the poll payload.
     for key in ('restarts','relaunches','wakes','gap_seconds','wake_gap_seconds'):
