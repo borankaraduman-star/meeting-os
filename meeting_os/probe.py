@@ -12,6 +12,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MIN_FREE_BYTES = 3 * 1024**3        # same warning line as the capture helper
+# scripts/fix-signing-prompts.sh writes this after the one-time `security set-key-partition-list` grant.
+# Without the grant codesign asks for the login keychain password on every build and every update, and
+# "Always Allow" never sticks — the dialog storm of 10 Sep 2026. Module constant so tests can point it
+# at a temp directory; nothing here ever calls `security`, so the check itself can never open a dialog.
+SIGNING_MARKER = Path.home() / 'Library/Application Support/MeetingOS/signing-partition.ok'
+SIGNING_PARTITION_WARNING = ('İmzalama anahtarına kalıcı izin verilmemiş; güncellemede parola penceresi '
+                            'çıkar: sh scripts/fix-signing-prompts.sh')
+
+
+def signing_partition_item():
+    """Warning, not an error: the app runs fine, but every rebuild will ask for the Mac password."""
+    try: granted = SIGNING_MARKER.is_file()
+    except OSError: granted = False
+    return _item('signing_partition', granted,
+                 'imzalama anahtarına kalıcı izin verilmiş' if granted else SIGNING_PARTITION_WARNING,
+                 'sh scripts/fix-signing-prompts.sh', level='warning')
 
 
 def _item(key, ok, detail, fix=None, level='error'):
@@ -56,11 +72,11 @@ def run(root, data_dir, *, network=False, timeout=8):
         items.append(_item('disk', free >= MIN_FREE_BYTES, f'{free/1024**3:.1f} GB boş', 'Eski sesleri temizleyin (Ayarlar → Sistem → Depolama)', level='warning'))
     except OSError as exc: items.append(_item('disk', False, str(exc)[:120], None, level='warning'))
     try:
-        from .openrouter import KEYCHAIN_SERVICE
         from .openrouter import KEY_CACHE
         has_key = KEY_CACHE.is_file()   # the app owns the Keychain; Python only ever looks at the file it wrote
     except Exception: has_key = False
-    items.append(_item('api_key', has_key, 'OpenRouter anahtarı Keychain’de' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
+    items.append(_item('api_key', has_key, 'OpenRouter anahtarı uygulamanın anahtar dosyasında (openrouter.key)' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
+    items.append(signing_partition_item())
     try:
         from . import glossary as G
         entries = G.load(data, root); items.append(_item('glossary', True, f'{len(entries)} terim'))
@@ -86,7 +102,7 @@ def run(root, data_dir, *, network=False, timeout=8):
 
 def summary_line(result):
     if result['ok'] and not result['warnings']: return 'Öz-test temiz'
-    names = {'python': 'Python', 'ffmpeg': 'ffmpeg', 'capture_helper': 'kayıt yardımcısı', 'speaker_model': 'ses modeli', 'database': 'veritabanı', 'data_writable': 'veri klasörü', 'disk': 'disk', 'api_key': 'OpenRouter anahtarı', 'glossary': 'sözlük', 'reports': 'raporlar', 'openrouter': 'OpenRouter erişimi'}
+    names = {'python': 'Python', 'ffmpeg': 'ffmpeg', 'capture_helper': 'kayıt yardımcısı', 'speaker_model': 'ses modeli', 'database': 'veritabanı', 'data_writable': 'veri klasörü', 'disk': 'disk', 'api_key': 'OpenRouter anahtarı', 'glossary': 'sözlük', 'reports': 'raporlar', 'openrouter': 'OpenRouter erişimi', 'signing_partition': 'imzalama izni'}
     parts = [names.get(k, k) for k in result['failed']] + [names.get(k, k) + ' (uyarı)' for k in result['warnings']]
     return 'Öz-test: ' + ', '.join(parts)
 

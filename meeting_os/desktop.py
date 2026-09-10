@@ -513,9 +513,6 @@ def dispatch(request, db=None):
             result=run(ROOT,DATA_DIR if db is None else Path(db).parent,network=bool(request.get('network')))
             return {**result,'summary':summary_line(result)}
         if action=='setup_status':
-            # Presence only: `security` without -w prints metadata and never prompts for the secret.
-            import subprocess
-            from .openrouter import KEYCHAIN_SERVICE
             from . import glossary as G
             from .openrouter import KEY_CACHE
             try: has_key=KEY_CACHE.is_file()   # never `security`: no Keychain dialog from a bridge or a test

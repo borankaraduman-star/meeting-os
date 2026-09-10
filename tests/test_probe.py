@@ -24,6 +24,52 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(probe.summary_line({'ok':True,'warnings':[],'failed':[]}),'Öz-test temiz')
 
 
+class SigningPartitionTests(unittest.TestCase):
+    """The marker scripts/fix-signing-prompts.sh leaves behind. Missing marker = a codesign password dialog on
+    the next update, so the probe warns; nothing here may ever shell out to `security`."""
+    def _with_marker(self, exists):
+        import contextlib, unittest.mock
+        tmp = tempfile.TemporaryDirectory()
+        marker = Path(tmp.name)/'signing-partition.ok'
+        if exists: marker.write_text('ABCDEF0123 granted 2026-09-10 10:00:00\n')
+        patch = unittest.mock.patch.object(probe,'SIGNING_MARKER',marker)
+        stack = contextlib.ExitStack(); stack.enter_context(tmp); stack.enter_context(patch)
+        return stack
+    def test_missing_marker_is_a_warning_not_an_error(self):
+        with self._with_marker(False):
+            item = probe.signing_partition_item()
+            self.assertFalse(item['ok']); self.assertEqual(item['level'],'warning')
+            self.assertEqual(item['fix'],'sh scripts/fix-signing-prompts.sh')
+            self.assertIn('fix-signing-prompts.sh',item['detail'])
+            self.assertIn('parola',item['detail'])
+    def test_present_marker_passes(self):
+        with self._with_marker(True):
+            item = probe.signing_partition_item()
+            self.assertTrue(item['ok']); self.assertNotIn('fix',item)
+    def test_probe_run_lists_the_check_and_only_warns(self):
+        with self._with_marker(False), tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
+            r=probe.run(root,data)
+            self.assertIn('signing_partition',r['warnings'])
+            self.assertNotIn('signing_partition',r['failed'])
+            self.assertIn('imzalama izni (uyarı)',probe.summary_line(r))
+        with self._with_marker(True), tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
+            r=probe.run(root,data)
+            self.assertNotIn('signing_partition',r['warnings'])
+    def test_api_key_detail_names_the_key_file_not_the_keychain(self):
+        import unittest.mock
+        from meeting_os import openrouter
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
+            cache=Path(tmp)/'openrouter.key'; cache.write_text('sk-test\n')
+            with unittest.mock.patch.object(openrouter,'KEY_CACHE',cache):
+                by={i['key']:i for i in probe.run(root,data)['items']}
+            self.assertTrue(by['api_key']['ok'])
+            self.assertIn('openrouter.key',by['api_key']['detail'])
+            self.assertNotIn('Keychain',by['api_key']['detail'])
+
+
 class NightlyCheckTests(unittest.TestCase):
     def test_daily_probe_is_cached_for_a_day(self):
         import json

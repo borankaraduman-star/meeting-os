@@ -4,6 +4,10 @@ cd "$(dirname "$0")/.."
 .venv/bin/python scripts/signing.py --resolve >/dev/null
 swift build --package-path capture -c release --jobs 1
 stage=$(mktemp -d "$PWD/build/capture-stage.XXXXXX")
+# A failed signing (a cancelled keychain dialog, a revoked identity) used to leave the staged bundle behind;
+# build/ then filled up with capture-stage.* copies. The trap keeps the script's own exit status.
+cleanup() { rc=$?; rm -rf "$stage"; exit "$rc"; }
+trap cleanup EXIT
 app="$stage/MeetingCapture.app"
 mkdir -p "$app/Contents/MacOS"
 cp capture/.build/release/MeetingCapture "$app/Contents/MacOS/MeetingCapture"
