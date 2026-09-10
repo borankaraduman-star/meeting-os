@@ -31,7 +31,7 @@ final class WordRuleTests:XCTestCase {
         ]]
         let rules=(payload["rules"] as? [[String:Any]] ?? []).map(WordRule.init)
         XCTAssertEqual(rules.count,2)
-        XCTAssertEqual(rules[0].id,"pemede")
+        XCTAssertEqual(rules[0].id,"taught::pemede")   // source + host + original: a team rule and a local rule for the same word are two rows
         XCTAssertEqual(rules[0].sourceLabel,"öğretildi")
         XCTAssertTrue(rules[0].vocabularyAdded)
         XCTAssertEqual(rules[0].line,"“pemede” → “PMD” · öğretildi · 2 toplantı")
