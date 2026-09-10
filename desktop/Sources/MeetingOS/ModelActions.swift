@@ -188,6 +188,26 @@ extension Model {
             await refresh(); await loadReview() }
         catch { self.error=error.localizedDescription }
     }
+    // MARK: - Transkriptte kelimeye tıklayarak düzelt
+    /// "Yalnız burada": the word was right everywhere else, so nothing is learned — only this segment's text
+    /// is rewritten, through the same `edit_text` the segment editor uses.
+    func fixWordHere(_ fix:WordFix,replacement:String) async {
+        let to=replacement.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard let mid=selected, !busy, !to.isEmpty, to != fix.original, let row=rows.first(where:{ $0.id==fix.segmentID }) else { wordFix=nil; return }
+        let text=WordClick.replacing(row.text,index:fix.index,with:to)
+        wordFix=nil
+        guard text != row.text else { return }
+        do { _=try await request(["action":"edit_text","meeting":mid,"segment":fix.segmentID,"text":text])
+            activity="“\(fix.original)” → “\(to)” · yalnız bu bölümde"
+            await refresh() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// "Düzelt ve öğret": the same teaching the segment editor does, started from the word itself.
+    func learnClickedWord(_ fix:WordFix,replacement:String) async {
+        guard !busy else { return }
+        wordFix=nil
+        await learnWord(original:fix.original,replacement:replacement)
+    }
     /// The same teaching, started from a Kontrol item rather than the segment editor.
     func applyWord(_ item:ReviewItem) async {
         guard let mid=selected, !item.original.isEmpty, !item.replacement.isEmpty else { return }

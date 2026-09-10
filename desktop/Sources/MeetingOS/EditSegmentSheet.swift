@@ -68,6 +68,7 @@ struct EditSegmentSheet:View {
                         .accessibilityIdentifier("learnWordButton")
                     Spacer()
                 }
+                Text("İpucu: transkriptte kelimeye tıklayarak da düzeltebilirsiniz.").font(.caption).foregroundStyle(.secondary)
                 Text("Bir kez düzeltin, uygulama öğrenir: bu toplantıdaki bütün geçişler düzelir, sonraki toplantılarda yakın yazımlar da kendiliğinden düzelir (Ayarlar → Sesler ve sözlük → Öğrenilen kelimeler).").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             }
             DisclosureGroup("Gelişmiş",isExpanded:$advanced) {
