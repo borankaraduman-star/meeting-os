@@ -26,8 +26,11 @@ DEFAULT_SUBDIR = 'MeetingOS-Reports'
 
 
 REAL_DATA_DIR = Path.home() / 'Library/Application Support/MeetingOS'
-DEFAULT_USER_NAME = 'Boran'   # the label every segment recorded before this setting existed carries; a teammate overwrites it on first run
+DEFAULT_USER_NAME = ''   # nobody by default: a name typed into Settings is the only thing that labels a mic row with a person
 NAME_LIMIT = 40
+# The mic labels a database can already carry before its owner typed a name: the source fallback
+# cloud_finalize uses today, and the personal default this app shipped with until 1.2.42.
+LEGACY_MIC_LABELS = ('Ben', 'Boran')
 
 
 def default_report_dir(data_dir):
@@ -58,7 +61,8 @@ def save_settings(data_dir, changes):
         if key in ('share_reports', 'share_text', 'auto_update', 'auto_retry', 'share_glossary') and isinstance(value, bool): current[key] = value
         elif key == 'audio_retention_days' and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
-        elif key == 'user_name' and isinstance(value, str) and 0 < len(value.strip()) <= NAME_LIMIT: current[key] = value.strip()
+        # An empty name is stored, not dropped: "" means nobody, and the mic rows keep the neutral 'Ben' label.
+        elif key == 'user_name' and isinstance(value, str) and len(value.strip()) <= NAME_LIMIT: current[key] = value.strip()
         # An unreachable team folder is refused rather than stored: the app would silently stop sharing.
         elif key == 'team_dir' and isinstance(value, str) and (not value.strip() or Path(value.strip()).expanduser().is_dir()): current[key] = value.strip()
     Path(data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -67,11 +71,39 @@ def save_settings(data_dir, changes):
 
 
 def settings_owner(data_dir):
-    """Who this Mac belongs to. One lookup for every place that used to say “Boran”: the microphone speaker
-    label, the “Bana ait” task filter, the digest and the waiting board. Falls back to the historical label so
-    an existing database whose mic segments say “Boran” keeps matching."""
+    """Who this Mac belongs to, or '' when nobody has said. One lookup for every place that needs the user's own
+    name: the microphone speaker label, the “Bana ait” task filter, the digest and the waiting board.
+
+    Empty is a real answer and every caller has to mean “no owner” by it — not “everyone” and not a guess.
+    Guessing is what labelled a teammate's first meeting “Boran” forever."""
     name = load_settings(data_dir).get('user_name')
     return name.strip() if isinstance(name, str) and name.strip() else DEFAULT_USER_NAME
+
+
+def owner_rename_targets(old, new):
+    """Which mic labels a change of `user_name` to `new` should relabel. The previous name when there was one;
+    the labels a database carries when its owner never typed a name (the 'Ben' fallback, the old 'Boran'
+    default) when there was not — a teammate's first meeting is recorded before they reach Settings."""
+    old = (old or '').strip(); new = (new or '').strip()
+    if not new: return []
+    targets = [old] if old and old != new else []
+    if not old or old in LEGACY_MIC_LABELS:
+        targets += [name for name in LEGACY_MIC_LABELS if name != new and name not in targets]
+    return targets
+
+
+def rename_owner_segments(store, old, new):
+    """Relabel the mic rows the previous owner name left behind, across every meeting. Returns the counts, or
+    None when there is nothing to do. Analyses of the touched meetings go stale on their own: the speaker
+    string is part of the transcript fingerprint, and owner attribution is exactly what an analysis reads."""
+    if store is None: return None
+    meetings = segments = 0; renamed = []
+    for target in owner_rename_targets(old, new):
+        try: result = store.rename_mic_owner(target, new)
+        except Exception: continue   # a settings write must never fail on the relabel
+        if result['segments']:
+            meetings += result['meetings']; segments += result['segments']; renamed.append(target)
+    return {'meetings': meetings, 'segments': segments, 'renamed_from': renamed} if segments else None
 
 
 def host_name():
@@ -154,12 +186,29 @@ def tighten_modes(data_dir):
     return fixed
 
 
+HOME_PATH = re.compile(r'/Users/[^ /]+')
+
+
+def redact_home(text):
+    """'/Users/ayse/…' → '/Users/…'. A report lands in iCloud Drive or a shared team folder, where a macOS
+    account name is a person's name; error lines were already redacted, everything else has to be too."""
+    return HOME_PATH.sub('/Users/…', text) if isinstance(text, str) else text
+
+
+def redact_paths(value):
+    """redact_home over a whole report payload — every string, however deep, keys included."""
+    if isinstance(value, dict): return {redact_home(k): redact_paths(v) for k, v in value.items()}
+    if isinstance(value, list): return [redact_paths(v) for v in value]
+    if isinstance(value, tuple): return [redact_paths(v) for v in value]
+    return redact_home(value)
+
+
 def _errors(log_path, limit=8):
     if not Path(log_path).is_file(): return []
     out = []
     for line in Path(log_path).read_text(encoding='utf-8', errors='replace').splitlines()[-400:]:
         if line.startswith('Meeting OS:') or line.startswith('Traceback') or re.match(r'\s*[\w.]*(Error|Exception)\b', line):   # anchored: a transcript line containing the word Error must never be copied into a shared report
-            out.append(re.sub(r'/Users/[^ /]+', '/Users/…', line)[:240])
+            out.append(redact_home(line)[:240])
     return out[-limit:]
 
 
@@ -188,6 +237,7 @@ def write_recording_heartbeat(data_dir, state):
         folder, shared = prepare_folder(settings)
         payload = {'recording_heartbeat_version': 1, 'host': host_name(), 'written': datetime.now(timezone.utc).isoformat(), **state}
         payload['line'] = recording_line(payload)
+        payload = redact_paths(payload)   # the recorder hands over capture_dir, which starts /Users/<name>/
         return str(publish(folder / RECORDING_HEARTBEAT_FILE, json.dumps(payload, ensure_ascii=False, indent=1), shared=shared))
     except Exception: return None
 
@@ -276,7 +326,10 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
     analysis_summary = None
     if analysis:
         payload = json.loads(analysis['payload'])
-        analysis_summary = {'model': analysis['model'], 'counts': {k: len(payload.get(k, [])) for k in ('summary', 'decisions', 'risks', 'questions', 'actions')}, 'coverage': payload.get('coverage'), 'dropped_quotes': payload.get('dropped_quotes'), 'created': analysis['created']}
+        spend = store.analysis_cost_totals(mid)
+        analysis_summary = {'model': analysis['model'], 'counts': {k: len(payload.get(k, [])) for k in ('summary', 'decisions', 'risks', 'questions', 'actions')},
+                            'coverage': payload.get('coverage'), 'dropped_quotes': payload.get('dropped_quotes'), 'dropped_items': payload.get('dropped_items'),
+                            'cost_usd': spend['cost'], 'calls': spend['calls'], 'cost_estimated': spend['estimated'], 'created': analysis['created']}
     duration = round(max((r['end'] for r in rows), default=0.0), 1)
     report = {
         'report_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
@@ -301,7 +354,7 @@ def write_meeting_report(store, mid, data_dir, *, version=None, commit=None):
     try:
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
-        report = build_meeting_report(store, mid, data_dir, include_text=bool(settings.get('share_text')), version=version, commit=commit)
+        report = redact_paths(build_meeting_report(store, mid, data_dir, include_text=bool(settings.get('share_text')), version=version, commit=commit))
         folder, shared = prepare_folder(settings)
         return str(publish(folder / f"{report['created'][:10]}_{mid}.json", json.dumps(report, ensure_ascii=False, indent=1), shared=shared))
     except Exception as exc:  # reporting must never break a job
@@ -388,7 +441,7 @@ def write_heartbeat(store, data_dir, *, app=None):
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
         folder, shared = prepare_folder(settings)
-        return str(publish(folder / HEARTBEAT_FILE, json.dumps(build_heartbeat(store, data_dir, app=app), ensure_ascii=False, indent=1), shared=shared))
+        return str(publish(folder / HEARTBEAT_FILE, json.dumps(redact_paths(build_heartbeat(store, data_dir, app=app)), ensure_ascii=False, indent=1), shared=shared))
     except Exception as exc:  # observability must never break the app
         import sys; print(f'Meeting OS: Nabız yazılamadı: {type(exc).__name__}', file=sys.stderr); return None
 

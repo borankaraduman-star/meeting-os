@@ -175,3 +175,54 @@ class GlossaryPoisoningTests(unittest.TestCase):
   self.assertEqual([a['title'] for a in out['actions']],['Tasarım notlarını paylaş'])
   self.assertEqual(out['actions'][0]['owner'],'Deniz')   # empty owner + first-person commitment → the speaker
   self.assertEqual(out['dropped_items'],1)
+
+
+class ReviewFlagTests(unittest.TestCase):
+ """needs_review=True on every single task is the same as no badge at all: the app cannot tell the two
+ tasks apart that a human really has to look at."""
+ def test_a_clean_quoted_owned_task_is_not_flagged(self):
+  r=validate_record(record(),ROWS)
+  self.assertFalse(r['actions'][0]['needs_review'])
+  self.assertEqual((r['actions'][0]['owner'],r['actions'][0]['due_text']),('Boran','yarın'))
+ def test_an_owner_the_evidence_does_not_support_is_still_flagged(self):
+  d=record();d['actions'][0]['owner']='Can'
+  r=validate_record(d,ROWS)
+  self.assertIsNone(r['actions'][0]['owner']);self.assertTrue(r['actions'][0]['needs_review'])
+ def test_an_uncertain_source_row_is_still_flagged(self):
+  self.assertTrue(validate_record(record(),[{**ROWS[0],'flags':['low_asr_confidence']}])['actions'][0]['needs_review'])
+ def test_a_rescued_quote_is_still_flagged(self):
+  source=("Bir karar daha: staging ortamını canary'ye çeviriyoruz. Yeni sürümler önce yüzde beş trafiğe gidecek, "
+          "sorun yoksa yüzde yüze çıkacağız. Bu kararı bugün alıyoruz ve geri dönüşü yok.")
+  rows=[{**ROWS[0],'text':source}]
+  d=record();d['summary']=[]
+  d['actions']=[{'title':"staging ortamını canary'ye çevir",'owner':None,'due_text':None,
+                 'evidence':[{'segment_id':1,'quote':"staging ortamını canary'ye çeviriyoruz. Bu kararı bugün alıyoruz ve geri dönüşü yok."}]}]
+  r=validate_record(d,rows)
+  self.assertTrue(r['actions'][0]['needs_review'])   # two spans silently joined: shown, but a human looks
+  self.assertIn(r['actions'][0]['evidence'][0]['quote'],source)
+
+
+class DroppedCountTests(unittest.TestCase):
+ """What the model produced and validation refused has to reach the saved payload, or the shorter list
+ looks like the meeting simply had less in it."""
+ def test_merge_adds_the_counts_of_every_chunk_up(self):
+  a=record();a['actions'][0]['evidence'].append({'segment_id':1,'quote':'bu cümle transkriptte yok'})
+  b=record();b['actions'][0]['evidence'][0]['segment_id']=99   # the summary keeps the batch usable
+  first=validate_record(a,ROWS);second=validate_record(b,ROWS)
+  self.assertEqual((first['dropped_quotes'],first['dropped_items']),(1,0))
+  self.assertEqual((second['dropped_quotes'],second['dropped_items']),(1,1))
+  merged=merge_records([first,second])
+  self.assertEqual((merged['dropped_quotes'],merged['dropped_items']),(2,1))
+ def test_an_analysis_saves_the_counts_where_the_report_reads_them(self):
+  from meeting_os import reports
+  with tempfile.TemporaryDirectory() as tmp:
+   s=Store(Path(tmp)/'meeting-os.sqlite');mid=s.create_meeting('Sprint')
+   sid=s.add_segment(mid,Segment(0,8,ROWS[0]['text'],'mic','Ben'));s.status(mid,'complete')
+   rows=s.display_segments(mid);d=record()
+   for key in ('summary','actions'):
+    for item in d[key]:item['evidence'][0]['segment_id']=sid
+   d['actions'][0]['evidence'].append({'segment_id':sid,'quote':'uydurma alıntı'})
+   mem=Memory(s);mem.save_analysis(mid,fingerprint(rows),'test',merge_records([validate_record(d,rows)]))
+   report=reports.build_meeting_report(s,mid,Path(tmp))
+   self.assertEqual((report['analysis']['dropped_quotes'],report['analysis']['dropped_items']),(1,0))
+   s.close()

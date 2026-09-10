@@ -223,32 +223,95 @@ class HeartbeatBridgeTests(unittest.TestCase):
             self.assertEqual((beat['app_version'],beat['meetings']),(__version__,0))
 
 class UserNameTests(unittest.TestCase):
-    def test_the_name_is_validated_and_falls_back_to_the_label_older_recordings_carry(self):
+    def test_the_name_is_validated_and_nobody_is_the_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp)
             self.assertEqual(reports.load_settings(data)['user_name'],reports.DEFAULT_USER_NAME)
-            self.assertEqual(reports.settings_owner(data),'Boran')   # no settings file: segments already labelled “Boran” keep matching
+            self.assertEqual(reports.settings_owner(data),'')   # no settings file: this Mac belongs to nobody yet
+            self.assertNotIn('Boran',(reports.DEFAULT_USER_NAME,reports.settings_owner(data)))
             self.assertEqual(reports.save_settings(data,{'user_name':'  Ayşe Yılmaz  '})['user_name'],'Ayşe Yılmaz')
             self.assertEqual(reports.settings_owner(data),'Ayşe Yılmaz')
-            for junk in ('','   ','x'*(reports.NAME_LIMIT+1),None,5,True,['Ayşe']):
+            for junk in ('x'*(reports.NAME_LIMIT+1),None,5,True,['Ayşe']):
                 self.assertEqual(reports.save_settings(data,{'user_name':junk})['user_name'],'Ayşe Yılmaz')
+            self.assertEqual(reports.save_settings(data,{'user_name':'   '})['user_name'],'')   # clearing the name is allowed and means nobody
             self.assertEqual(reports.save_settings(data,{'user_name':'x'*reports.NAME_LIMIT})['user_name'],'x'*reports.NAME_LIMIT)
             reports.settings_path(data).write_text(json.dumps({'user_name':'   '}),encoding='utf-8')
-            self.assertEqual(reports.settings_owner(data),'Boran')   # a blank value in the file is not a name
+            self.assertEqual(reports.settings_owner(data),'')   # a blank value in the file is not a name
     def test_the_bridge_reads_and_writes_the_name(self):
         from meeting_os.desktop import dispatch
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp);db=data/'meeting-os.sqlite';Store(db).close()
-            self.assertEqual(dispatch({'action':'report_settings'},db)['user_name'],'Boran')
+            self.assertEqual(dispatch({'action':'report_settings'},db)['user_name'],'')
             self.assertEqual(dispatch({'action':'report_settings_set','changes':{'user_name':'Deniz'}},db)['user_name'],'Deniz')
             self.assertEqual(reports.settings_owner(data),'Deniz')
     def test_the_microphone_speaker_label_follows_the_setting(self):
         from meeting_os.cloud_finalize import source_labels, speaker_label
         self.assertEqual(source_labels('Deniz'),{'mic':'Deniz','system':'Karşı taraf'})
         self.assertEqual(source_labels(None),source_labels('   '))
+        self.assertEqual(source_labels(None)['mic'],'Ben')   # nobody's name, not the author's
         self.assertEqual(speaker_label('mic','2',0,False,'Deniz'),'Deniz')
         self.assertEqual(speaker_label('system',None,0,False,'Deniz'),'Karşı taraf')
         self.assertEqual(speaker_label('system','1',2,True,'Deniz'),'Konuşmacı 3-2')   # the setting never touches diarized labels
+
+class MicOwnerRenameTests(unittest.TestCase):
+    """A teammate's first meeting is recorded before they reach Settings, so its mic rows carry a label that is
+    not their name. Typing the name has to reach those rows, in every meeting, or they stay somebody else's."""
+    def seed(self,db,label='Ben'):
+        from meeting_os.types import Segment
+        s=Store(db)
+        first=s.create_meeting('Sprint');second=s.create_meeting('Retro')
+        for mid in (first,second):
+            s.add_segment(mid,Segment(0,8,'Ben raporu yarın çıkaracağım.','mic',label))
+            s.add_segment(mid,Segment(8,16,'Tamam.','system','S0'))
+            s.status(mid,'complete')
+        return s,first,second
+    def test_rename_touches_every_meeting_and_the_stored_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'meeting-os.sqlite';s,first,second=self.seed(db)
+            self.assertEqual(s.rename_mic_owner('Ben','Deniz'),{'meetings':2,'segments':2})
+            for mid in (first,second):
+                rows=s.segments(mid)
+                self.assertEqual([r['speaker'] for r in rows],['Deniz','S0'])   # payload follows the column
+                self.assertEqual([r['speaker'] for r in s.display_segments(mid)],['Deniz','S0'])
+            self.assertEqual(s.rename_mic_owner('Ben','Deniz'),{'meetings':0,'segments':0})   # idempotent
+            self.assertEqual(s.rename_mic_owner('Deniz','Deniz'),{'meetings':0,'segments':0})
+            with self.assertRaises(ValueError): s.rename_mic_owner('Deniz','  ')
+            s.close()
+    def test_rename_marks_the_analysis_of_a_touched_meeting_stale(self):
+        from meeting_os.memory import Memory
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'meeting-os.sqlite';s,first,_=self.seed(db)
+            mem=Memory(s);rows=s.display_segments(first)
+            mem.save_analysis(first,mem.current_hash(first),'fixture',
+                {'summary':[],'decisions':[],'risks':[],'questions':[],
+                 'actions':[{'title':'Raporu çıkarmak','owner':'Ben','due_text':'yarın','evidence':[{'segment_id':rows[0]['id'],'quote':'raporu yarın çıkaracağım','start':0,'source':'mic','speaker':'Ben'}],'needs_review':False}]})
+            self.assertFalse(Memory(s).latest(first)['stale'])
+            s.rename_mic_owner('Ben','Deniz')
+            self.assertTrue(Memory(s).latest(first)['stale'])   # owner attribution changed: the analysis is not current
+            s.close()
+    def test_the_bridge_action_and_the_settings_write_relabel_earlier_meetings(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';s,first,_=self.seed(db);s.close()
+            self.assertEqual(dispatch({'action':'rename_mic_owner','old':'Ben','new':'Deniz'},db),{'meetings':2,'segments':2})
+            reports.save_settings(data,{'user_name':'Deniz'})
+            saved=dispatch({'action':'report_settings_set','changes':{'user_name':'Deniz Yılmaz'}},db)   # correcting the name later
+            self.assertEqual((saved['user_name'],saved['renamed_meetings'],saved['renamed_segments']),('Deniz Yılmaz',2,2))
+            s=Store(db);self.assertEqual(s.segments(first)[0]['speaker'],'Deniz Yılmaz');s.close()
+    def test_the_historical_boran_default_is_relabelled_too(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';s,first,_=self.seed(db,label='Boran');s.close()
+            saved=dispatch({'action':'report_settings_set','changes':{'user_name':'Ece'}},db)
+            self.assertEqual((saved['renamed_meetings'],saved['renamed_segments']),(2,2))
+            s=Store(db);self.assertEqual(s.segments(first)[0]['speaker'],'Ece');s.close()
+    def test_a_settings_write_that_does_not_change_the_name_renames_nothing(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';s,first,_=self.seed(db);s.close()
+            saved=dispatch({'action':'report_settings_set','changes':{'share_text':True}},db)
+            self.assertEqual((saved['renamed_meetings'],saved['renamed_segments']),(0,0))
+            s=Store(db);self.assertEqual(s.segments(first)[0]['speaker'],'Ben');s.close()
     def test_the_cli_writes_text_settings_as_text(self):
         """scripts/install.sh sets the name through this command; a string must not be coerced to a bool."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -388,3 +451,35 @@ class FileModeTests(unittest.TestCase):
                 dispatch({'action':'heartbeat'},db);dispatch({'action':'heartbeat'},db)
             self.assertEqual(tighten.call_count,1)
 
+
+class HomePathRedactionTests(unittest.TestCase):
+    """A report folder is iCloud Drive or a shared team drive. '/Users/ayse/...' inside it is a person's name,
+    and the Settings caption promises numbers, scores, costs, model names and error lines — not paths."""
+    def test_the_helper_replaces_only_the_account_name(self):
+        self.assertEqual(reports.redact_home('/Users/ayse/Library/x'),'/Users/…/Library/x')
+        self.assertEqual(reports.redact_home('bak /Users/ayse ve /Users/mehmet/rec'),'bak /Users/… ve /Users/…/rec')
+        self.assertEqual(reports.redact_home('/opt/data/x'),'/opt/data/x')
+        for junk in (None,5,True): self.assertEqual(reports.redact_home(junk),junk)
+        self.assertEqual(reports.redact_paths({'/Users/ayse/k':['/Users/ayse/a',{'b':'/Users/ayse'}]}),{'/Users/…/k':['/Users/…/a',{'b':'/Users/…'}]})
+    def test_the_recording_heartbeat_never_carries_a_home_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);reports.save_settings(data,{'report_dir':str(data/'shared')})
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                path=reports.write_recording_heartbeat(data,{'meeting':'abc','capture_dir':'/Users/ayse/Library/Application Support/MeetingOS/recordings/abc','elapsed_seconds':61})
+            text=Path(path).read_text(encoding='utf-8')
+            self.assertNotIn('/Users/ayse',text);self.assertIn('/Users/…/Library/Application Support/MeetingOS/recordings/abc',text)
+            self.assertEqual(json.loads(text)['line'],'kayıt sürüyor · 1 dk · henüz parça yok')
+    def test_the_hourly_heartbeat_and_the_meeting_report_are_redacted_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db)
+            mid=s.create_meeting('Sprint',{'capture_dir':'/Users/ayse/rec/abc'})
+            s.add_segment(mid,Segment(0,5,'Merhaba','system','S0'));s.status(mid,'complete');s.close()
+            (data/'last-job.log').write_text('Meeting OS: /Users/ayse/rec/abc açılamadı\n',encoding='utf-8')
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            s=Store(db)
+            with patch('meeting_os.reports.subprocess.run',side_effect=fake_run):
+                beat=Path(reports.write_heartbeat(s,data,app={'version':'t','commit':None})).read_text(encoding='utf-8')
+                report=Path(reports.write_meeting_report(s,mid,data,version='t')).read_text(encoding='utf-8')
+            s.close()
+            for text in (beat,report):
+                self.assertNotIn('/Users/ayse',text);self.assertIn('/Users/…',text)

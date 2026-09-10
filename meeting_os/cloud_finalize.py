@@ -26,8 +26,8 @@ FINE_PIECE_SECONDS = 30       # models without diarization get short windows so 
 MAX_PIECE_BYTES = 24*1024*1024
 REQUEST_TIMEOUT = 600
 UPLOAD_WORKERS = 3            # pieces in flight at once; MAI answered a 5-minute piece in ~63 s
-from .reports import DEFAULT_USER_NAME
-SOURCE_LABELS = {'mic':DEFAULT_USER_NAME,'system':'Karşı taraf'}   # 'mic' is only the fallback for databases recorded before the user_name setting; source_labels() is what jobs use
+MIC_FALLBACK = 'Ben'   # nobody's name: what a mic row is called until its owner types one in Settings
+SOURCE_LABELS = {'mic':MIC_FALLBACK,'system':'Karşı taraf'}   # 'mic' is only the fallback when user_name is unset; source_labels() is what jobs use
 
 
 def source_labels(owner=None):

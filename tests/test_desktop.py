@@ -124,7 +124,16 @@ class DesktopTests(unittest.TestCase):
    s.add_segment(a,Segment(0,70,'x','system','Konuşmacı 1',speaker_name='Ayşe'));s.add_segment(a,Segment(70,90,'y','system','Konuşmacı 2'));s.add_segment(a,Segment(0,60,'echo','mic','mic:S0'))
    s.status(a,'complete');s.status(b,'complete');s.close()
    st={m['id']:m['stats'] for m in dispatch({'action':'snapshot'},db)['meetings']}
-   self.assertEqual(st[a],{'segments':2,'seconds':90.0,'speakers':2,'names':['Ayşe']});self.assertEqual(st[b],{'segments':0,'seconds':0.0,'speakers':0})
+   # The microphone counts: its row is a person speaking, and its speaker_name is NULL on a cloud transcript.
+   self.assertEqual(st[a],{'segments':3,'seconds':90.0,'speakers':3,'names':['Ayşe']});self.assertEqual(st[b],{'segments':0,'seconds':0.0,'speakers':0})
+ def test_a_meeting_where_only_the_microphone_spoke_is_not_empty(self):
+  """Silent system audio (nobody else in the room, or a muted call) used to read as “Konuşma bulunmadı”."""
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';s=Store(db);mid=s.create_meeting('Yalnız ben',{})
+   s.add_segment(mid,Segment(0,30,'Ben notlarımı okuyorum.','mic','Ben'));s.add_segment(mid,Segment(30,60,'Devam.','mic','Ben'))
+   s.status(mid,'complete');s.close()
+   stats=dispatch({'action':'snapshot'},db)['meetings'][0]['stats']
+   self.assertEqual((stats['segments'],stats['seconds'],stats['speakers']),(2,60.0,1))
  def test_delete_meeting_refuses_active_job(self):
   from meeting_os.recovery import current_job_metadata
   with tempfile.TemporaryDirectory() as tmp:

@@ -6,7 +6,12 @@
 - Kayıt bitince sesi OpenRouter’a gönderir, Türkçe yazıya çevirir ve konuşanları ayırır.
 - Bir kez adlandırdığınız kişiyi ses profilinden sonraki toplantılarda kendiliğinden tanır.
 - Transkriptten özet, kararlar, riskler, açık sorular ve görevleri kaynak alıntısıyla çıkarır.
-- **Kendiliğinden dışarı çıkan iki şey var:** (1) ses ve transkript OpenRouter’a gider, (2) sayısal teşhis raporu ekip klasörüne yazılır (rapor paylaşımı varsayılan olarak açık). Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir. Tek istisna: bir görevi **Hatırlatıcılar’a ekle** derseniz görev başlığı, sahibi ve toplantı adı Apple Hatırlatıcılar’a (iCloud’la eşitlenir) yazılır; toplantıyı silince tamamlanmamış olanlar kaldırılır.
+- **Kendiliğinden dışarı çıkanların tam listesi:**
+  1. **OpenRouter’a:** kayıt bitince ses parçaları (yazıya çevirme) ve ardından transkriptin tamamı (özet/görev analizi).
+  2. **Paylaşılan rapor klasörüne** (iCloud Drive’daki `MeetingOS-Reports/` ya da ayarlanmışsa ekip klasörü): her toplantıdan sonra o toplantının sayısal raporu, **saatte bir** bu Mac’in nabzı (`heartbeat.json` — disk, bellek, termal, son hata satırları), ve **kayıt sürerken dakikada bir** kayıt nabzı (`recording-heartbeat.json` — geçen süre, parça sayısı, boş disk). Üçü de Ayarlar → Sistem → **Gelişmiş** → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz” anahtarıyla birlikte kapanır (varsayılan **açık**). Dosya yollarındaki kullanıcı adınız raporlara girmeden önce `/Users/…` olarak kısaltılır.
+  3. **GitHub’a:** altı saatte bir sürüm kontrolü (yeni bir sürüm var mı diye sorar; içerik göndermez).
+
+  Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir. Tek istisna: bir görevi **Hatırlatıcılar’a ekle** derseniz görev başlığı, sahibi ve toplantı adı Apple Hatırlatıcılar’a (iCloud’la eşitlenir) yazılır; toplantıyı silince tamamlanmamış olanlar kaldırılır.
 
 ## Gizlilik — ne nerede kalır
 
@@ -44,15 +49,15 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 ## İlk gün
 
 1. `Meeting OS.command` dosyasını çift tıklayın (kurulan uygulama: `build/Meeting OS.app`). İlk açılışta macOS **bildirim izni** ister; **İzin ver** deyin — Zoom toplantı penceresi açılınca gelen “Kaydı başlat” hatırlatması ve iş bitince gelen “toplantı hazır” bildirimi bununla çalışır.
-2. Açılış ekranında **adınızı** yazın ve **⏎** ile onaylayın. Ad ancak Enter’a bastığınızda (ya da açılış ekranından çıktığınızda) kaydedilir; onaylamadan uygulamayı kapatırsanız mikrofon kaydınız varsayılan **“Boran”** adıyla etiketlenir ve “Bana ait” görev filtresi sizin değil Boran’ın görevlerini gösterir. Sonradan düzeltmek için: Ayarlar (⌘,) → Genel → **Sizin adınız**.
+2. Açılış ekranında **adınızı** yazın ve **⏎** ile onaylayın. Ad ancak Enter’a bastığınızda (ya da açılış ekranından çıktığınızda) kaydedilir; onaylamadan uygulamayı kapatırsanız mikrofon kaydınız kimseye ait olmayan **“Ben”** etiketiyle geçer ve “Bana ait” görev filtresi boş kalır. Sonradan yazabilirsiniz: Ayarlar (⌘,) → Genel → **Sizin adınız** — adı kaydettiğinizde daha önce kaydedilmiş toplantılardaki mikrofon paragrafları da yeni adla yeniden etiketlenir (o toplantıların özeti “güncel değil” olarak işaretlenir, çünkü kimin ne söylediği değişmiştir).
 3. **İzinleri ilk kayıttan önce verin.** Ayarlar (⌘,) → **Sistem → Kurulum durumu** kartında mikrofon ve **Ekran kaydı (toplantı sesi)** satırlarındaki **İzin iste** düğmesine basın (reddedilmiş bir izinde düğme **Ayarları aç** olur). Ekran kaydı iznini verdikten sonra uygulamayı kapatıp yeniden açın; macOS bu izni ancak yeniden açılışta tanır. İzinsiz başlatılan kayıt sessizce boş biter: sonunda “Bu denemede ses parçası alınmadı” yazar ve o toplantıdan geriye hiçbir şey kalmaz.
 4. **⌃⌥R** her yerden kaydı başlatır ve bitirir (Zoom öndeyken de). ⌃⌥M önemli anı işaretler. Kulaklık kullanın: hoparlör sesi mikrofona kaçarsa metin ikizlenir.
-5. Kayıt bitince transkript, özet ve görevler birkaç dakikada kendiliğinden gelir. Transkriptin üstündeki **İsimler** kartında her sese bir kez adını verin (yazıp ⏎ ya da öneriyi onaylayın) — sonraki toplantılarda aynı ses kendiliğinden tanınır. Bu, aracın en çok işe yarayan tek adımı.
+5. Kayıt bitince transkript, özet ve görevler kendiliğinden gelir — ama hemen değil: 45 dakikalık bir toplantı için kabaca **10–20 dakika**. Sırayla ses parçaları üçerli gruplar hâlinde yazıya çevrilir, sonra ses profilleri eşleştirilir, sonra analiz çalışır; kenar çubuğunun altındaki **Son durum** satırı hangi aşamada olduğunu söyler. Bu arada Mac’i kullanabilirsiniz; kapağı kapatırsanız iş durur ve Mac boşta kalınca kaldığı yerden sürer. Transkriptin üstündeki **İsimler** kartında her sese bir kez adını verin (yazıp ⏎ ya da öneriyi onaylayın) — sonraki toplantılarda aynı ses kendiliğinden tanınır. Bu, aracın en çok işe yarayan tek adımı.
 
 ## İlk hafta kontrol listesi
 
 - [ ] En az üç toplantı kaydedin; her birinde İsimler kartını boşaltın ve Kontrol sekmesindeki şüpheli yerlere (sahipsiz görev, çakışan konuşma) bir kez bakın.
-- [ ] Kendi sesinizin ve sık görüştüğünüz 3–5 kişinin adı bir kez verilmiş olsun. Profil, İsimler kartındaki ya da bir paragraftaki **Düzelt → “Adlandır ve öğren”** ile kaydedilir; kişi başına bir kez yeter. Kayıtlı profilleri Ayarlar → **Sesler ve sözlük → Kaydedilmiş sesler** altında görürsünüz.
+- [ ] **Kendi sesiniz için profil oluşturmanız gerekmez:** mikrofon ayrı bir ses akışıdır ve doğrudan Ayarlar → Genel → **Sizin adınız** değeriyle etiketlenir. Profil yalnız *karşı taraftaki* kişiler için gerekir; sık görüştüğünüz 3–5 kişinin adı bir kez verilmiş olsun. Profil, İsimler kartındaki ya da bir paragraftaki **Düzelt → “Adlandır ve öğren”** ile kaydedilir; kişi başına bir kez yeter. Kayıtlı profilleri Ayarlar → **Sesler ve sözlük → Kaydedilmiş sesler** altında görürsünüz.
 - [ ] **Görevlerim → Bana ait** listesinin gerçekten sizin sözlerinizi gösterdiğini doğrulayın; sahibi yanlışsa Düzenle ile düzeltin.
 - [ ] Bir kez **Gün sonu özeti…** ve bir kez **Beklediklerim** çıktısı alın; işinize yaramıyorsa söyleyin.
 - [ ] Ayarlar → **Sesler ve sözlük → Sözlük**: sık geçen ürün/proje/kişi adlarını her satıra bir tane yazıp **Sözlüğü kaydet** deyin; yazım hataları belirgin biçimde azalır. Ekip klasörü verildiyse proje sözlüğü ekipçe ortaklaşır.
@@ -73,8 +78,8 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 
 ## Maliyet
 
-Yazıya çevirme ≈ **$0,10/saat** (MAI-Transcribe 2). Özet/görev analizi 40 dakikalık bir toplantı için ≈1 cent. Ödemeyi kendi OpenRouter hesabınız yapar; sessiz ve yankı olan parçalar hiç yüklenmez. Gerçek harcama: Ayarlar → Sistem → **Bulut maliyeti**.
+Yazıya çevirme ≈ **$0,10/saat** (MAI-Transcribe 2). Özet/görev analizi **her çalıştığında ≈1–3 cent** (40–60 dakikalık bir toplantı, `openai/gpt-4.1-mini`). Analiz bir toplantıda birden çok kez çalışabilir: transkript değişirse (isim verme, metin düzeltme) özet bayatlar ve yenilenirken analiz **yeniden ücretlendirilir**. Ödemeyi kendi OpenRouter hesabınız yapar; sessiz ve yankı olan parçalar hiç yüklenmez. Gerçek harcama — yazıya çevirme **ve** analiz ayrı ayrı: Ayarlar → Sistem → **Bulut maliyeti**.
 
 ## Ekip klasörü (isteğe bağlı)
 
-Ayarlar → Sesler ve sözlük → **Ekip klasörü**: ortak bir klasör (Dropbox, Drive, paylaşılan disk) seçerseniz proje sözlüğü ekipçe ortaklaşır ve teşhis raporlarınız oraya da yazılır. Sözlükte yerel kaydınız her zaman önceliklidir; ekip dosyası yalnız sizde olmayan terimleri ekler. Ses ve ses profilleri bu klasöre **girmez**; ama teşhis raporları girer — ve rapor toplantı başlığını ve konuşmacılara verdiğiniz adları içerir (“Raporlara transkript metnini de ekle” açıksa transkriptin tamamını da). Klasörü gören herkes bunları görür: `<ekip klasörü>/reports/<mac-adı>/`.
+Ayarlar → Sesler ve sözlük → **Ekip klasörü**: ortak bir klasör (Dropbox, Drive, paylaşılan disk) seçerseniz proje sözlüğü ekipçe ortaklaşır ve teşhis raporlarınız oraya da yazılır. Sözlükte yerel kaydınız her zaman önceliklidir; ekip dosyası yalnız sizde olmayan terimleri ekler. Ses ve ses profilleri bu klasöre **girmez**. Teşhis raporları girer; içeriği ayara bağlıdır: varsayılan hâlde yalnız sayılar, puanlar, ücret, model adı ve hata satırları vardır — toplantı başlığı boş geçer ve konuşmacılar S1, S2… diye adlandırılır. Ayarlar → Sistem → **Gelişmiş** → “Raporlara transkript metnini de ekle” açıksa rapor toplantı başlığını, konuşmacılara verdiğiniz adları **ve transkriptin tamamını** taşır. Klasörü gören herkes ne varsa görür: `<ekip klasörü>/reports/<mac-adı>/`.
