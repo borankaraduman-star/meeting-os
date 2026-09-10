@@ -278,12 +278,39 @@ class Store:
             if learnable and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,r['embedding_model'],provenance)).fetchone():
                 sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,r['embedding_model'],json.dumps(unit(r['embedding'])),duration,provenance)).lastrowid
             mark=f'{mid}:segment:{sid}@{created}'
+            rejected=False; cluster_sample=None
             if previous and fold_name(previous)!=fold_name(name):
                 self.db.execute('UPDATE samples SET deleted_by=? WHERE provenance=? AND name=? AND deleted_by IS NULL',(mark,provenance,previous))
+                if learnable:
+                    # Boran, 10 Sep 2026: "niye diğeriyle eşleştiğini çıkarmalı ve sonrası için bu hatayı yapmamalı".
+                    # Two things made the wrong match and both are undone here. (1) This voice is now known NOT to be
+                    # the cluster's person: a rejection, so a voice this close can never be them again. (2) The
+                    # cluster's pooled sample was computed WITH this piece in it, so the wrong person's profile
+                    # carried a bit of the right person's voice — it is rebuilt from the pieces that are really theirs.
+                    self.db.execute('INSERT INTO rejections(name,model,vector,provenance,created) VALUES(?,?,?,?,?)',(previous,r['embedding_model'],json.dumps(unit(r['embedding'])),mark,created))
+                    rejected=True
+                    cluster_sample=self._rebuild_cluster_sample(mid, r['speaker'], previous, exclude=self._pinned_segments(mid)|{sid}, mark=mark)
             hidden=[r['id'] for r in self.db.execute('SELECT id FROM samples WHERE deleted_by=?',(mark,))]
             self._move_task_owners(previous, name, mid, segments={sid})   # only a task whose whole evidence is THIS piece changes hands
-            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,f'segment:{sid}',name,created,previous,json.dumps({'pin':True,'sample_id':sample,'hidden':hidden})))
-        return {'labeled':1,'profile_saved':sample is not None,'seconds':duration,'previous':previous}
+            self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,f'segment:{sid}',name,created,previous,json.dumps({'pin':True,'sample_id':sample,'hidden':hidden,'rejected':rejected,'cluster_sample':cluster_sample})))
+        return {'labeled':1,'profile_saved':sample is not None,'seconds':duration,'previous':previous,'rejected':rejected,'cluster_sample_rebuilt':cluster_sample is not None}
+    def _rebuild_cluster_sample(self, mid, speaker, name, exclude, mark):
+        """Recompute the pooled cluster sample of `name` (provenance `<mid>:speaker:<speaker>`) without the pieces the user
+        has pinned to somebody else. Must run inside the caller's transaction. Returns what it replaced (so undo can put it
+        back) or None when there was no such sample. With no clean piece left the sample is hidden under `mark`."""
+        provenance=f'{mid}:speaker:{speaker}'
+        row=self.db.execute('SELECT id,model,vector,duration FROM samples WHERE name=? AND provenance=? AND deleted_by IS NULL',(name,provenance)).fetchone()
+        if not row: return None
+        rows=[x for x in self.segments(mid) if x['speaker']==speaker and x['id'] not in exclude]
+        voiced=[x for x in rows if x.get('embedding') and x['embedding_model']==row['model'] and (x['end']-x['start']>=3 or (x.get('metrics') or {}).get('cluster_embedding')) and 'speaker_ambiguous' not in x['flags']]
+        before={'id':row['id'],'vector':row['vector'],'duration':row['duration']}
+        if not voiced:
+            self.db.execute('UPDATE samples SET deleted_by=? WHERE id=?',(mark,row['id'])); return before
+        vectors=[unit(x['embedding']) for x in voiced]
+        centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
+        duration=sum(x['end']-x['start'] for x in rows if 'speaker_ambiguous' not in x['flags'])
+        self.db.execute('UPDATE samples SET vector=?,duration=? WHERE id=?',(json.dumps(centroid),duration,row['id']))
+        return before
     def correct_segment(self, mid, sid, name):
         name = name.strip()
         if not name: raise ValueError('Name cannot be empty')
@@ -405,6 +432,11 @@ class Store:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(previous,mid,sid))
             if previous: self._move_task_owners(row['name'], previous, mid, segments={sid})
             if feedback.get('sample_id') is not None: self.db.execute('DELETE FROM samples WHERE id=?',(feedback['sample_id'],))
+            mark=f"{mid}:segment:{sid}@{row['created']}"
+            self.db.execute('DELETE FROM rejections WHERE provenance=?',(mark,))   # the "not them" this pin filed
+            before=feedback.get('cluster_sample')
+            if isinstance(before,dict) and before.get('id') is not None:   # the cluster sample as it was before the rebuild
+                self.db.execute('UPDATE samples SET vector=?,duration=? WHERE id=?',(before['vector'],before['duration'],before['id']))
             for hid in feedback.get('hidden') or []:
                 self.db.execute("""UPDATE samples SET deleted_by=NULL WHERE id=? AND NOT EXISTS(
                     SELECT 1 FROM samples live WHERE live.name=samples.name AND live.model IS samples.model

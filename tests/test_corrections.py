@@ -467,8 +467,33 @@ class SegmentOnlyCorrectionTests(unittest.TestCase):
         self.assertEqual([rows[i]['speaker_name'] for i in ids],['Ayşe','Ali','Ayşe'])
         self.assertTrue(result['profile_saved']); self.assertEqual(result['previous'],'Ayşe')
         self.assertEqual([s['provenance'] for s in db.profile_samples('Ali')],[f'{mid}:{ids[1]}'])
-        self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)   # the cluster as a whole was right
-        self.assertEqual(len(db.profile_samples('Ayşe')),1)   # Ayşe keeps her cluster sample
+        # The cluster as a whole was right, so Ayşe is not convicted for it — but THIS voice is now known not to be hers:
+        # one rejection against her carrying the piece's vector (Boran: "niye diğeriyle eşleştiğini çıkarmalı").
+        self.assertEqual([r[0] for r in db.db.execute('SELECT name FROM rejections')],['Ayşe'])
+        self.assertTrue(result['rejected']); self.assertTrue(result['cluster_sample_rebuilt'])
+        # …and her pooled cluster sample no longer contains Ali's piece: it is the centroid of pieces 0 and 2 only.
+        self.assertEqual(len(db.profile_samples('Ayşe')),1)
+        vec=json.loads(db.db.execute("SELECT vector FROM samples WHERE name='Ayşe' AND deleted_by IS NULL").fetchone()[0])
+        from meeting_os.store import unit
+        want=unit([sum(c)/2 for c in zip(unit(self._voice(0)),unit(self._voice(2)))])
+        self.assertTrue(all(abs(a-b)<1e-9 for a,b in zip(vec,want)))
+        db.close(); tmp.cleanup()
+    def test_undo_pin_restores_the_cluster_sample_and_drops_the_rejection(self):
+        tmp,db,mid,ids=self._meeting()
+        before=db.db.execute("SELECT vector,duration FROM samples WHERE name='Ayşe'").fetchone()
+        db.correct_segment_only(mid,ids[1],'Ali')
+        db.undo_correction(mid)
+        after=db.db.execute("SELECT vector,duration FROM samples WHERE name='Ayşe' AND deleted_by IS NULL").fetchone()
+        self.assertEqual((after[0],after[1]),(before[0],before[1]))
+        self.assertEqual(db.db.execute('SELECT count(*) FROM rejections').fetchone()[0],0)
+        self.assertEqual(db.profile_samples('Ali'),[])
+        db.close(); tmp.cleanup()
+    def test_pinning_every_piece_hides_the_cluster_sample_until_undo(self):
+        tmp,db,mid,ids=self._meeting()
+        for i in ids: db.correct_segment_only(mid,i,'Ali')
+        self.assertEqual(db.profile_samples('Ayşe'),[])   # nothing of the cluster is hers any more
+        for _ in ids: db.undo_correction(mid)
+        self.assertEqual(len(db.profile_samples('Ayşe')),1)
         db.close(); tmp.cleanup()
     def test_short_or_unclean_piece_gets_only_the_label(self):
         tmp,db,mid,ids=self._meeting()
