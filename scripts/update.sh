@@ -19,10 +19,12 @@ if [ -n "$(git status --porcelain)" ]; then status failed "$FROM" "Yerel değiş
 if ! git fetch --tags origin v0.1; then status failed "$FROM" "GitHub'a ulaşılamadı"; exit 1; fi
 # Only released states are installed: the tip of origin/v0.1 must carry a release tag (vX.Y.Z). A half-finished
 # push or a stray commit never lands on a teammate's Mac. Set MEETING_OS_UPDATE_UNTAGGED=1 to override on a dev Mac.
-if [ -z "${MEETING_OS_UPDATE_UNTAGGED:-}" ] && ! git describe --tags --exact-match --match 'v*' origin/v0.1 >/dev/null 2>&1; then
-  status failed "$FROM" "GitHub'daki son commit yayınlanmış bir sürüm değil; güncelleme bekletildi"; exit 1
+TARGET="origin/v0.1"
+if [ -z "${MEETING_OS_UPDATE_UNTAGGED:-}" ]; then
+  TARGET="$(git describe --tags --abbrev=0 --match 'v*' origin/v0.1 2>/dev/null || true)"
+  if [ -z "$TARGET" ]; then status failed "$FROM" "GitHub'da yayınlanmış sürüm etiketi bulunamadı; güncelleme bekletildi"; exit 1; fi
 fi
-if ! git merge --ff-only origin/v0.1; then status failed "$FROM" "Dal ileri sarılamadı"; exit 1; fi
+if ! git merge --ff-only "$TARGET"; then status failed "$FROM" "Dal ileri sarılamadı"; exit 1; fi
 TO="$(git rev-parse --short HEAD)"
 status running "$TO" "Bağımlılıklar kontrol ediliyor"
 if [ "$FROM" != "$TO" ] && ! git diff --quiet "$FROM" "$TO" -- requirements-macos-tested.txt pyproject.toml; then

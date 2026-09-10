@@ -12,7 +12,7 @@
 2. Sorunlu raporu aç (`iCloud Drive/MeetingOS-Reports/<mac>/…json`), nedeni bul, düzelt, test et, commit + `git push origin v0.1`.
 3. Kullanım Mac’i bir sonraki açılışta günceller (veya kartta tek tık).
 
-Kullanım Mac’i yalnız **etiketli sürümleri** kurar: `update.sh`, `origin/v0.1`’in ucunda `vX.Y.Z` etiketi yoksa “yayınlanmış bir sürüm değil” deyip bekler (1.2.36). Bu yüzden her yayın `gh release create vX` ile etiketlenir; etiket sonrası atılan belge commit’leri bir sonraki etikete kadar diğer Mac’e gitmez. Geliştirme Mac’inde `MEETING_OS_UPDATE_UNTAGGED=1 sh scripts/update.sh` bu kapıyı açar.
+Kullanım Mac’i yalnız **etiketli sürümleri** kurar: hem uygulamadaki kontrol hem `update.sh`, `origin/v0.1` üzerindeki en yeni `vX.Y.Z` etiketini hedef alır; etiketten sonra atılan commit’ler bir sonraki etikete kadar diğer Mac’e gitmez (1.2.36). Bu yüzden her yayın `gh release create vX` ile etiketlenir; etiket sonrası atılan belge commit’leri bir sonraki etikete kadar diğer Mac’e gitmez. Geliştirme Mac’inde `MEETING_OS_UPDATE_UNTAGGED=1 sh scripts/update.sh` bu kapıyı açar.
 
 
 ## Kurulum durumu kartı (1.2.11+)
