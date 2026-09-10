@@ -70,6 +70,7 @@ def chat_usage(model, raw):
     prompt = _number(usage.get('prompt_tokens'))
     completion = _number(usage.get('completion_tokens'))
     cost = _number(usage.get('cost'))
+    if prompt is None and completion is None and cost is None: return None   # nothing billable was reported: no row, no made-up zero
     estimated = False
     if cost is None:
         cost = estimate_analysis_cost(model, prompt, completion)
@@ -278,7 +279,9 @@ class OpenRouterLLM:
         payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
         result=self.client._post('chat/completions',payload)
         if _USAGE_SINK is not None:
-            try: _USAGE_SINK(self.model_id,chat_usage(self.model_id,result.get('usage')))
+            try:
+                usage=chat_usage(self.model_id,result.get('usage'))
+                if usage is not None: _USAGE_SINK(self.model_id,usage)
             except Exception: pass   # bookkeeping must never lose a completed, paid-for analysis
         try:
             choice=result['choices'][0]

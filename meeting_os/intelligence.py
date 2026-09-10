@@ -178,6 +178,7 @@ def _name_key(text):
     a name that is already in the transcript, the dotted/dotless distinction is noise, not identity."""
     return normalize(text).replace('ı','i')
 
+FIRST_PERSON={'ben','bana','bende','benim','beni','biz','bizim','bize','bizi','kendim','me','i','myself','we','us'}
 def canonical_owner(owner,rows):
     """One spelling per person. Drops the case suffix ("Deniz'in"), honorifics and parenthetical
     notes, then snaps onto the transcript's own speaker name so a person's tasks group together.
@@ -190,6 +191,8 @@ def canonical_owner(owner,rows):
         if word and normalize(word) not in HONORIFICS:parts.append(word)
     cleaned=' '.join(parts).strip()
     if not cleaned:return None
+    # "Ben raporu paylaşacağım" → owner "Ben" is a pronoun, not a person: the caller fills the owner from the speaker instead.
+    if normalize(cleaned) in FIRST_PERSON:return None
     for match in (normalize,_name_key):
         key=match(cleaned)
         hits=[]

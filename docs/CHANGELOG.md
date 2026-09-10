@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 48 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 49 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.44](#v1244) | 2026-09-10 17:15 | Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır |
 | [v1.2.43](#v1243) | 2026-09-10 16:20 | Meeting OS 1.2.43 — ilk gerçek toplantı: ad, maliyet, bekleme süresi |
 | [v1.2.42](#v1242) | 2026-09-10 15:20 | Meeting OS 1.2.42 — kurulumda/güncellemede parola penceresi kalmadı; “Yalnız bu bölüm” ikinci görüşle sağlamlaştı |
 | [v1.2.41](#v1241) | 2026-09-10 14:40 | Meeting OS 1.2.41 — dinlemeyi durdur; “Yalnız bu bölüm” düzeltmesi |
@@ -68,6 +69,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1244"></a>
+### Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır
+
+2026-09-10 17:15 · yerel not · GitHub sürüm sayfası yok
+
+1.2.43'e ikinci görüş (1 P0, 4 P1):
+- **Kurulu Mac'lerde ad düzeltmesi devreye girmiyordu (P0):** 1.2.42 ayar dosyasına kimsenin yazmadığı "Boran" adını kaydediyordu; 1.2.43 bunu gerçek ad sanıyordu. Artık yalnız kullanıcının yazdığı ad (onaylı) sayılır; eski "Boran" kaydı adsız kabul edilir, kayıt öncesi ad sorulur ve eski toplantılar yeniden etiketlenir. Boran'ın kendi Mac'lerinde adı bir kez yeniden yazması yeter.
+- Boş ad alanı kayıtlı adı silmiyor (Ayarlar, ad yüklenmeden açılınca adı siliyordu); ayarlar köprüden yüklenmeden kaydedilmez.
+- "Ben raporu paylaşacağım" cümlesinden model "Ben" adında bir sahip üretiyordu; birinci tekil/çoğul zamirler sahip olamaz.
+- Toplantı değiştirilince bekleyen özet yenilemesi yanlış toplantıya "Özeti yenile" rozeti koyuyordu; düzeltildi, rozet artık kayıtlı "bayat" bilgisinden türetilir.
+- Zoom otomatik kaydı ad yokken sessizce başlamıyordu; şimdi Zoom oturumu başına bir kez bildirim gösterir.
+- Yeniden etiketlenen toplantı sayısı tekrarsız; kullanım bilgisi gelmeyen analiz çağrısı için sıfır satır yazılmaz.
 
 <a id="v1243"></a>
 ### Meeting OS 1.2.43 — ilk gerçek toplantı: ad, maliyet, bekleme süresi

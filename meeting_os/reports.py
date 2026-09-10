@@ -26,6 +26,7 @@ DEFAULT_SUBDIR = 'MeetingOS-Reports'
 
 
 REAL_DATA_DIR = Path.home() / 'Library/Application Support/MeetingOS'
+LEGACY_DEFAULT_NAME = 'Boran'   # what 1.2.42 and earlier persisted without anyone typing it
 DEFAULT_USER_NAME = ''   # nobody by default: a name typed into Settings is the only thing that labels a mic row with a person
 NAME_LIMIT = 40
 # The mic labels a database can already carry before its owner typed a name: the source fallback
@@ -51,8 +52,12 @@ def load_settings(data_dir):
     # auto_retry: when OpenRouter was down, pick the meeting up again while the Mac is idle. On by default —
     # a meeting the cloud refused is otherwise a meeting the user has to remember.
     defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30, 'auto_retry': True,
-                'user_name': DEFAULT_USER_NAME, 'team_dir': '', 'share_glossary': True}
-    return {**defaults, **{k: v for k, v in data.items() if k in defaults}}
+                'user_name': DEFAULT_USER_NAME, 'user_name_confirmed': False, 'team_dir': '', 'share_glossary': True}
+    merged = {**defaults, **{k: v for k, v in data.items() if k in defaults}}
+    # 1.2.42 and earlier wrote the old default 'Boran' into settings.json on any settings save, so a teammate's file
+    # can carry a stranger's name nobody typed. Only a name saved through save_settings (confirmed) counts.
+    if merged.get('user_name') == LEGACY_DEFAULT_NAME and not merged.get('user_name_confirmed'): merged['user_name'] = ''
+    return merged
 
 
 def save_settings(data_dir, changes):
@@ -62,7 +67,11 @@ def save_settings(data_dir, changes):
         elif key == 'audio_retention_days' and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
         # An empty name is stored, not dropped: "" means nobody, and the mic rows keep the neutral 'Ben' label.
-        elif key == 'user_name' and isinstance(value, str) and len(value.strip()) <= NAME_LIMIT: current[key] = value.strip()
+        elif key == 'user_name' and isinstance(value, str) and len(value.strip()) <= NAME_LIMIT:
+            # An empty value never wipes a stored name by accident (a settings sheet that opened before the name
+            # loaded used to do exactly that); clearing is explicit: {'user_name': '', 'user_name_clear': True}.
+            if value.strip() or not current.get('user_name') or (changes or {}).get('user_name_clear') is True:
+                current[key] = value.strip(); current['user_name_confirmed'] = bool(value.strip())
         # An unreachable team folder is refused rather than stored: the app would silently stop sharing.
         elif key == 'team_dir' and isinstance(value, str) and (not value.strip() or Path(value.strip()).expanduser().is_dir()): current[key] = value.strip()
     Path(data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -97,12 +106,13 @@ def rename_owner_segments(store, old, new):
     None when there is nothing to do. Analyses of the touched meetings go stale on their own: the speaker
     string is part of the transcript fingerprint, and owner attribution is exactly what an analysis reads."""
     if store is None: return None
-    meetings = segments = 0; renamed = []
+    segments = 0; renamed = []; touched = set()
     for target in owner_rename_targets(old, new):
         try: result = store.rename_mic_owner(target, new)
         except Exception: continue   # a settings write must never fail on the relabel
         if result['segments']:
-            meetings += result['meetings']; segments += result['segments']; renamed.append(target)
+            touched.update(result.get('meeting_ids') or []); segments += result['segments']; renamed.append(target)
+    meetings = len(touched)
     return {'meetings': meetings, 'segments': segments, 'renamed_from': renamed} if segments else None
 
 

@@ -181,7 +181,7 @@ class AnalysisUsageTests(unittest.TestCase):
     def test_junk_usage_and_a_missing_sink_never_break_an_analysis(self):
         from meeting_os.openrouter import analysis_usage_recorder, chat_usage
         for junk in (None,'lots',{'prompt_tokens':-4,'completion_tokens':float('nan'),'cost':True},[]):
-            self.assertEqual(chat_usage('someone/unpriced',junk),{'model':'someone/unpriced','prompt_tokens':0,'completion_tokens':0,'cost':0.0,'estimated':False})
+            self.assertIsNone(chat_usage('someone/unpriced',junk))   # nothing billable reported → no row, no made-up zero
         client=self.client({**self.RESPONSE,'usage':{'cost':0.1}})
         self.assertEqual(client.analysis('openai/gpt-4.1-mini',consent=True).complete('s','u'),'{"summary":[]}')   # no recorder installed
         def explode(model,usage): raise RuntimeError('disk full')

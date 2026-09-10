@@ -66,7 +66,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · ⌃⌥R ile kayıt başlat"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -233,7 +233,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     /// The window closed. Everything that made the refresh a good idea has to still hold; when it does not,
     /// the Özet tab keeps the offer instead of spending on a meeting nobody is looking at.
     func runScheduledSummaryRefresh(_ mid:String) {
-        guard selected==mid, meeting?.status=="complete" else { summaryStale=true; return }
+        guard selected==mid, meeting?.status=="complete" else { return }   // another meeting is open now: never badge it for this one
         guard analysis?["stale"] as? Bool == true else { summaryStale=false; return }
         guard !recording, recordProcess==nil, !zoomMeetingOpen else { summaryStale=true; return }
         if job != nil || busy { pendingSummaryRefresh=true; pendingSummaryMeeting=mid; summaryStale=true; activity="Özet, süren işlem bitince isimlerle yenilenecek"; return }
@@ -309,14 +309,16 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if ZoomWatch.shouldScan(tick:pollTick,autoRecord:zoomAutoRecord,zoomRunning:lastZoomState.running) { lastZoomState=ZoomWatch.state() }   // a full window-list walk on the main actor: only hands-free recording needs it every poll
             let zoomState=lastZoomState; let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
-            if !zoomNow { ZoomNotifier.reset() }
+            if !zoomNow { ZoomNotifier.reset(); nameRefusalNotified=false }
             if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
             applyLivePriority(zoomOpen:zoomState.strict || recordProcess != nil)   // any live recording (Zoom, Meet, in person) gets the same protection
             heartbeatIfDue()
             updateBlockedHint()
             idleRetryIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {
-            case .start: if let line=LaunchOutcome.activity(started:start(),onStart:"Zoom toplantısı açıldı · kayıt kendiliğinden başladı",onRefusal:startRefusal) { activity=line }
+            case .start:
+                if let line=LaunchOutcome.activity(started:start(),onStart:"Zoom toplantısı açıldı · kayıt kendiliğinden başladı",onRefusal:startRefusal) { activity=line }
+                if startRefusal==Model.nameRequiredMessage && !nameRefusalNotified { nameRefusalNotified=true; notifyDone("Kayıt başlamadı",Model.nameRequiredMessage) }   // nobody is looking at the status line during a Zoom call
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
@@ -330,7 +332,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 segmentsHash=result["segments_hash"] as? String ?? ""; lastSegmentsMeeting=wanted
                 resolvePendingEvidence()
                 let intel=result["intel_hash"] as? String ?? ""
-                if intel != intelHash || changed || analysis==nil && actions.isEmpty { intelHash=intel; try await refreshIntelligence(wanted) }
+                if intel != intelHash || changed || analysis==nil && actions.isEmpty { intelHash=intel; try await refreshIntelligence(wanted); if analysis?["stale"] as? Bool != true { summaryStale=false } else if summaryRefreshTask==nil && !pendingSummaryRefresh { summaryStale=true } }
                 if changed, !recording, meeting?.status=="complete" { await loadReview() }
             }
         } catch { self.error=error.localizedDescription }
@@ -702,6 +704,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     static let nameRequiredMessage="Önce adınızı yazın: kayıtta sizin sesiniz bu adla etiketlenir · Ayarlar → Genel"
     /// Why the last `start()` refused, so the caller does not paper over the reason with a different one.
     var startRefusal:String?
+    var settingsLoaded=false
+    var nameRefusalNotified=false   // hands-free Zoom: say "type your name" once per Zoom session, as a notification
     /// Bumped when a refused recording (or the settings sheet) should put the caret in the name field.
     @Published var userNameFocusToken=0
     /// The name the bridge last confirmed: what the stored microphone rows still carry, and therefore the
@@ -712,6 +716,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func saveUserName() async {
         let previous=storedUserName.trimmingCharacters(in:.whitespacesAndNewlines)
         let next=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines)
+        if next.isEmpty && !previous.isEmpty { reportSettings.userName=previous; return }   // an empty field never wipes a stored name
         reportSettings.userName=next
         // The bridge relabels earlier meetings itself when the name changes (`report_settings_set` → renamed_meetings);
         // a second explicit rename would only ever find 0 rows and hide the real count.
@@ -744,7 +749,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             UserDefaults.standard.set(status["time"] as? String ?? "",forKey:"lastShownUpdate"); activity=(state=="done" ? "Güncelleme tamam · " : "Güncelleme başarısız · ")+msg
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
-        if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName }
+        if let r=try? await request(["action":"report_settings"]) { reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName; settingsLoaded=true }
         if reportSettings.autoUpdate, update?.available==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
@@ -757,6 +762,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     /// Returns how many earlier meetings the bridge relabelled when the owner name changed (0 otherwise).
     @discardableResult func saveReportSettings() async -> Int {
+        // Settings are only ever pushed on top of what the bridge holds: a sheet opened before `report_settings`
+        // landed used to send user_name "" and erase the stored name.
+        if !settingsLoaded, let r=try? await request(["action":"report_settings"]) {
+            let stored=ReportSettings.parse(r); if reportSettings.userName.isEmpty { reportSettings.userName=stored.userName }; storedUserName=stored.userName; settingsLoaded=true
+        }
         do { let r=try await request(["action":"report_settings_set","changes":reportSettings.changes]); reportSettings=ReportSettings.parse(r); storedUserName=reportSettings.userName; return r["renamed_meetings"] as? Int ?? 0 } catch { self.error=error.localizedDescription; return 0 }
     }
     func loadGlossarySummary() async {

@@ -226,3 +226,11 @@ class DroppedCountTests(unittest.TestCase):
    report=reports.build_meeting_report(s,mid,Path(tmp))
    self.assertEqual((report['analysis']['dropped_quotes'],report['analysis']['dropped_items']),(1,0))
    s.close()
+
+
+class PronounOwnerTests(unittest.TestCase):
+    def test_first_person_owner_is_nobody(self):
+        from meeting_os.intelligence import canonical_owner
+        rows=[{'speaker_name':'Ayşe'},{'speaker_name':None}]
+        self.assertIsNone(canonical_owner('Ben',rows)); self.assertIsNone(canonical_owner('bizim',rows))
+        self.assertEqual(canonical_owner('Ayşe',rows),'Ayşe')

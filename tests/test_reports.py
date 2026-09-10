@@ -233,7 +233,8 @@ class UserNameTests(unittest.TestCase):
             self.assertEqual(reports.settings_owner(data),'Ayşe Yılmaz')
             for junk in ('x'*(reports.NAME_LIMIT+1),None,5,True,['Ayşe']):
                 self.assertEqual(reports.save_settings(data,{'user_name':junk})['user_name'],'Ayşe Yılmaz')
-            self.assertEqual(reports.save_settings(data,{'user_name':'   '})['user_name'],'')   # clearing the name is allowed and means nobody
+            self.assertEqual(reports.save_settings(data,{'user_name':'   '})['user_name'],'Ayşe Yılmaz')   # an empty value alone never wipes a name
+            self.assertEqual(reports.save_settings(data,{'user_name':'','user_name_clear':True})['user_name'],'')   # clearing is explicit and means nobody
             self.assertEqual(reports.save_settings(data,{'user_name':'x'*reports.NAME_LIMIT})['user_name'],'x'*reports.NAME_LIMIT)
             reports.settings_path(data).write_text(json.dumps({'user_name':'   '}),encoding='utf-8')
             self.assertEqual(reports.settings_owner(data),'')   # a blank value in the file is not a name
@@ -268,13 +269,13 @@ class MicOwnerRenameTests(unittest.TestCase):
     def test_rename_touches_every_meeting_and_the_stored_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             db=Path(tmp)/'meeting-os.sqlite';s,first,second=self.seed(db)
-            self.assertEqual(s.rename_mic_owner('Ben','Deniz'),{'meetings':2,'segments':2})
+            r=s.rename_mic_owner('Ben','Deniz'); self.assertEqual((r['meetings'],r['segments'],len(r['meeting_ids'])),(2,2,2))
             for mid in (first,second):
                 rows=s.segments(mid)
                 self.assertEqual([r['speaker'] for r in rows],['Deniz','S0'])   # payload follows the column
                 self.assertEqual([r['speaker'] for r in s.display_segments(mid)],['Deniz','S0'])
-            self.assertEqual(s.rename_mic_owner('Ben','Deniz'),{'meetings':0,'segments':0})   # idempotent
-            self.assertEqual(s.rename_mic_owner('Deniz','Deniz'),{'meetings':0,'segments':0})
+            self.assertEqual(s.rename_mic_owner('Ben','Deniz')['segments'],0)   # idempotent
+            self.assertEqual(s.rename_mic_owner('Deniz','Deniz')['segments'],0)
             with self.assertRaises(ValueError): s.rename_mic_owner('Deniz','  ')
             s.close()
     def test_rename_marks_the_analysis_of_a_touched_meeting_stale(self):
@@ -293,7 +294,7 @@ class MicOwnerRenameTests(unittest.TestCase):
         from meeting_os.desktop import dispatch
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp);db=data/'meeting-os.sqlite';s,first,_=self.seed(db);s.close()
-            self.assertEqual(dispatch({'action':'rename_mic_owner','old':'Ben','new':'Deniz'},db),{'meetings':2,'segments':2})
+            r=dispatch({'action':'rename_mic_owner','old':'Ben','new':'Deniz'},db); self.assertEqual((r['meetings'],r['segments']),(2,2))
             reports.save_settings(data,{'user_name':'Deniz'})
             saved=dispatch({'action':'report_settings_set','changes':{'user_name':'Deniz Yılmaz'}},db)   # correcting the name later
             self.assertEqual((saved['user_name'],saved['renamed_meetings'],saved['renamed_segments']),('Deniz Yılmaz',2,2))
@@ -483,3 +484,26 @@ class HomePathRedactionTests(unittest.TestCase):
             s.close()
             for text in (beat,report):
                 self.assertNotIn('/Users/ayse',text);self.assertIn('/Users/…',text)
+
+
+class LegacyDefaultNameTests(unittest.TestCase):
+    """1.2.42 persisted the old default 'Boran' on every settings save; only a typed name counts (10 Sep 2026)."""
+    def test_persisted_legacy_default_is_not_a_name(self):
+        import tempfile, json
+        from pathlib import Path
+        from meeting_os import reports
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp,'settings.json').write_text(json.dumps({'user_name':'Boran'}))
+            self.assertEqual(reports.settings_owner(tmp),'')
+            self.assertEqual(reports.owner_rename_targets('', 'Ayşe'),['Ben','Boran'])
+            saved=reports.save_settings(tmp,{'user_name':'Boran'})   # the real Boran types his own name
+            self.assertTrue(saved['user_name_confirmed']); self.assertEqual(reports.settings_owner(tmp),'Boran')
+    def test_empty_value_never_wipes_a_stored_name(self):
+        import tempfile
+        from meeting_os import reports
+        with tempfile.TemporaryDirectory() as tmp:
+            reports.save_settings(tmp,{'user_name':'Ayşe'})
+            reports.save_settings(tmp,{'user_name':'','share_text':True})
+            self.assertEqual(reports.settings_owner(tmp),'Ayşe')
+            reports.save_settings(tmp,{'user_name':'','user_name_clear':True})
+            self.assertEqual(reports.settings_owner(tmp),'')

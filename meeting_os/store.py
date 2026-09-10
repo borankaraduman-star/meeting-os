@@ -539,9 +539,9 @@ class Store:
         themselves, because the speaker string is part of the transcript fingerprint."""
         old = (old or '').strip(); new = (new or '').strip()
         if not new: raise ValueError('Yeni isim boş olamaz')
-        if not old or old == new: return {'meetings': 0, 'segments': 0}
+        if not old or old == new: return {'meetings': 0, 'segments': 0, 'meeting_ids': []}
         rows = self.db.execute("SELECT id,meeting,payload,speaker_name FROM segments WHERE source='mic' AND speaker=?", (old,)).fetchall()
-        if not rows: return {'meetings': 0, 'segments': 0}
+        if not rows: return {'meetings': 0, 'segments': 0, 'meeting_ids': []}
         meetings = {r['meeting'] for r in rows}
         with self.db:
             self.db.execute("UPDATE segments SET speaker=? WHERE source='mic' AND speaker=?", (new, old))
@@ -557,7 +557,7 @@ class Store:
                     for key in ('name', 'settled', 'suggested', 'candidate'):
                         if identity.get(key) == old: identity[key] = new
                 self.db.execute('UPDATE segments SET payload=? WHERE id=?', (json.dumps(payload, ensure_ascii=False), r['id']))
-        return {'meetings': len(meetings), 'segments': len(rows)}
+        return {'meetings': len(meetings), 'segments': len(rows), 'meeting_ids': sorted(meetings)}
     def rename_profile(self, name, new_name):
         """Rename a person; renaming onto an existing person merges the samples. Segment names follow."""
         new_name = (new_name or '').strip()
