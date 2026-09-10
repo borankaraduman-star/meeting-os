@@ -417,7 +417,7 @@ def dispatch(request, db=None):
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=app_version,commit=reports.repo_commit())}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G
-            if action=='glossary_apply_all': return G.apply_all(store,request['meeting'],verified_only=request.get('verified_only',True) is not False)
+            if action=='glossary_apply_all': return G.apply_all(store,request['meeting'],verified_only=request.get('verified_only',True) is not False,data_dir=DATA_DIR if db is None else Path(db).parent)
             if action=='glossary_dismiss': return G.dismiss_suggestion(store,request['meeting'],int(request['segment']),request['original'])
             if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent,shared=db is None)   # tests and private copies stay local
             base=DATA_DIR if db is None else Path(db).parent
@@ -426,7 +426,7 @@ def dispatch(request, db=None):
                 paths=[p for p in G.sources(base) if p.is_file()]
                 return {'count':len(entries),'from_file':from_file,'from_vocabulary':max(0,len(entries)-from_file),'sample':[e['term'] for e in entries[:8]],'path':str(paths[0]) if paths else str(G.shared_path() or (DATA_DIR/G.FILENAME)),'shared':any(G.shared_path() and p==G.shared_path() for p in paths)}
             entries=G.load(base,ROOT)
-            if action=='glossary_apply': return G.apply_suggestion(store,request['meeting'],int(request['segment']),request['original'],request['replacement'])
+            if action=='glossary_apply': return G.apply_suggestion(store,request['meeting'],int(request['segment']),request['original'],request['replacement'],data_dir=DATA_DIR if db is None else Path(db).parent)
             llm=None
             if request.get('openrouter_model'):
                 from .openrouter import OpenRouterClient,validate_analysis_model

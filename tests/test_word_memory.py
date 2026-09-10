@@ -283,3 +283,42 @@ class ApostropheTeachTests(unittest.TestCase):
             CM.teach(db,mid,"istanbul","İstanbul",tmp)
             self.assertEqual([x for x in db.segments(mid) if x['id']==sid][0]['text'],"İstanbul toplantısı")
             db.close()
+
+
+class GlossaryAcceptLearnsTests(unittest.TestCase):
+    def _db(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.types import Segment
+        tmp=tempfile.TemporaryDirectory(); db=Store(Path(tmp.name)/'db'); mid=db.create_meeting('t')
+        a=db.add_segment(mid,Segment(0,5,'AB Testi sonuçları geldi.','system','S1',flags=['cloud_transcript']))
+        b=db.add_segment(mid,Segment(6,9,'AB Testi bitince konuşuruz.','system','S1',flags=['cloud_transcript']))
+        import json
+        db.db.execute("UPDATE meetings SET metadata=? WHERE id=?",(json.dumps({'glossary_suggestions':[{'segment_id':a,'original':'AB Testi','replacement':'A/B Test','source':'llm'},{'segment_id':b,'original':'AB Testi','replacement':'A/B Test','source':'llm'}]}),mid)); db.db.commit()
+        return tmp,db,mid,a,b
+    def test_accepting_a_glossary_proposal_fixes_every_occurrence_and_stops_asking(self):
+        from meeting_os import glossary as G
+        from meeting_os.review import review_queue
+        tmp,db,mid,a,b=self._db()
+        r=G.apply_suggestion(db,mid,a,'AB Testi','A/B Test',tmp.name)
+        texts=[x['text'] for x in db.segments(mid)]
+        self.assertEqual(texts,['A/B Test sonuçları geldi.','A/B Test bitince konuşuruz.'])
+        self.assertTrue(r['learned']); self.assertEqual(r['remaining'],0)
+        # a new meeting with the same wording is fixed at finalize, not asked about
+        from meeting_os.types import Segment
+        from meeting_os.correction_memory import apply_rules
+        m2=db.create_meeting('u'); db.add_segment(m2,Segment(0,5,'Yeni AB Testi planı.','system','S1',flags=['cloud_transcript']))
+        apply_rules(db,m2,data_dir=tmp.name)
+        self.assertEqual([x['text'] for x in db.segments(m2)],['Yeni A/B Test planı.'])
+        q=review_queue(db,m2,tmp.name); items=q['items'] if isinstance(q,dict) else q
+        self.assertFalse([i for i in items if i['kind']=='glossary'])
+        db.close(); tmp.cleanup()
+    def test_dismissing_a_glossary_proposal_is_global(self):
+        from meeting_os import glossary as G
+        from meeting_os.review import review_queue
+        tmp,db,mid,a,b=self._db()
+        G.dismiss_suggestion(db,mid,a,'AB Testi')
+        q=review_queue(db,mid,tmp.name); items=q['items'] if isinstance(q,dict) else q
+        self.assertFalse([i for i in items if i['kind']=='glossary'])
+        db.close(); tmp.cleanup()

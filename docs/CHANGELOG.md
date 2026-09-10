@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 68 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 69 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.64](#v1264) | 2026-09-10 21:51 | Meeting OS 1.2.64 — Kontrol'de onaylanan sözlük düzeltmesi bir daha sorulmaz |
 | [v1.2.63](#v1263) | 2026-09-10 21:45 | Meeting OS 1.2.63 — ekip klasörü ortak bilgi tabanı: profiller ve kelimeler herkeste birikir |
 | [v1.2.62](#v1262) | 2026-09-10 21:34 | Meeting OS 1.2.62 — ekran paylaşırken göze batmaz |
 | [v1.2.61](#v1261) | 2026-09-10 21:19 | Meeting OS 1.2.61 — konuşma payı yine gözünüzün önünde |
@@ -88,6 +89,16 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1264"></a>
+### Meeting OS 1.2.64 — Kontrol'de onaylanan sözlük düzeltmesi bir daha sorulmaz
+
+2026-09-10 21:51 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "AB Testi → A/B Test diye birkaç kere düzelttim, hâlâ soruyor."
+- Kontrol'deki "Sözlük: X muhtemelen Y" maddesini onaylamak artık **öğretir**: bu toplantıdaki bütün geçişler düzelir, kural öğrenilen kelimelere girer (ekip klasörüne de yazılır) ve sonraki toplantılarda yazıya çevirme bitince kendiliğinden uygulanır; Kontrol aynı kelimeyi bir daha sormaz.
+- "Bu doğru" da bütün toplantılar için geçerli (aynı kelime başka toplantıda önerilmez).
+- "Tümünü uygula" da aynı şekilde öğretir.
 
 <a id="v1263"></a>
 ### Meeting OS 1.2.63 — ekip klasörü ortak bilgi tabanı: profiller ve kelimeler herkeste birikir

@@ -264,18 +264,30 @@ def refine_with_llm(cands, rows, entries, llm, limit=40):
     return out
 
 
-def apply_suggestion(store, mid, segment_id, original, replacement):
-    """Replace one span in one segment through the normal text-edit path (original text is preserved)."""
+def _learn(store, mid, original, replacement, data_dir):
+    """Accepting a glossary proposal is a lesson: the same wording is fixed everywhere in this meeting, the rule
+    is kept, and later meetings get it at finalize instead of asking again (Boran, 10 Sep 2026: "AB Testi →
+    A/B Test diye birkaç kere düzelttim, hâlâ soruyor"). Best-effort — the text edit already happened."""
+    try:
+        from .correction_memory import teach
+        return teach(store, mid, original, replacement, data_dir)
+    except Exception: return None
+
+
+def apply_suggestion(store, mid, segment_id, original, replacement, data_dir=None):
+    """Replace one span in one segment through the normal text-edit path (original text is preserved), then
+    teach the substitution so every other occurrence — here and in the next meetings — follows."""
     row = next((r for r in store.segments(mid) if r['id'] == segment_id), None)
     if not row: raise ValueError('Bölüm bulunamadı')
     text = row['text']
     if original not in text: raise ValueError('Önerilen bölüm metinde artık yok')
     store.correct_text(mid, segment_id, text.replace(original, replacement, 1))
+    learned = _learn(store, mid, original, replacement, data_dir)
     meta = json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?', (mid,)).fetchone()[0] or '{}')
-    remaining = [s for s in meta.get('glossary_suggestions') or [] if not (s.get('segment_id') == segment_id and s.get('original') == original)]
+    remaining = [s for s in meta.get('glossary_suggestions') or [] if not (s.get('original') == original)]   # every proposal of that wording is settled now
     meta['glossary_suggestions'] = remaining
     with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?', (json.dumps(meta), mid))
-    return {'applied': True, 'remaining': len(remaining)}
+    return {'applied': True, 'remaining': len(remaining), 'learned': learned is not None, 'fixes': (learned or {}).get('fixes', 0)}
 
 
 def _suggestions(store, mid):
@@ -289,14 +301,19 @@ def _save_suggestions(store, mid, meta, remaining):
 
 
 def dismiss_suggestion(store, mid, segment_id, original):
-    """Drop one proposal without touching the text; it will not come back until the next scan."""
+    """“Bu doğru”: drop every proposal of that wording in this meeting and remember the word globally, so no
+    later meeting asks about it again (the word dismissals table the Kontrol word items already honour)."""
     meta, current = _suggestions(store, mid)
-    remaining = [s for s in current if not (s.get('segment_id') == segment_id and s.get('original') == original)]
+    remaining = [s for s in current if not (s.get('original') == original)]
     _save_suggestions(store, mid, meta, remaining)
+    try:
+        from .correction_memory import dismiss_word
+        dismiss_word(store, mid, original)
+    except Exception: pass
     return {'dismissed': len(current) - len(remaining), 'remaining': len(remaining)}
 
 
-def apply_all(store, mid, verified_only=True):
+def apply_all(store, mid, verified_only=True, data_dir=None):
     """Apply every stored proposal (by default only the ones the analysis model accepted) in one pass.
     Proposals whose span no longer exists are dropped; each edit goes through the normal text-edit path."""
     meta, current = _suggestions(store, mid)
@@ -308,6 +325,7 @@ def apply_all(store, mid, verified_only=True):
         if not row or sg.get('original') not in text: skipped += 1; continue
         text = text.replace(sg['original'], sg['replacement'], 1)
         store.correct_text(mid, row['id'], text); row['text'] = text
+        _learn(store, mid, sg['original'], sg['replacement'], data_dir)
         applied.append({'segment_id': row['id'], 'original': sg['original'], 'replacement': sg['replacement']})
     _save_suggestions(store, mid, meta, remaining)
     return {'applied': len(applied), 'skipped': skipped, 'remaining': len(remaining), 'changes': applied}
