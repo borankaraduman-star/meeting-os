@@ -103,7 +103,9 @@ extension Model {
             // P0-3: the bundle's own CFBundleShortVersionString under `app.version` is what the Python side prefers;
             // no `commit` is sent, so the bridge falls back to the checkout's git hash for that.
             _=try? await request(["action":"heartbeat","app":["version":UpdateInfo.appVersion,"bridge":BridgeStats.shared.snapshot]])
-            if !recording, recordProcess==nil, job==nil, let r=try? await request(["action":"storage_housekeeping"]) {
+            // Not on the poll's bridge: the archive pass is seconds per meeting and the ten-second watchdog was
+            // SIGTERMing it every hour, so a library that had fallen behind could never catch up.
+            if !recording, recordProcess==nil, job==nil, let r=try? await requestSlow(["action":"storage_housekeeping"]) {
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
                 // One retention setting deletes a whole week of recordings on the same day; the warning comes first,
                 // while marking a meeting "Sesi koru" (or widening the setting) can still save it.

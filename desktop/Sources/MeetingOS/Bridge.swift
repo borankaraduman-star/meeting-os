@@ -17,6 +17,17 @@ enum Bridge {
             }
         }
     }
+    /// The housekeeping sweep archives every finished meeting's audio to FLAC and can legitimately run for
+    /// minutes. On the poll's queue it did two harmful things at once: it was killed at the ten-second
+    /// watchdog, so the archive never finished and the same work was attempted again the next hour, and while
+    /// it ran it held one of the two poll slots. Its own serial queue, its own deadline, and out of the
+    /// latency window — a ten-minute sweep in the p95 would make the settings card's poll figure meaningless.
+    static let slowQueue=DispatchQueue(label:"meetingos.bridge.slow",qos:.utility)
+    static func callSlow(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 600) async throws -> [String:Any] {
+        try await withCheckedThrowingContinuation { cont in
+            slowQueue.async { cont.resume(with:Result { try invoke(runtime,request,timeout:timeout) }) }
+        }
+    }
 }
 
 /// Rolling latency window of bridge calls. Pure arithmetic, testable.

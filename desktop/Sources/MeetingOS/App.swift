@@ -39,8 +39,11 @@ struct Row: Identifiable, Equatable {
         if let tail=speaker.split(separator:":").last, tail.hasPrefix("S"), let n=Int(tail.dropFirst()) { return "Konuşmacı \(n+1)" }
         return "İsimsiz konuşmacı"
     }
+    /// Built once for the process, not once per row: `notices` is read for all 1200+ rows of a long meeting
+    /// on every body pass, and a dictionary literal there allocated (and hashed) the whole table each time.
+    static let noticeLabels=["cloud_transcript":"Bulut transkript · OpenRouter", "cloud_diarization":"Konuşmacı ayrımı · sağlayıcı", "possible_echo":"Hoparlör yankısı olabilir · mikrofon sistem sesini almış", "coarse_timing":"Yaklaşık konuşma aralığı", "imported_text":"Elle aktarılan metin", "speaker_unverified":"Konuşmacı adı doğrulanmadı", "provisional":"Canlı metin · değişebilir", "short_context_diarization":"Konuşmacı için kısa ses örneği", "speaker_ambiguous":"Konuşmacı belirsiz / sesler çakışıyor", "low_asr_confidence":"Bu bölümü dinleyerek kontrol edin", "possible_non_speech":"Konuşma dışı ses olabilir", "repetition":"Tekrar algılandı", "confidence_unavailable":"Güven ölçümü yok", "baseline_diarization":"Temel konuşmacı ayrımı"]
     var notices:String {
-        let labels=["cloud_transcript":"Bulut transkript · OpenRouter", "cloud_diarization":"Konuşmacı ayrımı · sağlayıcı", "possible_echo":"Hoparlör yankısı olabilir · mikrofon sistem sesini almış", "coarse_timing":"Yaklaşık konuşma aralığı", "imported_text":"Elle aktarılan metin", "speaker_unverified":"Konuşmacı adı doğrulanmadı", "provisional":"Canlı metin · değişebilir", "short_context_diarization":"Konuşmacı için kısa ses örneği", "speaker_ambiguous":"Konuşmacı belirsiz / sesler çakışıyor", "low_asr_confidence":"Bu bölümü dinleyerek kontrol edin", "possible_non_speech":"Konuşma dışı ses olabilir", "repetition":"Tekrar algılandı", "confidence_unavailable":"Güven ölçümü yok", "baseline_diarization":"Temel konuşmacı ayrımı"]
+        let labels=Row.noticeLabels
         let shown=flags.contains("cloud_transcript") ? flags.filter { !TranscriptBlocks.meetingWideFlags.contains($0) } : flags
         return shown.filter { $0 != "untimed" }.map { labels[$0] ?? $0 }.joined(separator:" · ")
     }
@@ -49,13 +52,16 @@ struct Row: Identifiable, Equatable {
 struct Profile:Identifiable, Equatable { let name:String; let model:String; let samples:Int; var id:String { name+model } }
 struct Runtime:Decodable { let python:String; let repo:String }
 
-func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
+/// One bridge call. `timeout` is the watchdog: ten seconds is right for the poll and for everything the user
+/// is waiting on, and wrong for the hourly housekeeping sweep, whose FLAC archive pass takes seconds per
+/// meeting and was being SIGTERMed mid-archive every hour. Callers that know they are slow pass their own.
+func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) throws -> [String:Any] {
     let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os.desktop"]; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo)
     let key=OpenRouterCredential.environment(); if !key.isEmpty { p.environment=ProcessInfo.processInfo.environment.merging(key) { _,new in new } }
     let input=Pipe(), output=Pipe(); p.standardInput=input; p.standardOutput=output; p.standardError=FileHandle.nullDevice
     try p.run()
     let deadline=DispatchWorkItem { if p.isRunning { kill(-p.processIdentifier,SIGTERM); p.terminate() } }
-    DispatchQueue.global().asyncAfter(deadline:.now()+10, execute:deadline)
+    DispatchQueue.global().asyncAfter(deadline:.now()+timeout, execute:deadline)
     defer { deadline.cancel() }
     try input.fileHandleForWriting.write(contentsOf:JSONSerialization.data(withJSONObject:request)); try input.fileHandleForWriting.close()
     let data=output.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
@@ -66,7 +72,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
 
 @MainActor final class Model:ObservableObject {
     @Published var meetings:[Meeting]=[]; @Published var rows:[Row]=[] { didSet { rebuildBlocks(); shares=TalkShare.compute(rows) } }; @Published var profiles:[Profile]=[]
-    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { focusedSegment=nil; pendingEvidence=nil; rebuildBlocks() } }; @Published var title=""; @Published var error=""
+    @Published var selected:String? { didSet { if selected != oldValue { recordingNavigation.selectionChanged(); error=""; canUndoNaming=false; summaryStale=false; summaryRefreshTask?.cancel(); summaryRefreshTask=nil; pendingSummaryRefresh=false; pendingSummaryMeeting=""; rows=[]; analysis=nil; search=""; pendingEvidence=nil; focusedSegment=nil; segmentsHash=""; intelHash=""; renaming=false; renameText="" } } }; @Published var search="" { didSet { guard search != oldValue else { return }; focusedSegment=nil; pendingEvidence=nil; scheduleSearchRebuild() } }; @Published var title=""; @Published var error=""
     @Published var activity="Hazır · ⌃⌥R ile kayıt başlat"; @Published var recording=false; @Published var busy=false
     @Published var showOpenRouter=false
     @Published var deleteCandidate:Meeting?
@@ -88,6 +94,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var pressureSource:DispatchSourceMemoryPressure?
     var requestedQuit=false
     @Published var jobKind:String?; @Published var jobCanceled=false
+    /// Whether the running job was launched throttled (idle retry, or a job started under a live meeting).
+    /// Only the ETA reads it: such a job is meant to take longer, so its estimate is allowed a longer cap.
+    var jobLowPriority=false
     @Published var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
     let playback=PlaybackState()   // which span is playing; observed only by the play buttons, not the transcript layout
     init() {
@@ -246,10 +255,27 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     @Published var readingMode=true
     @Published var showAsides=false
     @Published var hideFillers=UserDefaults.standard.object(forKey:"hideFillers") as? Bool ?? true { didSet { UserDefaults.standard.set(hideFillers,forKey:"hideFillers") } }
+    /// The filter itself. Every reader goes through the cached `visibleRows` instead: this walks the whole
+    /// transcript twice (echo filter, then the search match) and the view body runs many times per keystroke.
     var filteredRows:[Row] {
         if let id=focusedSegment { return rows.filter { $0.id==id } }
         let visible=CloudTranscription.visibleRows(rows,showEcho:showEchoRows)
         return search.isEmpty ? visible : visible.filter { ($0.text+" "+$0.label).localizedCaseInsensitiveContains(search) }
+    }
+    /// What the Bölümler list renders: the filter's result, computed once per rebuild alongside the paragraphs.
+    @Published private(set) var visibleRows:[Row]=[]
+    /// Typing "kar" used to rebuild 1200 paragraphs three times. One rebuild per pause instead; 150 ms is below
+    /// the point where the list feels like it lags the keyboard, and above a fast typist's inter-key gap.
+    var searchDebounce:Task<Void,Never>?
+    func scheduleSearchRebuild() {
+        searchDebounce?.cancel(); searchDebounce=nil
+        // Clearing the field is not typing: the full transcript comes back at once, with no pause to explain.
+        guard !search.isEmpty else { rebuildBlocks(); return }
+        searchDebounce=Task { [weak self] in
+            try? await Task.sleep(nanoseconds:150_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.searchDebounce=nil; self.rebuildBlocks()
+        }
     }
     /// Reading-view paragraphs, rebuilt only when their inputs change. The 2-second status poll must not
     /// re-run block building for every published field (a 1500-row day would pin the CPU again).
@@ -258,9 +284,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     func rebuildBlocks() {
         var h=Hasher(); h.combine(rows.count); h.combine(rows.last?.id ?? -1); h.combine(showEchoRows); h.combine(search); h.combine(focusedSegment ?? -1); h.combine(rows.map { $0.name+$0.text }.joined().hashValue)
         let key=h.finalize(); if key==blocksKey && !blocks.isEmpty { return }
-        blocksKey=key; blocks=TranscriptBlocks.build(filteredRows)
+        blocksKey=key
+        let visible=filteredRows   // one pass feeds both the paragraph builder and the Bölümler list
+        if visibleRows != visible { visibleRows=visible }
+        blocks=TranscriptBlocks.build(visible)
     }
     func request(_ req:[String:Any]) async throws -> [String:Any] { try await Bridge.call(runtime,req) }
+    /// For the few actions that are allowed to take minutes (the housekeeping sweep). Off the poll's queue and
+    /// off its watchdog; never used for anything the user is standing in front of.
+    func requestSlow(_ req:[String:Any],timeout:TimeInterval = 600) async throws -> [String:Any] { try await Bridge.callSlow(runtime,req,timeout:timeout) }
     var jobStopsOnPressure=false
     func stopForResources() {
         guard let process=job,
@@ -277,7 +309,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         if job != nil, let started=jobStarted {
             let elapsed=Int(Date().timeIntervalSince(started))
             let progress=progressURL.flatMap { try? Data(contentsOf:$0) }.flatMap { try? JSONDecoder().decode(JobProgress.self,from:$0) }
-            let line=(progress?.line(elapsed:Double(elapsed)) ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"; if jobs.jobProgress != line { jobs.jobProgress=line }
+            let line=(progress?.line(elapsed:Double(elapsed),lowPriority:jobLowPriority) ?? activity)+" · \(elapsed/60) dk \(elapsed%60) sn"; if jobs.jobProgress != line { jobs.jobProgress=line }
         }
         guard !refreshing else { return }; refreshing=true
         let wanted=selected ?? ""
@@ -294,6 +326,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             if nextProfiles != profiles { profiles=nextProfiles }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
                 if let target=recordingNavigation.resolve(active:active.id) { selected=target }
+                // Disk is journalled on every chunk, not with the 6-second signal analysis: read it on every poll.
+                let lowDisk=CaptureSignalPresentation.lowDisk(active.capture) ?? ""
+                if recorder.lowDiskNotice != lowDisk { recorder.lowDiskNotice=lowDisk }
                 if active.capture["signals"] != nil {   // polls without signal analysis keep the last reading
                     let label=CaptureSignalPresentation.label(active.capture); if activity != label { activity=label }
                     let dots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
@@ -316,7 +351,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            if ZoomWatch.shouldScan(tick:pollTick,autoRecord:zoomAutoRecord,zoomRunning:lastZoomState.running) { lastZoomState=ZoomWatch.state() }   // a full window-list walk on the main actor: only hands-free recording needs it every poll
+            if ZoomWatch.shouldScan(tick:pollTick,autoRecord:zoomAutoRecord,zoomRunning:lastZoomState.running) { lastZoomState=await ZoomWatch.stateAsync() }   // the window-list walk runs off the main actor; only the running-app list is read here
             let zoomState=lastZoomState; let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset(); nameRefusalNotified=false }
@@ -361,15 +396,17 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
             let handle=try FileHandle(forWritingTo:log)
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
-            if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobs.jobProgress="İşlem başlatılıyor" }
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(jobEnvironment) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let zoomOpen=zoomMeetingOpen || recordProcess != nil
+            let throttled = !JobPriority.environment(args:args,zoomOpen:zoomOpen,idle:idle).isEmpty
+            if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobLowPriority=throttled;jobs.jobProgress="İşlem başlatılıyor" }
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(jobEnvironment) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomOpen,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomOpen,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
                 Task { @MainActor in
                     guard let self=self else { return }
                     if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; try? FileManager.default.removeItem(at:progress) }
-                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; JobSleepGuard.end(); try? FileManager.default.removeItem(at:progress) }
+                    else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobLowPriority=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; JobSleepGuard.end(); try? FileManager.default.removeItem(at:progress) }
                     if process.terminationStatus != 0 && !self.jobCanceled { self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage }
                     complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
                     // Quitting is not the moment to start an upload: the queued meetings keep their audio and the
@@ -395,14 +432,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         // the second one loses a meeting the user was ready to have. Settings first, then the name.
         guard settingsLoaded else { startRefusal=Model.settingsLoadingMessage; return false }
         guard hasUserName else { startRefusal=Model.nameRequiredMessage; return false }
+        // A meeting that dies at minute 40 because the disk filled is worse than one that never started, so the
+        // volume is measured here rather than discovered by the helper. Only a genuinely full disk refuses;
+        // between 600 MB and 1,5 GB the user is told and still gets the recording.
+        let freeBytes=DiskSpace.free(at:dataDir)
+        let diskNotice=DiskSpace.startNotice(freeBytes:freeBytes)
+        if DiskSpace.refuses(freeBytes:freeBytes) { startRefusal=diskNotice; return false }
         stopPlayback()   // never play audio into the room during a recording
         guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; continuitySeen=nil; sleptAt=nil; activity="Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
+        recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; recorder.lowDiskNotice=diskNotice ?? ""; continuitySeen=nil; sleptAt=nil; activity=diskNotice ?? "Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); if showRecorderPanel { RecorderPanel.show(model:self) }
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
-        if title.isEmpty, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
+        if title.isEmpty, diskNotice==nil, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
         recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         jobTitle=name
@@ -956,6 +999,9 @@ func statusLabel(_ status:String)->String {
     @Published var elapsedText="00:00"
     @Published var captureDots:[String:String]=[:]
     @Published var recordingNotice=""
+    /// "Disk azalıyor · 1,2 GB boş · kayıt 69 dk sonra durabilir". Seeded by ⌃⌥R when the volume is already
+    /// tight, then kept honest by the helper's own `low_disk` line on every poll. Empty means there is room.
+    @Published var lowDiskNotice=""
 }
 
 @MainActor final class JobState:ObservableObject { @Published var jobProgress="" }
