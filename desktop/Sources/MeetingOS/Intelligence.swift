@@ -110,7 +110,7 @@ struct AnalysisView:View {
     /// Which items show their evidence. It lives here, not on the Model: nothing else needs to know,
     /// and a meeting change wipes it (`.task(id:)` below).
     @State private var expanded:Set<String>=[]
-    @State private var showTalkShare=false
+    @AppStorage("summaryTalkShareOpen") private var showTalkShare=true   // who spoke how much is worth seeing at a glance; folding it is the user's choice and is remembered
     let categories=[("summary","Özet"),("decisions","Kararlar"),("risks","Riskler"),("questions","Açık sorular")]
     var stale:Bool { m.analysis?["stale"] as? Bool == true }
     var body:some View { ScrollView { VStack(alignment:.leading,spacing:16) {
@@ -144,5 +144,5 @@ struct AnalysisView:View {
                 .inlineNoticeArea()
         }
     }.padding(24).readingColumn()
-        .task(id:m.selected) { expanded=[];showTalkShare=false;await m.loadContinuity() } } }
+        .task(id:m.selected) { expanded=[];await m.loadContinuity() } } }
 }

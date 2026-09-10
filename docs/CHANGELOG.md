@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 65 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 66 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.61](#v1261) | 2026-09-10 21:19 | Meeting OS 1.2.61 — konuşma payı yine gözünüzün önünde |
 | [v1.2.60](#v1260) | 2026-09-10 21:16 | Meeting OS 1.2.60 — ekran kaydı izni neden isteniyor, kartta yazıyor |
 | [v1.2.59](#v1259) | 2026-09-10 21:10 | Meeting OS 1.2.59 — ortalı boş durumlar, her sayfada ✕, Geri düğmesi |
 | [v1.2.58](#v1258) | 2026-09-10 20:50 | Meeting OS 1.2.58 — tıkla-düzelt ve Özet'e ikinci görüş düzeltmeleri |
@@ -85,6 +86,13 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1261"></a>
+### Meeting OS 1.2.61 — konuşma payı yine gözünüzün önünde
+
+2026-09-10 21:19 · yerel not · GitHub sürüm sayfası yok
+
+- Özet'te "Konuşma payı" (kim ne kadar konuştu) çubukları yeniden varsayılan olarak açık; katlarsanız tercihiniz hatırlanır (toplantı değişince kapanmaz).
 
 <a id="v1260"></a>
 ### Meeting OS 1.2.60 — ekran kaydı izni neden isteniyor, kartta yazıyor
