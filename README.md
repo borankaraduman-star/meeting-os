@@ -1,10 +1,11 @@
 # Meeting OS — yerel toplantı hafızası
 
-Mac uygulaması ve CLI: ayrı mikrofon/sistem sesi, canlı Türkçe transkript,
-toplantı sonunda nihai metin, konuşmacı ayrımı ve kalıcı ses
-profilleri. Yerel özet, karar, risk, açık soru ve görev çıkarımı; kendi görev
-kuyruğu; kaynaklı arşiv araması ve görev taslakları. Varsayılan işleme bu Mac’te
-yapılır; ücretli inference API’si veya otomatik dış servis aksiyonu yoktur.
+Mac uygulaması ve CLI: ayrı mikrofon/sistem sesi, toplantı bitince OpenRouter’da
+Türkçe transkript ve konuşmacı ayrımı, kalıcı ses profilleri. Özet, karar, risk,
+açık soru ve görev çıkarımı; kendi görev kuyruğu; kaynaklı arşiv araması ve görev
+taslakları. Varsayılan yol buluttur (ücretli OpenRouter API’si); bu Mac’te model
+yüklemek için Ayarlar → Sistem → Yazıya çevirme → Yerel model seçilir. Otomatik
+dış servis aksiyonu yoktur.
 
 ![Meeting OS tek bakışta](docs/img/tanitim.png)
 
@@ -26,29 +27,32 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    ve ekran/sistem sesi izinlerini onaylayın. İzinler gerekirse **System Settings
    → Privacy & Security → Microphone / Screen & System Audio Recording** içinde
    **Meeting OS** için açılır. İzin değişikliğinden sonra uygulamayı yeniden açın.
-2. Mikrofon ve sistem sesi ayrı WAV dosyalarına kaydedilir. Canlı metin geçicidir;
-   kayıt devam ederken anonim konuşmacıların numaraları kalıcı kimlik değildir.
-3. **Kaydı bitir** sesi kapatır, bekleyen parçaları işler ve yerel modelle nihai
-   transkripti ayrı bir arşiv kaydı olarak oluşturur. Canlı kayıt kurtarma için korunur.
+2. Mikrofon ve sistem sesi ayrı WAV dosyalarına kaydedilir. Bulut modunda kayıt
+   sırasında canlı metin yoktur; metin, isimler ve özet kayıt bitince gelir.
+3. **Kaydı bitir** sesi kapatır ve parçaları OpenRouter’a gönderir; nihai transkript
+   oradan döner. Yerel modeldeyseniz aynı metin bu Mac’te üretilir. Ses kurtarma
+   için korunur.
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
 5. **Özet** ekranında her maddenin kaynak alıntısını kontrol edin.
    Kayıt son işlemi ve dosya içe aktarımı bittiğinde yerel analiz otomatik başlar.
-   İsim/metin düzeltince analiz eski işaretlenir; **Analizi güncelle** seçin.
-6. Aynı kişinin sonraki toplantılarda tanınması için en az 3 saniyelik temiz,
-   tek konuşmacılı bir bölümü dinleyin; temiz ses onayını işaretleyip **Ses
-   profilini kaydet** seçin. İsim düzeltmek tek başına profil eğitmez. Gürültülü,
+   İsim/metin düzeltince analiz eski işaretlenir; Özet sekmesinin sağ üstündeki
+   **Özeti güncelle** ile yenileyin.
+6. Aynı kişinin sonraki toplantılarda tanınması için temiz, tek konuşmacılı bir
+   bölümü dinleyin; **Düzelt → Gelişmiş** altındaki “Dinledim: en az 6 saniye, tek
+   kişi, temiz ses” kutusunu işaretleyip **Adlandır ve öğren** seçin. İsim
+   düzeltmek tek başına profil eğitmez. Gürültülü,
    çakışan veya kısa bağlamlı örnekler reddedilir. Aynı adlı farklı kişilere
    ayırt edici adlar verin. Belirsiz eşleşmeler isimsiz kalır.
 
-Kenar çubuğundaki **Yazıya çevirme** seçimi varsayılan olarak OpenRouter’dır: kayıt bitince ses seçili modele gönderilir, bu Mac’te model yüklenmez, konuşmacı ayrımı sağlayıcıdan gelir (varsayılan Deepgram Nova-3). Bu modda kayıt sırasında canlı metin yoktur. Bitmemiş kayıtlar başlıktaki **OpenRouter ile yazıya çevir** ile gönderilir. Kayıtlı ses dosyaları **OpenRouter ile ses aç** üzerinden yazıya çevrilir; yerel
-`import` ve `transcript_import` yolları CLI’de durur, kenar çubuğunda düğmeleri yoktur.
+Ayarlar (⌘,) → Sistem → **Yazıya çevirme** seçimi varsayılan olarak OpenRouter’dır: kayıt bitince ses seçili modele gönderilir, bu Mac’te model yüklenmez, konuşmacı ayrımı sağlayıcıdan gelir (varsayılan **Microsoft MAI-Transcribe 2**, ≈ $0,10/saat). Bu modda kayıt sırasında canlı metin yoktur. Bitmemiş kayıtlar toplantının üstündeki kurtarma şeridinde **Bulutta yazıya çevir** ile gönderilir. Kayıtlı ses dosyaları kenar çubuğundaki **⋯ → Ses dosyası aç…** ile yazıya çevrilir; yerel
+`import` yolu yalnız CLI’de durur, kenar çubuğunda düğmesi yoktur.
 Bir toplantıyı silmek için listede sağ tıklayıp **Toplantıyı sil…** seçin veya
 başlıktaki çöp kutusunu kullanın; onaydan sonra transkript, düzeltmeler, özet,
 görevler ve toplantıya ait ses klasörü silinir, ses profilleri korunur. Üzerinde iş
 süren toplantı silinemez. Arama seçili toplantının metnini ve konuşmacılarını
 filtreler. Markdown, SRT ve JSON dışa aktarımı vardır; JSON export ses vektörlerini
-içermez. **Sözlük ve ses profilleri** bölümünde kişi adlarını ve PM terimlerini
+içermez. **Sesler ve sözlük** bölümünde kişi adlarını ve PM terimlerini
 satır satır ekleyebilir, kaydedilmiş profilleri silebilirsiniz.
 
 ## Güncelleme ve iki Mac arası akış
@@ -59,9 +63,9 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 
 - **Menü çubuğu simgesi** (dalga) her uygulamanın üstünde: tek tıkla kayıt başlat/bitir, süre, an işaretleri, Kontrol’e geç. **⌃⌥R** ve **⌃⌥M** sistem geneli kısayollardır; Zoom öndeyken de çalışır, Erişilebilirlik izni gerektirmez. Zoom toplantı penceresi açıkken simge ve kenar çubuğu bunu belirtir.
 - **⌘R** kaydı başlatır/bitirir. Kayıt sırasında **⌘M** önemli an, **⌘⇧M** karar, **⌘⌥M** bana görev, **⌘⌃M** sonra bak işareti koyar; işaretler kayıt bitince Kontrol sekmesinin en üstünde ve ilgili paragrafta görünür.
-- **Kontrol** sekmesi bütün metni okumak yerine şüpheli yerleri sıralar: onay bekleyen isim (“Sol Üst?” → Onayla), isimsiz konuşmacı, çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev. Altında kimlik karnesi (otomatik doğru/yanlış, öneri onay/red, kaçırılan, metin düzeltmesi) vardır.
+- **Kontrol** sekmesi bütün metni okumak yerine şüpheli yerleri sıralar: onay bekleyen isim (“Sol Üst?” → Onayla), isimsiz konuşmacı, çakışan konuşma, kısa sesle tanıma, sahibi belirsiz görev. Altında **Adlandırma isabeti** satırı (otomatik doğru/yanlış, öneri onay/red, kaçırılan, metin düzeltmesi) ve onun altında haftalık **Öğrenme** satırı (bu haftaki kendiliğinden tanıma oranı, önceki hafta, 1000 kelimede düzeltme) vardır.
 - **Okuma görünümü** aynı kişinin ardışık bölümlerini paragraf yapar, “hı hı/tabii” araya girişlerini katlar, dolgu seslerini gizler (kapatılabilir). **Bölümler** ham kayıtları gösterir.
-- **Ayarlar → Depolama → Eski sesleri temizle:** 30/60/90/180 günden eski, tamamlanmış toplantıların yalnız ses dosyalarını siler; transkript, özet, görevler ve profiller kalır. Önce silinecekler listelenir; “Sesi koru” işaretli toplantılara dokunulmaz.
+- **Ayarlar → Sistem → Gelişmiş → Eski sesleri temizle:** 30/60/90/180 günden eski, tamamlanmış toplantıların yalnız ses dosyalarını siler; transkript, özet, görevler ve profiller kalır. Önce silinecekler listelenir; “Sesi koru” işaretli toplantılara dokunulmaz.
 - **Dışa aktar → Belge hazırla (bulut):** toplantıdan PRD, hata raporu, müşteri talebi veya Claude Code istemi; bilinen/eksik ayrımı, kaynak bölümler, kaynakta olmayan sayı reddi. **Dışa aktar → Paylaş…** isim maskeleme ve yalnız kararlar seçenekleriyle önizleme.
 - **Görevlerim:** önceki toplantıdaki benzer görev gösterilir, “Aynı görev, eskisini kapat” ile bağlanır; Özet’te kararların önceki hâli listelenir. **Gün sonu özeti…** yalnız sana düşenleri toplar.
 - **Düzelt → Neden bu isim?** ses profili puanlarını ve eşikleri gösterir; Ayarlar’da kişi başına örnekler silinebilir, isimler birleştirilebilir.
@@ -77,7 +81,7 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 
 ## Proje sözlüğü (terimler, kısaltmalar, isimler)
 
-İçe aktarılan sözlük `iCloud Drive/MeetingOS-Shared/glossary.jsonl` dosyasına yazılır ve bütün Mac’lerde okunur (Sözlük ve ses profilleri → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`); `~/Library/Application Support/MeetingOS/glossary.jsonl` varsa Mac’e özel ek/üstüne yazma olarak önce okunur. Git deposuna girmez. iCloud Drive tek Apple Kimliğine bağlı olduğu için ekip için Ayarlar → Sözlük ve sesler → **Ekip klasörü** vardır: ortak klasör seçilince sözlük `<ekip klasörü>/glossary.jsonl` ile birleştirilerek okunur/yazılır (yerel dosya önceliklidir, ekip dosyası yalnız eksikleri tamamlar) ve teşhis raporları kişisel klasör yerine `<ekip klasörü>/reports/<mac-adı>/` altına yazılır. Ses, transkript ve ses profilleri bu klasöre girmez. Her satır bir JSON nesnesi:
+İçe aktarılan sözlük `iCloud Drive/MeetingOS-Shared/glossary.jsonl` dosyasına yazılır ve bütün Mac’lerde okunur (Ayarlar → Sesler ve sözlük → **glossary.jsonl içe aktar…**, veya CLI `glossary import dosya.jsonl`); `~/Library/Application Support/MeetingOS/glossary.jsonl` varsa Mac’e özel ek/üstüne yazma olarak önce okunur. Git deposuna girmez. iCloud Drive tek Apple Kimliğine bağlı olduğu için ekip için Ayarlar → Sesler ve sözlük → **Ekip klasörü** vardır: ortak klasör seçilince sözlük `<ekip klasörü>/glossary.jsonl` ile birleştirilerek okunur/yazılır (yerel dosya önceliklidir, ekip dosyası yalnız eksikleri tamamlar) ve teşhis raporları kişisel klasör yerine `<ekip klasörü>/reports/<mac-adı>/` altına yazılır. Ses, transkript ve ses profilleri bu klasöre girmez. Her satır bir JSON nesnesi:
 
 ```
 {"term":"PMD","expansion":"Product Management Daily","category":"kısaltma","aliases":["pi em di"],"mishearings":["pemede","PMB"],"context":"ürün ekibinin günlük toplantısı","confidence":"yüksek","source_count":14}
