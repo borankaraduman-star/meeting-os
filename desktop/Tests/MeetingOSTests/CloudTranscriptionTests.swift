@@ -91,6 +91,31 @@ final class ZoomWatchTests:XCTestCase {
         XCTAssertTrue(ZoomWatch.meetingOpen(windows:share,runningBundles:["us.zoom.xos"],strict:true))   // screen share hides the meeting window
         XCTAssertEqual(GlobalHotkeys.keyName(GlobalHotkeys.record),"⌃⌥R")
     }
+    /// One walk of the window list must answer exactly what two separate walks answered.
+    func testOnePassAgreesWithBothSeparateReads() {
+        let bundles:Set<String>=["us.zoom.xos"]
+        let cases:[[[String:Any]]]=[
+            [["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Meeting","kCGWindowLayer":0],["kCGWindowOwnerName":"Safari","kCGWindowName":"Zoom Meeting tips","kCGWindowLayer":0]],
+            [["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Workplace","kCGWindowLayer":0]],
+            [["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Workplace","kCGWindowLayer":25]],
+            [["kCGWindowOwnerName":"zoom.us","kCGWindowName":"zoom share toolbar window","kCGWindowLayer":25]],
+            [["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Workplace","kCGWindowLayer":0],["kCGWindowOwnerName":"zoom.us","kCGWindowName":"Zoom Meeting","kCGWindowLayer":0]],
+            [["kCGWindowOwnerName":"Safari","kCGWindowName":"Zoom Meeting tips","kCGWindowLayer":0]],
+            []]
+        for windows in cases {
+            let f=ZoomWatch.flags(windows:windows,runningBundles:bundles)
+            XCTAssertEqual(f.open,ZoomWatch.meetingOpen(windows:windows,runningBundles:bundles))
+            XCTAssertEqual(f.strict,ZoomWatch.meetingOpen(windows:windows,runningBundles:bundles,strict:true))
+        }
+        XCTAssertFalse(ZoomWatch.flags(windows:cases[0],runningBundles:["com.apple.Safari"]).open)   // Zoom is not running
+    }
+    /// The scan walks every window on the Mac on the main actor: only hands-free recording pays for it every poll.
+    func testTheWindowScanIsCheapUnlessHandsFreeRecordingNeedsIt() {
+        XCTAssertTrue(ZoomWatch.shouldScan(tick:3,autoRecord:false,zoomRunning:true))
+        XCTAssertFalse(ZoomWatch.shouldScan(tick:4,autoRecord:false,zoomRunning:true))
+        XCTAssertFalse(ZoomWatch.shouldScan(tick:4,autoRecord:true,zoomRunning:false))
+        XCTAssertTrue(ZoomWatch.shouldScan(tick:4,autoRecord:true,zoomRunning:true))
+    }
 }
 final class IdentityExplanationTests:XCTestCase {
     func testVerdictsFollowThresholds() {

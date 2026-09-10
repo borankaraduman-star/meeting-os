@@ -273,7 +273,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
             }
             if selected==nil && !recording { selected=meetings.first?.id }
-            if recording || job != nil || pollTick%3==0 { lastZoomState=ZoomWatch.state() }   // window-list scan: every poll only while something runs
+            if ZoomWatch.shouldScan(tick:pollTick,autoRecord:zoomAutoRecord,zoomRunning:lastZoomState.running) { lastZoomState=ZoomWatch.state() }   // a full window-list walk on the main actor: only hands-free recording needs it every poll
             let zoomState=lastZoomState; let zoomNow=zoomState.open
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord { ZoomNotifier.notifyIfNeeded() }
             if !zoomNow { ZoomNotifier.reset() }
