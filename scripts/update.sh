@@ -16,7 +16,12 @@ status running "$FROM" "Uygulamanın kapanması bekleniyor"
 i=0; while pgrep -x MeetingOS >/dev/null && [ $i -lt 60 ]; do sleep 1; i=$((i+1)); done
 if pgrep -x MeetingOS >/dev/null; then status failed "$FROM" "Uygulama kapanmadı; güncelleme iptal"; exit 1; fi
 if [ -n "$(git status --porcelain)" ]; then status failed "$FROM" "Yerel değişiklikler var; güncelleme yapılmadı"; exit 1; fi
-if ! git fetch origin v0.1; then status failed "$FROM" "GitHub'a ulaşılamadı"; exit 1; fi
+if ! git fetch --tags origin v0.1; then status failed "$FROM" "GitHub'a ulaşılamadı"; exit 1; fi
+# Only released states are installed: the tip of origin/v0.1 must carry a release tag (vX.Y.Z). A half-finished
+# push or a stray commit never lands on a teammate's Mac. Set MEETING_OS_UPDATE_UNTAGGED=1 to override on a dev Mac.
+if [ -z "${MEETING_OS_UPDATE_UNTAGGED:-}" ] && ! git describe --tags --exact-match --match 'v*' origin/v0.1 >/dev/null 2>&1; then
+  status failed "$FROM" "GitHub'daki son commit yayınlanmış bir sürüm değil; güncelleme bekletildi"; exit 1
+fi
 if ! git merge --ff-only origin/v0.1; then status failed "$FROM" "Dal ileri sarılamadı"; exit 1; fi
 TO="$(git rev-parse --short HEAD)"
 status running "$TO" "Bağımlılıklar kontrol ediliyor"
