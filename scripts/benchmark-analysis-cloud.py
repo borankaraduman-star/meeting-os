@@ -82,6 +82,17 @@ def forbidden_leaks(result,terms):
     return out,elsewhere
 
 
+def missing_decisions(result,case):
+    """Optional per-fixture gate: each term group must be covered by one decision item.
+
+    A reversed decision only counts as reported when the same bullet carries both the subject and
+    the cancellation, so a stale "we will do X" plus a separate "X is cancelled" does not pass.
+    """
+    groups=case.get('required_decision_terms') or []
+    texts=[normalize(i.get('text') or '') for i in result.get('decisions',[])]
+    return [{'terms':g} for g in groups if not any(all(normalize(t) in text for t in g) for text in texts)]
+
+
 def missing_expected(result,case):
     """Which reference tasks are absent, and whether the loss is the task, its owner or its date."""
     actions=result.get('actions',[])
@@ -196,6 +207,7 @@ def main(argv=None):
                       'evidence':{**recorder.report(result),**evidence_stats(result,rows)},
                       'forbidden_leaks':leaks,'forbidden_mentions_elsewhere':elsewhere,
                       'missing_expected':missing_expected(result,case),
+                      'missing_decisions':missing_decisions(result,case),
                       'duplicates':duplicates(result),
                       'turkish_issues':turkish_issues(result),
                       'result':result}
@@ -225,20 +237,22 @@ def scorecard_line(item):
             f"checks={sum(1 for v in checks.values() if v)}/{len(checks)} "
             f"verbatim={e['verbatim_ratio']} verified={e['verified_ratio']} "
             f"leaks={len(item['forbidden_leaks'])} missing={len(item['missing_expected'])} "
+            f"misdec={len(item['missing_decisions'])} "
             f"dupe={len(item['duplicates']['exact'])}/{len(item['duplicates']['near'])} "
             f"tr={len(item['turkish_issues'])} chunks={(item.get('coverage') or {}).get('chunks')}")
 
 
-COLUMNS=('case','checks','verbatim','verified','leaks','missing','dup','near','tr_issue','chunks','calls')
+COLUMNS=('case','checks','verbatim','verified','leaks','missing','misdec','dup','near','tr_issue','chunks','calls')
 
 def table(results):
     rows=[]
     for item in results:
-        if 'error' in item:rows.append((item['case'],'error','-','-','-','-','-','-','-','-',str(item.get('calls','-'))));continue
+        if 'error' in item:rows.append((item['case'],'error')+('-',)*9+(str(item.get('calls','-')),));continue
         e=item['evidence'];checks=item['checks']
         rows.append((item['case'],f"{sum(1 for v in checks.values() if v)}/{len(checks)}",
             str(e['verbatim_ratio']),str(e['verified_ratio']),str(len(item['forbidden_leaks'])),
-            str(len(item['missing_expected'])),str(len(item['duplicates']['exact'])),
+            str(len(item['missing_expected'])),str(len(item['missing_decisions'])),
+            str(len(item['duplicates']['exact'])),
             str(len(item['duplicates']['near'])),str(len(item['turkish_issues'])),
             str((item.get('coverage') or {}).get('chunks')),str(item.get('calls'))))
     widths=[max(len(str(r[i])) for r in ((COLUMNS,)+tuple(rows))) for i in range(len(COLUMNS))]

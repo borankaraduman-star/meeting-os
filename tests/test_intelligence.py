@@ -33,3 +33,72 @@ class IntelligenceTests(unittest.TestCase):
  def test_named_implicit_first_person_future_is_owned(self):
   rows=[{**ROWS[0],'text':'Raporu cuma günü yazacağım.'}];d=record();d['summary']=[];d['actions']=[{'title':'Raporu yaz','owner':'Boran','due_text':'cuma günü','evidence':[{'segment_id':1,'quote':rows[0]['text']}]}]
   self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Boran')
+
+
+def note(text,start=0.,**extra):
+ return {'text':text,'evidence':[{'segment_id':1,'quote':text[:20],'start':start,'source':'system','speaker':'Boran'}],'needs_review':False,**extra}
+def task(title,owner=None,due=None,start=0.,quote='q'):
+ return {'title':title,'owner':owner,'due_text':due,'evidence':[{'segment_id':1,'quote':quote,'start':start,'source':'system','speaker':'Boran'}],'needs_review':True}
+def blank(**kw):
+ return {**{k:[] for k in ('summary','decisions','risks','questions','actions')},**kw}
+
+
+class OwnerNormalizationTests(unittest.TestCase):
+ ROWS=[{'speaker_name':'Deniz'},{'speaker_name':'Ece'},{'speaker_name':None}]
+ def test_case_suffix_and_honorific_snap_to_the_speaker_name(self):
+  from meeting_os.intelligence import canonical_owner
+  for spelling in ("Deniz'in","Deniz’e","deniz","DENIZ","Deniz Bey","Deniz (mobil)"):
+   self.assertEqual(canonical_owner(spelling,self.ROWS),'Deniz',spelling)
+ def test_unknown_name_is_cleaned_but_neither_invented_nor_dropped(self):
+  from meeting_os.intelligence import canonical_owner
+  self.assertEqual(canonical_owner("Ali'nin",self.ROWS),'Ali')
+  self.assertIsNone(canonical_owner('   ',self.ROWS));self.assertIsNone(canonical_owner(None,self.ROWS))
+  self.assertIsNone(canonical_owner('Bey',self.ROWS))   # an honorific on its own names nobody
+ def test_owner_written_with_a_case_suffix_still_verifies_against_the_quote(self):
+  rows=[{'id':1,'start':0.,'end':8.,'source':'mic','speaker':'mic:S0','speaker_name':'Boran','text':"Bu işi Deniz üstlendi, hotfix'i o deploy edecek.",'flags':[]}]
+  d=blank(actions=[{'title':'Hotfix deploy','owner':"Deniz'in",'due_text':None,'evidence':[{'segment_id':1,'quote':rows[0]['text']}]}])
+  self.assertEqual(validate_record(d,rows)['actions'][0]['owner'],'Deniz')
+
+
+class DedupeTests(unittest.TestCase):
+ def test_same_task_restated_in_another_chunk_is_reported_once(self):
+  a=task("Arama indeksini yeniden yazmak ve cache invalidation'ı segment bazlı yapmak",'Ece','sprint sonuna kadar',0.,'ilk')
+  b=task('Arama indeksi yeniden yazımı işini sprint sonuna kadar bitirmek','Ece','sprint sonuna kadar',300.,'ikinci')
+  merged=merge_records([blank(actions=[a]),blank(actions=[b])])['actions']
+  self.assertEqual(len(merged),1)
+  self.assertEqual(len(merged[0]['evidence']),2)   # both citations survive the merge
+  self.assertEqual(merged[0]['owner'],'Ece');self.assertEqual(merged[0]['due_text'],'sprint sonuna kadar')
+ def test_two_different_tasks_of_one_owner_are_not_collapsed(self):
+  a=task('Arama indeksini yeniden yazmak','Ece','sprint sonuna kadar')
+  b=task('Segment bazlı invalidation tasarımını yazıp paylaşmak','Ece','bugün',300.)
+  self.assertEqual(len(merge_records([blank(actions=[a]),blank(actions=[b])])['actions']),2)
+ def test_same_topic_but_a_different_owner_stays_separate(self):
+  a=task('Arama indeksini yeniden yazmak','Ece','sprint sonuna kadar')
+  b=task('Arama indeksi yeniden yazımını bitirmek','Murat','sprint sonuna kadar',300.)
+  self.assertEqual(len(merge_records([blank(actions=[a]),blank(actions=[b])])['actions']),2)
+ def test_a_restatement_keeps_the_fuller_wording(self):
+  merged=merge_records([blank(decisions=[note('Payment migration iptal edildi.')]),
+                        blank(decisions=[note('Payment migration bu sprint iptal edildi.',300.)])])['decisions']
+  self.assertEqual([i['text'] for i in merged],['Payment migration bu sprint iptal edildi.'])
+ def test_doubt_from_either_side_survives_the_merge(self):
+  a=task('Arama indeksini yazmak','Ece','yarın');b=task('Arama indeksini yazmak','Ece','yarın',300.)
+  a['needs_review']=False;b['needs_review']=True
+  self.assertTrue(merge_records([blank(actions=[a]),blank(actions=[b])])['actions'][0]['needs_review'])
+
+
+class SupersededDecisionTests(unittest.TestCase):
+ def test_a_reversed_decision_is_replaced_by_the_reversal(self):
+  later='E-posta doğrulama adımı bu sprint eklenmeyecek; karar iptal edildi.'
+  kept=merge_records([blank(decisions=[note("Onboarding'e e-posta doğrulama adımı bu sprint eklenmesine karar verildi.",60.)]),
+                      blank(decisions=[note(later,600.)])])['decisions']
+  self.assertEqual([i['text'] for i in kept],[later])
+ def test_an_unrelated_cancellation_does_not_remove_a_live_decision(self):
+  live=note('Onboarding için scope daraltıldı, yalnızca e-posta doğrulama ekranı çıkacak.',60.)
+  other=note('Payment migration bu sprint iptal edildi.',600.)
+  self.assertEqual(len(merge_records([blank(decisions=[live,other])])['decisions']),2)
+ def test_a_reversal_cannot_delete_a_decision_taken_after_it(self):
+  reversal=note('Eski plan iptal edildi.',60.);newer=note('Bundan sonra dağıtımda canary kullanılacak.',600.)
+  self.assertEqual(len(merge_records([blank(decisions=[reversal,newer])])['decisions']),2)
+ def test_two_cancellations_do_not_cancel_each_other(self):
+  first=note('Migration planı iptal edildi.',60.);second=note('Ayrıca demo hazırlığı da iptal edildi.',600.)
+  self.assertEqual(len(merge_records([blank(decisions=[first,second])])['decisions']),2)
