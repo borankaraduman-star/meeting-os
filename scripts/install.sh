@@ -74,9 +74,10 @@ if [ ! -f build/signing-identity.json ] && [ -z "${MEETING_OS_SIGNING_IDENTITY:-
       ) || echo "Sertifika kendiliğinden oluşturulamadı; aşağıdaki elle adımı uygulayın." >&2
     fi
     rm -rf "$certdir"
-    # Anahtar zinciri erişimini parolasız açamayız (set-key-partition-list Mac parolasını ister), bu yüzden
-    # derleme sırasında imzalama izni penceresi bir-iki kez çıkacak. Orada "Her Zaman İzin Ver"i seçin.
-    echo "Not: Derleme sırasında macOS 'anahtar zincirine erişmek istiyor' diye soracak. 'Her Zaman İzin Ver'i seçin; bir daha sormaz."
+    # Without a partition list codesign asks for the keychain password on EVERY signing (each build and each
+    # update) and "Always Allow" never sticks — that was the dialog storm of 10 Sep 2026. One password now, in
+    # the terminal, fixes it for good. scripts/fix-signing-prompts.sh does the same on an already-installed Mac.
+    /bin/sh "$(dirname "$0")/fix-signing-prompts.sh" || true
     identities="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | grep -c ') [0-9A-F]\{40\} ' || true)"
   fi
   if [ "$identities" != 1 ]; then
