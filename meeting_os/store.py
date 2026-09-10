@@ -58,8 +58,8 @@ class Store:
         if 'feedback' not in columns:
             # New column, so exactly once per database: the corrections the user already made are the evidence
             # Q5 needs, and the segments still carry the automatic verdict those corrections overruled.
-            self.db.execute('ALTER TABLE corrections ADD COLUMN feedback TEXT')
-            self._backfill_feedback()
+            try: self.db.execute('ALTER TABLE corrections ADD COLUMN feedback TEXT'); self._backfill_feedback()
+            except sqlite3.OperationalError: pass   # the poll and a job opened the file together; the other one migrated
     def close(self): self.db.close()
     def create_meeting(self, title, metadata=None):
         mid = uuid.uuid4().hex[:12]
