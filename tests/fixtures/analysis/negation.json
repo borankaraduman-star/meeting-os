@@ -1,0 +1,40 @@
+{
+  "title": "Kurgu test — Olumsuzlanan söz ile gerçek söz aynı toplantıda",
+  "note": "Tamamen kurgudur. Gerçek kişi, ekip, ürün veya toplantı değildir. Codex #10 için: olumsuzlanan cümle gerçek bir alıntıdır ve iddia ile aynı içerik sözcüklerini taşır, yani alıntı doğrulaması tek başına onu durdurmaz. Yalnızca changelog işi kabul edilmiş bir taahhüttür.",
+  "segments": [
+    {
+      "speaker": "Boran",
+      "text": "Şunu net söyleyeyim: ben release notlarını yazmayacağım. O iş geçen sprint zaten bitti, tekrar açmayalım."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Ben changelog'u yarın hazırlayacağım. Bu iş bende, kimseyi beklemiyorum."
+    },
+    {
+      "speaker": "Deniz",
+      "text": "Migration planını da yazmayacağız, iptal edildi. Şimdilik buna gerek yok, veritabanı tarafına dokunmuyoruz."
+    },
+    {
+      "speaker": "Ece",
+      "text": "Bir de dün gelen iki hata raporu var ama ikisi de tekrar üretilemedi. Yani şu an kimseye iş çıkmıyor, sadece bilgi olarak söylüyorum."
+    }
+  ],
+  "expected_actions": 1,
+  "forbidden_action_terms": [
+    "release not",
+    "migration",
+    "hata rapor"
+  ],
+  "expected_owners": [
+    "Ece"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "changelog"
+      ],
+      "owner": "Ece",
+      "due_text": "yarın"
+    }
+  ]
+}

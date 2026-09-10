@@ -9,6 +9,13 @@ would otherwise have to read for: how many model quotes were verbatim, how many 
 repaired by locate_quote, how many were unusable, which forbidden terms leaked into any
 category, which expected tasks are missing (and why), duplicate items surviving the chunk
 merge, and English section names / untranslated labels in Turkish output.
+
+The case list is every fixture in tests/fixtures/analysis (--case narrows it). Three of them exist for
+the 2026-09-10 independent review and cost a call each like any other: `negation` and `conditional`
+(Codex #10 — a real quote that negates, conditions or delegates the task it is cited for) and
+`due_conflict` (Codex #5 — one owner, one wording, two different deadlines, which must stay two tasks).
+Adding cases only spends more of the same --max-calls budget; nothing here sends a request without
+--allow-upload.
 """
 import argparse,json,re,sys,time
 from pathlib import Path
