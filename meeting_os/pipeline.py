@@ -1,4 +1,3 @@
-import time
 import numpy as np
 from .audio import RATE, read_audio, speech_regions
 from .types import Segment

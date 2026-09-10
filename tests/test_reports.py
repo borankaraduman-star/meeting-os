@@ -375,11 +375,13 @@ class MicOwnerRenameTests(unittest.TestCase):
             s.rename_mic_owner('Ben','Deniz')
             self.assertTrue(Memory(s).latest(first)['stale'])   # owner attribution changed: the analysis is not current
             s.close()
-    def test_the_bridge_action_and_the_settings_write_relabel_earlier_meetings(self):
+    def test_the_settings_write_relabels_earlier_meetings(self):
+        """The settings write is the only way a rename reaches the store; the bare `rename_mic_owner` bridge
+        action was removed because nothing in the app ever called it."""
         from meeting_os.desktop import dispatch
         with tempfile.TemporaryDirectory() as tmp:
-            data=Path(tmp);db=data/'meeting-os.sqlite';s,first,_=self.seed(db);s.close()
-            r=dispatch({'action':'rename_mic_owner','old':'Ben','new':'Deniz'},db); self.assertEqual((r['meetings'],r['segments']),(2,2))
+            data=Path(tmp);db=data/'meeting-os.sqlite';s,first,_=self.seed(db)
+            r=s.rename_mic_owner('Ben','Deniz'); self.assertEqual((r['meetings'],r['segments']),(2,2)); s.close()
             reports.save_settings(data,{'user_name':'Deniz'})
             saved=dispatch({'action':'report_settings_set','changes':{'user_name':'Deniz Yılmaz'}},db)   # correcting the name later
             self.assertEqual((saved['user_name'],saved['renamed_meetings'],saved['renamed_segments']),('Deniz Yılmaz',2,2))

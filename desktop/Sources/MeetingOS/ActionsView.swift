@@ -19,11 +19,6 @@ struct ActionsView:View {
         Picker("Durum",selection:Binding(get:{item.state},set:{value in Task { await m.updateAction(item,changes:["state":value]) }})) { Text("Açık").tag("open");Text("Devam ediyor").tag("in_progress");Text("Tamamlandı").tag("done");Text("Kaldırıldı").tag("dismissed") }
             .frame(width:220).accessibilityIdentifier("actionState-\(item.id)")
     }
-    func draftButton(_ item:ActionItem)->some View {
-        Button(m.drafts.contains { $0.task==item.id && !$0.stale } ? "Taslağı yeniden hazırla":"Taslak hazırla") { m.prepareAction(item,force:m.drafts.contains { $0.task==item.id && !$0.stale }) }
-            .disabled(m.busy || item.stale || ["done","dismissed"].contains(item.state))
-            .accessibilityIdentifier("prepareDraft-\(item.id)")
-    }
     /// Confirmed date, or the parser's proposal with one-tap approval. Never writes a date on its own.
     func dueChip(_ item:ActionItem)->some View {
         HStack(spacing:6) {
@@ -37,11 +32,6 @@ struct ActionsView:View {
                 Button("Onayla") { Task { await m.setDue(item,s) } }.controlSize(.mini).accessibilityIdentifier("approveDue-\(item.id)")
             }
         }
-    }
-    func handoffButton(_ item:ActionItem)->some View {
-        Button("\(item.route) için paket kaydet") { Task { await m.exportHandoff(item) } }
-            .disabled(item.stale || ["done","dismissed"].contains(item.state))
-            .accessibilityIdentifier("exportHandoff-\(item.id)")
     }
     var body:some View { VStack(alignment:.leading) {
         HStack { Text("Görevlerim").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)

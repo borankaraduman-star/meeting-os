@@ -3,7 +3,7 @@ import json
 import re,hashlib,sys,uuid
 from pathlib import Path
 from .memory import Memory,RETIRED,now
-from .intelligence import analyze_rows,fingerprint,parse_json,validate_record
+from .intelligence import analyze_rows,parse_json,validate_record
 from .metrics import normalize
 from .schemas import analysis_schema
 

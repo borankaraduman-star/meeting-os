@@ -130,6 +130,16 @@ def rename_owner_segments(store, old, new):
     return {'meetings': meetings, 'segments': segments, 'tasks': tasks, 'renamed_from': renamed} if segments or tasks else None
 
 
+def save_settings_with_rename(store, data_dir, changes):
+    """Save the settings, then relabel the mic rows a changed `user_name` left behind. The bridge and the CLI
+    both do this and both have to return the same counts, so it is written once."""
+    before = (load_settings(data_dir).get('user_name') or '').strip()
+    saved = save_settings(data_dir, changes)
+    # A name typed after the first meeting was already recorded has to reach that meeting too.
+    renamed = rename_owner_segments(store, before, saved.get('user_name')) if (saved.get('user_name') or '').strip() != before else None
+    return {**saved, 'renamed_meetings': (renamed or {}).get('meetings', 0), 'renamed_segments': (renamed or {}).get('segments', 0)}
+
+
 def host_name():
     """Stable, file-safe Mac name (System Settings → local hostname); falls back to the network hostname."""
     import subprocess

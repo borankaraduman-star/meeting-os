@@ -45,7 +45,6 @@ def parse_json(text):
     return value
 
 def _fold(text):
-    import unicodedata
     out=[];index=[]
     for i,ch in enumerate(text):
         if ch.isalnum(): out.append(ch.casefold());index.append(i)

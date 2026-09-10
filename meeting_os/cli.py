@@ -300,11 +300,7 @@ def main(supervised=False):
                         elif k=='audio_retention_days': changes[k]=int(v) if v.strip().isdigit() else v
                         else: changes[k]=v.lower() in ('1','true','evet','on')
                     if not changes: output(reports.load_settings(DATA_DIR))
-                    else:
-                        before=(reports.load_settings(DATA_DIR).get('user_name') or '').strip()
-                        saved=reports.save_settings(DATA_DIR,changes)
-                        renamed=reports.rename_owner_segments(store,before,saved.get('user_name')) if (saved.get('user_name') or '').strip()!=before else None
-                        output({**saved,'renamed_meetings':(renamed or {}).get('meetings',0),'renamed_segments':(renamed or {}).get('segments',0)})
+                    else: output(reports.save_settings_with_rename(store,DATA_DIR,changes))
                 else:
                     if not args.meeting: raise ValueError('--meeting gerekli')
                     from . import __version__

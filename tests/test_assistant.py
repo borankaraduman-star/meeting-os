@@ -90,7 +90,8 @@ class AssistantTests(unittest.TestCase):
 
 class TurkishSearchTests(unittest.TestCase):
     def test_suffixed_forms_match_and_stopwords_are_ignored(self):
-        from meeting_os.memory import query_terms,match_score
+        from meeting_os.memory import query_terms,score_and_hits
+        match_score=lambda terms,text: score_and_hits(terms,text)[0]
         self.assertEqual(query_terms('Eğitim modülleri kaç günde tamamlanıyor ve kim söyledi?'),['eğitim','modülleri','günde','tamamlanıyor'])
         self.assertEqual(query_terms('ne kaç mi'),['ne','kaç','mi'])   # nothing but function words: keep them rather than return nothing
         self.assertGreater(match_score(['modülleri','günde'],'1. modülü ve 3. modülü toplam 3 günde alıyoruz'),1.5)

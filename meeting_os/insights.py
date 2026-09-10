@@ -52,10 +52,11 @@ def build_masker(store, meetings=None, glossary=None, owner=None):
     if owner is None:
         from .reports import store_owner
         owner = store_owner(store)
-    # The owner is not appended blind: a microphone row already resolves to them (row_person), and a name
-    # that never appears in any of these meetings is not a person to redact — "Can sıkıntısı" is not Can.
+    # A microphone row already resolves to the owner (row_person); the owner is appended as well, carrying a
+    # mic source, so they are redacted across a whole range even in the meetings they only listened to.
+    # `name_groups` is what decides whether an everyday-word name ("Can sıkıntısı") needs proof they took part.
     names = [{'speaker_name': row_person({'speaker_name': r['name'], 'source': r['source'], 'speaker': r['speaker']}, owner)} for r in people]
-    if (owner or '').strip(): names.append({'speaker_name': owner, 'source': 'mic'})   # the owner is a person to redact even in a meeting they only listened to
+    if (owner or '').strip(): names.append({'speaker_name': owner, 'source': 'mic'})
     return NameMasker(name_groups(names, glossary, owner))
 
 

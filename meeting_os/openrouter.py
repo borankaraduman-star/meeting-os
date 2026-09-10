@@ -1,11 +1,11 @@
 """Explicit, bounded OpenRouter requests. Never called by local/default workflows."""
 import base64
+import contextvars
 import json
 import math
 import os
 from pathlib import Path
 import re
-import subprocess
 import urllib.error
 import urllib.request
 
@@ -39,7 +39,10 @@ def estimate_analysis_cost(model, prompt_tokens, completion_tokens):
     return round((float(prompt_tokens or 0)*price[0] + float(completion_tokens or 0)*price[1])/1_000_000, 6)
 
 
-_USAGE_SINK = None   # set for the length of one analysis by assistant.analyze; see analysis_usage_recorder
+# Set for the length of one analysis by assistant.analyze; see analysis_usage_recorder. A ContextVar rather
+# than a plain global: the reset token restores exactly this scope's value, and a concurrent analysis in
+# another thread or task cannot end up billing its chunks to somebody else's meeting.
+_USAGE_SINK = contextvars.ContextVar('meeting_os_usage_sink', default=None)
 
 
 def analysis_usage_recorder(sink):
@@ -51,10 +54,9 @@ def analysis_usage_recorder(sink):
     import contextlib
     @contextlib.contextmanager
     def scope():
-        global _USAGE_SINK
-        previous = _USAGE_SINK; _USAGE_SINK = sink
+        token = _USAGE_SINK.set(sink)
         try: yield
-        finally: _USAGE_SINK = previous
+        finally: _USAGE_SINK.reset(token)
     return scope()
 
 
@@ -278,10 +280,11 @@ class OpenRouterLLM:
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
         payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
         result=self.client._post('chat/completions',payload)
-        if _USAGE_SINK is not None:
+        sink=_USAGE_SINK.get()
+        if sink is not None:
             try:
                 usage=chat_usage(self.model_id,result.get('usage'))
-                if usage is not None: _USAGE_SINK(self.model_id,usage)
+                if usage is not None: sink(self.model_id,usage)
             except Exception: pass   # bookkeeping must never lose a completed, paid-for analysis
         try:
             choice=result['choices'][0]

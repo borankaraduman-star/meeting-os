@@ -4,7 +4,6 @@ nothing stored is changed; masking happens in the rendered text only."""
 from datetime import date, datetime, timezone
 from .insights import build_masker, local_day, prepared_header, source_line
 from .memory import Memory, RETIRED, STATE_LABELS
-from .metrics import normalize
 from .intelligence import REVERSED_NOTE, row_label, row_person
 from .memory import owner_key
 

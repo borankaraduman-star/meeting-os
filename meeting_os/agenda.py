@@ -1,6 +1,5 @@
 """Next-meeting preparation: open tasks, unanswered questions and decisions from recent meetings, with sources.
 Draft only — nothing is sent anywhere."""
-import json
 from .insights import prepared_header, source_line
 from .memory import Memory
 

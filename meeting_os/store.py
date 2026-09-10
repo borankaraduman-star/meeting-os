@@ -178,7 +178,7 @@ class Store:
         return wrong[0]
     # --- Q5: per-person evidence. Only automation is judged here; a name the user typed into an empty cluster says
     # nothing about the model, so it moves no counter. One overruled automatic name outweighs one confirmed suggestion.
-    PERSON_THRESHOLD_FLOOR=0.84   # 3 profiles of real data still separate different people at 0.85; never go under
+    PERSON_THRESHOLD_FLOOR=0.84   # how far confirmations may discount a bar that already starts above it (real data: 3 profiles still separate different people at 0.85). A base below it is left where it is; see person_threshold.
     PERSON_THRESHOLD_CAP=0.93
     def _feedback(self, identities, name):
         """(confirmed, wrong) for one naming: the suggestion the user accepted, and the automatic name he overruled."""

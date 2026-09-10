@@ -108,7 +108,7 @@ def has_audio(metadata):
     return folder.is_dir() and any(f for f in folder.glob('*.wav') if not f.name.endswith('.partial.wav'))   # a half-written chunk is not audio the cloud can use
 
 
-RETRY_STATES=('incomplete','failed','processing','provisional')
+RETRY_STATES=UNSETTLED   # the same four: a meeting that is not settled is exactly one that can be retried
 
 def retry_candidates(store, now=None):
     """Meetings an idle retry may pick up, and the ones only the user can unblock. A candidate still has its
@@ -371,20 +371,12 @@ def dispatch(request, db=None):
             if action=='update_check': return updater.check(ROOT)
             if action=='update_start': return updater.start(ROOT,DATA_DIR)
             return updater.status(DATA_DIR)
-        if action=='rename_mic_owner':
-            # The Mac's owner corrected their own name: every microphone row in every meeting follows.
-            return store.rename_mic_owner(request.get('old'),request.get('new'))
         if action in ('report_settings','report_settings_set','report_write','reports_summary','heartbeat'):
             from . import reports
             base=DATA_DIR if db is None else Path(db).parent
             if action=='report_settings': return reports.load_settings(base)
             if action=='report_settings_set':
-                changes=request.get('changes') or {}
-                before=(reports.load_settings(base).get('user_name') or '').strip()
-                saved=reports.save_settings(base,changes)
-                # A name typed after the first meeting was already recorded has to reach that meeting too.
-                renamed=reports.rename_owner_segments(store,before,saved.get('user_name')) if (saved.get('user_name') or '').strip()!=before else None
-                return {**saved,'renamed_meetings':(renamed or {}).get('meetings',0),'renamed_segments':(renamed or {}).get('segments',0)}
+                return reports.save_settings_with_rename(store,base,request.get('changes') or {})
             if action=='reports_summary': return reports.summarize(reports.report_root(reports.load_settings(base)))
             from . import __version__
             # The version of the BUNDLE that is running, when the app tells us (CFBundleShortVersionString), not
@@ -421,7 +413,7 @@ def dispatch(request, db=None):
             from .glossary import load as load_glossary, analysis_context
             if not request.get('openrouter_model'): raise ValueError('Belge hazırlama bulut modu gerektirir (Yazıya çevirme: OpenRouter)')
             llm=OpenRouterClient().analysis(validate_analysis_model(request['openrouter_model']),consent=True)
-            doc=build_document(store,request['meeting'],request.get('kind','prd'),llm,segment_ids=request.get('segments'),glossary=analysis_context(load_glossary(DATA_DIR,ROOT)))
+            doc=build_document(store,request['meeting'],request.get('kind','prd'),llm,segment_ids=request.get('segments'),glossary=analysis_context(load_glossary(DATA_DIR if db is None else Path(db).parent,ROOT)))
             if request.get('path'): Path(request['path']).write_text(doc['text'],encoding='utf-8')
             return {**doc,'path':request.get('path')}
         if action=='continuity':
@@ -499,15 +491,13 @@ def dispatch(request, db=None):
             if action=='word_dismiss': return CM.dismiss_word(store,request['meeting'],request['original'])
             if action=='forget_word': return CM.forget(store,request['original'],base)
             return CM.teach(store,request['meeting'],request['original'],request['replacement'],base)
-        if action in ('correction_rules','apply_learned_corrections','revert_auto_correction','accept_rule','reject_rule'):
+        if action in ('correction_rules','accept_rule','reject_rule'):
             from . import correction_memory as CM
-            if action=='apply_learned_corrections': return CM.apply_rules(store,request['meeting'],data_dir=DATA_DIR if db is None else Path(db).parent)
-            if action=='revert_auto_correction': return CM.revert(store,request['meeting'],int(request['segment']))
-            if action=='accept_rule': CM.accept_rule(store,request['original']); return {'ok':True}
+            if action=='accept_rule': CM.accept_rule(store,request['original']); return {'ok':True}   # the pair of reject_rule, which the app calls
             if action=='reject_rule': CM.reject_rule(store,request['original']); return {'ok':True}
             from .glossary import load as load_glossary
             rules=CM.learned_rules(store)
-            return {'rules':rules,'glossary_proposals':CM.glossary_proposals(rules,load_glossary(DATA_DIR,ROOT))}
+            return {'rules':rules,'glossary_proposals':CM.glossary_proposals(rules,load_glossary(DATA_DIR if db is None else Path(db).parent,ROOT))}
         if action=='review_queue':
             from .review import review_queue
             return review_queue(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
