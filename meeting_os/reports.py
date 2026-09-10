@@ -562,12 +562,12 @@ def alerts(hosts, *, now=None):
     shared folder, so it works on the dev Mac without touching the other machines."""
     now = now or datetime.now(timezone.utc); out = []
     for host, h in sorted(hosts.items()):
-        beat = h.get('heartbeat') or {}
+        beat = h.get('heartbeat') or {}; stale = False
         seen = beat.get('last_seen')
         if seen:
             try:
                 age = (now - datetime.fromisoformat(seen)).total_seconds()
-                if age > STALE_HEARTBEAT_SECONDS: out.append({'host': host, 'level': 'warning', 'key': 'stale', 'line': f'{host}: {int(age//86400)} gündür nabız yok · uygulama açık mı, güncelleme takıldı mı?'})
+                if age > STALE_HEARTBEAT_SECONDS: stale = True; out.append({'host': host, 'level': 'warning', 'key': 'stale', 'line': f'{host}: {int(age//86400)} gündür nabız yok · uygulama açık mı, güncelleme takıldı mı?'})
             except ValueError: pass
         elif h.get('reports'): out.append({'host': host, 'level': 'note', 'key': 'no_heartbeat', 'line': f'{host}: rapor var ama nabız dosyası yok · 1.2.15 öncesi sürüm olabilir'})
         free = beat.get('free_disk')
@@ -577,15 +577,18 @@ def alerts(hosts, *, now=None):
         elif probe.get('warnings'): out.append({'host': host, 'level': 'warning', 'key': 'probe', 'line': f'{host}: {probe.get("summary")}'})
         # The installed bundle and the checkout it would be built from disagree: `git merge --ff-only` landed and
         # the build did not. The Mac then reports itself as up to date (behind=0) while running the old app.
-        app_version, repo_version = beat.get('app_version'), beat.get('repo_version')
-        if app_version and repo_version and app_version != repo_version:
-            out.append({'host': host, 'level': 'error', 'key': 'version_mismatch',
-                        'line': f'{host}: eski uygulama ({app_version}, depo {repo_version}) · güncelleme yarıda kalmış olabilir: sh scripts/update.sh'})
+        # A Mac that has been silent for days already has its `stale` line; repeating three more alerts about a
+        # state nobody can act on is noise. A dev Mac is legitimately ahead of its bundle between a version bump and
+        # the next build, so a mismatch alone is a warning; with a failed update behind it, an error.
         update = beat.get('update_status') or {}
-        if update.get('state') == 'failed':
+        app_version, repo_version = beat.get('app_version'), beat.get('repo_version')
+        if not stale and app_version and repo_version and app_version != repo_version:
+            out.append({'host': host, 'level': 'error' if update.get('state') == 'failed' else 'warning', 'key': 'version_mismatch',
+                        'line': f'{host}: uygulama {app_version}, depo {repo_version} · güncelleme yarıda kalmış olabilir: sh scripts/update.sh'})
+        if not stale and update.get('state') == 'failed':   # `refused` (a recording, local edits) is not a failure
             out.append({'host': host, 'level': 'error', 'key': 'update_failed',
                         'line': f'{host}: son güncelleme başarısız · {update.get("message") or "ayrıntı update.log"}'})
-        if beat.get('signing_partition') is False:
+        if not stale and beat.get('signing_partition') is False:
             out.append({'host': host, 'level': 'warning', 'key': 'signing_partition',
                         'line': f'{host}: imzalama izni yok · güncelleme başlamadan durur: sh scripts/fix-signing-prompts.sh'})
         blocked = beat.get('cloud_blocked')

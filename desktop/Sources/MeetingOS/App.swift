@@ -268,6 +268,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     }
     @Published var microphoneHint=""
     func refresh() async {
+        if !settingsLoaded { await loadReportSettings() }   // a failed first load must not leave ⌃⌥R refusing for an hour
         if recording || pollTick%3==0 { let hint=MicrophoneHint.current(); if hint != microphoneHint { microphoneHint=hint } }   // IOKit query: every poll while recording, every third otherwise
         if let process=job, let bytes=ResourceGuard.footprint(pid:process.processIdentifier), bytes>ResourceGuard.budget(physical:ProcessInfo.processInfo.physicalMemory) { stopForResources() }
         if job != nil, let started=jobStarted {

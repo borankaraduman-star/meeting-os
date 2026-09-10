@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 50 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 51 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.46](#v1246) | 2026-09-10 19:40 | Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir |
 | [v1.2.45](#v1245) | 2026-09-10 18:40 | Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz |
 | [v1.2.44](#v1244) | 2026-09-10 17:15 | Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır |
 | [v1.2.43](#v1243) | 2026-09-10 16:20 | Meeting OS 1.2.43 — ilk gerçek toplantı: ad, maliyet, bekleme süresi |
@@ -70,6 +71,20 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1246"></a>
+### Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir
+
+2026-09-10 19:40 · yerel not · GitHub sürüm sayfası yok
+
+1.2.45'e ikinci görüş (1 P0, 5 P1):
+- **Diğer Mac'in kaydı bu Mac'in güncellemesini engelliyordu (P0):** kayıt nabzı paylaşılan iCloud klasörüne de yazıldığı için `update.sh` başka Mac'in toplantısını "kayıt sürüyor" sayıp reddediyor, uygulamayı kapatıp açıyor ve sahte "güncelleme başarısız" uyarısı yayıyordu. Artık yalnız bu Mac'in kaydına bakılır.
+- Kilit artık saate değil sürecin yaşayıp yaşamadığına bakar (uzun derleme kilidi kaybetmez); ikinci koşu durum dosyasına dokunmaz.
+- Kayıt, yerel değişiklik ve kapanmayan uygulama "başarısız" değil "yapılmadı" (refused) sayılır: bildirim ve ekip uyarısı çıkmaz.
+- Uygulama ile betik etiket yokken aynı şeyi söyler (uygulama artık olmayan bir güncellemeyi teklif etmez); etiket deseni `vX.Y.Z` ile sınırlı (rc/iki parçalı etiketler seçilmez).
+- ⌃⌥R ayarlar ilk seferde yüklenemediyse bir saat boyunca "ayarlar yükleniyor" demez; her yoklamada yeniden yükler.
+- Ekip uyarıları: sessiz (bayat nabızlı) Mac için tekrar etmez; sürüm uyuşmazlığı başarısız güncelleme yoksa uyarı düzeyinde.
+- "Dal ileri sarılamadı" mesajı boş kalmıyor; betiğin çıkış kodu derleme hatasında korunuyor; kurulum kartındaki imza komutu geçersiz `/tmp` yolu üretmiyor.
 
 <a id="v1245"></a>
 ### Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz

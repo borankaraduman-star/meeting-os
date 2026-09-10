@@ -59,6 +59,7 @@ enum UpdateStatusLine {
         switch state {
         case "done": return "Güncelleme tamam · "+message
         case "failed": return "Güncelleme başarısız · "+message
+        case "refused": return "Güncelleme yapılmadı · "+message   // a recording, local edits or a second run: not a failure, no notification
         case "running":
             guard let started=parseTime(time), now.timeIntervalSince(started) >= stallSeconds else { return nil }
             return stalledMessage

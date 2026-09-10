@@ -32,9 +32,9 @@ def release_target(root):
     branch carrying several tags can resolve to an OLDER release than the one already installed — a silent
     downgrade. Ordering the reachable tags by version says what the newest release actually is."""
     if os.environ.get('MEETING_OS_UPDATE_UNTAGGED'): return f'origin/{BRANCH}'
-    listing = _git(root, 'tag', '--merged', f'origin/{BRANCH}', 'v*').stdout.splitlines()
+    listing = _git(root, 'tag', '--merged', f'origin/{BRANCH}', 'v[0-9]*.[0-9]*.[0-9]*').stdout.splitlines()
     tags = sorted(((_version(t), t.strip()) for t in listing if _version(t)), key=lambda p: p[0])
-    return tags[-1][1] if tags else f'origin/{BRANCH}'
+    return tags[-1][1] if tags else None   # None = nothing released: update.sh refuses too, so the app must not offer
 
 
 def check(root):
@@ -46,6 +46,10 @@ def check(root):
         if fetch.returncode: return {'available': False, 'error': 'GitHub’a ulaşılamadı', 'local': _git(root, 'rev-parse', '--short', 'HEAD').stdout.strip()}
         local = _git(root, 'rev-parse', '--short', 'HEAD').stdout.strip()
         target = release_target(root)   # the newest vX.Y.Z tag on the branch: only released states are offered
+        if target is None:
+            return {'available': False, 'behind': 0, 'ahead': 0, 'target': None, 'no_tag': True,
+                    'error': 'GitHub’da yayınlanmış sürüm etiketi bulunamadı; güncelleme bekletildi',
+                    'local': _git(root, 'rev-parse', '--short', 'HEAD').stdout.strip()}
         remote = _git(root, 'rev-parse', '--short', target).stdout.strip()
         behind = int(_git(root, 'rev-list', '--count', f'HEAD..{target}').stdout.strip() or 0)
         ahead = int(_git(root, 'rev-list', '--count', f'{target}..HEAD').stdout.strip() or 0)

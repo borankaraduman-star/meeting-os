@@ -55,7 +55,7 @@ class ReleaseTargetTests(unittest.TestCase):
     def test_an_untagged_branch_falls_back_to_the_tip(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); git(root, 'init', '-b', 'v0.1', str(root/'r'))
-            self.assertEqual(updater.release_target(root/'r'), 'origin/v0.1')
+            self.assertIsNone(updater.release_target(root/'r'))   # nothing released: the app must not offer what update.sh would refuse
 
     def test_the_dev_override_follows_every_commit(self):
         with Fleet() as f, patch.dict(os.environ, {'MEETING_OS_UPDATE_UNTAGGED': '1'}):

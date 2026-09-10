@@ -71,7 +71,7 @@ enum SetupStatus {
     /// The one-line fix for a Mac that has never granted the codesign Keychain partition: without it every
     /// update stops on an unanswerable password prompt, in a Terminal nobody is watching.
     static func signingFix(repo:String)->String {
-        let script=repo.isEmpty ? "scripts/fix-signing-prompts.sh" : repo+"/scripts/fix-signing-prompts.sh"
+        let script=(repo.isEmpty || repo=="/tmp") ? "scripts/fix-signing-prompts.sh" : repo+"/scripts/fix-signing-prompts.sh"
         return "Güncelleme başlamadan durur · Terminal’de bir kez: sh "+script
     }
     /// Bridge answer → checks for the pieces the Python side owns. `repo` names the checkout in the signing fix

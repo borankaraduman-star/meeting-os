@@ -258,10 +258,11 @@ class DesktopTests(unittest.TestCase):
    key=next((k for k in answers if args[:len(k)]==k),None)
    class R: returncode=0; stdout=answers.get(key,'')
    return R()
-  with patch.object(updater,'_git',fake):
+  import os
+  with patch.object(updater,'_git',fake), patch.dict(os.environ,{'MEETING_OS_UPDATE_UNTAGGED':'1'}):   # tag selection has its own tests; this one checks the git-state parsing
    r=updater.check('/tmp');self.assertTrue(r['available']);self.assertEqual((r['behind'],r['ahead'],r['local'],r['remote'],r['subjects']),(3,0,'aaa1111','bbb2222',['Fix a','Fix b']))
   answers[('status','--porcelain')]=' M x.py\n'
-  with patch.object(updater,'_git',fake):
+  with patch.object(updater,'_git',fake), patch.dict(os.environ,{'MEETING_OS_UPDATE_UNTAGGED':'1'}):
    self.assertFalse(updater.check('/tmp')['available'])
  def test_profile_maintenance_actions(self):
   with tempfile.TemporaryDirectory() as tmp:

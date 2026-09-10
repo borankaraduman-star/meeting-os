@@ -7,7 +7,6 @@ DATA="$HOME/Library/Application Support/MeetingOS"
 LOG="$DATA/update.log"; STATUS="$DATA/update-status.json"
 MARKER="$DATA/signing-partition.ok"      # scripts/fix-signing-prompts.sh writes it after the one-time grant
 LOCK="$DATA/update.lock.d"               # mkdir is the atomic primitive every sh has
-LOCK_STALE_MINUTES=30                    # a build takes ~20 min; older than this and the holder is gone
 INSTALLED="$REPO/build/installed-commit" # the commit the installed app was actually built from
 LOG_MAX_BYTES=1048576
 SIGNING_FIX="İmzalama anahtarı için bir kez: sh '$REPO/scripts/fix-signing-prompts.sh' (Terminal'de, Mac parolası)"
@@ -16,54 +15,54 @@ mkdir -p "$DATA"
 # Atomic: a half-written status file is read by the app as "no update ever ran", and the app polls this
 # while the updater is mid-write.
 status() {
-  message="$(printf '%s' "$3" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n')"
+  message="$(printf '%s' "$3" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\000-\037')"
+  [ -n "$LOCK_HELD" ] && touch "$LOCK" 2>/dev/null
   tmp="$STATUS.tmp.$$"
   printf '{"state":"%s","from":"%s","to":"%s","message":"%s","time":"%s"}\n' \
     "$1" "$FROM" "$2" "$message" "$(date '+%Y-%m-%d %H:%M:%S')" > "$tmp" && mv -f "$tmp" "$STATUS" || rm -f "$tmp"
 }
 FROM="$(git rev-parse --short HEAD 2>/dev/null)"
+LOCK_HELD=''
 # The log is append-only across every update this Mac ever runs; without rotation it is the largest file in
 # the data folder after a year.
 if [ -f "$LOG" ] && [ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt "$LOG_MAX_BYTES" ]; then mv -f "$LOG" "$LOG.1"; fi
 exec >> "$LOG" 2>&1
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/meeting-os-update.XXXXXX")" || exit 1
-LOCK_HELD=''
 # Whatever happens, the app comes back — and the build that was just installed is the one that opens.
 # `open -a` goes through LaunchServices, which happily resolves "Meeting OS" to a stale copy in ~/Applications
 # or the Trash; the bundle path is the only unambiguous answer, so it is tried first.
-trap 'code=$?; [ -n "$LOCK_HELD" ] && rmdir "$LOCK" 2>/dev/null; rm -rf "$TMP" 2>/dev/null;
+trap 'code=$?; [ -n "$LOCK_HELD" ] && rm -rf "$LOCK" 2>/dev/null; rm -rf "$TMP" 2>/dev/null;
       open "$REPO/build/Meeting OS.app" 2>/dev/null || open -a "Meeting OS" 2>/dev/null; exit $code' EXIT
 echo "== $(date '+%F %T') güncelleme başladı ($FROM)"
 # Two updaters at once means two builds writing the same app bundle. The app can launch a second one (the card
 # and the automatic check are separate paths) and a teammate can start one by hand while another runs.
-if ! mkdir "$LOCK" 2>/dev/null; then
-  if [ -d "$LOCK" ] && [ -z "$(find "$LOCK" -maxdepth 0 -mmin "-$LOCK_STALE_MINUTES" 2>/dev/null)" ]; then
-    echo "eski kilit temizlendi ($LOCK)"; rm -rf "$LOCK"
-  fi
-  if ! mkdir "$LOCK" 2>/dev/null; then status failed "$FROM" "Güncelleme zaten sürüyor"; exit 1; fi
+take_lock() { mkdir "$LOCK" 2>/dev/null && printf '%s\n' "$$" > "$LOCK/pid"; }
+if ! take_lock; then
+  holder="$(cat "$LOCK/pid" 2>/dev/null || true)"
+  # Stale = the holder process is gone (a killed run); a lock without a pid (older updater, or taken a moment ago)
+  # is trusted for 30 minutes. A live holder is never evicted by a clock: a cold build can outlive any budget.
+  if [ -n "$holder" ]; then
+    kill -0 "$holder" 2>/dev/null || { echo "eski kilit temizlendi ($LOCK, pid $holder)"; rm -rf "$LOCK"; }
+  elif [ -z "$(find "$LOCK" -maxdepth 0 -mmin -30 2>/dev/null)" ]; then echo "eski kilit temizlendi ($LOCK)"; rm -rf "$LOCK"; fi
+  # Refusing must not touch update-status.json: that file belongs to the run that holds the lock.
+  if ! take_lock; then echo "güncelleme zaten sürüyor (pid ${holder:-?}); bu koşu bırakıldı"; exit 1; fi
 fi
 LOCK_HELD=1
 # A recording is the one thing that must never be interrupted: the build replaces the capture helper and the
 # app bundle underneath a meeting that is being taped right now.
-report_roots() {
-  printf '%s\n' "$DATA"
-  printf '%s\n' "$HOME/Library/Mobile Documents/com~apple~CloudDocs/MeetingOS-Reports"
-  [ -f "$DATA/settings.json" ] && sed -n 's/.*"\(report_dir\|team_dir\)"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\2/p' "$DATA/settings.json"
+# Only THIS Mac's recording counts: recording-heartbeat.json is also published per host into the shared iCloud
+# report folder, and scanning that made one Mac's meeting block the other Mac's update (10 Sep 2026).
+recording_live() {
+  [ -n "$(find "$DATA" -maxdepth 1 -name recording-heartbeat.json -mmin -3 2>/dev/null | head -n 1)" ] && echo live
   return 0
 }
-recording_live() {   # recording-heartbeat.json is rewritten once a minute while the recorder drains
-  report_roots | while IFS= read -r root; do
-    [ -n "$root" ] && [ -d "$root" ] || continue
-    [ -n "$(find "$root" -maxdepth 3 -name recording-heartbeat.json -mmin -3 2>/dev/null | head -n 1)" ] && { echo live; break; }
-  done
-}
 if pgrep -x MeetingCapture >/dev/null 2>&1 || [ -n "$(recording_live)" ]; then
-  status failed "$FROM" "Kayıt sürüyor; güncelleme yapılmadı"; exit 1
+  status refused "$FROM" "Kayıt sürüyor; güncelleme yapılmadı"; exit 1
 fi
 status running "$FROM" "Uygulamanın kapanması bekleniyor"
 i=0; while pgrep -x MeetingOS >/dev/null && [ $i -lt 60 ]; do sleep 1; i=$((i+1)); done
-if pgrep -x MeetingOS >/dev/null; then status failed "$FROM" "Uygulama kapanmadı; güncelleme iptal"; exit 1; fi
-if [ -n "$(git status --porcelain)" ]; then status failed "$FROM" "Yerel değişiklikler var; güncelleme yapılmadı"; exit 1; fi
+if pgrep -x MeetingOS >/dev/null; then status refused "$FROM" "Uygulama kapanmadı; güncelleme iptal"; exit 1; fi
+if [ -n "$(git status --porcelain)" ]; then status refused "$FROM" "Yerel değişiklikler var; güncelleme yapılmadı"; exit 1; fi
 # GIT_TERMINAL_PROMPT/GIT_ASKPASS: a repo that lost its credentials must fail, never sit on an invisible
 # username prompt. The watchdog covers the other half: a TCP connection that hangs instead of refusing.
 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git fetch --tags --force origin v0.1 &
@@ -83,7 +82,7 @@ if ! wait "$fetch_pid"; then status failed "$FROM" "GitHub'a ulaşılamadı"; ex
 # installed — that is a silent downgrade. `sort -V` orders them by version instead of by graph distance.
 TARGET="origin/v0.1"
 if [ -z "${MEETING_OS_UPDATE_UNTAGGED:-}" ]; then
-  TARGET="$(git tag --merged origin/v0.1 'v*' 2>/dev/null | sort -V | tail -n 1)"
+  TARGET="$(git tag --merged origin/v0.1 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
   if [ -z "$TARGET" ]; then status failed "$FROM" "GitHub'da yayınlanmış sürüm etiketi bulunamadı; güncelleme bekletildi"; exit 1; fi
 fi
 # Everything that can refuse the update is asked BEFORE the working tree moves. A Mac that fails the signing gate
@@ -92,7 +91,9 @@ fi
 if [ ! -f "$MARKER" ]; then status failed "$FROM" "$SIGNING_FIX"; exit 1; fi
 if ! git merge-base --is-ancestor HEAD "$TARGET" 2>"$TMP/ff.err"; then
   cat "$TMP/ff.err"
-  status failed "$FROM" "Dal ileri sarılamadı: $(head -n 1 "$TMP/ff.err" | tr -d '\r' || true) · yerel dal ayrışmış · Boran'a update.log gönderin"; exit 1
+  detail="$(head -n 1 "$TMP/ff.err" | tr -d '\r\t' || true)"
+  [ -n "$detail" ] || detail="yerel dalda GitHub’da olmayan değişiklik var (ayrışma)"   # rc=1 prints nothing
+  status failed "$FROM" "Dal ileri sarılamadı: $detail · Boran’a update.log gönderin"; exit 1
 fi
 # The commit the app in build/ was actually built from. After a failure between the merge and a finished build,
 # HEAD is already the new commit while the app is the old one; comparing against HEAD-at-start would then skip pip
@@ -130,5 +131,7 @@ else
   else
     status failed "$TO" "Derleme başarısız; kurulu sürüm değişmedi (build/Meeting OS.app) · ayrıntı update.log"
   fi
+  rc=1
 fi
 echo "== $(date '+%F %T') bitti ($TO)"
+exit "${rc:-0}"

@@ -17,7 +17,7 @@ def _exe(path, body):
 class UpdateScriptTests(unittest.TestCase):
     def run_update(self, *, marker=True, build='exit 0\n', tags='v9.9.9', can_ff=True, merged=False,
                    installed=None, deps_changed=False, capture_running=False, recording=None, lock=None,
-                   env=None):
+                   shared_recording=None, env=None):
         """Runs the real script against a fake repository.
 
         merged        HEAD already sits on the target (a retry after a post-merge failure)
@@ -40,9 +40,13 @@ class UpdateScriptTests(unittest.TestCase):
             if merged: (repo/'.git/merged').write_text('')
             if installed: (repo/'build/installed-commit').write_text(installed + '\n')
             if recording is not None:
-                beat = data/'MeetingOS-Reports'/'Test-Mac'/'recording-heartbeat.json'
-                beat.parent.mkdir(parents=True); beat.write_text('{}')
+                beat = data/'recording-heartbeat.json'   # this Mac's own recorder writes it here; the shared copy under MeetingOS-Reports/<host>/ is ignored
+                beat.parent.mkdir(parents=True, exist_ok=True); beat.write_text('{}')
                 os.utime(beat, (time.time()-recording, time.time()-recording))
+            if shared_recording is not None:   # another Mac's meeting, published into the shared report folder
+                beat = home/'Library/Mobile Documents/com~apple~CloudDocs/MeetingOS-Reports/Other-Mac/recording-heartbeat.json'
+                beat.parent.mkdir(parents=True, exist_ok=True); beat.write_text('{}')
+                os.utime(beat, (time.time()-shared_recording, time.time()-shared_recording))
             if lock is not None:
                 (data/'update.lock.d').mkdir()
                 os.utime(data/'update.lock.d', (time.time()-lock, time.time()-lock))
@@ -65,7 +69,7 @@ exit 0
             environ = {**os.environ, 'HOME': str(home), 'PATH': f'{bin_dir}:{os.environ["PATH"]}', **(env or {})}
             r = subprocess.run(['/bin/sh', 'scripts/update.sh'], cwd=repo, env=environ,
                                capture_output=True, text=True, timeout=180)
-            state = json.loads((data/'update-status.json').read_text())
+            state = json.loads((data/'update-status.json').read_text()) if (data/'update-status.json').is_file() else {}
             installed_now = (repo/'build/installed-commit').read_text().strip() if (repo/'build/installed-commit').is_file() else None
             return {'code': r.returncode, 'status': state, 'log': (data/'update.log').read_text(),
                     'installed': installed_now, 'merged': (repo/'.git/merged').exists(),
@@ -134,8 +138,13 @@ exit 0
     def test_a_second_updater_refuses_while_one_is_running(self):
         r = self.run_update(lock=60)
         self.assertEqual(r['code'], 1)
-        self.assertEqual(r['status']['message'], 'Güncelleme zaten sürüyor')
+        self.assertIn('zaten sürüyor', r['log'])
+        self.assertIsNone(r['status'].get('state'))   # the status file belongs to the run that holds the lock: untouched
         self.assertFalse(r['merged'])
+
+    def test_a_teammates_recording_in_the_shared_folder_does_not_refuse(self):
+        r = self.run_update(shared_recording=30)   # two Macs share one iCloud folder: the other one's meeting is not ours
+        self.assertEqual(r['status']['state'], 'done')
 
     def test_a_stale_lock_is_cleared(self):
         r = self.run_update(lock=45*60)
@@ -144,7 +153,7 @@ exit 0
     def test_a_live_recording_heartbeat_refuses_the_update(self):
         r = self.run_update(recording=30, build='echo BUILD_RAN; exit 0\n')
         self.assertEqual(r['code'], 1)
-        self.assertEqual(r['status']['message'], 'Kayıt sürüyor; güncelleme yapılmadı')
+        self.assertEqual((r['status']['state'], r['status']['message']), ('refused', 'Kayıt sürüyor; güncelleme yapılmadı'))
         self.assertFalse(r['merged'])
         self.assertNotIn('BUILD_RAN', r['log'])
 
@@ -155,7 +164,7 @@ exit 0
     def test_a_running_capture_helper_refuses_the_update(self):
         r = self.run_update(capture_running=True)
         self.assertEqual(r['code'], 1)
-        self.assertEqual(r['status']['message'], 'Kayıt sürüyor; güncelleme yapılmadı')
+        self.assertEqual((r['status']['state'], r['status']['message']), ('refused', 'Kayıt sürüyor; güncelleme yapılmadı'))
 
     # ---- the release target -----------------------------------------------------------------------------
     def test_the_highest_release_tag_wins_not_the_nearest_ancestor(self):
