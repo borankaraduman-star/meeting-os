@@ -106,7 +106,7 @@ def _errors(log_path, limit=8):
     if not Path(log_path).is_file(): return []
     out = []
     for line in Path(log_path).read_text(encoding='utf-8', errors='replace').splitlines()[-400:]:
-        if line.startswith('Meeting OS:') or 'Traceback' in line or 'Error' in line:
+        if line.startswith('Meeting OS:') or line.startswith('Traceback') or re.match(r'\s*\w*(Error|Exception)\b', line):   # anchored: a transcript line containing the word Error must never be copied into a shared report
             out.append(re.sub(r'/Users/[^ /]+', '/Users/…', line)[:240])
     return out[-limit:]
 
@@ -133,7 +133,7 @@ def write_recording_heartbeat(data_dir, state):
     try:
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
-        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True)
+        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         payload = {'recording_heartbeat_version': 1, 'host': host_name(), 'written': datetime.now(timezone.utc).isoformat(), **state}
         payload['line'] = recording_line(payload)
         target = folder / RECORDING_HEARTBEAT_FILE
@@ -247,7 +247,7 @@ def write_meeting_report(store, mid, data_dir, *, version=None, commit=None):
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
         report = build_meeting_report(store, mid, data_dir, include_text=bool(settings.get('share_text')), version=version, commit=commit)
-        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True)
+        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         target = folder / f"{report['created'][:10]}_{mid}.json"
         target.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding='utf-8')
         return str(target)
@@ -334,7 +334,7 @@ def write_heartbeat(store, data_dir, *, app=None):
     try:
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
-        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True)
+        folder = host_dir(settings); folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         target = folder / HEARTBEAT_FILE
         target.write_text(json.dumps(build_heartbeat(store, data_dir, app=app), ensure_ascii=False, indent=1), encoding='utf-8')
         return str(target)
@@ -346,10 +346,14 @@ def remove_meeting_report(mid, data_dir):
     """Delete this host's report for a meeting that was deleted, so the shared folder mirrors the app. Never raises."""
     removed = []
     try:
-        folder = host_dir(load_settings(data_dir))
-        if folder.is_dir():
-            for path in folder.glob(f'*_{mid}.json'):
-                path.unlink(); removed.append(str(path))
+        settings = load_settings(data_dir)
+        roots = {host_dir(settings), Path(settings['report_dir']) / host_name()}   # today's root and the personal one it may have replaced
+        team = team_dir(settings)
+        if team: roots.add(team / 'reports' / host_name())
+        for folder in roots:
+            if folder.is_dir():
+                for path in folder.glob(f'*_{mid}.json'):
+                    path.unlink(); removed.append(str(path))
     except Exception as exc:
         import sys; print(f'Rapor silinemedi: {type(exc).__name__}', file=sys.stderr)
     return removed

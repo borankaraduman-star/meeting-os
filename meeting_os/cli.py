@@ -224,7 +224,12 @@ def main(supervised=False):
                     from .mcp import serve
                     serve(store);return
                 if getattr(args,'output',None):args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2))
-                output(result)
+                if os.environ.get('MEETING_OS_PROGRESS_PATH') and args.command in ('analyze','ask','prepare','search'):
+                    # Launched by the app: stdout lands in last-job.log, which the teammate guide asks people to send along.
+                    # Print a receipt, never the analysis text, quotes or answers.
+                    counts={k:len(v) for k,v in ((result or {}).get('payload') or {}).items() if isinstance(v,list)} if isinstance(result,dict) else {}
+                    output({'command':args.command,'meeting':getattr(args,'meeting',None),'counts':counts,'ok':True})
+                else: output(result)
             elif args.command=='openrouter-import':
                 if not args.resume and args.audio is None:raise ValueError('Ses dosyası seçin')
                 if args.no_local or args.resume and json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(args.resume,)).fetchone()[0] if store.db.execute('SELECT 1 FROM meetings WHERE id=?',(args.resume,)).fetchone() else '{}').get('cloud_mode'):

@@ -332,3 +332,17 @@ class SecondOpinionTests(unittest.TestCase):
             d=Path(tmp); (d/'system-000000.partial.wav').write_bytes(b'x')
             self.assertFalse(has_audio({'capture_dir':str(d)}))
             (d/'system-000000.wav').write_bytes(b'x'); self.assertTrue(has_audio({'capture_dir':str(d)}))
+
+
+class PrivacySweepTests(unittest.TestCase):
+    def test_deleting_a_meeting_removes_its_retry_workspace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            db.db.executescript('''CREATE TABLE IF NOT EXISTS retry_attempts(id TEXT PRIMARY KEY, meeting TEXT, owner TEXT, state TEXT);
+                CREATE TABLE IF NOT EXISTS retry_workspaces(attempt TEXT PRIMARY KEY REFERENCES retry_attempts(id), root TEXT, name TEXT, device INTEGER, inode INTEGER);''')
+            attempt='a'*32; ws=Path(tmp)/('meeting-os-retry-'+attempt); ws.mkdir(); (ws/'mic-full.wav').write_bytes(b'x'*10)
+            db.db.execute('INSERT INTO retry_attempts VALUES(?,?,?,?)',(attempt,mid,'{}','interrupted'))
+            db.db.execute('INSERT INTO retry_workspaces VALUES(?,?,?,?,?)',(attempt,str(Path(tmp)),ws.name,0,0)); db.db.commit()
+            db.delete_meeting(mid)
+            self.assertFalse(ws.exists())   # the temp audio goes with the meeting
+            db.close()

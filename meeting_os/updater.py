@@ -32,7 +32,7 @@ def start(root, data_dir):
     script = Path(root) / 'scripts' / 'update.sh'
     if not script.is_file(): raise ValueError('update.sh bulunamadı')
     log = open(Path(data_dir) / 'update.log', 'a')
-    subprocess.Popen(['/bin/sh', str(script)], cwd=root, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True, env={**os.environ, 'MEETING_OS_UPDATER': '1'})
+    subprocess.Popen(['/bin/sh', str(script)], cwd=root, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True, env={**{k: v for k, v in os.environ.items() if k != 'OPENROUTER_API_KEY'}, 'MEETING_OS_UPDATER': '1'})
     return {'started': True}
 
 

@@ -196,7 +196,7 @@ class OpenRouterClient:
         options=diarization_options(model) if diarize else None
         if diarize and options is None:raise OpenRouterError('Seçilen model konuşmacı ayrımı sunmuyor; model otomatik değiştirilmedi.')
         if options:
-            payload['response_format']='verbose_json';payload['timestamp_granularities']=['segment'];payload['provider']={'options':options}
+            payload['response_format']='verbose_json';payload['timestamp_granularities']=['segment'];payload['provider']={'options':options,'data_collection':'deny'}
         result=self._post('audio/transcriptions',payload,timeout=timeout)
         if not isinstance(result.get('text'),str):raise OpenRouterError('OpenRouter transkript metni döndürmedi.')
         usage=result.get('usage') or {}
@@ -223,7 +223,7 @@ class OpenRouterLLM:
     def count(self,text):return max(1,len(text.encode('utf-8'))//3)  # ≈ tokens for Turkish; no tokenizer download
     def complete(self,system,user,max_tokens=1800,schema=None):
         payload={'model':self.model_id,'messages':[{'role':'system','content':system},{'role':'user','content':user}],
-                 'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True}}
+                 'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
         result=self.client._post('chat/completions',payload)
         try:

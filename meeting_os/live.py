@@ -203,7 +203,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
                 for row in rows:
                     row.metrics['live_lag_seconds']=max(0,time.monotonic()-started-row.end)
                     store.add_segment(mid,row)
-                    print(f'{row.start:8.2f} {row.speaker_name or row.speaker}: {row.text}',flush=True)
+                    if os.environ.get('MEETING_OS_LIVE_PREVIEW')=='1': print(f'{row.start:8.2f} {row.speaker_name or row.speaker}: {row.text}',flush=True)   # transcript text stays out of last-job.log unless a CLI user opts in
                 print(json.dumps({'backlog_chunks':pending.qsize()}),flush=True)
             except Exception as exc:
                 if stopping:continue

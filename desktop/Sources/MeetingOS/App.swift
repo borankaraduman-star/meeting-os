@@ -305,7 +305,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
         do {
             try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true)
             let log=dataDir.appendingPathComponent("last-job.log")
-            FileManager.default.createFile(atPath:log.path,contents:nil)
+            FileManager.default.createFile(atPath:log.path,contents:nil,attributes:[.posixPermissions:0o600])   // the log can carry job output; never world-readable
             let handle=try FileHandle(forWritingTo:log)
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")

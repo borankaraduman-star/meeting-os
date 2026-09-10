@@ -37,6 +37,7 @@ class Store:
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA busy_timeout=5000')   # the 2 s poll and a job open the same file; wait instead of failing
         self.db.execute('PRAGMA foreign_keys=ON')
+        self.db.execute('PRAGMA secure_delete=ON')   # deleted transcript pages are zeroed, not left in free space
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS meetings(id TEXT PRIMARY KEY, title TEXT, created TEXT, status TEXT, metadata TEXT);
         CREATE TABLE IF NOT EXISTS segments(id INTEGER PRIMARY KEY, meeting TEXT REFERENCES meetings(id), start REAL, end REAL, source TEXT, speaker TEXT, speaker_name TEXT, payload TEXT);
@@ -287,6 +288,17 @@ class Store:
             self.db.execute('DELETE FROM corrections WHERE id=?',(row['id'],))
         # The cluster is open again (or back to its old name): what the rest of the meeting can be has changed.
         return {'speaker':speaker,'name':name,'previous':previous,**self.resuggest(mid)}
+    def _sweep_retry_workspaces(self, mid, tables):
+        """A crashed retry leaves full mic/system WAVs in a temp workspace outside the data dir; the rows that
+        point at it are about to go, so the directories must go first (must run inside the caller's transaction)."""
+        if 'retry_workspaces' not in tables: return
+        import shutil
+        rows = self.db.execute('SELECT w.root, w.name FROM retry_workspaces w JOIN retry_attempts a ON a.id=w.attempt WHERE a.meeting=?', (mid,)).fetchall()
+        for root, name in rows:
+            try:
+                path = Path(root) / name
+                if isinstance(name, str) and name.startswith('meeting-os-retry-') and path.is_dir() and not path.is_symlink(): shutil.rmtree(path, ignore_errors=True)
+            except (OSError, TypeError): pass
     def delete_meeting(self, mid):
         """Remove one meeting and every row derived from it. Voice profiles are kept. Returns metadata for file cleanup."""
         row=self.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()
@@ -302,6 +314,7 @@ class Store:
                     self.db.execute('DELETE FROM task_edits WHERE task IN (SELECT id FROM tasks WHERE meeting=?)',(mid,))
                 self.db.execute('DELETE FROM tasks WHERE meeting=?',(mid,))
             if 'retry_attempts' in tables:
+                self._sweep_retry_workspaces(mid, tables)
                 for t in ('retry_segments','retry_workspaces'):
                     if t in tables: self.db.execute(f'DELETE FROM {t} WHERE attempt IN (SELECT id FROM retry_attempts WHERE meeting=?)',(mid,))
                 self.db.execute('DELETE FROM retry_attempts WHERE meeting=?',(mid,))
