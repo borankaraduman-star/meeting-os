@@ -4,6 +4,15 @@ import AppKit
 struct TranscriptView:View {
     @ObservedObject var model:Model
     var body:some View {
+        // Nothing to scroll: no NamesCard, no hints, no rows. Rendering the notice outside the ScrollView is
+        // what lets it centre vertically — inside one it would only ever be as tall as its own text.
+        if model.rows.isEmpty {
+            TranscriptEmptyView(model:model).noticeArea()
+        } else {
+            transcript
+        }
+    }
+    var transcript:some View {
         ScrollViewReader { proxy in ScrollView {
             // LazyVStack: a day-long meeting is 1200+ rows and an eager stack laid out every one of them on
             // open, on every rename and on every poll that published a row. The oscillation the eager stack was
@@ -20,7 +29,7 @@ struct TranscriptView:View {
                 if hiddenEcho>0 {
                     HStack(spacing:8) {
                         Image(systemName:"speaker.wave.2").foregroundStyle(.secondary)
-                        Text(model.showEchoRows ? "Mikrofon yankısı bölümleri gösteriliyor · hoparlörden mikrofona düşen aynı konuşma, ayrı kişi değil" : "\(hiddenEcho) mikrofon yankısı bölümü gizlendi · hoparlörden mikrofona düşen aynı konuşma").font(.caption).foregroundStyle(.secondary)
+                        Text(model.showEchoRows ? "Mikrofon yankısı bölümleri gösteriliyor · hoparlörden mikrofona düşen aynı konuşma, ayrı kişi değil" : "\(hiddenEcho) mikrofon yankısı bölümü gizlendi · hoparlörden mikrofona düşen aynı konuşma").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                         Spacer()
                         Button(model.showEchoRows ? "Gizle" : "Göster") { model.showEchoRows.toggle() }.font(.caption).accessibilityIdentifier("toggleEchoRows")
                     }
@@ -39,7 +48,7 @@ struct TranscriptView:View {
                 let canPlay = !model.recording && model.meeting?.metadata["text_only"] as? Bool != true
                 let canEdit = model.meeting?.status == "complete"
                 if canEdit && !model.rows.isEmpty {
-                    Text("Bir kelimeye tıklayın: yalnız burada ya da öğreterek düzeltin").font(.caption).foregroundStyle(.secondary)
+                    Text("Bir kelimeye tıklayın: yalnız burada ya da öğreterek düzeltin").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 }
                 if model.readingMode && model.search.isEmpty && model.focusedSegment == nil {
                     let blocks=model.blocks
@@ -48,13 +57,13 @@ struct TranscriptView:View {
                         if i>0, blocks[i-1].label != block.label { Divider().padding(.leading,62).padding(.vertical,4) }
                         TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label,marks:Markers.inBlock(marks,start:block.start,end:block.end),hideFillers:model.hideFillers,profiles:model.profiles.map(\.name),attendees:model.calendarAttendees,wordFix:model.wordFix?.blockID==block.id ? model.wordFix : nil).equatable().id(block.id)
                     }
-                    if blocks.isEmpty { TranscriptEmptyView(model:model).padding(32) }
+                    if blocks.isEmpty { TranscriptEmptyView(model:model).inlineNoticeArea() }
                 } else {
                     let rows=model.visibleRows   // filtered once per rebuild, not once per body pass
                     ForEach(rows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit,wordFix:model.wordFix?.blockID==row.id ? model.wordFix : nil).equatable().id(row.id) }
-                    if rows.isEmpty { TranscriptEmptyView(model:model).padding(32) }
+                    if rows.isEmpty { TranscriptEmptyView(model:model).inlineNoticeArea() }
                 }
-            }.padding(24)
+            }.padding(24).readingColumn()
         }
         // Every word in the transcript is a link to a private meetingos://word URL; this is where a click
         // on one lands. Nothing else in the app opens URLs from inside the transcript, so the handler can own

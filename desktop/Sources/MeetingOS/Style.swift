@@ -56,6 +56,60 @@ struct TaskStatusBadge:View {
     var body:some View { Label(label,systemImage:icon).font(.caption.weight(.medium)).foregroundStyle(color).padding(.horizontal,9).padding(.vertical,5).background(color.opacity(0.09),in:Capsule()).fixedSize() }
 }
 
+/// Widths every content page and every notice agrees on. Boran, 10 Sep 2026: "boş tablerde gelen uyarı
+/// ortalı değil; uygulamayı genişletince ya da küçültünce kötü görünüyor." The cause was that an empty
+/// state is just another row of a leading-aligned VStack, so at 2300 pt it sat in the top-left corner and
+/// its sentence ran the whole width of the screen.
+enum NoticeMetrics {
+    /// A notice's own text column. One sentence must never be wider than this, at any window size.
+    static let textWidth:CGFloat=420
+    /// The reading column every tab's content sits in, centred in the window.
+    static let readingWidth:CGFloat=820
+    /// A notice that shares a scrolling page with other content still gets a block of its own.
+    static let inlineHeight:CGFloat=220
+}
+
+/// The one shape every empty state and page-level notice takes: icon, title, one detail line, and at most
+/// a couple of buttons — centred on both axes inside whatever space it is given, text capped and centred.
+struct CenteredNotice<Actions:View>:View {
+    let icon:String
+    let title:String
+    let detail:String
+    @ViewBuilder var actions:()->Actions
+    init(icon:String,title:String,detail:String,@ViewBuilder actions:@escaping ()->Actions={ EmptyView() }) {
+        self.icon=icon;self.title=title;self.detail=detail;self.actions=actions
+    }
+    var body:some View {
+        VStack(spacing:10) {
+            Image(systemName:icon).font(.system(size:34,weight:.regular)).foregroundStyle(.secondary).accessibilityHidden(true)
+            Text(title).font(.headline).multilineTextAlignment(.center).fixedSize(horizontal:false,vertical:true)
+            Text(detail).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal:false,vertical:true)
+            // Bare, not wrapped in an HStack: a notice with no button (most of them) must not pay for a
+            // zero-height row's spacing, which would push the whole thing off centre by a few points.
+            actions()
+        }
+        .frame(maxWidth:NoticeMetrics.textWidth)
+        .padding(24)
+        .accessibilityElement(children:.contain)
+        .accessibilityLabel(title)
+    }
+}
+
+extension View {
+    /// A notice that owns the whole tab: centred horizontally and vertically in the content area.
+    /// Only ever applied outside a ScrollView — a scroll view proposes an unbounded height, so
+    /// `maxHeight:.infinity` inside one collapses to the notice's own height and centres nothing.
+    func noticeArea()->some View { frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.center) }
+    /// A notice on a page that still has other content (a header, a card, a filter): centred across the
+    /// page with a block of height of its own so it does not cling to the row above it.
+    func inlineNoticeArea()->some View { frame(maxWidth:.infinity,minHeight:NoticeMetrics.inlineHeight,alignment:.center) }
+    /// One reading column per tab: capped, centred in the window, its own content still left-aligned.
+    /// Two frames, not one — the inner cap is what wraps the text, the outer `.infinity` is what centres it.
+    func readingColumn(_ width:CGFloat=NoticeMetrics.readingWidth)->some View {
+        frame(maxWidth:width,alignment:.leading).frame(maxWidth:.infinity,alignment:.center)
+    }
+}
+
 struct TranscriptEmptyView:View {
     @ObservedObject var model:Model
     var title:String {
@@ -85,9 +139,7 @@ struct TranscriptEmptyView:View {
         }
     }
     var body:some View {
-        ContentUnavailableView {
-            Label(title,systemImage:model.rows.isEmpty ? "waveform":"magnifyingglass")
-        } description: { Text(detail) } actions: {
+        CenteredNotice(icon:model.rows.isEmpty ? "waveform":"magnifyingglass",title:title,detail:detail) {
             if !model.rows.isEmpty {
                 Button("Tüm konuşmayı göster") { model.search="";model.focusedSegment=nil;model.pendingEvidence=nil }
             } else if model.selected != nil {

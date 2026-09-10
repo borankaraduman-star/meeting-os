@@ -47,7 +47,7 @@ struct ReviewView:View {
                     .help("Sözlükle tara: transkripti proje sözlüğüyle karşılaştırır. Karne ve bakım panellerini buradan açıp kapatırsınız.")
                     .accessibilityIdentifier("reviewMenu")
             }
-            Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary)
+            Text("Bütün metni okumak yerine yalnız şüpheli yerleri dinleyip düzeltin. Her madde neden şüpheli bulunduğunu söyler.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             ReviewDebtView(m:model)
             if showScorecard { VStack(alignment:.leading,spacing:8) { Label("Son 7 gün karnesi · toplantı saati, karar, görev, konuşma payı",systemImage:"chart.bar").font(.callout); ScorecardView(m:model) }.accessibilityIdentifier("scorecardGroup") }
             if showMaintenance { VStack(alignment:.leading,spacing:8) { Label("Haftalık bakım · profiller, öğrenilen kurallar, disk",systemImage:"wrench.and.screwdriver").font(.callout); MaintenanceView(m:model) }.accessibilityIdentifier("maintenanceGroup") }
@@ -59,7 +59,10 @@ struct ReviewView:View {
                 }.padding(14).meetingCard()
             }
             if !model.scorecard.isEmpty { Label(model.scorecard,systemImage:"chart.bar").font(.caption).foregroundStyle(.secondary).help("Düzeltmelerinizden biriken yerel kalite seti; model eğitilmez, iyileşme ölçülür") }
-            if model.review.isEmpty { ContentUnavailableView("Kontrol gerektiren bir şey yok",systemImage:"checkmark.seal",description:Text("Konuşmacı adları, çakışan konuşmalar ve görev sahipleri için şüpheli bir bölüm bulunmadı.")) }
+            if model.review.isEmpty {
+                CenteredNotice(icon:"checkmark.seal",title:"Kontrol gerektiren bir şey yok",detail:"Konuşmacı adları, çakışan konuşmalar ve görev sahipleri için şüpheli bir bölüm bulunmadı.")
+                    .inlineNoticeArea()
+            }
             ForEach(model.review) { item in
                 VStack(alignment:.leading,spacing:8) {
                     HStack(spacing:8) {
@@ -104,7 +107,7 @@ struct ReviewView:View {
                     }.font(.callout)
                 }.padding(18).meetingCard()
             }
-        }.padding(24) }
+        }.padding(24).readingColumn() }
         .task(id:model.selected) { await model.loadReview(); await model.loadScorecard() }
     }
 }

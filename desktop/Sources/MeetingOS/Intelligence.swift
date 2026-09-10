@@ -139,7 +139,10 @@ struct AnalysisView:View {
                 SummarySection(m:m,section:key,label:label,items:(payload[key] as? [[String:Any]] ?? []).map(Insight.init),expanded:$expanded).padding(.top,6)
             }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout).foregroundStyle(.secondary).padding(.top,6)
-        } else { ContentUnavailableView("Henüz özet yok",systemImage:"text.bubble",description:Text(m.transcriptionMode=="openrouter" ? "Transkript hazır olunca özet, kararlar ve görevler OpenRouter’daki \(m.analysisModel) modeliyle çıkarılır; bu Mac’te model yüklenmez." : "Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")) }
-    }.frame(maxWidth:760,alignment:.leading).padding(24).frame(maxWidth:.infinity,alignment:.leading)
+        } else {
+            CenteredNotice(icon:"text.bubble",title:"Henüz özet yok",detail:m.transcriptionMode=="openrouter" ? "Transkript hazır olunca özet, kararlar ve görevler OpenRouter’daki \(m.analysisModel) modeliyle çıkarılır; bu Mac’te model yüklenmez." : "Nihai transkript tamamlandıktan sonra özet, kararlar ve görevler yerel olarak çıkarılır.")
+                .inlineNoticeArea()
+        }
+    }.padding(24).readingColumn()
         .task(id:m.selected) { expanded=[];showTalkShare=false;await m.loadContinuity() } } }
 }

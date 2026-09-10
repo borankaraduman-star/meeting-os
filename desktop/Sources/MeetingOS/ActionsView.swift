@@ -34,19 +34,19 @@ struct ActionsView:View {
         }
     }
     var body:some View { VStack(alignment:.leading) {
-        HStack { Text("Görevlerim").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20)
+        HStack { Text("Görevlerim").font(.system(size:23,weight:.bold,design:.rounded));Spacer();Text("\(visible.filter { !["done","dismissed"].contains($0.state) }.count) açık · \(visible.count) toplam").font(.callout).foregroundStyle(.secondary) }.padding(.horizontal,24).padding(.top,20).readingColumn()
         // Pinned above the list: the filter never scrolls away with the tasks it filters.
-        HStack { Picker("Görevler",selection:Binding(get:{ filter },set:{ stored=$0 })) { Text("Bana ait (\(count("mine")))").tag("mine");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Spacer(minLength:8); Menu("Dışa aktar") { Button("Brifing…") { Task { await m.exportBrief() } }; Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }; Divider(); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }; Button("Hafta özeti…") { Task { await m.exportWeeklyDigest() } } }.fixedSize().help("Markdown olarak kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("actionsExportMenu") }.padding().task(id:m.selected) { await m.loadContinuity() }.accessibilityIdentifier("actionsFilterPicker")
-        ScrollView { LazyVStack(alignment:.leading,spacing:18) {
-            if visible.isEmpty {
-                ContentUnavailableView { Label("Görev bulunamadı",systemImage:"checklist") } description: {
-                    Text(ActionsFilter.emptyMessage(filter:filter,meetingOpen:count("meeting")))
-                } actions: {
-                    if ActionsFilter.offersMeetingSwitch(filter:filter,meetingOpen:count("meeting")) {
-                        Button("Bu toplantı") { stored="meeting" }.buttonStyle(.link).accessibilityIdentifier("showMeetingTasksButton")
-                    }
+        HStack { Picker("Görevler",selection:Binding(get:{ filter },set:{ stored=$0 })) { Text("Bana ait (\(count("mine")))").tag("mine");Text("Bu toplantı (\(count("meeting")))").tag("meeting");Text("Tüm görevler (\(count("all")))").tag("all") }.pickerStyle(.segmented); Spacer(minLength:8); Menu("Dışa aktar") { Button("Brifing…") { Task { await m.exportBrief() } }; Button("Sonraki toplantı gündemi…") { Task { await m.exportAgenda() } }; Divider(); Button("Gün sonu özeti…") { Task { await m.exportDigest() } }; Button("Hafta özeti…") { Task { await m.exportWeeklyDigest() } } }.fixedSize().help("Markdown olarak kaydeder; hiçbir yere gönderilmez").accessibilityIdentifier("actionsExportMenu") }.padding().readingColumn().task(id:m.selected) { await m.loadContinuity() }.accessibilityIdentifier("actionsFilterPicker")
+        // Nothing under the filter: the notice takes the space the list would have had, rather than
+        // hanging off the top-left corner of a scroll view that has nothing else in it.
+        if visible.isEmpty {
+            CenteredNotice(icon:"checklist",title:"Görev bulunamadı",detail:ActionsFilter.emptyMessage(filter:filter,meetingOpen:count("meeting"))) {
+                if ActionsFilter.offersMeetingSwitch(filter:filter,meetingOpen:count("meeting")) {
+                    Button("Bu toplantı") { stored="meeting" }.buttonStyle(.link).accessibilityIdentifier("showMeetingTasksButton")
                 }
-            }
+            }.noticeArea()
+        } else {
+        ScrollView { LazyVStack(alignment:.leading,spacing:18) {
             ForEach(visible) { item in VStack(alignment:.leading,spacing:10) {
                 HStack(alignment:.top) { Text(item.title).font(.headline).strikethrough(["done","dismissed"].contains(item.state)).textSelection(.enabled);Spacer() }   // the state picker below already says the state
                 Text("\(item.owner.isEmpty ? "Sahibi belirsiz" : item.owner) · \(item.due.isEmpty ? "Tarih belirtilmedi" : item.due) · \(item.meetingTitle)").font(.caption).foregroundStyle(.secondary)
@@ -70,6 +70,7 @@ struct ActionsView:View {
                 EvidenceView(m:m,evidence:item.evidence)
                 ForEach(m.drafts.filter {$0.task==item.id}.prefix(1)) { draft in DisclosureGroup(draft.stale ? "Güncel olmayan taslak":"İncelenecek taslak · gönderilmedi") { VStack(alignment:.leading) { Text(draft.text).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(.top,8);Button("Taslağı düzenle") { draftEdit=draft;draftText=draft.text }.disabled(draft.stale) } } }
             }.padding(20).meetingCard() }
-        }.padding(24) }
+        }.padding(24).readingColumn() }
+        }
     }.sheet(item:$draftEdit) { draft in VStack(alignment:.leading,spacing:16) { Text("Taslağı düzenle").font(.title2.bold());TextEditor(text:$draftText).frame(height:340);HStack { Button("Vazgeç") { draftEdit=nil };Spacer();Button("Kaydet") { Task { do { _=try await m.request(["action":"draft_update","draft":draft.id,"text":draftText]);try await m.refreshIntelligence(m.selected ?? "");draftEdit=nil } catch { m.error=error.localizedDescription } } } } }.padding(24).frame(width:650) }.sheet(item:$edit) { item in VStack(alignment:.leading,spacing:16) { Text("Görevi düzenle").font(.title2.bold());TextField("Görev",text:$title);TextField("Sahibi",text:$owner);TextField("Kaynakta geçen tarih",text:$due);Text("Otomatik çıkarım öneridir. Sahip ve tarihi kaynak konuşmayla doğrulayın.").font(.caption).foregroundStyle(.secondary);HStack { Button("Vazgeç") { edit=nil };Spacer();Button("Kaydet") { Task { await m.updateAction(item,changes:["title":title,"owner":owner,"due_text":due]);edit=nil } }.disabled(title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty) } }.padding(24).frame(width:500) } }
 }
