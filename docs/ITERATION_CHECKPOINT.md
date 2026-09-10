@@ -635,3 +635,7 @@ Ajan `scripts/benchmark-analysis-cloud.py` yazdı (OpenRouter adaptörüyle fixt
 ## 2026-09-10 03:40 — 1.2.30 boşta soak (15 dk, 30 örnek)
 
 `ps` 30 sn’de bir: CPU 30 örneğin 20’sinde %0,0, en yüksek %1,2; RSS 178 → 79 MB (sistem bellek baskısında uygulama önbelleğini bıraktı, sızıntı yok). Köprü süreci hiçbir örnekte açık yakalanmadı (çağrı ~25 ms). Sistem baskısı Cloudflare/Chrome/claude süreçlerinden; Meeting OS en küçüklerden.
+
+## 2026-09-10 04:30 — analiz katmanı için ikinci görüş uygulandı
+
+Doğrulama ajanı 1.2.30 analiz değişikliklerinde 10 bulgu verdi; kritik üçü ve diğerleri uygulandı: `drop_superseded` artık silmiyor, `superseded=True` + `needs_review` işaretliyor (Özet’te üstü çizili ve “Toplantı içinde geri alındı”; Karar günlüğü atlıyor; `payload_items` alanı taşır); `REVERSAL` olumsuzlama koruması (“iptal edilmeyecek” onaydır) ve konu barı `max(3, ceil(0.5·min))` (aynı ürün alanı ≠ aynı karar); alıntı kurtarma en az 3 içerik kelimesi + iddiayla ortak kelime ister ve kurtarılan madde `needs_review` (dolgu cümlesi kanıt olamaz); tekrar giderme 3. kural iki tarafta gerçek vade ister (bir sahibin iki tarihsiz görevi iki görevdir); `canonical_owner` katlanmış eşleşme birden fazla kişiye çıkarsa tahmin etmez; `compact_summary` alıntı kontrolü `normalize` ile; devredilen görev yeni sahibiyle kalır (prompt); `owner_key` waiting/digest/brief’te de (kendi görevin Beklediklerim’e düşmez; İlker/Ilker tek kart); `brief` sabit “boran” yerine ayar. 77 birim testi yeşil; bulut kıyası yeniden koşuyor.
