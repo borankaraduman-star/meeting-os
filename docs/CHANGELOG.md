@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 49 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 50 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.45](#v1245) | 2026-09-10 18:40 | Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz |
 | [v1.2.44](#v1244) | 2026-09-10 17:15 | Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır |
 | [v1.2.43](#v1243) | 2026-09-10 16:20 | Meeting OS 1.2.43 — ilk gerçek toplantı: ad, maliyet, bekleme süresi |
 | [v1.2.42](#v1242) | 2026-09-10 15:20 | Meeting OS 1.2.42 — kurulumda/güncellemede parola penceresi kalmadı; “Yalnız bu bölüm” ikinci görüşle sağlamlaştı |
@@ -69,6 +70,29 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1245"></a>
+### Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz
+
+2026-09-10 18:40 · yerel not · GitHub sürüm sayfası yok
+
+Tur 12 denetimi (güncelleme / geri alma / ekip klasörü: 4 P0, 10 P1, 9 P2) → uygulandı.
+
+**Güncelleme (P0)**
+- `update.sh` artık depoyu değiştirmeden ÖNCE imza iznini ve ileri sarılabilirliği denetler; yarıda kalan güncelleme depoyu yeni/uygulamayı eski bırakıp "güncel" diyemez.
+- Son başarıyla kurulan commit `build/installed-commit` olarak izlenir; tekrar denemede pip ve kayıt yardımcısı atlanmaz.
+- Ekip klasörü nabzı yüklü uygulama sürümünü, depo sürümünü, commit'i, son güncelleme durumunu ve imza işaretini taşır; `reports summarize` sürüm uyuşmazlığı, başarısız güncelleme ve eksik izin için uyarı verir.
+- Dal ayrışması (force-push) artık uygulamada, kurulum kartında ve köprüde açıkça "Dal ayrışmış · yeni sürüm kurulamıyor · Boran'a bildirin"; güncelle düğmesi gizlenir. Etiketler `--force` ile çekilir, en YÜKSEK sürüm etiketi seçilir (en yakın değil).
+
+**Güncelleme (P1)**
+- Kilit (ikinci koşu "Güncelleme zaten sürüyor"), kayıt sürerken red ("Kayıt sürüyor; güncelleme yapılmadı"), atomik durum dosyası, günlük döndürme, derleme çıktısı koşu başına ayrı dosya, "Derleme başarısız; kurulu sürüm değişmedi" doğru mesajı, çıkışta önce depo yolundaki uygulama açılır.
+- Yedekler artık oluşturulur oluşturulmaz silinmiyor (zaman damgasına göre iki yedek kalır).
+- İmza izni işareti mesajında depo yolu var; Öz-test ve `doctor` "hata" düzeyinde söyler; kurulum kartında "İmzalama izni" satırı. Keychain'de anahtar olan ama dosyası olmayan Mac artık hata değil uyarı.
+- Ad 1.2.44 geçişinde sessizce boşalmıyor: uygulama açılışta bir kez sorar; ⌃⌥R ayarlar yüklenmeden ad yok sanmaz; ayarlar penceresi açıkken çıkışta yazılan ad kaybolmaz. 30 dk'dan eski "çalışıyor" güncelleme durumu "yarıda kalmış olabilir" diye söylenir; başarısız güncelleme bildirim de gönderir.
+
+**Belgeler:** güncelleme sırası, yarıda kalan güncelleme, force-push yasağı, "etiket sürümdür, release paketi değil" (zip ve SHA güncellemede kullanılmaz), geri dönüş desteklenmiyor (ölçüldü), nabız içeriği.
+
+Kurulu Mac'lerde ilk güncelleme bir kez `sh ~/meeting-os/scripts/fix-signing-prompts.sh` isteyebilir (1.2.41 ve öncesinde çalıştırılmış olsa da dosya yazılmamıştı).
 
 <a id="v1244"></a>
 ### Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır
