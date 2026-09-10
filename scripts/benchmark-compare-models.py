@@ -58,7 +58,7 @@ def main():
     a = ap.parse_args()
     files = a.files or sorted(glob.glob(str(Path(__file__).resolve().parents[1]/'build'/'benchmark-model-*.json')))
     rows = sorted((load(f) for f in files), key=score, reverse=True)
-    cols = ['model', 'passed', 'checks', 'verified', 'verbatim', 'leaks', 'missing_tasks', 'missing_decisions', 'duplicates', 'turkish_issues', 'errors', 'mean_seconds', 'spend_usd', 'two_hour_usd']
+    cols = ['model', 'cases', 'passed', 'checks', 'verified', 'verbatim', 'leaks', 'missing_tasks', 'missing_decisions', 'duplicates', 'turkish_issues', 'errors', 'mean_seconds', 'spend_usd', 'two_hour_usd']
     print('| ' + ' | '.join(cols) + ' |'); print('|' + '---|'*len(cols))
     for r in rows:
         print('| ' + ' | '.join('' if r.get(c) is None else str(r.get(c)) for c in cols) + ' |')
