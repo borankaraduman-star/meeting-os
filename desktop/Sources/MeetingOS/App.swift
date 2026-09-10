@@ -300,17 +300,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     /// Recording has its own process slot: a finalize/analyze job from the previous meeting must never block ⌃⌥R.
     func launch(_ args:[String], complete:@escaping (Bool)->Void) {
         let isRecord=JobPriority.isRealtime(args)
+        let jobEnvironment=consumeJobEnvironment()   // a refused launch drops them too: they belong to this attempt only
         guard isRecord ? recordProcess==nil : job==nil else { return }
         let idle=idleRetry; idleRetry=false   // consumed by this launch only
         do {
-            try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true)
+            try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])   // transcripts and receipts live here; an existing folder keeps its mode
             let log=dataDir.appendingPathComponent("last-job.log")
             FileManager.default.createFile(atPath:log.path,contents:nil,attributes:[.posixPermissions:0o600])   // the log can carry job output; never world-readable
             let handle=try FileHandle(forWritingTo:log)
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobs.jobProgress="İşlem başlatılıyor" }
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path,"MEETING_OS_TITLE":jobTitle]) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(jobEnvironment) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomMeetingOpen || recordProcess != nil,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
@@ -493,6 +494,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any]) throws -> [String:Any] {
     var pollTick=0
     /// Title of the job being launched, handed to the child in MEETING_OS_TITLE (never on argv).
     var jobTitle=""
+    /// The typed archive question and the picked import file: MEETING_OS_QUESTION / MEETING_OS_AUDIO_PATH.
+    /// argv is world-readable through `ps`, and both name what this Mac's owner is working on.
+    var jobQuestion=""; var jobAudioPath=""
+    /// One-shot inputs for the child, consumed by the launch attempt that carries them: a later, unrelated
+    /// job must never inherit the previous meeting's title or the last question.
+    private func consumeJobEnvironment()->[String:String] {
+        defer { jobTitle="";jobQuestion="";jobAudioPath="" }
+        return ["MEETING_OS_TITLE":jobTitle,"MEETING_OS_QUESTION":jobQuestion,"MEETING_OS_AUDIO_PATH":jobAudioPath]
+    }
     /// Recording lives in its own process slot (see launch); jobs never block it.
     var recordProcess:Process?; var recordStartedAt:Date?; var stopArmedAt:Date?
     var sleptAt:Date?; var continuitySeen:RecordingContinuity.State?

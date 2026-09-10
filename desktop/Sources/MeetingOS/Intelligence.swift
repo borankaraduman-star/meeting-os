@@ -67,8 +67,10 @@ extension Model {
         guard !memoryQuery.trimmingCharacters(in:.whitespaces).isEmpty else { return }
         let url=dataDir.appendingPathComponent("answer-\(UUID().uuidString).json")
         activity="Toplantı kayıtlarında yanıt aranıyor…";answer="";answerEvidence=[]
-        launch(["ask",memoryQuery,"--output",url.path]+cloudAnalysisArguments) { [weak self] ok in
+        jobQuestion=memoryQuery   // never on argv: the question names what this Mac's owner is looking for
+        launch(["ask","--output",url.path]+cloudAnalysisArguments) { [weak self] ok in
             guard let self=self else { return }
+            defer { try? FileManager.default.removeItem(at:url) }   // the receipt quotes the transcript verbatim; it lives only as long as this read
             if ok, let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] { self.answer=result["answer"] as? String ?? ""; self.answerEvidence=(result["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); self.activity="Arşiv yanıtı hazır · Kaynaklarla birlikte kontrol edin" }
         }
     }

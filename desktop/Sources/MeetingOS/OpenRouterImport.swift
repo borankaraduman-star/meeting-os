@@ -134,7 +134,8 @@ struct OpenRouterImportView:View {
         if let resume, let meeting=model.meetings.first(where:{ $0.id==resume }) { model.jobTitle=""; args=CloudTranscription.resumeArguments(meeting:meeting,model:selectedModel,output:result.path) }
         else if let path {
             model.jobTitle=title.isEmpty ? "OpenRouter toplantısı":title
-            args=CloudTranscription.importArguments(path:path.path,title:title.isEmpty ? "OpenRouter toplantısı":title,model:selectedModel,output:result.path)
+            model.jobAudioPath=path.path
+            args=CloudTranscription.importArguments(model:selectedModel,output:result.path)
             if let digest { registration=["action":"register_import_digest","digest":digest];if let fileSize { registration?["size"]=fileSize } }
         }
         else { return }

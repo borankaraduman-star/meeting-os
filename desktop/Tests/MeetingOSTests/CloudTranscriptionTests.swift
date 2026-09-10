@@ -117,12 +117,20 @@ final class CloudTranscriptionTests:XCTestCase {
     func testFinalizeAndImportNeverCarryKeysAndResumeKeepsStoredModel() {
         let f=CloudTranscription.finalizeArguments(meeting:"m1",model:"deepgram/nova-3",output:"/o")
         XCTAssertEqual(f,["openrouter-finalize","m1","--allow-upload","--output","/o","--model","deepgram/nova-3"])
-        XCTAssertTrue(CloudTranscription.importArguments(path:"/a.m4a",title:"T",model:"deepgram/nova-3",output:"/o").contains("--no-local"))
+        XCTAssertEqual(CloudTranscription.importArguments(model:"deepgram/nova-3",output:"/o"),["openrouter-import","--no-local","--allow-upload","--model","deepgram/nova-3","--output","/o"])
         let cloud=Meeting(["id":"m2","status":"incomplete","recovery_state":"interrupted","metadata":["cloud_mode":"capture","model":"deepgram/nova-3"]])
         XCTAssertEqual(CloudTranscription.resumeArguments(meeting:cloud,model:"openai/gpt-transcribe",output:"/o").prefix(2),["openrouter-finalize","m2"])
         XCTAssertFalse(CloudTranscription.resumeArguments(meeting:cloud,model:"openai/gpt-transcribe",output:"/o").contains("--model"))
         let legacy=Meeting(["id":"m3","status":"incomplete","recovery_state":"interrupted","metadata":["engine":"openrouter","model":"openai/gpt-transcribe"]])
         XCTAssertEqual(CloudTranscription.resumeArguments(meeting:legacy,model:"openai/gpt-transcribe",output:"/o").first,"openrouter-import")
+    }
+    /// `ps` shows argv to every user on the Mac: the meeting title, the picked file and the typed question
+    /// travel in the environment instead. Only ids, model names and paths the app itself made stay on argv.
+    func testUserTextNeverReachesArgv() {
+        let record=CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"Gizli görüşme",receipt:"/r")
+        XCTAssertFalse(record.contains("Gizli görüşme"));XCTAssertFalse(record.contains("--title"))
+        let imported=CloudTranscription.importArguments(model:"deepgram/nova-3",output:"/o")
+        XCTAssertFalse(imported.contains { $0.hasSuffix(".m4a") });XCTAssertFalse(imported.contains("--title"))
     }
     func testCloudRowsShowClusterLabelsUntilNamed() {
         let cluster=Row(["id":1,"start":0.0,"end":3.0,"text":"x","speaker":"Konuşmacı 2","source":"system","flags":["cloud_transcript","cloud_diarization"]])

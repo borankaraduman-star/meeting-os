@@ -18,8 +18,9 @@ enum CloudTranscription {
         if let model, !model.isEmpty { args += ["--model",model] }
         return args
     }
-    static func importArguments(path:String,title:String,model:String,output:String)->[String] {
-        ["openrouter-import","--no-local","--allow-upload","--model",model,"--output",output,path]
+    /// The picked file travels in MEETING_OS_AUDIO_PATH, like the title: argv is readable by every user on the Mac.
+    static func importArguments(model:String,output:String)->[String] {
+        ["openrouter-import","--no-local","--allow-upload","--model",model,"--output",output]
     }
     /// Meetings created by the cloud-only path resume through finalize; older Sherpa-based imports keep their own resume.
     static func resumeArguments(meeting:Meeting,model:String,output:String)->[String] {
