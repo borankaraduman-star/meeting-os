@@ -6,6 +6,8 @@ from .memory import Memory, RETIRED
 from .reports import store_owner
 
 
+MIN_NAMEABLE_SECONDS=4.0   # below this a diarization cluster is noise, not a voice the user should be asked to name
+
 def review_queue(store, mid, data_dir=None):
     rows=store.segments(mid)
     owner=store_owner(store)   # the mic label is a person: read raw, every queue item about the user said "Ben"
@@ -17,6 +19,7 @@ def review_queue(store, mid, data_dir=None):
         base={'segment_id':r['id'],'start':r['start'],'speaker':row_label(r,owner),'text':excerpt}
         if identity.get('suggested') and not r.get('speaker_name'):
             if (r['speaker'],'suggest') in seen_clusters: continue
+            if sum(x['end']-x['start'] for x in rows if x['speaker']==r['speaker'] and x['source']==r['source'])<MIN_NAMEABLE_SECONDS: continue
             seen_clusters.add((r['speaker'],'suggest'))
             items.append({**base,'kind':'suggested_name','severity':1,'reason':f"Ses profili “{identity['suggested']}” kişisine benziyor (benzerlik {identity.get('similarity',0):.2f}); tek tıkla onaylayın veya düzeltin",'suggested':identity['suggested'],'speaker_key':r['speaker']})
             continue
@@ -25,6 +28,10 @@ def review_queue(store, mid, data_dir=None):
         if 'cloud_diarization' in r['flags'] and not r.get('speaker_name') and cluster is not None and (r['speaker'],'unnamed') not in seen_clusters:
             total=sum(x['end']-x['start'] for x in rows if x['speaker']==r['speaker'] and x['source']==r['source'])   # linked clusters share one label
             seen_clusters.add((r['speaker'],'unnamed'))
+            # A cluster with a second or two of sound is a cough, a door, a word cut off by the diarizer — not a
+            # person to name (Boran, 10 Sep 2026: "1-2 saniyelik noise'lara isim verilemez"). It stays in the
+            # transcript under its label; nobody is asked about it.
+            if total<MIN_NAMEABLE_SECONDS: continue
             sim=identity.get('similarity')
             why=f"Kayıtlı profillere yeterince benzemedi (en yakın {identity.get('candidate')} {sim:.2f})" if sim else 'Bu ses için kayıtlı profil yok'
             items.append({**base,'kind':'unnamed_speaker','severity':2,'reason':f'İsimsiz konuşmacı, toplam {total:.0f} sn · {why}','speaker_key':r['speaker']})

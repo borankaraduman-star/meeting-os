@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 61 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 62 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,16 +18,17 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
-| [v1.2.56](#v1256) | 2026-09-11 07:10 | Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli |
-| [v1.2.55](#v1255) | 2026-09-11 05:05 | Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural |
-| [v1.2.54](#v1254) | 2026-09-11 03:50 | Meeting OS 1.2.54 — 2 saatlik toplantı: kayıp yok, disk dürüst, arayüz tembel |
-| [v1.2.53](#v1253) | 2026-09-11 03:05 | Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin |
-| [v1.2.52](#v1252) | 2026-09-11 01:35 | Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor |
-| [v1.2.51](#v1251) | 2026-09-11 00:50 | Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez |
-| [v1.2.50](#v1250) | 2026-09-10 23:55 | Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı |
-| [v1.2.49](#v1249) | 2026-09-10 23:20 | Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür |
-| [v1.2.48](#v1248) | 2026-09-10 22:50 | Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez |
-| [v1.2.47](#v1247) | 2026-09-10 21:40 | Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst |
+| [v1.2.57](#v1257) | 2026-09-10 20:47 | Meeting OS 1.2.57 — soldaki listede çöp kutusu; 1–2 saniyelik seslere isim istenmez |
+| [v1.2.56](#v1256) | 2026-09-10 20:38 | Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli |
+| [v1.2.55](#v1255) | 2026-09-10 19:57 | Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural |
+| [v1.2.54](#v1254) | 2026-09-10 19:26 | Meeting OS 1.2.54 — 2 saatlik toplantı: kayıp yok, disk dürüst, arayüz tembel |
+| [v1.2.53](#v1253) | 2026-09-10 19:12 | Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin |
+| [v1.2.52](#v1252) | 2026-09-10 18:45 | Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor |
+| [v1.2.51](#v1251) | 2026-09-10 18:32 | Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez |
+| [v1.2.50](#v1250) | 2026-09-10 18:16 | Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı |
+| [v1.2.49](#v1249) | 2026-09-10 17:56 | Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür |
+| [v1.2.48](#v1248) | 2026-09-10 17:52 | Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez |
+| [v1.2.47](#v1247) | 2026-09-10 17:34 | Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst |
 | [v1.2.46](#v1246) | 2026-09-10 19:40 | Meeting OS 1.2.46 — iki Mac aynı iCloud klasöründe: biri toplantıdayken diğeri güncellenebilir |
 | [v1.2.45](#v1245) | 2026-09-10 18:40 | Meeting OS 1.2.45 — güncelleme yolu: yarıda kalınca dürüst, tekrar denemede eksiksiz |
 | [v1.2.44](#v1244) | 2026-09-10 17:15 | Meeting OS 1.2.44 — ad düzeltmesi kurulu Mac'lerde de çalışır |
@@ -82,10 +83,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 ## Notlar
 
+<a id="v1257"></a>
+### Meeting OS 1.2.57 — soldaki listede çöp kutusu; 1–2 saniyelik seslere isim istenmez
+
+2026-09-10 20:47 · yerel not · GitHub sürüm sayfası yok
+
+- Kenar çubuğunda her toplantı satırının sağında, üzerine gelince ya da seçiliyken görünen **çöp kutusu** düğmesi (sağ tık menüsü ve ⌫/⌘⌫ de duruyor). Boran: "toplantıyı sil butonu hâlâ yok solda".
+- Toplam 4 saniyenin altındaki konuşmacı kümeleri (öksürük, kapı, kesik kelime) için İsimler kartı ve Kontrol artık isim istemez; transkriptte etiketleriyle kalırlar. Boran: "1–2 saniyelik noise'lara isim verilemez".
+- Sürüm notlarındaki saatler gerçek git zaman damgalarına göre düzeltildi (1.2.47–1.2.56 hepsi 10 Eylül 17:34–20:38).
+
 <a id="v1256"></a>
 ### Meeting OS 1.2.56 — kelimeye tıkla düzelt, temiz Özet, soldan sil; kelime öğrenme güvenli
 
-2026-09-11 07:10 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 20:38 · yerel not · GitHub sürüm sayfası yok
 
 Boran'ın üç isteği + ikinci görüşün kritik bulgusu:
 - **Kelimeye tıklayarak düzeltme:** transkriptte herhangi bir kelimeye tıklayın → küçük baloncuk: "Yalnız burada" (sadece bu geçiş) ya da "Düzelt ve öğret". Düzelt penceresine girmeye gerek yok; oradaki satır da duruyor.
@@ -99,7 +109,7 @@ Kıyas 7/7 (bir koşuda `mic_owner` vade metni "cuma günü"/"cuma gününe kada
 <a id="v1255"></a>
 ### Meeting OS 1.2.55 — temizlik: doğru belgeler, tam köprü, tek kural
 
-2026-09-11 05:05 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 19:57 · yerel not · GitHub sürüm sayfası yok
 
 Tur 17 (sadelik/tutarlılık denetimi) → uygulandı.
 - README/OPENROUTER/V1_USAGE'deki 8 yanlış cümle düzeltildi (disk eşikleri, Zoom 5 dk, bulut yanıt, düğme/sekme adları, kimlik eşikleri, bulut akışı).
@@ -112,7 +122,7 @@ Tur 17 (sadelik/tutarlılık denetimi) → uygulandı.
 <a id="v1254"></a>
 ### Meeting OS 1.2.54 — 2 saatlik toplantı: kayıp yok, disk dürüst, arayüz tembel
 
-2026-09-11 03:50 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 19:26 · yerel not · GitHub sürüm sayfası yok
 
 Tur 16 ölçek denetimi (2 saat / 1200 bölüm, ölçüldü: 4 P0, 4 P1, 5 P2) → uygulandı.
 
@@ -129,7 +139,7 @@ Tur 16 ölçek denetimi (2 saat / 1200 bölüm, ölçüldü: 4 P0, 4 P1, 5 P2) �
 <a id="v1253"></a>
 ### Meeting OS 1.2.53 — kelimeyi bir kez düzelt, uygulama öğrensin
 
-2026-09-11 03:05 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 19:12 · yerel not · GitHub sürüm sayfası yok
 
 Boran'ın isteği: "kelimelerde de düzeltme yapabilmeliyim; sonrasında o kelimeyi öğrenmeli ve yakınsa o şekilde algılamalı; Kontrol'e gelmeyen yanlış kelime algıları var; eğitilebilir olmalı."
 
@@ -142,7 +152,7 @@ Boran'ın isteği: "kelimelerde de düzeltme yapabilmeliyim; sonrasında o kelim
 <a id="v1252"></a>
 ### Meeting OS 1.2.52 — kıyas seti mikrofon sahibi yolunu da sınıyor
 
-2026-09-11 01:35 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 18:45 · yerel not · GitHub sürüm sayfası yok
 
 - Kıyas setine `mic_owner` vakası (kurgusal 4 kişilik toplantı; sahibin mikrofon satırları "Ben" etiketiyle, bir yankı satırı, bir karar): sahibin iki sözü sahibe, meslektaşınki meslektaşa, yankı sözü "kontrol edin" ile. Bulutta 7/7, çevrimdışı 11 sözleşme testi. Uygulama kodu değişmedi.
 - `docs/BENCHMARK.md` güncellendi.
@@ -152,7 +162,7 @@ Diğer Mac için Terminal'den güncelleme tarifi (eski sürüm düğmeyi gizliyo
 <a id="v1251"></a>
 ### Meeting OS 1.2.51 — maske adınızı yine gizler, kopya birleştirme vadeleri ayırır, yeniden analiz onaylı vadeyi silmez
 
-2026-09-11 00:50 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 18:32 · yerel not · GitHub sürüm sayfası yok
 
 1.2.50'ye ikinci görüş (3 P0, 4 P1):
 - **Maske gerilemesi (P0):** 1.2.50 sahibin adını yalnız mikrofon satırı varsa maskeliyordu; mikrofonsuz toplantılarda (bu Mac'te 3 tanesi) "Boran'a soralım" açıkta kalıyordu. Artık sahibin adı her zaman maskelenir; yalnız ortak kelime olan adlar (Can, Deniz…) için katılım şartı var.
@@ -165,7 +175,7 @@ Diğer Mac için Terminal'den güncelleme tarifi (eski sürüm düğmeyi gizliyo
 <a id="v1250"></a>
 ### Meeting OS 1.2.50 — kopya görevler, dürüst sayılar, ses silme uyarısı
 
-2026-09-10 23:55 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 18:16 · yerel not · GitHub sürüm sayfası yok
 
 Tur 14 (ikinci görüşlerden kalan küçük maddeler):
 - Aynı toplantı içindeki kopya görevler: analizde birleştirilir; kalanlar "Bu toplantıda benzer görev" ile bağlanır ve "Aynı görev, eskisini kapat" çalışır.
@@ -180,7 +190,7 @@ Tur 14 (ikinci görüşlerden kalan küçük maddeler):
 <a id="v1249"></a>
 ### Meeting OS 1.2.49 — bölüm seçici gerçek paragrafı görür
 
-2026-09-10 23:20 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 17:56 · yerel not · GitHub sürüm sayfası yok
 
 Canlı doğrulama (bu Mac, 1.2.48): ▶ çalarken ■ oluyor ve ikinci tıkta duruyor; Düzelt penceresinde "Yalnız bu bölüm"; Özet ve Kontrol sekmeleri düzgün. Bulunan eksik: 3 bölümlü paragrafta "hangi bölüm?" seçicisi çıkmıyordu, çünkü seçici bitişik satırlara bakıyor, okuma görünümünde gizli yankı satırları ve kısa "hı hı" araları paragrafı bölüyordu.
 - Bölüm seçici artık okuma görünümünün kendi paragraf gruplamasını kullanır (gizli yankı satırları ve kısa aralar paragrafı bölmez); "3 bölüm" yazan paragrafta üç seçenek listelenir.
@@ -188,7 +198,7 @@ Canlı doğrulama (bu Mac, 1.2.48): ▶ çalarken ■ oluyor ve ikinci tıkta du
 <a id="v1248"></a>
 ### Meeting OS 1.2.48 — görevler geri alınabilir, boş analiz görev silmez
 
-2026-09-10 22:50 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 17:52 · yerel not · GitHub sürüm sayfası yok
 
 1.2.47'ye ikinci görüş (2 P0, 6 P1):
 - **Boş dönen yeniden analiz açık görevleri gizliyordu (P0):** "Özeti yenile" sonrası model hiç görev çıkarmazsa eski görevlerin hepsi görünmez oluyordu. Artık eski görevler yalnız yeni analiz en az bir görev ürettiğinde emekli edilir; "devam ediyor"/"tamamlandı" işaretli görevler her zaman kalır.
@@ -202,7 +212,7 @@ Canlı doğrulama (bu Mac, 1.2.48): ▶ çalarken ■ oluyor ve ikinci tıkta du
 <a id="v1247"></a>
 ### Meeting OS 1.2.47 — ikinci hafta: kendi sözleriniz artık sizin, Hafıza dürüst
 
-2026-09-10 21:40 · yerel not · GitHub sürüm sayfası yok
+2026-09-10 17:34 · yerel not · GitHub sürüm sayfası yok
 
 Tur 13 denetimi (Hafıza, gün sonu özeti, brifing, karne — gerçek veriyle: 3 P0, 8 P1, 9 P2) → uygulandı.
 

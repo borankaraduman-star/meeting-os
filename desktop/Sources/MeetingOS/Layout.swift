@@ -100,7 +100,7 @@ struct SidebarView:View {
             List(selection:$model.selected) {
                 ForEach(model.groupedMeetings,id:\.0) { group,items in
                     Section { ForEach(items) { meeting in
-                        MeetingLibraryRow(meeting:meeting)
+                        SidebarMeetingRow(meeting:meeting,selected:model.selected==meeting.id,canDelete:meeting.recoveryState != "active" && !(model.recording && model.selected==meeting.id)) { model.deleteCandidate=meeting }
                             .contentShape(Rectangle())   // the whole row answers a right-click, not just the text
                             .tag(meeting.id)
                             // Deleting is always offered (the confirmation and deleteMeeting's own guards decide); only a
@@ -348,4 +348,24 @@ struct FlowChips:View {
     }
 }
 
-
+/// A library row with a trash button that appears on hover (and on the selected row): deleting must not depend on
+/// knowing that a right-click menu exists. Boran, 10 Sep 2026: "toplantıyı sil butonu hâlâ yok solda".
+struct SidebarMeetingRow:View {
+    let meeting:Meeting
+    let selected:Bool
+    let canDelete:Bool
+    let onDelete:()->Void
+    @State private var hovering=false
+    var body:some View {
+        HStack(alignment:.top,spacing:6) {
+            MeetingLibraryRow(meeting:meeting)
+            Spacer(minLength:0)
+            if hovering || selected {
+                Button(action:onDelete) { Image(systemName:"trash").font(.system(size:12)).foregroundStyle(.secondary) }
+                    .buttonStyle(.plain).disabled(!canDelete).help("Toplantıyı sil…").accessibilityIdentifier("deleteRow-\(meeting.id)")
+                    .padding(.top,2)
+            }
+        }
+        .onHover { hovering=$0 }
+    }
+}

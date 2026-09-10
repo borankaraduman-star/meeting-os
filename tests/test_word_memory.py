@@ -237,3 +237,20 @@ class WordMemoryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ShortClusterTests(unittest.TestCase):
+    def test_a_two_second_cluster_is_not_offered_for_naming(self):
+        import tempfile
+        from pathlib import Path
+        from meeting_os.store import Store
+        from meeting_os.types import Segment
+        from meeting_os.review import review_queue
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db'); mid=db.create_meeting('t')
+            db.add_segment(mid,Segment(0,12,'uzun bir konuşma burada','system','system:S1',metrics={'cluster':'0:S1'},flags=['cloud_diarization']))
+            db.add_segment(mid,Segment(20,21.5,'hı','system','system:S14',metrics={'cluster':'0:S14'},flags=['cloud_diarization']))
+            q=review_queue(db,mid,tmp); items=q['items'] if isinstance(q,dict) else q
+            kinds={(i['kind'],i.get('speaker_key')) for i in items}
+            self.assertIn(('unnamed_speaker','system:S1'),kinds); self.assertNotIn(('unnamed_speaker','system:S14'),kinds)
+            db.close()
