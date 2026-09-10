@@ -17,17 +17,41 @@ MIN_FREE_BYTES = 3 * 1024**3        # same warning line as the capture helper
 # "Always Allow" never sticks — the dialog storm of 10 Sep 2026. Module constant so tests can point it
 # at a temp directory; nothing here ever calls `security`, so the check itself can never open a dialog.
 SIGNING_MARKER = Path.home() / 'Library/Application Support/MeetingOS/signing-partition.ok'
-SIGNING_PARTITION_WARNING = ('İmzalama anahtarına kalıcı izin verilmemiş; güncellemede parola penceresi '
-                            'çıkar: sh scripts/fix-signing-prompts.sh')
+SIGNING_PARTITION_ERROR = ('İmzalama izni yok; güncelleme başlamadan durur: {fix} '
+                           '(1.2.41 ve öncesinde çalıştırmış olsanız bile dosya yazılmamıştır)')
+KEYCHAIN_HINT = 'Uygulamayı bir kez açın; anahtar dosyaya alınacak'
 
 
-def signing_partition_item():
-    """Warning, not an error: the app runs fine, but every rebuild will ask for the Mac password."""
+def _repo_root(root=None):
+    if root is not None: return Path(root)
+    try:
+        from .cli import ROOT
+        return Path(ROOT)
+    except Exception: return Path(__file__).resolve().parents[1]
+
+
+def signing_partition_item(root=None):
+    """An error, not a warning: since 1.2.44 scripts/update.sh refuses BEFORE it merges when the marker is
+    missing, so this Mac cannot take any new version at all until the script is run once. The path is absolute
+    because the person reading this is in a terminal that is not in the checkout."""
     try: granted = SIGNING_MARKER.is_file()
     except OSError: granted = False
+    fix = f'sh {_repo_root(root)}/scripts/fix-signing-prompts.sh'
     return _item('signing_partition', granted,
-                 'imzalama anahtarına kalıcı izin verilmiş' if granted else SIGNING_PARTITION_WARNING,
-                 'sh scripts/fix-signing-prompts.sh', level='warning')
+                 'imzalama anahtarına kalıcı izin verilmiş' if granted else SIGNING_PARTITION_ERROR.format(fix=fix),
+                 fix, level='error')
+
+
+def keychain_item_exists(service=None, account='openrouter', timeout=5):
+    """Does the Keychain still hold the key the app has not yet copied into its own file? A metadata query —
+    `find-generic-password` WITHOUT -w returns attributes, never the secret — so macOS does not prompt and this
+    can never open a dialog on a Mac nobody is sitting at."""
+    try:
+        from .openrouter import KEYCHAIN_SERVICE
+        r = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', service or KEYCHAIN_SERVICE, '-a', account],
+                           capture_output=True, text=True, timeout=timeout)
+        return r.returncode == 0
+    except Exception: return False
 
 
 def _item(key, ok, detail, fix=None, level='error'):
@@ -75,8 +99,13 @@ def run(root, data_dir, *, network=False, timeout=8):
         from .openrouter import KEY_CACHE
         has_key = KEY_CACHE.is_file()   # the app owns the Keychain; Python only ever looks at the file it wrote
     except Exception: has_key = False
-    items.append(_item('api_key', has_key, 'OpenRouter anahtarı uygulamanın anahtar dosyasında (openrouter.key)' if has_key else 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
-    items.append(signing_partition_item())
+    if has_key: items.append(_item('api_key', True, 'OpenRouter anahtarı uygulamanın anahtar dosyasında (openrouter.key)'))
+    elif keychain_item_exists():
+        # Installed before 1.2.30, so the key is still only in the Keychain. Nothing is missing and nothing needs
+        # typing again: the app copies it into openrouter.key the first time it is opened.
+        items.append(_item('api_key', False, 'OpenRouter anahtarı Anahtar Zinciri’nde; anahtar dosyasına henüz alınmamış', KEYCHAIN_HINT, level='warning'))
+    else: items.append(_item('api_key', False, 'OpenRouter anahtarı yok', 'Ayarlar → Sistem → OpenRouter anahtarı'))
+    items.append(signing_partition_item(root))
     try:
         from . import glossary as G
         entries = G.load(data, root); items.append(_item('glossary', True, f'{len(entries)} terim'))

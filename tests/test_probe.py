@@ -25,8 +25,8 @@ class ProbeTests(unittest.TestCase):
 
 
 class SigningPartitionTests(unittest.TestCase):
-    """The marker scripts/fix-signing-prompts.sh leaves behind. Missing marker = a codesign password dialog on
-    the next update, so the probe warns; nothing here may ever shell out to `security`."""
+    """The marker scripts/fix-signing-prompts.sh leaves behind. Missing marker = update.sh refuses before it even
+    merges, so this Mac can take no new version at all; nothing here may ever shell out to `security`."""
     def _with_marker(self, exists):
         import contextlib, unittest.mock
         tmp = tempfile.TemporaryDirectory()
@@ -35,28 +35,33 @@ class SigningPartitionTests(unittest.TestCase):
         patch = unittest.mock.patch.object(probe,'SIGNING_MARKER',marker)
         stack = contextlib.ExitStack(); stack.enter_context(tmp); stack.enter_context(patch)
         return stack
-    def test_missing_marker_is_a_warning_not_an_error(self):
+    def test_missing_marker_is_an_error_with_an_absolute_command(self):
         with self._with_marker(False):
-            item = probe.signing_partition_item()
-            self.assertFalse(item['ok']); self.assertEqual(item['level'],'warning')
-            self.assertEqual(item['fix'],'sh scripts/fix-signing-prompts.sh')
-            self.assertIn('fix-signing-prompts.sh',item['detail'])
-            self.assertIn('parola',item['detail'])
+            item = probe.signing_partition_item('/Users/x/meeting-os')
+            self.assertFalse(item['ok']); self.assertEqual(item['level'],'error')
+            self.assertEqual(item['fix'],'sh /Users/x/meeting-os/scripts/fix-signing-prompts.sh')
+            self.assertIn('güncelleme başlamadan durur',item['detail'])
+            self.assertIn('1.2.41',item['detail'])   # running it back then wrote no file; it has to be run again
+    def test_the_command_is_absolute_even_without_a_root(self):
+        with self._with_marker(False):
+            self.assertTrue(probe.signing_partition_item()['fix'].startswith('sh /'))
     def test_present_marker_passes(self):
         with self._with_marker(True):
             item = probe.signing_partition_item()
             self.assertTrue(item['ok']); self.assertNotIn('fix',item)
-    def test_probe_run_lists_the_check_and_only_warns(self):
+    def test_probe_run_fails_on_it_and_names_the_checkout(self):
         with self._with_marker(False), tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
             r=probe.run(root,data)
-            self.assertIn('signing_partition',r['warnings'])
-            self.assertNotIn('signing_partition',r['failed'])
-            self.assertIn('imzalama izni (uyarı)',probe.summary_line(r))
+            self.assertIn('signing_partition',r['failed'])
+            self.assertNotIn('signing_partition',r['warnings'])
+            self.assertIn('imzalama izni',probe.summary_line(r))
+            by={i['key']:i for i in r['items']}
+            self.assertEqual(by['signing_partition']['fix'],f'sh {root}/scripts/fix-signing-prompts.sh')
         with self._with_marker(True), tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
             r=probe.run(root,data)
-            self.assertNotIn('signing_partition',r['warnings'])
+            self.assertNotIn('signing_partition',r['warnings']+r['failed'])
     def test_api_key_detail_names_the_key_file_not_the_keychain(self):
         import unittest.mock
         from meeting_os import openrouter
@@ -68,6 +73,34 @@ class SigningPartitionTests(unittest.TestCase):
             self.assertTrue(by['api_key']['ok'])
             self.assertIn('openrouter.key',by['api_key']['detail'])
             self.assertNotIn('Keychain',by['api_key']['detail'])
+    def test_a_key_that_is_only_in_the_keychain_is_a_warning_not_a_missing_key(self):
+        """Macs installed before 1.2.30 never got an openrouter.key file. Nothing is missing and nothing has to be
+        typed again: the app copies the key across the first time it is opened."""
+        import unittest.mock
+        from meeting_os import openrouter
+        class Found: returncode=0; stdout=''; stderr=''
+        class Absent: returncode=44; stdout=''; stderr=''
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'root'; data=Path(tmp)/'data'; root.mkdir()
+            missing=Path(tmp)/'openrouter.key'
+            with unittest.mock.patch.object(openrouter,'KEY_CACHE',missing):
+                with unittest.mock.patch.object(probe.subprocess,'run',return_value=Found()) as run:
+                    by={i['key']:i for i in probe.run(root,data)['items']}
+                self.assertFalse(by['api_key']['ok']); self.assertEqual(by['api_key']['level'],'warning')
+                self.assertEqual(by['api_key']['fix'],probe.KEYCHAIN_HINT)
+                query=[c.args[0] for c in run.call_args_list if 'find-generic-password' in c.args[0]][0]
+                self.assertNotIn('-w',query)          # metadata only: macOS must never be given a reason to prompt
+                self.assertIn(openrouter.KEYCHAIN_SERVICE,query)
+                with unittest.mock.patch.object(probe.subprocess,'run',return_value=Absent()):
+                    by={i['key']:i for i in probe.run(root,data)['items']}
+                self.assertEqual(by['api_key']['level'],'error')
+                self.assertIn('yok',by['api_key']['detail'])
+    def test_the_keychain_query_never_raises_into_the_probe(self):
+        import unittest.mock
+        with unittest.mock.patch.object(probe.subprocess,'run',side_effect=OSError('yok')):
+            self.assertFalse(probe.keychain_item_exists())
+        with unittest.mock.patch.object(probe.subprocess,'run',side_effect=probe.subprocess.TimeoutExpired('security',5)):
+            self.assertFalse(probe.keychain_item_exists())
 
 
 class NightlyCheckTests(unittest.TestCase):

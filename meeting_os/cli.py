@@ -195,7 +195,7 @@ def main(supervised=False):
         if args.command=='doctor':
             import platform, importlib.util
             from .probe import signing_partition_item
-            signing=signing_partition_item()
+            signing=signing_partition_item(ROOT)
             # stderr, so `doctor` keeps printing one parseable JSON document on stdout.
             if not signing['ok']: print(signing['detail'],file=sys.stderr)
             output({'python':sys.version.split()[0],'machine':platform.machine(),'macos':platform.mac_ver()[0],

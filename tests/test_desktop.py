@@ -74,7 +74,25 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual((r['api_key'],r['glossary_terms']>=1,r['glossary_shared'],r['update_behind']),(True,True,False,0))
    self.assertEqual((r['reports_on'],r['reports_writable'],r['reports_written']),(True,True,0))
    cache.unlink()
-   with patch('subprocess.run',return_value=R()),patch.object(openrouter,'KEY_CACHE',cache):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])   # the key file the app wrote is the only signal; `security` is never run
+   with patch('subprocess.run',return_value=R()),patch.object(openrouter,'KEY_CACHE',cache):self.assertFalse(dispatch({'action':'setup_status'},db)['api_key'])   # the key file the app wrote is the only signal; the secret is never fetched
+ def test_setup_status_reports_the_signing_grant_and_a_key_still_only_in_the_keychain(self):
+  """Two rows the card could not show before: without the signing marker update.sh refuses before it merges,
+  and a Mac installed before 1.2.30 has its key only in the Keychain — which is a 'open the app once', not a
+  'no key'. The Keychain query is metadata-only (no -w), so macOS never prompts."""
+  from unittest.mock import patch
+  from meeting_os import openrouter,probe
+  with tempfile.TemporaryDirectory() as tmp:
+   db=Path(tmp)/'meeting-os.sqlite';Store(db).close()
+   cache=Path(tmp)/'openrouter.key';marker=Path(tmp)/'signing-partition.ok'
+   class Found:returncode=0;stdout='Test-Mac\n';stderr=''
+   class Absent:returncode=44;stdout='Test-Mac\n';stderr=''
+   with patch('subprocess.run',return_value=Found()),patch.object(openrouter,'KEY_CACHE',cache),patch.object(probe,'SIGNING_MARKER',marker):
+    r=dispatch({'action':'setup_status'},db)
+   self.assertEqual((r['api_key'],r['api_key_keychain'],r['signing_partition']),(False,True,False))
+   marker.write_text('granted\n');cache.write_text('k\n')
+   with patch('subprocess.run',return_value=Absent()),patch.object(openrouter,'KEY_CACHE',cache),patch.object(probe,'SIGNING_MARKER',marker):
+    r=dispatch({'action':'setup_status'},db)
+   self.assertEqual((r['api_key'],r['api_key_keychain'],r['signing_partition']),(True,False,True))   # key file present: the Keychain is not even asked
  def test_archive_converts_full_wav_to_flac_and_housekeeping_respects_retention(self):
   import numpy as np, soundfile as sf
   from meeting_os import reports
