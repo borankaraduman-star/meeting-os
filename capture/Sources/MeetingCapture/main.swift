@@ -153,8 +153,19 @@ func remainingBytes(_ directory:URL) -> Int64? {
 }
 func diskError() -> NSError { NSError(domain:"MeetingCapture",code:6,userInfo:[NSLocalizedDescriptionKey:"Disk doldu. Ses dosyaları korundu; devam etmek için yer açın."]) }
 let diskWarnBytes: Int64 = 3_000_000_000   // journal a warning the app can show; recording continues
-let diskStopBytes: Int64 = 400_000_000     // stop only when the disk is genuinely about to fill
+let diskStopBytes: Int64 = 400_000_000     // floor: stop only when the disk is genuinely about to fill
 let diskStartBytes: Int64 = 600_000_000
+let assemblySources = 2                    // mic + system: finalize assembles one float32 file per source
+let assemblyHeadroomBytes: Int64 = 200_000_000
+/// What finalize will need free to assemble this recording: 16 kHz float32 per source for every second
+/// recorded so far, plus headroom. A fixed 400 MB stop threshold let a two-hour meeting run the disk down to
+/// a point where assembly (≈1.02 GB) could no longer produce the very files the recording exists for.
+func assemblyReserveBytes(elapsed: Double, sources: Int = assemblySources) -> Int64 {
+    let perSource = max(0, elapsed) * 16000 * 4
+    let needed = perSource * Double(sources)
+    guard needed.isFinite, needed < 1e15 else { return Int64.max/4 }
+    return max(diskStopBytes, Int64(needed) + assemblyHeadroomBytes)
+}
 func run() async throws {
     if CommandLine.arguments.contains("--help") {
         print("MeetingCapture --output DIR [--seconds 60] [--chunk-seconds 12] [--start-offset 0] [--self-test]")
@@ -194,7 +205,8 @@ func run() async throws {
         }
         return
     }
-    if let available=remainingBytes(directory), available < diskStartBytes { throw diskError() }
+    // A continuation inherits its predecessor's seconds, and those have to be assembled too.
+    if let available=remainingBytes(directory), available < max(diskStartBytes, assemblyReserveBytes(elapsed: startOffset)) { throw diskError() }
     guard await AVCaptureDevice.requestAccess(for: .audio) else {
         throw NSError(domain:"MeetingCapture", code:2, userInfo:[NSLocalizedDescriptionKey:"Microphone access denied. Enable MeetingCapture in System Settings > Privacy & Security > Microphone."])
     }
@@ -220,6 +232,7 @@ func run() async throws {
     var stream = try makeStream()
     try await stream.startCapture()
     capture.markSample()
+    let recordingStarted = Date()
     emit(["event":"started", "directory":directory.path, "clock":"hostTime", "sources":["mic", "system"], "start_offset":startOffset])
     let restartGate = DispatchQueue(label:"meeting-os.restart")
     var restarting = false
@@ -286,10 +299,13 @@ func run() async throws {
             }
             if Date().timeIntervalSince(diskCheck)>5 {
                 diskCheck=Date()
+                // Recomputed every check: the longer the meeting runs, the more room its assembly needs.
+                let stopAt = assemblyReserveBytes(elapsed: startOffset + Date().timeIntervalSince(recordingStarted))
+                let warnAt = max(diskWarnBytes, stopAt * 3)   // assemblyReserveBytes is capped well below Int64.max/3
                 if let available=remainingBytes(directory) {
-                    if available < diskStopBytes { capture.fail(diskError()) }
-                    else if available < diskWarnBytes && !warnedDisk { warnedDisk=true; emit(["event":"low_disk", "free_bytes":available]) }
-                    else if available >= diskWarnBytes { warnedDisk=false }
+                    if available < stopAt { capture.fail(diskError()) }
+                    else if available < warnAt && !warnedDisk { warnedDisk=true; emit(["event":"low_disk", "free_bytes":available]) }
+                    else if available >= warnAt { warnedDisk=false }
                 }
             }
             if let err = capture.takeStreamError() { restartStream(reason: err.localizedDescription) }

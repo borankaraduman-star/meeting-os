@@ -295,7 +295,7 @@ Görevlerim’de her görevin yanında **Hatırlatıcılar’a ekle**: görev va
 
 ### Uyku, uyanma ve akış hatası (1.2.18+)
 
-Kayıt yardımcısı ScreenCaptureKit akışı durursa (uyku/uyanma, ekran değişikliği) ya da 20 saniye hiç ses gelmezse akışı kendiliğinden yeniden kurar (en çok üç deneme; günlükte `restarting`/`restarted` olayları). Disk 3 GB’ın altına inince kayıt sürer ve günlüğe `low_disk` uyarısı yazılır; kayıt yalnız 400 MB’ın altında durur (eskiden 1 GB’ta duruyordu).
+Kayıt yardımcısı ScreenCaptureKit akışı durursa (uyku/uyanma, ekran değişikliği) ya da 20 saniye hiç ses gelmezse akışı kendiliğinden yeniden kurar (en çok üç deneme; günlükte `restarting`/`restarted` olayları). Disk eşiği kaydın uzunluğuna göre her beş saniyede yeniden hesaplanır: birleştirme için gereken yer (kaynak başına saniyede 64 KB + 200 MB, taban 400 MB) kalmayınca kayıt durur, bunun üç katının (taban 3 GB) altında günlüğe `low_disk` uyarısı yazılır ve kayıt sürer. Sabit 400 MB eşiği iki saatlik bir toplantıda birleştirme için gereken ≈1 GB'ı bırakmıyordu.
 
 ### Ses dosyaları ve disk (1.2.17+)
 

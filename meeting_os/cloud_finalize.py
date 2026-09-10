@@ -6,6 +6,7 @@ speaker-labelled segments. Every finished piece is checkpointed with its transcr
 transaction, so an interrupted job resumes without re-uploading finished pieces.
 """
 import contextlib
+import errno
 import fcntl
 import hashlib
 import json
@@ -26,6 +27,9 @@ FINE_PIECE_SECONDS = 30       # models without diarization get short windows so 
 MAX_PIECE_BYTES = 24*1024*1024
 REQUEST_TIMEOUT = 600
 UPLOAD_WORKERS = 3            # pieces in flight at once; MAI answered a 5-minute piece in ~63 s
+LOW_PRIORITY_WORKERS = 2      # idle-time retry: one uploader at a time took 51 minutes over a 2 h meeting, and nobody is at the Mac to notice
+ENCODE_WORKERS = 2            # ffmpeg runs ahead of the uploads; two is enough to keep the pool fed without competing with a meeting
+PREFETCH_PIECES = 3           # pieces encoded ahead of the batch being uploaded; the Opus bytes sit in a scratch file, not in RAM
 MIC_FALLBACK = 'Ben'   # nobody's name: what a mic row is called until its owner types one in Settings
 SOURCE_LABELS = {'mic':MIC_FALLBACK,'system':'Karşı taraf'}   # 'mic' is only the fallback when user_name is unset; source_labels() is what jobs use
 
@@ -36,6 +40,7 @@ def source_labels(owner=None):
 RETRY_WAITS = (2,8,20)        # a rate limit or a 5xx usually clears in seconds; 30 s of waiting is cheaper than losing the batch
 RETRY_JITTER = 0.25           # three workers that failed together must not come back in lockstep
 BACKOFF_MINUTES = (10,30,120,360)   # idle-retry spacing after a failed job; every 24 h from then on
+DISK_FULL_RETRY_MINUTES = 30        # a full disk is fixed by the user, not by waiting longer and longer
 MAX_CLOUD_RETRIES = 30        # the queue stops asking after this; the audio is still never deleted
 
 
@@ -52,6 +57,12 @@ def next_attempt(meta):
     return min((previous if isinstance(previous,int) and not isinstance(previous,bool) and previous>0 else 0)+1,MAX_CLOUD_RETRIES)
 
 
+def is_disk_full(exc):
+    """A local out-of-space error, whatever raised it. `kind` comes from audio.disk_full so the sidebar shows a
+    line the user can act on rather than a provider name."""
+    return isinstance(exc,OSError) and getattr(exc,'errno',None)==errno.ENOSPC
+
+
 def note_cloud_failure(store, mid, exc):
     """Remember why the cloud refused this meeting, and when it is worth asking again. Nothing about the
     audio or the finished pieces changes: this is the one line the sidebar shows and the idle queue reads."""
@@ -60,11 +71,23 @@ def note_cloud_failure(store, mid, exc):
     if not row: return None
     meta=json.loads(row['metadata'] or '{}')
     # The attempt is already counted when it started, unless this failure came from somewhere that never began one.
-    attempt=meta.get('cloud_retry_attempt') if meta.pop('cloud_attempt_open',None) else next_attempt(meta)
+    open_attempt=meta.pop('cloud_attempt_open',None)
+    stored=meta.get('cloud_retry_attempt')
+    stored=stored if isinstance(stored,int) and not isinstance(stored,bool) and stored>0 else 0
+    if is_disk_full(exc):
+        # Nothing was asked of OpenRouter and nothing about this meeting is wrong: the user frees space and it
+        # works. Spending one of the thirty retries on it would eventually retire a perfectly good recording.
+        attempt=max(0,stored-1) if open_attempt else stored
+        wait=DISK_FULL_RETRY_MINUTES
+    else:
+        attempt=(stored or next_attempt(meta)) if open_attempt else next_attempt(meta)
+        wait=backoff_minutes(attempt)
     now=datetime.now(timezone.utc)
-    meta['cloud_error']={'kind':error_kind(exc),'message':error_message(exc),'at':now.isoformat()}
+    kind='disk_full' if is_disk_full(exc) else error_kind(exc)
+    message=error_message(exc) if getattr(exc,'user_message',None) or not is_disk_full(exc) else 'Disk dolu; devam etmek için yer açın.'
+    meta['cloud_error']={'kind':kind,'message':message,'at':now.isoformat()}
     meta['cloud_retry_attempt']=attempt
-    meta['cloud_retry_after']=(now+timedelta(minutes=backoff_minutes(attempt))).isoformat()
+    meta['cloud_retry_after']=(now+timedelta(minutes=wait)).isoformat()
     with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),mid))
     return meta['cloud_error']
 
@@ -134,11 +157,14 @@ def is_silent(path, start, end, threshold=1e-4):
 
 
 def upload_workers():
-    """One piece at a time while a Zoom meeting is on screen: the app sets the env flag at launch and, for a job
-    that is already running when the next meeting opens, drops a flag file we re-check before every batch."""
-    if os.environ.get('MEETING_OS_LOW_PRIORITY'): return 1
+    """One piece at a time only while a Zoom meeting is actually on screen — that is what the flag file means,
+    and the app drops it for a job that is already running when the next meeting opens. Plain low priority (the
+    idle retry queue) still gets two: a single uploader spent 51 minutes on a two-hour meeting for no benefit,
+    because nothing is on screen to protect."""
     flag=os.environ.get('MEETING_OS_LOW_PRIORITY_FLAG')
-    return 1 if flag and os.path.exists(flag) else UPLOAD_WORKERS
+    if flag and os.path.exists(flag): return 1
+    if os.environ.get('MEETING_OS_LOW_PRIORITY'): return LOW_PRIORITY_WORKERS
+    return UPLOAD_WORKERS
 
 
 def job_usage(started):
@@ -207,18 +233,43 @@ def speaker_label(source, provider_speaker, piece_index, multi_piece, owner=None
     return f'Konuşmacı {piece_index+1}-{number}' if multi_piece else f'Konuşmacı {number}'
 
 
+REORDER_OFFSET = 1_000_000   # positions are a primary key; park them out of the way before renumbering
+
+
+def _reorder_checkpoints(store, mid, old, plan, plan_json):
+    """A stored plan that holds exactly the same pieces in a different order (an app update changed how the
+    plan is laid out) is not a changed recording. Renumber the finished pieces instead of refusing to resume
+    — otherwise every meeting that was mid-upload during the update would have to be paid for again."""
+    try: stored=[tuple(piece) for piece in json.loads(old['plan'])]
+    except (ValueError,TypeError): return None
+    if sorted(stored)!=sorted(plan): return None
+    position_of={piece:index for index,piece in enumerate(plan)}
+    with store.db:
+        store.db.execute('UPDATE cloud_chunks SET position=position+? WHERE meeting=?',(REORDER_OFFSET,mid))
+        for index,piece in enumerate(stored):
+            store.db.execute('UPDATE cloud_chunks SET position=? WHERE meeting=? AND position=?',(position_of[piece],mid,index+REORDER_OFFSET))
+        store.db.execute('UPDATE cloud_sources SET plan=? WHERE meeting=?',(plan_json,mid))
+    return store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
+
+
 def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None, hint=None, owner=None):
     """sources: {'mic': path, 'system': path} of 16 kHz mono files. Returns the plan."""
     _consent(consent);validate_stt_model(model)
     labels=source_labels(owner)
     diarize=diarization_options(model) is not None
     length=PIECE_SECONDS if diarize else FINE_PIECE_SECONDS
-    plan=[]
+    per_source={}
     for source in sorted(sources):
         info=sf.info(sources[source])
         if info.samplerate!=16000 or info.channels!=1 or not 0<info.duration<=14400: raise ValueError('Ses mono 16 kHz ve en fazla dört saat olmalı')
         piece_length=length   # the mic gets the same long pieces: 30 s cuts chopped the user's own words 119 times an hour and starved the ASR of context
-        for index,(a,b) in enumerate(pieces(info.duration,piece_length)): plan.append((source,a,b,index))
+        per_source[source]=[(source,a,b,index) for index,(a,b) in enumerate(pieces(info.duration,piece_length))]
+    # Interleave the sources (mic0, sys0, mic1, sys1…). All-mic-then-all-system meant that on a speaker phone —
+    # where every mic piece is echo and is skipped for free — the first half of the job finished in seconds and
+    # the progress line promised a finish eight times sooner than the truth.
+    plan=[piece for position in range(max((len(v) for v in per_source.values()),default=0))
+                for source in sorted(per_source) if position<len(per_source[source])
+                for piece in (per_source[source][position],)]
     counts={s:sum(1 for p in plan if p[0]==s) for s in sources}
     signature=digest_files([sources[s] for s in sorted(sources)])
     store.db.executescript('''CREATE TABLE IF NOT EXISTS cloud_sources(meeting TEXT PRIMARY KEY REFERENCES meetings(id), digest TEXT, plan TEXT);
@@ -227,6 +278,8 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         with store.db:store.db.execute("ALTER TABLE cloud_sources ADD COLUMN model TEXT NOT NULL DEFAULT 'openai/gpt-transcribe'")
     plan_json=json.dumps(plan)
     old=store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
+    if old and old['digest']==signature and old['model']==model and old['plan']!=plan_json:
+        old=_reorder_checkpoints(store,mid,old,plan,plan_json) or old   # same pieces in a new order: move the checkpoints, do not throw them away
     if old and (old['digest']!=signature or old['plan']!=plan_json or old['model']!=model):
         paid=[u for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if u and ('"cost"' in u or '"seconds"' in u)]  # silent/echo windows cost nothing
         if paid or old['digest']!=signature or old['model']!=model: raise ValueError('Kaynak ses veya plan değişti; devam edilmedi')
@@ -235,16 +288,33 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         old=store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
     if not old:
         with store.db:store.db.execute('INSERT INTO cloud_sources(meeting,digest,plan,model) VALUES(?,?,?,?)',(mid,signature,plan_json,model))
-    done={r[0] for r in store.db.execute('SELECT position FROM cloud_chunks WHERE meeting=?',(mid,))}
+    done={row[0]:(row[1] or '') for row in store.db.execute('SELECT position,usage FROM cloud_chunks WHERE meeting=?',(mid,))}
+    # Progress weighted by audio seconds, not by piece count: a skipped echo window finishes instantly and a
+    # five-minute upload does not. `total` shrinks as windows turn out to be skippable, `uploaded` only grows
+    # when audio really went out, so the remaining-time estimate is built on the rate that is actually running.
+    seconds=[max(0.0,b-a) for _,a,b,_ in plan]
+    weight={'uploaded':0.0,'total':float(sum(seconds))}
+    for position,usage in done.items():
+        if 0<=position<len(plan):
+            if 'skipped' in usage: weight['total']-=seconds[position]
+            else: weight['uploaded']+=seconds[position]
+    import random, shutil as _shutil, tempfile, time
+    from concurrent.futures import ThreadPoolExecutor
+    staging=Path(tempfile.mkdtemp(prefix='meeting-os-pieces-'))
+    def progress(detail='OpenRouter'):
+        emit('transcribing',finished,len(plan),detail,
+             uploaded_seconds=round(weight['uploaded'],1),total_seconds=round(max(weight['total'],weight['uploaded']),1))
     def prepare(position):
-        """Main-thread decision per piece: skip (echo/silent) or hand encoded audio to an upload worker."""
+        """Skip (echo/silent) or encode this piece. Runs on the encode pool one batch ahead of the uploads;
+        the Opus bytes land in a scratch file so a prefetched batch never sits in memory."""
         source,a,b,index=plan[position];path=sources[source]
         silent=is_silent(path,a,b)   # one pass over the window: the echo branch and the silence branch ask the same question
         if source=='mic' and 'system' in sources and not silent and is_echo(path,sources['system'],a,b): return ('skip',{'skipped':'echo'})
         if silent: return ('skip',{'skipped':'silent'})
         audio=encode_piece(path,a,b,ffmpeg)
         if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
-        return ('upload',audio)
+        piece=staging/f'{position:06d}.ogg';piece.write_bytes(audio)
+        return ('upload',piece)
     def commit(position,usage,result):
         source,a,b,index=plan[position]
         segments=[]
@@ -268,9 +338,15 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
             store.db.execute('INSERT INTO cloud_chunks VALUES(?,?,?)',(mid,position,json.dumps(usage)))
     pending=[i for i in range(len(plan)) if i not in done]
     finished=len(plan)-len(pending)
-    import random, time
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=UPLOAD_WORKERS) as pool:
+    prepared={};cursor=0
+    pool=ThreadPoolExecutor(max_workers=UPLOAD_WORKERS)
+    encoders=ThreadPoolExecutor(max_workers=ENCODE_WORKERS)
+    try:
+        def top_up(limit):
+            """Keep at most `limit` pieces prepared, so ffmpeg works on the next batch while this one uploads."""
+            nonlocal cursor
+            while cursor<len(pending) and len(prepared)<limit:
+                position=pending[cursor];cursor+=1;prepared[position]=encoders.submit(prepare,position)
         def send(positions,encoded):
             """Upload these pieces, never more than upload_workers() at a time (re-read so a meeting that opens
             mid-job slows the next slice down). Every paid success is checkpointed even when a sibling fails."""
@@ -278,22 +354,25 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
             failures={};queue=list(positions)
             while queue:
                 slice_=queue[:max(1,upload_workers())];queue=queue[len(slice_):]
-                futures={i:pool.submit(client.transcribe,encoded[i],'ogg',model=model,consent=True,
-                    diarize=diarize and plan[i][0]!='mic',timeout=REQUEST_TIMEOUT,hint=hint) for i in slice_}
+                futures={i:pool.submit(lambda position:client.transcribe(encoded[position].read_bytes(),'ogg',model=model,consent=True,
+                    diarize=diarize and plan[position][0]!='mic',timeout=REQUEST_TIMEOUT,hint=hint),i) for i in slice_}
                 for position in sorted(futures):
                     try: result=futures[position].result()
                     except Exception as exc: failures[position]=exc;continue
-                    commit(position,result['usage'],result);finished+=1
+                    commit(position,result['usage'],result);finished+=1;weight['uploaded']+=seconds[position]
+                    try: encoded[position].unlink()
+                    except OSError: pass
             return failures
         start=0
         while start<len(pending):
-            workers=upload_workers()   # re-read per batch: a meeting may start mid-job
+            workers=max(1,upload_workers())   # re-read per batch: a meeting may start mid-job
             batch=pending[start:start+workers]; start+=workers
-            emit('transcribing',finished,len(plan),'OpenRouter')
+            top_up(len(batch)+min(PREFETCH_PIECES,workers))   # this batch plus one batch of head start, at most three pieces
+            progress()
             encoded={}
             for position in batch:
-                kind,payload=prepare(position)
-                if kind=='skip': commit(position,payload,None);finished+=1;continue
+                kind,payload=prepared.pop(position).result()
+                if kind=='skip': commit(position,payload,None);finished+=1;weight['total']-=seconds[position];continue
                 encoded[position]=payload
             attempt=0;waiting=sorted(encoded)
             while waiting:
@@ -303,10 +382,14 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
                 fatal=next((e for e in failures.values() if not getattr(e,'retryable',False)),None)
                 if fatal is not None or attempt>=len(RETRY_WAITS): raise fatal or failures[min(failures)]
                 wait=RETRY_WAITS[attempt]
-                emit('transcribing',finished,len(plan),f'OpenRouter · yeniden deneme {attempt+1}/{len(RETRY_WAITS)}')
+                progress(f'OpenRouter · yeniden deneme {attempt+1}/{len(RETRY_WAITS)}')
                 time.sleep(wait+random.uniform(0,wait*RETRY_JITTER))
                 attempt+=1;waiting=sorted(failures)
-    emit('transcribing',len(plan),len(plan),'OpenRouter')
+    finally:
+        encoders.shutdown(wait=True,cancel_futures=True)   # a fatal upload error must not keep ffmpeg busy
+        pool.shutdown(wait=True)
+        _shutil.rmtree(staging,ignore_errors=True)
+    finished=len(plan);progress()
     return plan
 
 
@@ -610,7 +693,22 @@ def compact_capture(store, mid):
     directory=Path(capture)
     full={k:Path(v) for k,v in paths.items() if isinstance(v,str)}
     if not full or not all(f.is_file() and f.stat().st_size>0 for f in full.values()): return 0
+    # Both requested sources or nothing: the chunks are the only way back if one channel never got assembled.
+    from .audio import journal_source_ends
+    expected=journal_source_ends(directory)
+    if expected and set(expected)-set(full): return 0
     freed=0;removed=0
+    # Orphan `*-full.wav.tmp` / `*-full.flac.tmp`: an assembler or an archiver that was killed mid-write. They
+    # are never adopted, nothing else sweeps them, and they are the size of the recording. An hour of grace
+    # keeps this away from anything still being written.
+    import time
+    stale=0
+    for pattern in ('*-full.wav.tmp','*-full.flac.tmp'):
+        for orphan in directory.glob(pattern):
+            try:
+                if time.time()-orphan.stat().st_mtime<3600: continue
+                freed+=orphan.stat().st_size;orphan.unlink();stale+=1
+            except OSError: pass
     # `*.partial.wav` is a chunk the helper was still writing when it was killed. It never announced a chunk
     # event, so the assembler skipped it and those seconds are NOT in *-full.wav — but neither is the file
     # usable, nothing else ever sweeps it, and it stayed on disk for the life of the meeting.
@@ -619,8 +717,9 @@ def compact_capture(store, mid):
             if chunk.resolve() in {f.resolve() for f in full.values()}: continue
             try: freed+=chunk.stat().st_size;chunk.unlink();removed+=1
             except OSError: pass
-    if removed:
-        meta['chunks_removed']=removed;meta['chunks_freed_bytes']=freed
+    if stale: meta['stale_temporaries_removed']=meta.get('stale_temporaries_removed',0)+stale
+    if removed: meta['chunks_removed']=removed;meta['chunks_freed_bytes']=freed
+    if removed or stale:
         with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),mid))
     return freed
 
@@ -651,12 +750,20 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             if not sources: raise ValueError('İçe aktarılan ses dosyası bulunamadı')
         else:
             directory=Path(capture).resolve()
-            existing={s:str(directory/f'{s}-full.wav') for s in ('mic','system') if (directory/f'{s}-full.wav').is_file()}
-            if existing: sources=existing
-            else:
-                emit('assembling')
-                from .audio import assemble_capture
-                sources=assemble_capture(directory)
+            from .audio import adoptable_full_files, assemble_capture
+            # Only adopt what an earlier run really finished: every source the journal recorded, each as long as
+            # the journal says. A half-written file used to be adopted whole, the chunks were then compacted
+            # away, and the meeting was transcribed from the fragment that survived.
+            try:
+                sources=adoptable_full_files(directory)
+                if not sources:
+                    emit('assembling')
+                    sources=assemble_capture(directory)
+            except OSError as exc:
+                # Assembly runs before the attempt is opened, so a full disk would otherwise leave no error line
+                # at all and the idle queue would come straight back. Say what is wrong, wait, spend nothing.
+                if not is_disk_full(exc): raise
+                store.status(mid,'incomplete');note_cloud_failure(store,mid,exc);raise
         if not mode:
             with store.db: store.db.execute('DELETE FROM segments WHERE meeting=?',(mid,))  # provisional live text is replaced by the cloud transcript
         metadata.update({'engine':'openrouter','model':model,'cloud_mode':mode or 'capture','cloud_upload_authorized':True,'paths':sources,'provisional':False})

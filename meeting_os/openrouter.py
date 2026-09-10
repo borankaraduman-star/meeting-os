@@ -21,7 +21,7 @@ STT_MODELS = (
 )
 DIARIZATION_DEFAULT_MODEL = 'microsoft/mai-transcribe-2'
 ANALYSIS_MODELS = (   # chat models with strict JSON schema output, verified on OpenRouter endpoints 2026-09-09
-    {'id':'openai/gpt-4.1-mini','name':'GPT-4.1 mini','pricing':'$0.40/M giriş, $1.60/M çıkış; 40 dk toplantı ≈ 1 cent'},
+    {'id':'openai/gpt-4.1-mini','name':'GPT-4.1 mini','pricing':'$0.40/M giriş, $1.60/M çıkış; 40 dk toplantı ≈ 3 cent, 2 saatlik toplantı ≈ $0,08'},
     {'id':'openai/gpt-4o-mini','name':'GPT-4o mini','pricing':'$0.15/M giriş, $0.60/M çıkış'},
     {'id':'google/gemini-2.5-flash','name':'Gemini 2.5 Flash','pricing':'$0.30/M giriş, $2.50/M çıkış'},
 )
