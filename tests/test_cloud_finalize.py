@@ -674,7 +674,7 @@ class GlossaryTests(unittest.TestCase):
                     return json.dumps({'decisions':[{'segment_id':a,'original':'pemede','accept':True,'reason':'kısaltma'},{'segment_id':a,'original':'trend yol','accept':False,'reason':'genel ifade'}]})
             refined=G.suggest_for_meeting(s,mid,entries,LLM());self.assertEqual([(r['original'],r['source']) for r in refined],[('pemede','llm')]);s.close()
             q=dispatch({'action':'review_queue','meeting':mid},db);g=[i for i in q['items'] if i['kind']=='glossary'];self.assertEqual(len(g),1);self.assertIn('PMD',g[0]['reason']);self.assertTrue(g[0]['verified'])
-            r=dispatch({'action':'glossary_apply','meeting':mid,'segment':a,'original':'pemede','replacement':'PMD'},db);self.assertEqual(r,{'applied':True,'remaining':0})
+            r=dispatch({'action':'glossary_apply','meeting':mid,'segment':a,'original':'pemede','replacement':'PMD'},db);self.assertEqual((r['applied'],r['remaining'],r['learned']),(True,0,True))   # accepting teaches the word (1.2.64)
             s=Store(db);row=[x for x in s.segments(mid) if x['id']==a][0];self.assertTrue(row['text'].startswith('Bugün PMD toplantısında'));self.assertEqual(row['original_text'],'Bugün pemede toplantısında trend yol için karar aldık.');s.close()
             summary=dispatch({'action':'glossary_summary'},db);self.assertEqual(summary['from_file'],2);self.assertEqual(summary['count'],2+summary['from_vocabulary'])
     def test_apply_all_and_dismiss(self):
