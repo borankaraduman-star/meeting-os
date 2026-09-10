@@ -183,7 +183,7 @@ struct DetailView:View {
                     if meeting.status != "complete" { Button("İşlemi sürdür") { if meeting.metadata["cloud_mode"] != nil { model.finalizeWithOpenRouter(meeting.id,model:nil) } else { model.showOpenRouter=true } }.disabled(model.busy || meeting.recoveryState=="active") }
                 }.padding(.horizontal,24).padding(.bottom,8)
             }
-            MeetingNavigation(model:model).padding(.horizontal,24).padding(.bottom,16)
+            HStack(spacing:10) { BackButton(model:model); MeetingNavigation(model:model) }.padding(.horizontal,24).padding(.bottom,16)
             if model.tab=="transcript" {
                 TranscriptSearchBar(model:model).padding(.horizontal,24).padding(.bottom,12)
             }
