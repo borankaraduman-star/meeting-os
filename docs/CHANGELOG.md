@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 76 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 77 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.72](#v1272) | 2026-09-11 10:15 | v1.2.72 — Tek parça uygulama paketi: indir, Uygulamalar'a sürükle, aç |
 | [v1.2.71](#v1271) | 2026-09-11 03:15 | v1.2.71 — Analiz modeli kararı gerçek toplantıyla düzeltildi: gpt-4.1-mini + otomatik yedek model |
 | [v1.2.70](#v1270) | 2026-09-11 02:45 | v1.2.70 — Daha geniş özet: konu başına madde, toplantı uzunluğuna göre |
 | [v1.2.69](#v1269) | 2026-09-11 01:45 | v1.2.69 — Analiz modeli: DeepSeek V3.2 (ölçüldü); CLI veri klasörü tuzağı |
@@ -96,6 +97,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1272"></a>
+### v1.2.72 — Tek parça uygulama paketi: indir, Uygulamalar'a sürükle, aç
+
+2026-09-11 10:15 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "kullanacak insanlar terminal yazamaz" + "bugün arkadaşlara ileteceğim, guide hazırla". Kurulum artık geliştirici kurulumu değil.
+
+- **Paket** (`scripts/build-bundle.sh --invite`, tasarım `docs/BUNDLE.md`): `Meeting OS.app` içinde kendi Python'u (python-build-standalone 3.12), paketleri (resemblyzer/torch, silero-vad, sherpa-onnx…), statik ffmpeg, ses modeli, kayıt yardımcısı ve **ekip daveti + OpenRouter anahtarı**. 1,0 GB. Ekip arkadaşı: zip indir → Uygulamalar'a sürükle → aç → (bir kez) Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç → adını yaz → üç izin. Başka hiçbir şey. `runtime.json` göreli yollar, `PATH`'e paket `runtime/bin`.
+- **İlk açılış:** paket davetini kendisi içe alır (ekip + anahtar), karşılama ekranı yalnız ad sorar; kurulum kartında "Paket sürümü".
+- **Uygulama içi güncelleme (paket kanalı):** sunucuda `GET /dl/<gizli>/latest.json` ve zip (Range ile devam, tarayıcıdan da iner); uygulama "Güncelle ve yeniden başlat" ile zip'i indirir (yüzde gösterir), sha256 doğrular, açar, `swap-update.sh` ile kendini değiştirip yeniden açılır; karantina yok, sudo yok, başarısızsa eski sürüm geri gelir. Yayınlama: `scripts/publish-bundle.sh build/Meeting-OS-<sürüm>.zip`.
+- Rehber (ekip arkadaşları için, teknik terimsiz): https://claude.ai/code/artifact/c82309a9-1730-4b60-b1f4-d9f4ceadfdb1
+- Testler: Python 967 (paket düzeni 20, güncelleme kanalı 30, sunucu +8), Swift 245+. Canlı: bu Mac'te paket açılıp köprü/kurulum kartı denendi (aşağıda not); ikinci Mac'te uçtan uca (indir → aç → kayıt) Boran'la.
 
 <a id="v1271"></a>
 ### v1.2.71 — Analiz modeli kararı gerçek toplantıyla düzeltildi: gpt-4.1-mini + otomatik yedek model

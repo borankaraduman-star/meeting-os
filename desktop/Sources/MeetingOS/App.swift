@@ -1025,7 +1025,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         lastUpdateCheck=Date()
         if let status=try? await request(["action":"update_status"]), let state=status["state"] as? String {
             let msg=status["message"] as? String ?? "", stamp=status["time"] as? String ?? ""
-            if let line=UpdateStatusLine.line(state:state,message:msg,time:stamp), UserDefaults.standard.string(forKey:"lastShownUpdate") != stamp {
+            let percent=status["percent"] as? Int ?? 0
+            if let line=UpdateStatusLine.line(state:state,message:msg,time:stamp,percent:percent), UserDefaults.standard.string(forKey:"lastShownUpdate") != stamp {
                 UserDefaults.standard.set(stamp,forKey:"lastShownUpdate"); activity=line
                 // A failed update is not a passing sidebar line: nothing else will ever mention it again.
                 if state=="failed" { notifyDone("Güncelleme başarısız",msg.isEmpty ? line : msg) }
@@ -1042,7 +1043,22 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         if recordProcess != nil { activity="Önceki kayıt kapanıyor · birkaç saniye sonra güncelleyin"; return }   // the updater would wait 60 s on the draining helper and abort
         if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
-        Task { do { _=try await request(["action":"update_start"]); try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil) } catch { self.error=error.localizedDescription; updating=false } }
+        Task {
+            do {
+                _=try await request(BundleInfo.updateStartRequest())
+                if !BundleInfo.bundled { try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil); return }
+                // Bundle channel: the detached worker downloads (minutes for ~1 GB) while the app stays open and shows
+                // the percentage; the swap script waits for this pid, so we quit only once the state says `swapping`.
+                while true {
+                    try? await Task.sleep(nanoseconds:2_000_000_000)
+                    guard let status=try? await request(["action":"update_status"]), let state=status["state"] as? String else { continue }
+                    let percent=status["percent"] as? Int ?? 0
+                    if let line=UpdateStatusLine.line(state:state,message:status["message"] as? String ?? "",time:status["time"] as? String ?? "",percent:percent) { activity=line }
+                    if UpdateStatusLine.shouldQuit(state:state) { NSApp.terminate(nil); return }
+                    if state=="failed" { updating=false; return }
+                }
+            } catch { self.error=error.localizedDescription; updating=false }
+        }
     }
     /// Returns how many earlier meetings the bridge relabelled when the owner name changed (0 otherwise).
     @discardableResult func saveReportSettings() async -> Int {
