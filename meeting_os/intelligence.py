@@ -459,22 +459,48 @@ def chunks(rows,llm,budget=2800,owner=None):
             current.append(item);used+=n
     if current:yield current
 
-def analyze_rows(rows,llm,progress=None,glossary=None,owner=None):
+CHUNK_BUDGET=7000        # ≈ tokens per chunk (11 Sep 2026: 2800 made a 41-minute meeting six chunks; gpt-4.1-mini reads 7000 as easily and answers once)
+CHUNK_WORKERS=3          # chunks in flight at once; the per-chunk answer does not depend on its neighbours, the merge happens after
+CHUNK_MAX_TOKENS=4000    # room for one bullet per topic plus actions on a bigger chunk
+
+
+def _analyze_chunk(batch,rows,llm,glossary,owner):
+    prompt=json.dumps(({'glossary':glossary} if glossary else {})|{'transcript':batch},ensure_ascii=False)   # glossary: expand abbreviations in output text, still untrusted data
+    error=None
+    for attempt in range(2):
+        try:
+            raw=llm.complete(SYSTEM,prompt+(('\nYour previous output was rejected: '+str(error)+'. Follow the exact schema above. Summary must contain objects with text and evidence. Actions must include evidence. Never invent owners.') if attempt else ''),max_tokens=CHUNK_MAX_TOKENS,schema=analysis_schema([b['segment_id'] for b in batch]))
+            parsed=parse_json(raw)
+            if not all(key in parsed for key in CATEGORIES):raise ValueError('Analiz kategorileri eksik')
+            allowed={b['segment_id'] for b in batch}
+            return validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner)
+        except (ValueError,TypeError,KeyError,json.JSONDecodeError) as exc:error=exc
+    raise ValueError('Analiz doğrulanamadı; kaynak transkript korunuyor: '+str(error))
+
+
+def analyze_rows(rows,llm,progress=None,glossary=None,owner=None,workers=None):
     if not rows:return {key:[] for key in CATEGORIES}
-    outputs=[];batches=list(chunks(rows,llm,owner=owner))
-    for i,batch in enumerate(batches):
-        if progress:progress(i,len(batches))
-        prompt=json.dumps(({'glossary':glossary} if glossary else {})|{'transcript':batch},ensure_ascii=False)   # glossary: expand abbreviations in output text, still untrusted data
-        error=None
-        for attempt in range(2):
-            try:
-                raw=llm.complete(SYSTEM,prompt+(('\nYour previous output was rejected: '+str(error)+'. Follow the exact schema above. Summary must contain objects with text and evidence. Actions must include evidence. Never invent owners.') if attempt else ''),max_tokens=2400,schema=analysis_schema([b['segment_id'] for b in batch]))
-                parsed=parse_json(raw)
-                if not all(key in parsed for key in CATEGORIES):raise ValueError('Analiz kategorileri eksik')
-                allowed={b['segment_id'] for b in batch}
-                item=validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner);outputs.append(item);break
-            except (ValueError,TypeError,KeyError,json.JSONDecodeError) as exc:error=exc
-        else:raise ValueError('Analiz doğrulanamadı; kaynak transkript korunuyor: '+str(error))
+    batches=list(chunks(rows,llm,budget=CHUNK_BUDGET,owner=owner))
+    if progress:progress(0,len(batches))
+    workers=max(1,min(CHUNK_WORKERS if workers is None else int(workers),len(batches)))
+    if workers==1:
+        outputs=[]
+        for i,batch in enumerate(batches):
+            outputs.append(_analyze_chunk(batch,rows,llm,glossary,owner))
+            if progress:progress(i+1,len(batches))
+    else:
+        # Chunks in parallel, results in order. Each worker runs inside a copy of the caller's context so the
+        # usage recorder (a ContextVar in openrouter) still sees the analysis money spent on other threads.
+        import contextvars
+        from concurrent.futures import ThreadPoolExecutor
+        outputs=[None]*len(batches); done=0
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures={pool.submit(contextvars.copy_context().run,_analyze_chunk,batch,rows,llm,glossary,owner):i for i,batch in enumerate(batches)}
+            from concurrent.futures import as_completed
+            for fut in as_completed(futures):
+                outputs[futures[fut]]=fut.result()   # the first failure raises here; the pool's exit waits for the rest
+                done+=1
+                if progress:progress(done,len(batches))
     result=merge_records(outputs)
     if len(batches)>1:
         result['section_summaries']=result['summary']

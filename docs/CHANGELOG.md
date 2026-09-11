@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 82 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 83 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.78](#v1278) | 2026-09-11 16:30 | v1.2.78 — Ayarlar anında açılır; özet daha hızlı çıkar |
 | [v1.2.77](#v1277) | 2026-09-11 15:40 | v1.2.77 — Ekran görüntüsü toplantı dışında çalışır; Özet sekmesinde dışa aktarma |
 | [v1.2.76](#v1276) | 2026-09-11 15:00 | v1.2.76 — Mikrofon kapısı: yalnız Zoom'da sesiniz açıkken ya da "sesimi de al" deyince |
 | [v1.2.75](#v1275) | 2026-09-11 14:20 | v1.2.75 — Güncelleme düğmesi yalnız gerçek toplantıda bekler |
@@ -102,6 +103,17 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1278"></a>
+### v1.2.78 — Ayarlar anında açılır; özet daha hızlı çıkar
+
+2026-09-11 16:30 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "Ayarlar butonu yavaş açılıyor, özet çıkarma uzun sürüyor."
+
+- **Ayarlar:** pencere önce açılır, beş köprü çağrısı (sözlük, depolama, maliyet, kurulum durumu, kelime listesi) aynı anda arkada koşar ve bölümler geldikçe dolar. Kurulum durumu artık Ayarlar açılırken git ile ağa çıkmaz (`quick`); saatlik güncelleme kontrolünün cevabı kullanılır. Ölçüm: eskiden ardışık ≈4 sn (ağ yavaşsa 25 sn'ye kadar), şimdi pencere anında.
+- **Özet:** transkript parçaları 2.800 yerine 7.000 token'lık (41 dk toplantı 6 parça → 3), parçalar aynı anda 3'lü işlenir (`CHUNK_WORKERS`), parça başına cevap sınırı 4.000 token. Kullanım kaydı iş parçacıklarında da tutulur. Ölçüm 41 dk gerçek toplantı (335 bölüm): 214 sn → 118 sn, özet yine 9 madde, parça maddeleri 26.
+- Testler: Python 983, Swift 262.
 
 <a id="v1277"></a>
 ### v1.2.77 — Ekran görüntüsü toplantı dışında çalışır; Özet sekmesinde dışa aktarma

@@ -632,7 +632,7 @@ def dispatch(request, db=None):
             data=DATA_DIR if db is None else Path(db).parent
             entries=G.load(data,ROOT); paths=[p for p in G.sources(data) if p.is_file()]
             update={}
-            if db is None:
+            if db is None and request.get('quick') is not True:   # quick: Settings just opened; the app merges its own hourly check
                 try:
                     from .updater import check
                     update=check(ROOT) or {}

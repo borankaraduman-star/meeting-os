@@ -1175,15 +1175,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         do { _=try await request(["action":"glossary_dismiss","meeting":mid,"segment":seg,"original":item.original]); await loadReview() }
         catch { self.error=error.localizedDescription }
     }
+    /// Boran, 11 Sep 2026: "ayarlar butonu yavaş açılıyor" — five bridge calls ran one after another before the
+    /// sheet appeared. Now the sheet opens at once with what the app already knows, and the five loads run
+    /// together behind it; each section fills in as its answer lands.
     func settings() async {
-        do {
-            vocabulary=try await request(["action":"vocabulary"])["text"] as? String ?? ""
-            await loadGlossarySummary()
-            storage=(try? await request(["action":"storage_report"])).map(StorageReport.parse)   // read-only walk; a failure hides the section only
-            cost=try? await request(["action":"cost_report"])
-            await loadSetupStatus()
-            showSettings=true
-        } catch { self.error=error.localizedDescription }
+        showSettings=true
+        async let vocab:[String:Any]? = try? request(["action":"vocabulary"])
+        async let storageReport:[String:Any]? = try? request(["action":"storage_report"])
+        async let costReport:[String:Any]? = try? request(["action":"cost_report"])
+        async let glossaryLoad:Void = loadGlossarySummary()
+        async let setup:Void = loadSetupStatus(quick:true)
+        let (v,st,c,_,_)=await (vocab,storageReport,costReport,glossaryLoad,setup)
+        vocabulary=v?["text"] as? String ?? vocabulary
+        if let st { storage=StorageReport.parse(st) }   // read-only walk; a failure hides the section only
+        if let c { cost=c }
     }
     /// From the storage list: close the sheet first so the sidebar's confirmation dialog can present.
     func requestDelete(meetingID:String) {

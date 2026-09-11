@@ -287,12 +287,18 @@ extension Model {
         guard !original.isEmpty else { return }
         do { _=try await request(["action":"reject_rule","original":original]); activity="Kural kapatıldı · “\(original)” artık kendiliğinden düzeltilmez"; await loadMaintenance() } catch { self.error=error.localizedDescription }
     }
-    func loadSetupStatus() async {
+    /// `quick`: no git fetch inside the bridge (Settings opens; the hourly update check already ran and its
+    /// answer is merged in below), so the card never waits on the network.
+    func loadSetupStatus(quick:Bool=false) async {
         var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
         let settings=await UNUserNotificationCenter.current().notificationSettings()
         checks.append(SetupStatus.notificationCheck(settings))
         var answer:[String:Any]?
-        if let r=try? await request(["action":"setup_status"]) {
+        if var r=try? await request(quick ? ["action":"setup_status","quick":true] : ["action":"setup_status"]) {
+            if quick, let u=update {
+                r["update_behind"]=u.behind; r["update_diverged"]=u.diverged; r["update_ahead"]=u.ahead
+                r["update_hint"]=u.hint; r["update_error"]=u.error
+            }
             answer=r
             checks+=SetupStatus.serviceChecks(r,repo:runtime.repo,divergedNotice:update?.divergedNotice ?? "",bundled:runtime.bundled,bundleVersion:runtime.version ?? "")
             // The same answer, read once more as the one line Ayarlar → Ekip opens with — and as the flag that
