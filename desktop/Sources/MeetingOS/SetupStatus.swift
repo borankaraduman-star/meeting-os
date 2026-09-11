@@ -84,6 +84,24 @@ enum SetupStatus {
         if !writable { return SetupCheck(id:"reports",title:"Teşhis raporları",state:.missing,hint:"iCloud Drive klasörü yok ya da yazılamıyor: \(r["reports_dir"] as? String ?? "")") }
         return SetupCheck(id:"reports",title:"Teşhis raporları",state:.ok,hint:written==0 ? "Açık · henüz rapor yazılmadı (ilk tamamlanan toplantıdan sonra)" : "Açık · \(written) rapor iCloud Drive’da")
     }
+    /// Is the fleet correcting MORE than it was? One line, built by the Python side from the daily numbers
+    /// every Mac puts in its heartbeat (`quality.quality_trend`), and nothing at all when there is no answer
+    /// yet: a Mac with no shared folder, no heartbeats or no measured day must not get a row saying zero.
+    /// `.optional` unless the pooled error rate rose 30 % or more with enough observations behind both
+    /// periods — the same bar as the fleet alert, so the card and the alert can never disagree.
+    static func qualityCheck(_ r:[String:Any])->SetupCheck? {
+        guard let trend=r["quality_trend"] as? [String:Any] else { return nil }
+        let line=(trend["line"] as? String ?? "").trimmingCharacters(in:.whitespaces)
+        if line.isEmpty { return nil }
+        let change=trend["change"] as? Double ?? 0
+        let eligible=trend["eligible"] as? Bool ?? false
+        let worse=eligible && change >= 0.30
+        let worst=(trend["top_errors"] as? [[String:Any]])?.first?["metric"] as? String ?? ""
+        let tail=worse && !worst.isEmpty ? " · en çok: "+(errorLabels[worst] ?? worst) : ""
+        return SetupCheck(id:"quality",title:"Kalite eğilimi",state:worse ? .missing : .optional,hint:line+tail)
+    }
+    static let errorLabels=["names_falsified":"yanlış otomatik isim","word_repeat_errors":"öğretilen kelime yine yanlış",
+                            "summary_edits":"özet düzeltmesi","task_edits":"görev düzeltmesi"]
     /// The one-line fix for a Mac that has never granted the codesign Keychain partition: without it every
     /// update stops on an unanswerable password prompt, in a Terminal nobody is watching.
     static func signingFix(repo:String)->String {
@@ -175,6 +193,7 @@ enum SetupStatus {
                               state:(diverged && !bundled) ? .missing : (!updateError.isEmpty ? .optional : (behind==0 ? .ok : .missing)),
                               hint:(diverged && !bundled) ? divergedLine : (!updateError.isEmpty ? "kontrol edilemedi · "+updateError : (behind==0 ? currentHint : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"))))
         out.append(reportsCheck(r))
+        if let quality=qualityCheck(r) { out.append(quality) }
         return out
     }
 }

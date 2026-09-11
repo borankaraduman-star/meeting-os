@@ -1,0 +1,376 @@
+{
+  "title": "Kurgu test — Uzun toplantıda sahip devri ve başkasının ağzından aktarılan söz",
+  "note": "Tamamen kurgudur: kişiler, ürünler, sayılar ve cümleler scripts/make-fixture.py tarafından yapısal bir tarifden üretildi. Gerçek bir toplantının metni, düzeltmesi veya yeniden yazılmış hâli değildir. Gerçek boyutta parça ölçmek için uzundur; kısaltmak ölçtüğü şeyi ortadan kaldırır. İki gerçek boyutta parça. Aynı iş ilk parçada bir kişiye veriliyor, son parçada bir başkası açıkça devralıyor; ayrıca toplantıda olmayan birinin sözü üçüncü bir ağızdan aktarılıyor. Ölçtüğü şey: devir sonrası sahip kim yazılıyor, aktarılan söz kimin görevi sayılıyor, iş iki kez mi çıkıyor.",
+  "segments": [
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Test grubu tarafında Çınar raporlama paneli kurulumu 6 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Geçen ay Çınar raporlama paneli üzerinde 7316 değişiklik yapıldı, bunların 10 tanesi aynı hafta içinde geri alındı. Çınar raporlama paneli için ayrılan bütçenin 95,3 kısmı kullanıldı, kalan 5,8 kısmı duruyor; bu rakam geçen çeyrekte 39,4 idi. Çınar raporlama paneli için topladığımız 1235 örnekte yeniden deneme sayısı ortalaması 68,2, en kötü gün 39,2 oldu; medyan ise 9,9 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Çınar raporlama paneli testlerinde tamamlanma oranı 11,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Çınar raporlama paneli yükü 46,0 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 95,3 saniyeye kadar gidiyor. Çınar raporlama paneli günlüklerinde 2107 uyarı satırı var, 66 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kavak mobil uygulaması ekranındaki 3562 kayıttan 26 tanesi Bursa bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Kavak mobil uygulaması tarafında hata oranı bu hafta 37,4 çıktı, geçen hafta 92,3 idi; aradaki fark 21,0 puan ve iki ölçüm de aynı sayaçtan geliyor. Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 47,1 diğeri 69,8; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması için 15,2 olan hedefi geçen çeyrekte 43,2 olarak revize etmiştik; ölçüm bugün 8,5 seviyesinde. Kavak mobil uygulaması konusunda 6904 kullanıcı geri bildirimi geldi, 35 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Kavak mobil uygulaması yükü 20,3 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 17,4 saniyeye kadar gidiyor. Kavak mobil uygulaması tarafında yeniden deneme sayısı bu hafta 15,0 çıktı, geçen hafta 89,9 idi; aradaki fark 28,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Geçen ay Lodos arama motoru üzerinde 8364 değişiklik yapıldı, bunların 90 tanesi aynı hafta içinde geri alındı. Lodos arama motoru konusunda 4525 kullanıcı geri bildirimi geldi, 23 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru testlerinde günlük aktif kullanıcı sayısı 18,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kurumsal müşteri tarafında Lodos arama motoru kurulumu 6 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Lodos arama motoru için ayrılan bütçenin 27,2 kısmı kullanıldı, kalan 32,4 kısmı duruyor; bu rakam geçen çeyrekte 77,7 idi. Lodos arama motoru için topladığımız 6463 örnekte önbellek isabet oranı ortalaması 3,6, en kötü gün 26,3 oldu; medyan ise 5,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 92,7 diğeri 85,3; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi ekranındaki 4529 kayıttan 15 tanesi Denizli bölgesinden geldi, kalanı test grubu üzerinden düştü. Kestane depo sistemi günlüklerinde 4743 uyarı satırı var, 17 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi için 84,5 olan hedefi geçen çeyrekte 93,8 olarak revize etmiştik; ölçüm bugün 21,3 seviyesinde. Kestane depo sistemi için 10,0 olan hedefi geçen çeyrekte 98,8 olarak revize etmiştik; ölçüm bugün 17,3 seviyesinde. Kestane depo sistemi günlüklerinde 6762 uyarı satırı var, 44 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulamasının yaş sınırı ekranını ben üstleniyorum, önümüzdeki salıya kadar hazırlarım."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Çınar raporlama paneli konusunda 8758 kullanıcı geri bildirimi geldi, 84 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Çınar raporlama paneli için topladığımız 8189 örnekte önbellek isabet oranı ortalaması 29,3, en kötü gün 50,4 oldu; medyan ise 65,5 seviyesinde kaldı. Çınar raporlama paneli ekranındaki 1459 kayıttan 22 tanesi Bursa bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Saha ekibi tarafında Çınar raporlama paneli kurulumu 10 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Çınar raporlama paneli için ayrılan bütçenin 49,4 kısmı kullanıldı, kalan 38,8 kısmı duruyor; bu rakam geçen çeyrekte 73,0 idi. Geçen ay Çınar raporlama paneli üzerinde 6144 değişiklik yapıldı, bunların 53 tanesi aynı hafta içinde geri alındı. Çınar raporlama paneli yükü 42,1 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 36,0 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması tarafında bellek kullanımı bu hafta 72,3 çıktı, geçen hafta 34,7 idi; aradaki fark 9,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Kavak mobil uygulaması testlerinde yeniden deneme sayısı 43,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 28,1 diğeri 74,9; hangisinin doğru olduğunu şu an bilmiyoruz. Kavak mobil uygulaması günlüklerinde 2202 uyarı satırı var, 46 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Kavak mobil uygulaması testlerinde yeniden deneme sayısı 74,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Lodos arama motoru için topladığımız 2672 örnekte tamamlanma oranı ortalaması 16,8, en kötü gün 52,9 oldu; medyan ise 67,7 seviyesinde kaldı. Mağaza panosu tarafında Lodos arama motoru kurulumu 7 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Lodos arama motoru tarafında önbellek isabet oranı bu hafta 37,0 çıktı, geçen hafta 89,8 idi; aradaki fark 40,2 puan ve iki ölçüm de aynı sayaçtan geliyor. Lodos arama motoru için 11,3 olan hedefi geçen çeyrekte 1,0 olarak revize etmiştik; ölçüm bugün 85,0 seviyesinde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Lodos arama motoru konusunda 6295 kullanıcı geri bildirimi geldi, 40 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Lodos arama motoru ekranındaki 6232 kayıttan 76 tanesi Bursa bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Lodos arama motoru yükü 67,9 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 7,6 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Geçen ay Kestane depo sistemi üzerinde 3018 değişiklik yapıldı, bunların 33 tanesi aynı hafta içinde geri alındı. Kestane depo sistemi için ayrılan bütçenin 90,6 kısmı kullanıldı, kalan 61,3 kısmı duruyor; bu rakam geçen çeyrekte 6,3 idi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 10,6 diğeri 95,5; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi için 83,0 olan hedefi geçen çeyrekte 70,2 olarak revize etmiştik; ölçüm bugün 7,0 seviyesinde."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Çınar raporlama paneli konusunda 1184 kullanıcı geri bildirimi geldi, 25 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Çınar raporlama paneli ekranındaki 2632 kayıttan 15 tanesi Adana bölgesinden geldi, kalanı test grubu üzerinden düştü. Çınar raporlama paneli tarafında kuyruk derinliği bu hafta 71,6 çıktı, geçen hafta 20,8 idi; aradaki fark 20,0 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Çağrı merkezi tarafında Çınar raporlama paneli kurulumu 5 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Çınar raporlama paneli için topladığımız 6437 örnekte yeniden deneme sayısı ortalaması 12,1, en kötü gün 22,6 oldu; medyan ise 8,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 45,1 diğeri 32,8; hangisinin doğru olduğunu şu an bilmiyoruz. Kavak mobil uygulaması günlüklerinde 8595 uyarı satırı var, 30 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Kavak mobil uygulaması için ayrılan bütçenin 26,1 kısmı kullanıldı, kalan 93,4 kısmı duruyor; bu rakam geçen çeyrekte 22,7 idi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Geçen ay Kavak mobil uygulaması üzerinde 3328 değişiklik yapıldı, bunların 57 tanesi aynı hafta içinde geri alındı. Kavak mobil uygulaması yükü 81,2 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 29,5 saniyeye kadar gidiyor. Kavak mobil uygulaması testlerinde önbellek isabet oranı 38,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kurumsal müşteri tarafında Lodos arama motoru kurulumu 11 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Lodos arama motoru ekranındaki 9075 kayıttan 69 tanesi Bursa bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 78,6 diğeri 46,8; hangisinin doğru olduğunu şu an bilmiyoruz. Lodos arama motoru konusunda 7534 kullanıcı geri bildirimi geldi, 8 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Lodos arama motoru yükü 36,2 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 54,2 saniyeye kadar gidiyor. Geçen ay Lodos arama motoru üzerinde 7010 değişiklik yapıldı, bunların 30 tanesi aynı hafta içinde geri alındı. Lodos arama motoru için ayrılan bütçenin 82,1 kısmı kullanıldı, kalan 18,1 kısmı duruyor; bu rakam geçen çeyrekte 72,3 idi."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi testlerinde kuyruk derinliği 26,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kestane depo sistemi günlüklerinde 5681 uyarı satırı var, 69 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Kestane depo sistemi için 60,2 olan hedefi geçen çeyrekte 75,4 olarak revize etmiştik; ölçüm bugün 28,5 seviyesinde. Kestane depo sistemi tarafında kuyruk derinliği bu hafta 80,9 çıktı, geçen hafta 68,9 idi; aradaki fark 27,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi için topladığımız 3352 örnekte tamamlanma oranı ortalaması 73,8, en kötü gün 1,1 oldu; medyan ise 73,4 seviyesinde kaldı. Kestane depo sistemi tarafında günlük aktif kullanıcı sayısı bu hafta 19,7 çıktı, geçen hafta 67,6 idi; aradaki fark 30,4 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi günlüklerinde 2904 uyarı satırı var, 43 tanesi tek bir sunucudan; kalanlar Eskişehir kenar düğümünde. Kestane depo sistemi ekranındaki 2964 kayıttan 15 tanesi Bursa bölgesinden geldi, kalanı mağaza panosu üzerinden düştü."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Çınar raporlama paneli yükü 18,0 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 24,5 saniyeye kadar gidiyor. Çınar raporlama paneli için 56,3 olan hedefi geçen çeyrekte 95,9 olarak revize etmiştik; ölçüm bugün 11,2 seviyesinde. Bayi portalı tarafında Çınar raporlama paneli kurulumu 12 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 97,6 diğeri 77,1; hangisinin doğru olduğunu şu an bilmiyoruz. Çınar raporlama paneli testlerinde ortalama yanıt süresi 95,8 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Çınar raporlama paneli konusunda 9720 kullanıcı geri bildirimi geldi, 49 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Çınar raporlama paneli için ayrılan bütçenin 81,4 kısmı kullanıldı, kalan 27,2 kısmı duruyor; bu rakam geçen çeyrekte 12,5 idi."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Geçen ay Kavak mobil uygulaması üzerinde 1727 değişiklik yapıldı, bunların 26 tanesi aynı hafta içinde geri alındı. Kavak mobil uygulaması için topladığımız 2097 örnekte önbellek isabet oranı ortalaması 5,3, en kötü gün 85,0 oldu; medyan ise 60,9 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kavak mobil uygulaması için topladığımız 4202 örnekte yeniden deneme sayısı ortalaması 96,8, en kötü gün 25,8 oldu; medyan ise 79,7 seviyesinde kaldı. Kavak mobil uygulaması testlerinde önbellek isabet oranı 9,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Lodos arama motoru için 73,4 olan hedefi geçen çeyrekte 73,2 olarak revize etmiştik; ölçüm bugün 13,7 seviyesinde. Lodos arama motoru konusunda 2714 kullanıcı geri bildirimi geldi, 56 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı. Geçen ay Lodos arama motoru üzerinde 9178 değişiklik yapıldı, bunların 22 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Lodos arama motoru ekranındaki 9134 kayıttan 16 tanesi Sakarya bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü. Lodos arama motoru tarafında ortalama yanıt süresi bu hafta 75,0 çıktı, geçen hafta 47,0 idi; aradaki fark 35,4 puan ve iki ölçüm de aynı sayaçtan geliyor. Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 87,1 diğeri 63,0; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kestane depo sistemi için ayrılan bütçenin 24,4 kısmı kullanıldı, kalan 25,7 kısmı duruyor; bu rakam geçen çeyrekte 41,8 idi. Kestane depo sistemi yükü 9,4 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 39,5 saniyeye kadar gidiyor. Bayi portalı tarafında Kestane depo sistemi kurulumu 11 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kestane depo sistemi günlüklerinde 8429 uyarı satırı var, 20 tanesi tek bir sunucudan; kalanlar Eskişehir kenar düğümünde. Kestane depo sistemi testlerinde hata oranı 8,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kestane depo sistemi günlüklerinde 5429 uyarı satırı var, 61 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Tolga dedi ki, Lodos arama motorunun yazım denetimini o bitirecekmiş; kendisi bugün toplantıda yok, onun adına söz veremeyiz."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Çınar raporlama paneli için ayrılan bütçenin 71,2 kısmı kullanıldı, kalan 66,0 kısmı duruyor; bu rakam geçen çeyrekte 88,3 idi. Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 25,1 diğeri 19,9; hangisinin doğru olduğunu şu an bilmiyoruz. Saha ekibi tarafında Çınar raporlama paneli kurulumu 10 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Çınar raporlama paneli üzerinde 216 değişiklik yapıldı, bunların 61 tanesi aynı hafta içinde geri alındı. Çınar raporlama paneli tarafında ortalama yanıt süresi bu hafta 23,5 çıktı, geçen hafta 87,9 idi; aradaki fark 39,2 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kavak mobil uygulaması ekranındaki 550 kayıttan 88 tanesi Konya bölgesinden geldi, kalanı test grubu üzerinden düştü. Kavak mobil uygulaması konusunda 5935 kullanıcı geri bildirimi geldi, 70 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı. Kavak mobil uygulaması için 73,8 olan hedefi geçen çeyrekte 71,9 olarak revize etmiştik; ölçüm bugün 16,7 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması yükü 31,1 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 12,1 saniyeye kadar gidiyor. Kavak mobil uygulaması için topladığımız 2397 örnekte ortalama yanıt süresi ortalaması 37,2, en kötü gün 1,3 oldu; medyan ise 19,3 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Lodos arama motoru yükü 70,5 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 17,2 saniyeye kadar gidiyor. Lodos arama motoru için topladığımız 1587 örnekte hata oranı ortalaması 88,2, en kötü gün 7,1 oldu; medyan ise 21,5 seviyesinde kaldı. Bayi portalı tarafında Lodos arama motoru kurulumu 8 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Lodos arama motoru konusunda 8020 kullanıcı geri bildirimi geldi, 41 tanesi aynı ekranı işaret ediyor; metinler Samsun ağırlıklı. Lodos arama motoru tarafında kuyruk derinliği bu hafta 71,5 çıktı, geçen hafta 24,6 idi; aradaki fark 13,6 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi için ayrılan bütçenin 89,1 kısmı kullanıldı, kalan 72,5 kısmı duruyor; bu rakam geçen çeyrekte 57,6 idi. Kestane depo sistemi için 98,5 olan hedefi geçen çeyrekte 65,2 olarak revize etmiştik; ölçüm bugün 35,3 seviyesinde. Kestane depo sistemi ekranındaki 2040 kayıttan 45 tanesi Adana bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Kestane depo sistemi günlüklerinde 8923 uyarı satırı var, 77 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 4,4 diğeri 76,2; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi testlerinde işlem hacmi 81,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Geçen ay Kestane depo sistemi üzerinde 2642 değişiklik yapıldı, bunların 66 tanesi aynı hafta içinde geri alındı. Kestane depo sistemi tarafında tamamlanma oranı bu hafta 38,2 çıktı, geçen hafta 56,4 idi; aradaki fark 7,5 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 95,8 diğeri 14,2; hangisinin doğru olduğunu şu an bilmiyoruz. Çınar raporlama paneli konusunda 6321 kullanıcı geri bildirimi geldi, 60 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Geçen ay Çınar raporlama paneli üzerinde 7781 değişiklik yapıldı, bunların 24 tanesi aynı hafta içinde geri alındı. Çınar raporlama paneli için topladığımız 1553 örnekte gecikme ortalaması 84,3, en kötü gün 33,0 oldu; medyan ise 58,7 seviyesinde kaldı. Çınar raporlama paneli yükü 50,3 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 10,6 saniyeye kadar gidiyor. Çınar raporlama paneli testlerinde önbellek isabet oranı 46,8 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kavak mobil uygulaması için ayrılan bütçenin 49,1 kısmı kullanıldı, kalan 39,9 kısmı duruyor; bu rakam geçen çeyrekte 97,9 idi. Kavak mobil uygulaması günlüklerinde 2963 uyarı satırı var, 63 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Test grubu tarafında Kavak mobil uygulaması kurulumu 9 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması için 80,5 olan hedefi geçen çeyrekte 47,8 olarak revize etmiştik; ölçüm bugün 39,7 seviyesinde. Kavak mobil uygulaması ekranındaki 9672 kayıttan 86 tanesi Sakarya bölgesinden geldi, kalanı test grubu üzerinden düştü. Kavak mobil uygulaması konusunda 621 kullanıcı geri bildirimi geldi, 53 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Lodos arama motoru tarafında önbellek isabet oranı bu hafta 31,1 çıktı, geçen hafta 13,2 idi; aradaki fark 5,4 puan ve iki ölçüm de aynı sayaçtan geliyor. Lodos arama motoru için 34,1 olan hedefi geçen çeyrekte 36,9 olarak revize etmiştik; ölçüm bugün 92,0 seviyesinde. Lodos arama motoru için topladığımız 1877 örnekte işlem hacmi ortalaması 92,5, en kötü gün 14,6 oldu; medyan ise 32,3 seviyesinde kaldı. Lodos arama motoru günlüklerinde 694 uyarı satırı var, 27 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Geçen ay Lodos arama motoru üzerinde 9402 değişiklik yapıldı, bunların 9 tanesi aynı hafta içinde geri alındı. Lodos arama motoru yükü 86,0 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 6,4 saniyeye kadar gidiyor. Lodos arama motoru için ayrılan bütçenin 40,1 kısmı kullanıldı, kalan 68,6 kısmı duruyor; bu rakam geçen çeyrekte 73,5 idi."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 88,5 diğeri 40,0; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi ekranındaki 1797 kayıttan 80 tanesi Adana bölgesinden geldi, kalanı test grubu üzerinden düştü. Test grubu tarafında Kestane depo sistemi kurulumu 12 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi testlerinde hata oranı 22,9 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Mağaza panosu tarafında Kestane depo sistemi kurulumu 8 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Çınar raporlama paneli yükü 66,8 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 57,6 saniyeye kadar gidiyor. Çınar raporlama paneli tarafında önbellek isabet oranı bu hafta 86,1 çıktı, geçen hafta 85,6 idi; aradaki fark 2,7 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Çınar raporlama paneli günlüklerinde 6699 uyarı satırı var, 20 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Çınar raporlama paneli ekranındaki 2147 kayıttan 56 tanesi Bursa bölgesinden geldi, kalanı test grubu üzerinden düştü. Çınar raporlama paneli için 81,3 olan hedefi geçen çeyrekte 43,6 olarak revize etmiştik; ölçüm bugün 38,8 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması için topladığımız 2431 örnekte kuyruk derinliği ortalaması 80,1, en kötü gün 78,7 oldu; medyan ise 29,9 seviyesinde kaldı. Kavak mobil uygulaması testlerinde kuyruk derinliği 29,3 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kavak mobil uygulaması için ayrılan bütçenin 80,9 kısmı kullanıldı, kalan 14,8 kısmı duruyor; bu rakam geçen çeyrekte 80,5 idi. Geçen ay Kavak mobil uygulaması üzerinde 1406 değişiklik yapıldı, bunların 52 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kavak mobil uygulaması konusunda 5602 kullanıcı geri bildirimi geldi, 37 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 55,4 diğeri 71,0; hangisinin doğru olduğunu şu an bilmiyoruz. Kavak mobil uygulaması tarafında kuyruk derinliği bu hafta 97,4 çıktı, geçen hafta 24,8 idi; aradaki fark 12,9 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Lodos arama motoru için topladığımız 3879 örnekte önbellek isabet oranı ortalaması 80,1, en kötü gün 32,3 oldu; medyan ise 88,7 seviyesinde kaldı. Lodos arama motoru ekranındaki 3939 kayıttan 78 tanesi Bursa bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü. Lodos arama motoru için 37,9 olan hedefi geçen çeyrekte 7,9 olarak revize etmiştik; ölçüm bugün 15,3 seviyesinde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Lodos arama motoru testlerinde yeniden deneme sayısı 47,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Lodos arama motoru konusunda 4337 kullanıcı geri bildirimi geldi, 61 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kestane depo sistemi yükü 42,4 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 56,7 saniyeye kadar gidiyor. Geçen ay Kestane depo sistemi üzerinde 3928 değişiklik yapıldı, bunların 80 tanesi aynı hafta içinde geri alındı. Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 33,4 diğeri 67,6; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kestane depo sistemi için ayrılan bütçenin 94,9 kısmı kullanıldı, kalan 83,9 kısmı duruyor; bu rakam geçen çeyrekte 44,4 idi. Test grubu tarafında Kestane depo sistemi kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Kestane depo sistemi günlüklerinde 5523 uyarı satırı var, 50 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Çınar raporlama paneli konusunda 9239 kullanıcı geri bildirimi geldi, 9 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Çınar raporlama paneli ekranındaki 3479 kayıttan 31 tanesi Sakarya bölgesinden geldi, kalanı test grubu üzerinden düştü. Çınar raporlama paneli tarafında ortalama yanıt süresi bu hafta 34,4 çıktı, geçen hafta 60,2 idi; aradaki fark 16,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Çınar raporlama paneli yükü 85,7 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 91,5 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Test grubu tarafında Çınar raporlama paneli kurulumu 8 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 50,8 diğeri 75,9; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması için ayrılan bütçenin 60,3 kısmı kullanıldı, kalan 10,3 kısmı duruyor; bu rakam geçen çeyrekte 98,9 idi. Geçen ay Kavak mobil uygulaması üzerinde 8817 değişiklik yapıldı, bunların 88 tanesi aynı hafta içinde geri alındı. Kavak mobil uygulaması testlerinde ortalama yanıt süresi 47,7 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kavak mobil uygulaması için topladığımız 2536 örnekte tamamlanma oranı ortalaması 68,5, en kötü gün 7,4 oldu; medyan ise 84,6 seviyesinde kaldı. Kavak mobil uygulaması günlüklerinde 3368 uyarı satırı var, 31 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru için 46,7 olan hedefi geçen çeyrekte 13,3 olarak revize etmiştik; ölçüm bugün 18,1 seviyesinde. Lodos arama motoru için topladığımız 5515 örnekte hata oranı ortalaması 42,1, en kötü gün 73,2 oldu; medyan ise 8,0 seviyesinde kaldı. Lodos arama motoru için 11,9 olan hedefi geçen çeyrekte 3,8 olarak revize etmiştik; ölçüm bugün 63,8 seviyesinde. Lodos arama motoru ekranındaki 9798 kayıttan 9 tanesi Trabzon bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 48,4 diğeri 98,9; hangisinin doğru olduğunu şu an bilmiyoruz. Kurumsal müşteri tarafında Lodos arama motoru kurulumu 9 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Lodos arama motoru yükü 40,0 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 44,4 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi için ayrılan bütçenin 45,2 kısmı kullanıldı, kalan 90,6 kısmı duruyor; bu rakam geçen çeyrekte 61,3 idi. Kestane depo sistemi tarafında işlem hacmi bu hafta 12,1 çıktı, geçen hafta 42,7 idi; aradaki fark 34,0 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi konusunda 2063 kullanıcı geri bildirimi geldi, 81 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi günlüklerinde 3380 uyarı satırı var, 45 tanesi tek bir sunucudan; kalanlar Konya kenar düğümünde. Kestane depo sistemi testlerinde hata oranı 36,8 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Geçen ay Kestane depo sistemi üzerinde 2567 değişiklik yapıldı, bunların 19 tanesi aynı hafta içinde geri alındı. Kestane depo sistemi için topladığımız 7665 örnekte hata oranı ortalaması 89,1, en kötü gün 59,9 oldu; medyan ise 95,7 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Çınar raporlama paneli ekranındaki 7191 kayıttan 35 tanesi Adana bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü. Çınar raporlama paneli günlüklerinde 1742 uyarı satırı var, 34 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Çınar raporlama paneli tarafında bellek kullanımı bu hafta 57,4 çıktı, geçen hafta 64,6 idi; aradaki fark 8,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Çınar raporlama paneli için ayrılan bütçenin 67,6 kısmı kullanıldı, kalan 27,3 kısmı duruyor; bu rakam geçen çeyrekte 87,8 idi. Test grubu tarafında Çınar raporlama paneli kurulumu 12 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Çınar raporlama paneli testlerinde gecikme 48,3 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kavak mobil uygulaması yükü 83,2 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 71,4 saniyeye kadar gidiyor. Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 50,0 diğeri 19,0; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kavak mobil uygulaması konusunda 5697 kullanıcı geri bildirimi geldi, 59 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Kavak mobil uygulaması için 28,8 olan hedefi geçen çeyrekte 72,7 olarak revize etmiştik; ölçüm bugün 50,9 seviyesinde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Lodos arama motoru üzerinde 6479 değişiklik yapıldı, bunların 87 tanesi aynı hafta içinde geri alındı. Lodos arama motoru için topladığımız 2262 örnekte ortalama yanıt süresi ortalaması 68,8, en kötü gün 64,7 oldu; medyan ise 34,1 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Lodos arama motoru için ayrılan bütçenin 41,9 kısmı kullanıldı, kalan 35,8 kısmı duruyor; bu rakam geçen çeyrekte 14,7 idi. Lodos arama motoru ekranındaki 1573 kayıttan 33 tanesi Sakarya bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü. Lodos arama motoru testlerinde yeniden deneme sayısı 43,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kestane depo sistemi için 38,4 olan hedefi geçen çeyrekte 60,9 olarak revize etmiştik; ölçüm bugün 50,7 seviyesinde. Çağrı merkezi tarafında Kestane depo sistemi kurulumu 9 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Geçen ay Kestane depo sistemi üzerinde 5216 değişiklik yapıldı, bunların 40 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 56,5 diğeri 37,0; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi konusunda 8853 kullanıcı geri bildirimi geldi, 28 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Kestane depo sistemi yükü 39,0 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 39,2 saniyeye kadar gidiyor. Kestane depo sistemi günlüklerinde 8978 uyarı satırı var, 17 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Çınar raporlama paneli tarafında bellek kullanımı bu hafta 13,3 çıktı, geçen hafta 86,1 idi; aradaki fark 33,3 puan ve iki ölçüm de aynı sayaçtan geliyor. Çınar raporlama paneli ekranındaki 7725 kayıttan 74 tanesi Samsun bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 67,4 diğeri 10,9; hangisinin doğru olduğunu şu an bilmiyoruz. Çınar raporlama paneli için 47,0 olan hedefi geçen çeyrekte 96,4 olarak revize etmiştik; ölçüm bugün 69,8 seviyesinde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Çınar raporlama paneli üzerinde 3527 değişiklik yapıldı, bunların 22 tanesi aynı hafta içinde geri alındı. Çınar raporlama paneli yükü 32,5 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 2,2 saniyeye kadar gidiyor. Çınar raporlama paneli için ayrılan bütçenin 57,3 kısmı kullanıldı, kalan 61,4 kısmı duruyor; bu rakam geçen çeyrekte 34,9 idi. Saha ekibi tarafında Çınar raporlama paneli kurulumu 8 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kavak mobil uygulaması günlüklerinde 6544 uyarı satırı var, 52 tanesi tek bir sunucudan; kalanlar Konya kenar düğümünde. Kavak mobil uygulaması için topladığımız 8518 örnekte bellek kullanımı ortalaması 79,5, en kötü gün 78,1 oldu; medyan ise 29,1 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kavak mobil uygulamasının yaş sınırı ekranını ben devralıyorum, Kerem başka işe geçti; aynı vadeyle, önümüzdeki salıya kadar bende."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması konusunda 6508 kullanıcı geri bildirimi geldi, 16 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Kavak mobil uygulaması tarafında işlem hacmi bu hafta 38,8 çıktı, geçen hafta 64,1 idi; aradaki fark 33,7 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Lodos arama motoru testlerinde bellek kullanımı 38,9 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Lodos arama motoru testlerinde yeniden deneme sayısı 71,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Geçen ay Lodos arama motoru üzerinde 7200 değişiklik yapıldı, bunların 55 tanesi aynı hafta içinde geri alındı. Lodos arama motoru ekranındaki 7793 kayıttan 31 tanesi Denizli bölgesinden geldi, kalanı test grubu üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Lodos arama motoru konusunda 3323 kullanıcı geri bildirimi geldi, 87 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Lodos arama motoru günlüklerinde 9340 uyarı satırı var, 66 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde. Lodos arama motoru için 58,0 olan hedefi geçen çeyrekte 13,6 olarak revize etmiştik; ölçüm bugün 32,8 seviyesinde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi için topladığımız 4752 örnekte bellek kullanımı ortalaması 88,4, en kötü gün 71,9 oldu; medyan ise 30,5 seviyesinde kaldı. Kestane depo sistemi için ayrılan bütçenin 41,7 kısmı kullanıldı, kalan 88,8 kısmı duruyor; bu rakam geçen çeyrekte 96,3 idi. Mağaza panosu tarafında Kestane depo sistemi kurulumu 3 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Tamam, yaş sınırı ekranı artık Nihalde; ben o işten çıkıyorum."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kestane depo sistemi tarafında tamamlanma oranı bu hafta 47,6 çıktı, geçen hafta 56,0 idi; aradaki fark 17,2 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi yükü 56,9 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 71,4 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 89,2 diğeri 24,5; hangisinin doğru olduğunu şu an bilmiyoruz. Çınar raporlama paneli konusunda 4532 kullanıcı geri bildirimi geldi, 48 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Çınar raporlama paneli testlerinde tamamlanma oranı 86,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Çınar raporlama paneli tarafında iki farklı ölçüm duruyor, biri 30,9 diğeri 92,5; hangisinin doğru olduğunu şu an bilmiyoruz."
+    }
+  ],
+  "expected_actions": 1,
+  "forbidden_action_terms": [
+    "yazım denetimi"
+  ],
+  "expected_owners": [
+    "Nihal Peker"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "yaş sınırı"
+      ],
+      "owner": "Nihal Peker",
+      "due_text": "önümüzdeki salıya kadar"
+    }
+  ],
+  "expected_topic_terms": [
+    [
+      "kavak"
+    ],
+    [
+      "çınar"
+    ],
+    [
+      "lodos"
+    ],
+    [
+      "kestane"
+    ]
+  ]
+}

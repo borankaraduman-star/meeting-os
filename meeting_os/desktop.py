@@ -180,6 +180,19 @@ def meeting_files(metadata, data_dir):
     return sorted(folders)
 
 
+def _quality_trend(settings):
+    """The fleet's quality trend for the setup card: two consecutive periods of the daily numbers every Mac
+    puts in its heartbeat, plus one Turkish line. Heartbeats only and never a network call; an unreadable
+    shared folder is simply an empty answer."""
+    try:
+        from .reports import report_root, summarize
+        from .quality import trend_line
+        trend=summarize(report_root(settings),limit=0).get('quality_trend') or {}
+        return {**{k:trend.get(k) for k in ('period_days','current','previous','change','eligible','top_errors')},'line':trend_line(trend)}
+    except Exception:
+        return {}
+
+
 def folder_bytes(path):
     """Total size of regular files under a directory (symlinks skipped, nothing modified)."""
     path=Path(path)
@@ -822,7 +835,10 @@ def dispatch(request, db=None):
                     'api_key':has_key,'api_key_keychain':key_in_keychain,'signing_partition':signing_partition,'glossary_terms':len(entries),'glossary_shared':any(G.shared_path() and p==G.shared_path() for p in paths),'update_behind':behind,
                     'update_diverged':bool(update.get('diverged')),'update_ahead':int(update.get('ahead') or 0),
                     'update_hint':str(update.get('hint') or ''),'update_error':update_error,
-                    'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder)}
+                    'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder),
+                    # One line about whether the fleet is correcting MORE than it was. Heartbeats only
+                    # (`limit=0` skips every meeting report), so the card stays cheap to draw.
+                    'quality_trend':_quality_trend(rs)}
         if action=='cost_report':
             # Real OpenRouter charges: transcription per audio piece, analysis per chat completion.
             from datetime import datetime,timezone

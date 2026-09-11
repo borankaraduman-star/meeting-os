@@ -219,3 +219,113 @@ token) gerçek parçayı (≈8–10k token) temsil etmiyor. **Karar geri alınd�
 model kendi yeniden denemelerinden sonra da düşerse istemci aynı isteği `ANALYSIS_FALLBACK_MODEL` (gpt-4.1-mini) ile
 bir kez daha dener, düşen model ve neden iş günlüğüne yazılır. Ders: model kararı kurgu kıyas + en az bir gerçek toplantı
 ölçümü olmadan verilmez; `scripts/benchmark-analysis-cloud.py` gerçek boyutta bir kurgu parça senaryosu almalı (açık).
+
+
+## Gerçek boyutta kurgu set ve üretici (1.2.82, Codex #12)
+
+Yukarıdaki dersin karşılığı: **kurgu senaryolar ≈2k token, gerçek parça ≈8–10k token.** Kısa fixture'ları
+geçen bir model uzun toplantıda düşebiliyor ve kıyas bunu göremiyor. `scripts/make-fixture.py` gerçek boyutta,
+**tamamen kurgu** senaryolar üretir.
+
+```sh
+.venv/bin/python scripts/make-fixture.py --list
+.venv/bin/python scripts/make-fixture.py --check          # ağsız, ücretsiz; üretilenle depodakini karşılaştırır
+.venv/bin/python scripts/make-fixture.py --case late_reversal --write
+```
+
+**Girdi yapıdır, metin değil.** Betiğe verilen şey “aynı sahip, aynı başlık, sonradan kayan tarih”, “ilk
+parçada alınan kararın son parçada iptali” gibi bir **olay yapısıdır**; kişiler, ürün adları, şehirler,
+sayılar ve bütün cümleler betiğin kendi kelime bankasından üretilir. **Gerçek bir transkript, gerçek bir
+düzeltme ya da onun yeniden yazılmış hâli hiçbir zaman girdi değildir** — isim maskelemek anonimleştirme
+sayılmaz. Üretim tohumu senaryo adıdır: aynı tarif her zaman aynı dosyayı verir, bu yüzden `--check` bir
+diff kapısıdır.
+
+| senaryo | parça | ≈token | ölçtüğü şey |
+|---|---|---|---|
+| `real_size_chunk` | 1 | 6,6k | Dolu tek parçada özet 3 maddeye çöküyor mu; iki taahhüt sahibi ve söylenen vadesiyle çıkıyor mu |
+| `long_multi_chunk` | 3 | 20,5k | Üç parçada üç ayrı taahhüt; parça birleştirmesi aynı görevi iki kez raporluyor mu; altı konunun kapsanması |
+| `late_reversal` | 2 | 13,3k | İlk parçadaki karar, **son parçada** iptal ediliyor; iptal ayrı bir karar olarak (aynı maddede konu + iptal) raporlanıyor mu, iptal edilen işten görev sızıyor mu |
+| `topic_coverage` | 1 | 6,6k | Dokuz ayrı konu; özete girmeyen konu sayısı (`expected_topic_terms`) |
+| `owner_handover_long` | 2 | 13,3k | İş ilk parçada birine veriliyor, son parçada bir başkası devralıyor; sahip kim yazılıyor, aktarılan söz kimin sayılıyor |
+| `due_shift_long` | 2 | 13,4k | Vade son parçada erteleniyor; tek görev ve **son** vade mi çıkıyor, yoksa iki görev mi |
+
+Senaryo şekli mevcut şeklin aynısıdır (`expected_actions`, `expected_owners`, `expected_action_fields`,
+`forbidden_action_terms`, `required_decision_terms`) ve bir alan eklendi: **`expected_topic_terms`** — her
+grup bir konu; o grubun bütün terimlerini taşıyan bir özet maddesi yoksa konu kaçırılmış sayılır. Kıyas
+betiği eksik konuyu ayrıca `lost_in_compaction` ile işaretler: konu parça özetlerinde vardı ve
+sıkıştırmada mı kayboldu, yoksa parça hiç görmedi mi.
+
+**Bu altı senaryo paralıdır.** Çok parçalı bir senaryo parça başına bir çağrı, ek olarak özet sıkıştırma ve
+görev uzlaştırma çağrılarını da harcar (`long_multi_chunk` tek koşuda ≈5 çağrı). Bütün seti körlemesine
+koşmak yerine `--case` ile seçin; `--repeat 3` bir adayı üç kez koşar, çünkü tek koşu bir anekdottur.
+
+Kıyas betiği 1.2.82'de üç şey daha raporluyor: **p95 saniye** (vaka başına duvar süresi; ortalama, dört
+dakika süren tek vakayı gizler), **başarısız istek sayısı** (`failed_calls`) ve **yanıtı gerçekten veren
+model** (`model_answered` / `fell_back`). Sonuncusu şart: seçilen model kendi yeniden denemelerinden sonra
+düşerse istemci isteği `ANALYSIS_FALLBACK_MODEL` ile bir kez daha dener ve **o modeli kullanmaya devam
+eder** — tablodaki “deepseek” satırı aslında gpt-4.1-mini'nin puanı olabilir. Tabloda `answered` sütunu `=`
+ise yanıtı sorulan model verdi.
+
+Kapılar hâlâ **sözlükseldir**; geçmeleri anlam doğruluğu değildir ve altı senaryo istatistiksel garanti
+vermez. Bir modeli varsayılan yapmadan önce hâlâ en az bir **gerçek toplantı** ölçümü gerekir (11 Eylül
+dersi).
+
+## Zaman sıralı kimlik değerlendirmesi (1.2.82)
+
+```sh
+.venv/bin/python -m meeting_os quality replay --timeline
+.venv/bin/python -m meeting_os quality replay --timeline --json    # toplantı başına döküm
+```
+
+Mevcut `quality replay` (leave-one-meeting-out) bir **gerileme kontrolüdür**: değerlendirilen toplantının
+kendi örneklerini çıkarır, ama **sonraki** toplantıların örneklerini kullanmaya devam eder ve yalnız
+isimlendirilmiş kümeleri değerlendirir. Bu, cold start ölçümü değildir. `--timeline` her toplantıyı
+**yalnız kendisinden eski kanıtla** değerlendirir (`samples.created` / `rejections.created` < toplantının
+`created`), böylece **bilinmeyen kişi** vakası ölçülebilir hâle gelir.
+
+Beş sonuç, toplantı başına ve toplamda:
+
+| alan | anlamı |
+|---|---|
+| `auto_correct` | doğru kişi kendiliğinden adlandırıldı |
+| `auto_wrong` | **bilinen** bir kişi başkası sanıldı |
+| `abstained_wrong` | bilinen kişi adsız bırakıldı (kanıt vardı, taşımadı) |
+| `abstained_ok` | **bilinmeyen** kişi adsız bırakıldı — doğru cevap, ayrıca sayılır |
+| `unknown_named` | bilinmeyen kişiye isim verildi; en kötü sonuç ve leave-one-out replay'in göremediği sonuç |
+
+`auto_precision` = `auto_correct` / (adlandırılan hepsi), `known_recall` = `auto_correct` / (bilinen kişiler).
+Eşik ve marj üretimdeki değerlerdir; kişisel eşik de **o tarihe kadarki** onay/ret sayısından hesaplanır.
+**`undated_samples`**: tarihi bilinmeyen örnek (eski bir kurulumda elle kaydedilmiş ses ya da ekipten gelen
+profil) zaman çizgisinde yer alamaz, sayılır ve **kullanılmaz** — tahmin etmek yerine payda küçültülür.
+1.2.82'den sonra eklenen her örnek tarih taşır; eski satırlar geldikleri toplantının tarihiyle doldurulur.
+
+## Günlük sayılar nasıl okunur (1.2.82, Codex #10)
+
+```sh
+.venv/bin/python -m meeting_os quality daily            # bugünün ölçümü
+.venv/bin/python -m meeting_os quality daily --day 2026-09-10
+```
+
+Her ölçüm **pay/payda** taşır (`{"n":…, "d":…, "rate":…}`) ve **payda boşsa `rate` `null`'dır** — sıfır
+yüzde de yüz yüzde de iddia edilmez. Kayıt (cihaz, gün, uygulama sürümü) anahtarıyla
+`<veri klasörü>/quality/daily.json` içinde tutulur ve nabza aynı anahtarla girer; **aynı gün yeniden
+yüklendiğinde eklenmez, yerine konur**.
+
+| alan | pay | payda |
+|---|---|---|
+| `names_reviewed` | insanın karar verdiği otomatik isim | o günün toplantılarındaki otomatik isim sayısı |
+| `names_falsified` | kullanıcının çürüttüğü otomatik isim | karar verilenler |
+| `names_unreviewed` | hiç dokunulmamış otomatik isim | otomatik isim sayısı — **dokunulmamış isim onay sayılmaz** |
+| `word_repeat_errors` | öğretilen kelimenin **ham** transkriptte yine yanlış çıktığı (kelime, toplantı) çifti | toplantıdan önce öğretilmiş her (kelime, toplantı) çifti |
+| `summary_edits` | özet maddesi düzeltmesi | o gün üretilen özet maddesi sayısı (kaydı tutan tablo gelene kadar payda 0 → `null`) |
+| `task_edits` | görev alanı düzeltmesi | o gün üretilen görev sayısı |
+| `review_correct` / `review_fixed` / `review_skipped` | sonuca göre kapanan Kontrol maddesi | kapanan toplam |
+| `exports_ok` | başarılı dışa aktarma | denenen dışa aktarma (yerel öğrenme kaydı gelene kadar 0/0) |
+| `meetings_analysed` | analizi olan toplantı | o gün tamamlanan toplantı |
+
+`analysis_seconds` ayrı durur: analiz süresinin `p50`/`p95`'i ve kaç ölçümden geldiği (`n`).
+
+**Eğilim tek alarmdır.** `quality.quality_trend(hosts)` ardışık iki dönemi (varsayılan 7+7 gün) karşılaştırır;
+alarm yalnız **iki dönemde de en az 20 uygun gözlem** varken ve hata oranı **%30 veya daha fazla** yükselmişken
+üretilir. Altında hiçbir şey söylenmez — az veride oran gürültüdür. Kartta ve alarmda gösterilen kırılım
+**hata türüdür**, kişi değil; hiçbir sayı bir insanı diğeriyle kıyaslamaz.

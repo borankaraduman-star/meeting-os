@@ -49,9 +49,18 @@ class Store:
         CREATE INDEX IF NOT EXISTS segment_meeting ON segments(meeting,start);
         ''')
         # Samples a naming rejected are hidden, not destroyed: undo has to be able to give them back.
-        if 'deleted_by' not in {r[1] for r in self.db.execute('PRAGMA table_info(samples)')}:
+        sample_columns={r[1] for r in self.db.execute('PRAGMA table_info(samples)')}
+        if 'deleted_by' not in sample_columns:
             try: self.db.execute('ALTER TABLE samples ADD COLUMN deleted_by TEXT')
             except sqlite3.OperationalError: pass   # another process migrated first
+        if 'created' not in sample_columns:
+            # WHEN a voice sample came into existence. Rejections always carried it; samples did not, so a
+            # time-ordered replay (quality.replay_timeline) could not tell evidence that existed before a
+            # meeting from evidence that meeting itself produced. New rows are stamped at insert; the rows
+            # already here are dated from the meeting their provenance names, which is where they came from.
+            try:
+                self.db.execute('ALTER TABLE samples ADD COLUMN created TEXT'); self._backfill_sample_dates()
+            except sqlite3.OperationalError: pass
         columns={r[1] for r in self.db.execute('PRAGMA table_info(corrections)')}
         if 'previous_name' not in columns:
             try: self.db.execute('ALTER TABLE corrections ADD COLUMN previous_name TEXT')
@@ -61,6 +70,24 @@ class Store:
             # Q5 needs, and the segments still carry the automatic verdict those corrections overruled.
             try: self.db.execute('ALTER TABLE corrections ADD COLUMN feedback TEXT'); self._backfill_feedback()
             except sqlite3.OperationalError: pass   # the poll and a job opened the file together; the other one migrated
+    @staticmethod
+    def provenance_meeting(provenance):
+        """The meeting a sample's provenance names, or None for `manual` and team imports. Three shapes ever
+        reach the samples table: `<mid>:<segment>`, `<mid>:speaker:<speaker>` and `auto:<mid>:<cluster>`."""
+        text=provenance or ''
+        if not text or text=='manual' or text.startswith('team:'): return None
+        parts=text.split(':')
+        if text.startswith('auto:'): return parts[1] if len(parts)>2 else None
+        return parts[0] if len(parts)>1 else None
+    def _backfill_sample_dates(self):
+        """Date the samples that predate the column from the meeting they came out of. A sample whose meeting
+        is gone (or that was enrolled by hand) stays undated — the replay counts those rather than guessing."""
+        meetings={r[0]:r[1] for r in self.db.execute('SELECT id,created FROM meetings')}
+        rows=[]
+        for r in self.db.execute('SELECT id,provenance FROM samples WHERE created IS NULL'):
+            created=meetings.get(self.provenance_meeting(r[1]))
+            if created: rows.append((created,r[0]))
+        if rows: self.db.executemany('UPDATE samples SET created=? WHERE id=?',rows)
     def close(self): self.db.close()
     def create_meeting(self, title, metadata=None):
         mid = uuid.uuid4().hex[:12]
@@ -223,12 +250,17 @@ class Store:
                 except ValueError: continue
                 if f.get('confirmed')==name: confirmed-=1
                 if f.get('wrong')==name: wrong-=1
+        return self.personal_bar(base,confirmed,wrong)
+    @classmethod
+    def personal_bar(cls, base, confirmed, wrong):
+        """The bar `confirmed` approvals and `wrong` overrulings put in front of one person. Split out of
+        `person_threshold` so a replay that counts the same evidence by date uses the same arithmetic."""
         confirmed=max(0,min(confirmed,3));wrong=max(0,min(wrong,3))
         if not confirmed and not wrong: return base
         # The floor may never push the bar up: on the local paths base is 0.80, and clamping to 0.84 made a
         # person the user had *confirmed* harder to match than one he had never judged. Only `wrong` raises.
-        floor=min(base,self.PERSON_THRESHOLD_FLOOR)
-        return min(self.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, floor)+0.02*wrong)
+        floor=min(base,cls.PERSON_THRESHOLD_FLOOR)
+        return min(cls.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, floor)+0.02*wrong)
     SEGMENT_SAMPLE_SECONDS=6   # the app's own bar for a clean single-speaker voice sample
     def _pinned_segments(self, mid):
         """Segments the user corrected one by one: a later naming of their cluster must not write over them."""
@@ -277,7 +309,7 @@ class Store:
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(name,mid,sid))
             sample=None
             if learnable and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,r['embedding_model'],provenance)).fetchone():
-                sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,r['embedding_model'],json.dumps(unit(r['embedding'])),duration,provenance)).lastrowid
+                sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance,created) VALUES(?,?,?,?,?,?)',(name,r['embedding_model'],json.dumps(unit(r['embedding'])),duration,provenance,created)).lastrowid
             mark=f'{mid}:segment:{sid}@{created}'
             rejected=False; cluster_sample=None
             if previous and fold_name(previous)!=fold_name(name):
@@ -323,7 +355,7 @@ class Store:
         if not name.strip() or not math.isfinite(duration) or duration < 3: raise ValueError('Enrollment needs named, clean speech >=3 seconds')
         vector = unit(vector)
         with self.db:
-            self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)', (name.strip(), model, json.dumps(vector), duration, provenance))
+            self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance,created) VALUES(?,?,?,?,?,?)', (name.strip(), model, json.dumps(vector), duration, provenance, datetime.now(timezone.utc).isoformat()))
     def correct_text(self, mid, sid, text):
         text=text.strip()
         if not text: raise ValueError('Transcript text cannot be empty')
@@ -369,7 +401,7 @@ class Store:
             self.correct_segment(mid,sid,name); return
         # One transaction: label and voice sample either both persist or neither.
         with self.db:
-            self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)', (name,r['embedding_model'],json.dumps(vector),duration,f'{mid}:{sid}'))
+            self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance,created) VALUES(?,?,?,?,?,?)', (name,r['embedding_model'],json.dumps(vector),duration,f'{mid}:{sid}',datetime.now(timezone.utc).isoformat()))
             self.db.execute('UPDATE segments SET speaker_name=? WHERE meeting=? AND id=?',(name,mid,sid))
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created) VALUES(?,?,?,?)',(mid,f'segment:{sid}',name,datetime.now(timezone.utc).isoformat()))
     def enroll_speaker(self, mid, speaker, name):
@@ -393,7 +425,7 @@ class Store:
             sample=None
             if vectors and duration>=3 and not self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone():
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
-                sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance) VALUES(?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance)).lastrowid
+                sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance,created) VALUES(?,?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance,created)).lastrowid
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,speaker,name,created,previous,self._with_sample(feedback,sample)))
         return {'labeled':len(rows),'profile_saved':sample is not None,'seconds':duration}
     def undo_correction(self, mid):

@@ -17,6 +17,25 @@ final class SetupStatusTests: XCTestCase {
         XCTAssertEqual(SetupStatus.reportsCheck(["reports_on":true,"reports_writable":false,"reports_dir":"/x"]).state,.missing)
         XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":3])[4].hint,"3 değişiklik geride · kenar çubuğundan güncelleyin")
     }
+    /// 1.2.82: the fleet's own numbers on the setup card. A Mac with nothing measured gets NO row — an
+    /// empty measurement must never be drawn as a green zero — and the row only turns red on the same bar
+    /// the fleet alert uses: a 30 % rise with enough observations behind both periods.
+    func testQualityTrendRowAppearsOnlyWhenThereIsSomethingToSay() {
+        XCTAssertNil(SetupStatus.qualityCheck([:]))
+        XCTAssertNil(SetupStatus.qualityCheck(["quality_trend":["line":"   "]]))
+        XCTAssertEqual(SetupStatus.serviceChecks([:]).map(\.id),["key","glossary","signing","team","update","reports"])
+        let quiet=SetupStatus.qualityCheck(["quality_trend":["line":"Kalite ölçümü: düzeltme oranı %4,0 → %4,2","eligible":true,"change":0.05]])
+        XCTAssertEqual(quiet?.id,"quality"); XCTAssertEqual(quiet?.state,.optional)
+        XCTAssertEqual(quiet?.hint,"Kalite ölçümü: düzeltme oranı %4,0 → %4,2")
+        let worse=SetupStatus.qualityCheck(["quality_trend":["line":"Kalite ölçümü: düzeltme oranı %4,0 ↑ %8,0 (16/200)","eligible":true,"change":1.0,
+                                                             "top_errors":[["metric":"word_repeat_errors","n":9,"d":100]]]])
+        XCTAssertEqual(worse?.state,.missing)
+        XCTAssertTrue(worse!.hint.hasSuffix(" · en çok: öğretilen kelime yine yanlış"))
+        // Not enough observations: the Python side says so in the line and the row stays a note.
+        let thin=SetupStatus.qualityCheck(["quality_trend":["line":"Kalite ölçümü: son 7 günde düzeltme oranı %50,0 (5/10) · karşılaştırma için en az 20 gözlem gerek","eligible":false,"change":4.0]])
+        XCTAssertEqual(thin?.state,.optional)
+        XCTAssertEqual(SetupStatus.serviceChecks(["quality_trend":["line":"Kalite ölçümü: bu dönemde sayılacak gözlem yok"]]).map(\.id).last,"quality")
+    }
     /// P1-4: the signing partition is the step that silently stops every update on a second Mac.
     func testSigningRowCarriesTheOneLineFix() {
         let missing=SetupStatus.serviceChecks(["signing_partition":false],repo:"/Users/x/repo")[2]

@@ -77,7 +77,7 @@ Uygulama GitHub `v0.1` dalını açılışta ve 6 saatte bir kontrol eder; yeni 
 - **Gözden geçirme borcu:** son N günde kaydedilen tamamlanmış toplantıların Kontrol kuyrukları tek listede, önce en ağır madde. CLI: `review-debt --days 7`.
 - **Dışa aktar → Paylaş…** paylaşmadan önce önizleme gösterir: **İsimleri maskele** konuşmacı adlarını ve sözlükteki `kişi` girdilerini dışa verilen metinde “Kişi A, Kişi B…” yapar (kayıtlı veri değişmez), **Yalnız kararlar** sadece karar bölümünü bırakır, **Transkripti dahil et** kapatılabilir. CLI: `share --meeting ID --mask-names --only-decisions --output paylasim.md`.
 - Kayıt sırasında ekran uykusu engellenir (sistem sesi yakalama ekran uyuyunca düşer). Mikrofon hoparlör yankısı yüklenmeden atlanır.
-- CLI: `quality report` (düzeltmelerinizden WER ve kimlik karnesi), `quality compare --model … --allow-upload` (modelleri kendi düzeltmelerinize karşı ölçer), `agenda --output gundem.md`.
+- CLI: `quality report` (düzeltmelerinizden WER ve kimlik karnesi), `quality compare --model … --allow-upload` (modelleri kendi düzeltmelerinize karşı ölçer), `quality daily` (bir günün sayısal kalite özeti, pay/payda), `quality replay --timeline` (zaman sıralı kimlik değerlendirmesi: her toplantı yalnız kendisinden eski kanıtla), `agenda --output gundem.md`.
 
 ## Proje sözlüğü (terimler, kısaltmalar, isimler)
 
@@ -124,7 +124,7 @@ Varsayılan yol **bulut** (1.2.x, 9 Eylül 2026 kararı): bu Mac’te model yük
 
 - Transkript ve konuşmacı ayrımı: **OpenRouter · `microsoft/mai-transcribe-2`** (Opus 32 kbps parçalar, ≈ $0,10/saat; mikrofona düşen hoparlör yankısı yüklenmeden atlanır).
 - Özet / karar / görev: **OpenRouter · `openai/gpt-4.1-mini`** (11 Eylül: kurgu kıyasta DeepSeek V3.2 daha iyi, gerçek toplantıda düştü; docs/BENCHMARK.md); kaynak alıntıları yerelde doğrulanır, doğrulanamayan atılır.
-- Kalıcı kişi eşleştirme: **Resemblyzer** (tek yerel model, hafif), model sürümüne bağlı SQLite profilleri; eşikler 0,87 / marj 0,05 / öneri 0,83 / otomatik örnek 0,93; `quality replay` ile regresyon (gerçek veri: 16 küme, 14 doğru, 0 yanlış, 2 atlanmış).
+- Kalıcı kişi eşleştirme: **Resemblyzer** (tek yerel model, hafif), model sürümüne bağlı SQLite profilleri; eşikler 0,87 / marj 0,05 / öneri 0,83 / otomatik örnek 0,93; `quality replay` ile regresyon (gerçek veri: 16 küme, 14 doğru, 0 yanlış, 2 atlanmış), `quality replay --timeline` ile cold start ölçümü (yalnız toplantıdan eski örnekler; bilinmeyen kişi adlandırılırsa ayrıca sayılır).
 - Yerel yol (MLX Whisper, sherpa-onnx, Silero VAD, Qwen3-4B MLX) CLI’de durur; uygulama artık kullanmaz.
 
 M4 / 16 GB üzerinde 12 Türkçe insan okuma kaydında kelime hata oranı büyük

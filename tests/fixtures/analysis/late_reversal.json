@@ -1,0 +1,386 @@
+{
+  "title": "Kurgu test — İlk parçada alınan kararın son parçada geri alınması",
+  "note": "Tamamen kurgudur: kişiler, ürünler, sayılar ve cümleler scripts/make-fixture.py tarafından yapısal bir tarifden üretildi. Gerçek bir toplantının metni, düzeltmesi veya yeniden yazılmış hâli değildir. Gerçek boyutta parça ölçmek için uzundur; kısaltmak ölçtüğü şeyi ortadan kaldırır. İki gerçek boyutta parça. Karar ilk parçanın başında alınıyor, son parçanın sonunda iptal ediliyor. Ölçtüğü şey: iptal ayrı bir karar olarak raporlanıyor mu (aynı maddede hem konu hem iptal), iptal edilen karardan doğan iş görev listesine sızıyor mu.",
+  "segments": [
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Poyraz ödeme ağı için 47,8 olan hedefi geçen çeyrekte 89,8 olarak revize etmiştik; ölçüm bugün 70,4 seviyesinde. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 92,9 diğeri 79,9; hangisinin doğru olduğunu şu an bilmiyoruz. Poyraz ödeme ağı için topladığımız 5080 örnekte tamamlanma oranı ortalaması 4,0, en kötü gün 75,2 oldu; medyan ise 23,7 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Poyraz ödeme ağı ekranındaki 2360 kayıttan 31 tanesi Trabzon bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Geçen ay Poyraz ödeme ağı üzerinde 213 değişiklik yapıldı, bunların 50 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Sumru abonelik ekranı konusunda 7268 kullanıcı geri bildirimi geldi, 51 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Sumru abonelik ekranı yükü 36,3 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 14,1 saniyeye kadar gidiyor. Sumru abonelik ekranı için ayrılan bütçenin 5,2 kısmı kullanıldı, kalan 1,3 kısmı duruyor; bu rakam geçen çeyrekte 83,6 idi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Sumru abonelik ekranı testlerinde tamamlanma oranı 71,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Sumru abonelik ekranı günlüklerinde 1597 uyarı satırı var, 8 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Saha ekibi tarafında Meltem bildirim servisi kurulumu 10 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Meltem bildirim servisi tarafında gecikme bu hafta 78,8 çıktı, geçen hafta 78,5 idi; aradaki fark 32,0 puan ve iki ölçüm de aynı sayaçtan geliyor. Meltem bildirim servisi tarafında önbellek isabet oranı bu hafta 24,3 çıktı, geçen hafta 78,8 idi; aradaki fark 32,0 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Bugün şunu karara bağlıyoruz: Sumru abonelik ekranını Poyraz ödeme ağına taşıyacağız, eski hattan çıkıyoruz."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kurumsal müşteri tarafında Meltem bildirim servisi kurulumu 8 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Meltem bildirim servisi için ayrılan bütçenin 62,1 kısmı kullanıldı, kalan 17,9 kısmı duruyor; bu rakam geçen çeyrekte 70,5 idi. Meltem bildirim servisi konusunda 9145 kullanıcı geri bildirimi geldi, 20 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kunduz yedekleme için topladığımız 8845 örnekte yeniden deneme sayısı ortalaması 72,5, en kötü gün 23,8 oldu; medyan ise 80,5 seviyesinde kaldı. Kunduz yedekleme günlüklerinde 1128 uyarı satırı var, 12 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Kunduz yedekleme testlerinde bellek kullanımı 7,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kunduz yedekleme için 17,9 olan hedefi geçen çeyrekte 82,1 olarak revize etmiştik; ölçüm bugün 21,6 seviyesinde. Kunduz yedekleme ekranındaki 3155 kayıttan 12 tanesi Sakarya bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Poyraz ödeme ağı yükü 57,5 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 68,2 saniyeye kadar gidiyor. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 38,3 diğeri 64,7; hangisinin doğru olduğunu şu an bilmiyoruz. Geçen ay Poyraz ödeme ağı üzerinde 3225 değişiklik yapıldı, bunların 25 tanesi aynı hafta içinde geri alındı. Poyraz ödeme ağı için topladığımız 4916 örnekte kuyruk derinliği ortalaması 42,5, en kötü gün 34,4 oldu; medyan ise 73,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Test grubu tarafında Poyraz ödeme ağı kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Poyraz ödeme ağı ekranındaki 175 kayıttan 14 tanesi Eskişehir bölgesinden geldi, kalanı test grubu üzerinden düştü."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Sumru abonelik ekranı konusunda 2777 kullanıcı geri bildirimi geldi, 61 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Sumru abonelik ekranı testlerinde önbellek isabet oranı 34,9 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Sumru abonelik ekranı yükü 19,3 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 35,4 saniyeye kadar gidiyor. Sumru abonelik ekranı için ayrılan bütçenin 70,2 kısmı kullanıldı, kalan 1,4 kısmı duruyor; bu rakam geçen çeyrekte 81,4 idi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Sumru abonelik ekranı için 45,1 olan hedefi geçen çeyrekte 3,7 olarak revize etmiştik; ölçüm bugün 97,1 seviyesinde. Sumru abonelik ekranı tarafında iki farklı ölçüm duruyor, biri 55,8 diğeri 89,1; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi günlüklerinde 1379 uyarı satırı var, 28 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Meltem bildirim servisi tarafında gecikme bu hafta 65,3 çıktı, geçen hafta 7,1 idi; aradaki fark 10,8 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 683 değişiklik yapıldı, bunların 27 tanesi aynı hafta içinde geri alındı. Geçen ay Meltem bildirim servisi üzerinde 4886 değişiklik yapıldı, bunların 43 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kunduz yedekleme günlüklerinde 2651 uyarı satırı var, 71 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Kunduz yedekleme için ayrılan bütçenin 25,6 kısmı kullanıldı, kalan 82,1 kısmı duruyor; bu rakam geçen çeyrekte 10,8 idi. Kunduz yedekleme için topladığımız 4620 örnekte ortalama yanıt süresi ortalaması 8,5, en kötü gün 53,4 oldu; medyan ise 92,8 seviyesinde kaldı. Mağaza panosu tarafında Kunduz yedekleme kurulumu 11 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kunduz yedekleme için 28,5 olan hedefi geçen çeyrekte 48,9 olarak revize etmiştik; ölçüm bugün 81,9 seviyesinde. Kunduz yedekleme tarafında bellek kullanımı bu hafta 85,1 çıktı, geçen hafta 42,6 idi; aradaki fark 35,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Kunduz yedekleme ekranındaki 8118 kayıttan 31 tanesi Eskişehir bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Kunduz yedekleme yükü 73,2 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 87,9 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Poyraz ödeme ağı konusunda 356 kullanıcı geri bildirimi geldi, 61 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı. Poyraz ödeme ağı testlerinde gecikme 62,7 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 13,9 diğeri 49,1; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Poyraz ödeme ağı günlüklerinde 8421 uyarı satırı var, 37 tanesi tek bir sunucudan; kalanlar Konya kenar düğümünde. Poyraz ödeme ağı konusunda 9728 kullanıcı geri bildirimi geldi, 47 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Sumru abonelik ekranı testlerinde gecikme 26,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kurumsal müşteri tarafında Sumru abonelik ekranı kurulumu 7 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Sumru abonelik ekranı yükü 14,9 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 88,9 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Sumru abonelik ekranı tarafında iki farklı ölçüm duruyor, biri 93,9 diğeri 72,2; hangisinin doğru olduğunu şu an bilmiyoruz. Geçen ay Sumru abonelik ekranı üzerinde 9778 değişiklik yapıldı, bunların 21 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi için topladığımız 2592 örnekte bellek kullanımı ortalaması 61,2, en kötü gün 98,1 oldu; medyan ise 37,3 seviyesinde kaldı. Meltem bildirim servisi ekranındaki 2152 kayıttan 79 tanesi Eskişehir bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Meltem bildirim servisi için ayrılan bütçenin 92,5 kısmı kullanıldı, kalan 22,4 kısmı duruyor; bu rakam geçen çeyrekte 10,5 idi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Meltem bildirim servisi için 10,1 olan hedefi geçen çeyrekte 34,1 olarak revize etmiştik; ölçüm bugün 81,4 seviyesinde. Meltem bildirim servisi tarafında kuyruk derinliği bu hafta 60,6 çıktı, geçen hafta 84,9 idi; aradaki fark 33,7 puan ve iki ölçüm de aynı sayaçtan geliyor. Meltem bildirim servisi günlüklerinde 8725 uyarı satırı var, 4 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kunduz yedekleme için topladığımız 4213 örnekte tamamlanma oranı ortalaması 94,9, en kötü gün 26,4 oldu; medyan ise 27,8 seviyesinde kaldı. Kunduz yedekleme konusunda 3832 kullanıcı geri bildirimi geldi, 72 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Kunduz yedekleme ekranındaki 976 kayıttan 52 tanesi Eskişehir bölgesinden geldi, kalanı bayi portalı üzerinden düştü."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kunduz yedekleme tarafında iki farklı ölçüm duruyor, biri 19,6 diğeri 43,9; hangisinin doğru olduğunu şu an bilmiyoruz. Kunduz yedekleme tarafında hata oranı bu hafta 34,0 çıktı, geçen hafta 7,8 idi; aradaki fark 34,3 puan ve iki ölçüm de aynı sayaçtan geliyor. Kunduz yedekleme için 92,8 olan hedefi geçen çeyrekte 23,8 olarak revize etmiştik; ölçüm bugün 6,0 seviyesinde."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Poyraz ödeme ağına geçiş için sunucu kirasını artırmamız gerekebilir, ama bugün bunu kimse üstlenmiyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Poyraz ödeme ağı yükü 5,7 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 57,8 saniyeye kadar gidiyor. Poyraz ödeme ağı testlerinde yeniden deneme sayısı 57,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Geçen ay Poyraz ödeme ağı üzerinde 6993 değişiklik yapıldı, bunların 34 tanesi aynı hafta içinde geri alındı. Poyraz ödeme ağı için ayrılan bütçenin 36,3 kısmı kullanıldı, kalan 71,7 kısmı duruyor; bu rakam geçen çeyrekte 35,4 idi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Saha ekibi tarafında Sumru abonelik ekranı kurulumu 7 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Test grubu tarafında Sumru abonelik ekranı kurulumu 5 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Sumru abonelik ekranı konusunda 3244 kullanıcı geri bildirimi geldi, 32 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Sumru abonelik ekranı günlüklerinde 5493 uyarı satırı var, 74 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Sumru abonelik ekranı üzerinde 4040 değişiklik yapıldı, bunların 9 tanesi aynı hafta içinde geri alındı. Sumru abonelik ekranı tarafında ortalama yanıt süresi bu hafta 55,8 çıktı, geçen hafta 32,9 idi; aradaki fark 34,0 puan ve iki ölçüm de aynı sayaçtan geliyor. Sumru abonelik ekranı testlerinde önbellek isabet oranı 36,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Sumru abonelik ekranı için 55,0 olan hedefi geçen çeyrekte 70,7 olarak revize etmiştik; ölçüm bugün 63,6 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Meltem bildirim servisi için topladığımız 6702 örnekte kuyruk derinliği ortalaması 66,2, en kötü gün 8,9 oldu; medyan ise 80,4 seviyesinde kaldı. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 51,9 diğeri 78,4; hangisinin doğru olduğunu şu an bilmiyoruz. Meltem bildirim servisi ekranındaki 8083 kayıttan 78 tanesi Konya bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Meltem bildirim servisi için ayrılan bütçenin 17,0 kısmı kullanıldı, kalan 73,1 kısmı duruyor; bu rakam geçen çeyrekte 36,5 idi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Meltem bildirim servisi yükü 53,5 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 92,3 saniyeye kadar gidiyor. Meltem bildirim servisi konusunda 3496 kullanıcı geri bildirimi geldi, 27 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Meltem bildirim servisi günlüklerinde 511 uyarı satırı var, 52 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde. Meltem bildirim servisi ekranındaki 1218 kayıttan 37 tanesi Denizli bölgesinden geldi, kalanı mağaza panosu üzerinden düştü."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kunduz yedekleme tarafında iki farklı ölçüm duruyor, biri 44,2 diğeri 88,3; hangisinin doğru olduğunu şu an bilmiyoruz. Kunduz yedekleme için ayrılan bütçenin 83,9 kısmı kullanıldı, kalan 41,0 kısmı duruyor; bu rakam geçen çeyrekte 9,3 idi. Geçen ay Kunduz yedekleme üzerinde 8981 değişiklik yapıldı, bunların 21 tanesi aynı hafta içinde geri alındı. Kunduz yedekleme için topladığımız 8467 örnekte önbellek isabet oranı ortalaması 34,2, en kötü gün 60,3 oldu; medyan ise 60,1 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kunduz yedekleme tarafında kuyruk derinliği bu hafta 43,8 çıktı, geçen hafta 7,2 idi; aradaki fark 13,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Mağaza panosu tarafında Kunduz yedekleme kurulumu 5 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Poyraz ödeme ağı testlerinde günlük aktif kullanıcı sayısı 33,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Poyraz ödeme ağı için 72,5 olan hedefi geçen çeyrekte 30,5 olarak revize etmiştik; ölçüm bugün 84,6 seviyesinde. Poyraz ödeme ağı yükü 84,8 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 53,9 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Poyraz ödeme ağı için 90,1 olan hedefi geçen çeyrekte 76,5 olarak revize etmiştik; ölçüm bugün 63,2 seviyesinde. Poyraz ödeme ağı ekranındaki 6539 kayıttan 20 tanesi Samsun bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 74,8 diğeri 19,3; hangisinin doğru olduğunu şu an bilmiyoruz. Poyraz ödeme ağı konusunda 2494 kullanıcı geri bildirimi geldi, 27 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Bayi portalı tarafında Sumru abonelik ekranı kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Sumru abonelik ekranı testlerinde hata oranı 75,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Geçen ay Sumru abonelik ekranı üzerinde 4714 değişiklik yapıldı, bunların 54 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Sumru abonelik ekranı günlüklerinde 8600 uyarı satırı var, 56 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Sumru abonelik ekranı tarafında önbellek isabet oranı bu hafta 68,3 çıktı, geçen hafta 87,0 idi; aradaki fark 17,1 puan ve iki ölçüm de aynı sayaçtan geliyor. Sumru abonelik ekranı için topladığımız 3797 örnekte tamamlanma oranı ortalaması 22,6, en kötü gün 11,3 oldu; medyan ise 7,0 seviyesinde kaldı. Sumru abonelik ekranı yükü 66,7 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 68,8 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Meltem bildirim servisi için ayrılan bütçenin 45,9 kısmı kullanıldı, kalan 97,1 kısmı duruyor; bu rakam geçen çeyrekte 19,6 idi. Saha ekibi tarafında Meltem bildirim servisi kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Meltem bildirim servisi konusunda 837 kullanıcı geri bildirimi geldi, 47 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Meltem bildirim servisi testlerinde bellek kullanımı 97,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi tarafında günlük aktif kullanıcı sayısı bu hafta 42,9 çıktı, geçen hafta 27,4 idi; aradaki fark 7,0 puan ve iki ölçüm de aynı sayaçtan geliyor. Meltem bildirim servisi günlüklerinde 8762 uyarı satırı var, 8 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kunduz yedekleme için 70,3 olan hedefi geçen çeyrekte 97,6 olarak revize etmiştik; ölçüm bugün 89,7 seviyesinde. Kunduz yedekleme için ayrılan bütçenin 89,2 kısmı kullanıldı, kalan 16,2 kısmı duruyor; bu rakam geçen çeyrekte 58,2 idi. Kunduz yedekleme için topladığımız 2510 örnekte tamamlanma oranı ortalaması 89,8, en kötü gün 17,6 oldu; medyan ise 46,6 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Geçen ay Kunduz yedekleme üzerinde 3688 değişiklik yapıldı, bunların 66 tanesi aynı hafta içinde geri alındı. Kunduz yedekleme yükü 39,6 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 27,2 saniyeye kadar gidiyor. Kunduz yedekleme tarafında iki farklı ölçüm duruyor, biri 16,0 diğeri 65,3; hangisinin doğru olduğunu şu an bilmiyoruz. Kunduz yedekleme ekranındaki 6628 kayıttan 62 tanesi Eskişehir bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Poyraz ödeme ağı için topladığımız 7494 örnekte bellek kullanımı ortalaması 38,4, en kötü gün 93,5 oldu; medyan ise 22,2 seviyesinde kaldı. Poyraz ödeme ağı konusunda 7151 kullanıcı geri bildirimi geldi, 6 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Poyraz ödeme ağı tarafında bellek kullanımı bu hafta 69,5 çıktı, geçen hafta 13,7 idi; aradaki fark 34,1 puan ve iki ölçüm de aynı sayaçtan geliyor. Poyraz ödeme ağı testlerinde yeniden deneme sayısı 72,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Test grubu tarafında Poyraz ödeme ağı kurulumu 4 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Poyraz ödeme ağı ekranındaki 646 kayıttan 82 tanesi Trabzon bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 73,0 diğeri 35,7; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Sumru abonelik ekranı üzerinde 8183 değişiklik yapıldı, bunların 56 tanesi aynı hafta içinde geri alındı. Sumru abonelik ekranı için ayrılan bütçenin 49,9 kısmı kullanıldı, kalan 15,7 kısmı duruyor; bu rakam geçen çeyrekte 73,0 idi. Sumru abonelik ekranı için 58,8 olan hedefi geçen çeyrekte 47,5 olarak revize etmiştik; ölçüm bugün 59,8 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Sumru abonelik ekranı yükü 41,5 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 68,9 saniyeye kadar gidiyor. Sumru abonelik ekranı günlüklerinde 1736 uyarı satırı var, 64 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Sumru abonelik ekranı konusunda 8074 kullanıcı geri bildirimi geldi, 78 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Sumru abonelik ekranı tarafında ortalama yanıt süresi bu hafta 75,6 çıktı, geçen hafta 31,8 idi; aradaki fark 11,6 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Mağaza panosu tarafında Meltem bildirim servisi kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Meltem bildirim servisi yükü 46,6 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 41,6 saniyeye kadar gidiyor. Geçen ay Meltem bildirim servisi üzerinde 5370 değişiklik yapıldı, bunların 31 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisinin sessiz saat ayarını ben ekleyeceğim, önümüzdeki perşembeye kadar çıkar."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi için 21,0 olan hedefi geçen çeyrekte 24,6 olarak revize etmiştik; ölçüm bugün 39,9 seviyesinde. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 81,5 diğeri 34,7; hangisinin doğru olduğunu şu an bilmiyoruz. Meltem bildirim servisi testlerinde kuyruk derinliği 4,9 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Kunduz yedekleme için ayrılan bütçenin 49,6 kısmı kullanıldı, kalan 70,3 kısmı duruyor; bu rakam geçen çeyrekte 77,1 idi. Kunduz yedekleme için topladığımız 5895 örnekte yeniden deneme sayısı ortalaması 50,2, en kötü gün 18,1 oldu; medyan ise 69,1 seviyesinde kaldı. Kunduz yedekleme günlüklerinde 2626 uyarı satırı var, 63 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kunduz yedekleme ekranındaki 7578 kayıttan 33 tanesi Trabzon bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü. Kunduz yedekleme testlerinde işlem hacmi 75,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kunduz yedekleme konusunda 1873 kullanıcı geri bildirimi geldi, 76 tanesi aynı ekranı işaret ediyor; metinler Samsun ağırlıklı. Kunduz yedekleme için 84,8 olan hedefi geçen çeyrekte 39,6 olarak revize etmiştik; ölçüm bugün 69,1 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Poyraz ödeme ağı için topladığımız 151 örnekte bellek kullanımı ortalaması 14,6, en kötü gün 75,3 oldu; medyan ise 50,7 seviyesinde kaldı. Poyraz ödeme ağı günlüklerinde 9762 uyarı satırı var, 74 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Poyraz ödeme ağı için ayrılan bütçenin 59,4 kısmı kullanıldı, kalan 33,6 kısmı duruyor; bu rakam geçen çeyrekte 17,4 idi. Geçen ay Poyraz ödeme ağı üzerinde 5454 değişiklik yapıldı, bunların 72 tanesi aynı hafta içinde geri alındı. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 61,8 diğeri 2,8; hangisinin doğru olduğunu şu an bilmiyoruz. Poyraz ödeme ağı yükü 65,0 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 54,7 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Test grubu tarafında Sumru abonelik ekranı kurulumu 4 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Sumru abonelik ekranı ekranındaki 4871 kayıttan 25 tanesi Samsun bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Sumru abonelik ekranı tarafında bellek kullanımı bu hafta 96,6 çıktı, geçen hafta 35,8 idi; aradaki fark 32,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Sumru abonelik ekranı konusunda 1808 kullanıcı geri bildirimi geldi, 58 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Sumru abonelik ekranı tarafında hata oranı bu hafta 91,6 çıktı, geçen hafta 78,2 idi; aradaki fark 19,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Sumru abonelik ekranı için ayrılan bütçenin 70,6 kısmı kullanıldı, kalan 47,6 kısmı duruyor; bu rakam geçen çeyrekte 84,8 idi. Test grubu tarafında Sumru abonelik ekranı kurulumu 3 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi yükü 96,8 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 71,8 saniyeye kadar gidiyor. Meltem bildirim servisi ekranındaki 4024 kayıttan 40 tanesi Sakarya bölgesinden geldi, kalanı test grubu üzerinden düştü. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 39,4 diğeri 60,6; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Meltem bildirim servisi testlerinde gecikme 29,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Meltem bildirim servisi için 22,9 olan hedefi geçen çeyrekte 46,9 olarak revize etmiştik; ölçüm bugün 70,7 seviyesinde. Geçen ay Meltem bildirim servisi üzerinde 2437 değişiklik yapıldı, bunların 78 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kunduz yedekleme günlüklerinde 7128 uyarı satırı var, 30 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde. Kunduz yedekleme için topladığımız 3346 örnekte günlük aktif kullanıcı sayısı ortalaması 27,2, en kötü gün 81,9 oldu; medyan ise 5,1 seviyesinde kaldı. Kunduz yedekleme konusunda 2404 kullanıcı geri bildirimi geldi, 14 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Bayi portalı tarafında Kunduz yedekleme kurulumu 7 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Kunduz yedekleme testlerinde tamamlanma oranı 14,3 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Poyraz ödeme ağı için ayrılan bütçenin 59,7 kısmı kullanıldı, kalan 93,0 kısmı duruyor; bu rakam geçen çeyrekte 41,8 idi. Poyraz ödeme ağı yükü 8,5 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 59,1 saniyeye kadar gidiyor. Poyraz ödeme ağı günlüklerinde 4559 uyarı satırı var, 78 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde. Poyraz ödeme ağı tarafında ortalama yanıt süresi bu hafta 24,0 çıktı, geçen hafta 26,4 idi; aradaki fark 25,7 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Poyraz ödeme ağı ekranındaki 425 kayıttan 41 tanesi Denizli bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Geçen ay Poyraz ödeme ağı üzerinde 1865 değişiklik yapıldı, bunların 48 tanesi aynı hafta içinde geri alındı. Poyraz ödeme ağı için 5,4 olan hedefi geçen çeyrekte 27,4 olarak revize etmiştik; ölçüm bugün 54,0 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Sumru abonelik ekranı tarafında iki farklı ölçüm duruyor, biri 17,4 diğeri 54,1; hangisinin doğru olduğunu şu an bilmiyoruz. Sumru abonelik ekranı için topladığımız 933 örnekte tamamlanma oranı ortalaması 24,9, en kötü gün 41,5 oldu; medyan ise 81,0 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Sumru abonelik ekranı için 11,3 olan hedefi geçen çeyrekte 42,4 olarak revize etmiştik; ölçüm bugün 52,3 seviyesinde. Sumru abonelik ekranı tarafında iki farklı ölçüm duruyor, biri 2,2 diğeri 2,5; hangisinin doğru olduğunu şu an bilmiyoruz. Sumru abonelik ekranı testlerinde tamamlanma oranı 36,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Bayi portalı tarafında Meltem bildirim servisi kurulumu 10 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Meltem bildirim servisi günlüklerinde 6605 uyarı satırı var, 71 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Meltem bildirim servisi konusunda 3098 kullanıcı geri bildirimi geldi, 65 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Meltem bildirim servisi tarafında işlem hacmi bu hafta 40,7 çıktı, geçen hafta 37,4 idi; aradaki fark 36,0 puan ve iki ölçüm de aynı sayaçtan geliyor. Meltem bildirim servisi için topladığımız 2590 örnekte hata oranı ortalaması 60,2, en kötü gün 65,5 oldu; medyan ise 97,7 seviyesinde kaldı. Meltem bildirim servisi yükü 42,7 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 39,1 saniyeye kadar gidiyor. Geçen ay Meltem bildirim servisi üzerinde 8526 değişiklik yapıldı, bunların 49 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kunduz yedekleme ekranındaki 5234 kayıttan 51 tanesi Eskişehir bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Kunduz yedekleme için ayrılan bütçenin 53,8 kısmı kullanıldı, kalan 82,1 kısmı duruyor; bu rakam geçen çeyrekte 75,3 idi. Kunduz yedekleme tarafında iki farklı ölçüm duruyor, biri 34,0 diğeri 41,8; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Geçen ay Kunduz yedekleme üzerinde 5406 değişiklik yapıldı, bunların 12 tanesi aynı hafta içinde geri alındı. Kunduz yedekleme günlüklerinde 557 uyarı satırı var, 54 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde. Kunduz yedekleme için 25,8 olan hedefi geçen çeyrekte 2,6 olarak revize etmiştik; ölçüm bugün 81,5 seviyesinde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Poyraz ödeme ağı tarafında kuyruk derinliği bu hafta 32,6 çıktı, geçen hafta 35,4 idi; aradaki fark 27,7 puan ve iki ölçüm de aynı sayaçtan geliyor. Poyraz ödeme ağı ekranındaki 3302 kayıttan 74 tanesi Sakarya bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Poyraz ödeme ağı yükü 97,0 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 83,6 saniyeye kadar gidiyor. Poyraz ödeme ağı için topladığımız 1381 örnekte bellek kullanımı ortalaması 17,4, en kötü gün 18,3 oldu; medyan ise 55,8 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Çağrı merkezi tarafında Sumru abonelik ekranı kurulumu 9 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Sumru abonelik ekranı için ayrılan bütçenin 6,5 kısmı kullanıldı, kalan 21,0 kısmı duruyor; bu rakam geçen çeyrekte 62,2 idi. Sumru abonelik ekranı testlerinde ortalama yanıt süresi 24,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Sumru abonelik ekranı konusunda 514 kullanıcı geri bildirimi geldi, 79 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Sumru abonelik ekranı için ayrılan bütçenin 33,5 kısmı kullanıldı, kalan 42,3 kısmı duruyor; bu rakam geçen çeyrekte 34,5 idi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Meltem bildirim servisi ekranındaki 3278 kayıttan 49 tanesi Sakarya bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü. Meltem bildirim servisi testlerinde gecikme 65,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Meltem bildirim servisi günlüklerinde 8674 uyarı satırı var, 61 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Meltem bildirim servisi için 94,8 olan hedefi geçen çeyrekte 47,9 olarak revize etmiştik; ölçüm bugün 85,4 seviyesinde."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kunduz yedekleme tarafında iki farklı ölçüm duruyor, biri 7,4 diğeri 97,4; hangisinin doğru olduğunu şu an bilmiyoruz. Kunduz yedekleme tarafında ortalama yanıt süresi bu hafta 90,4 çıktı, geçen hafta 2,3 idi; aradaki fark 6,4 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Geçen ay Kunduz yedekleme üzerinde 1529 değişiklik yapıldı, bunların 54 tanesi aynı hafta içinde geri alındı. Çağrı merkezi tarafında Kunduz yedekleme kurulumu 9 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Poyraz ödeme ağı yükü 42,1 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 5,0 saniyeye kadar gidiyor. Poyraz ödeme ağı konusunda 3893 kullanıcı geri bildirimi geldi, 65 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Poyraz ödeme ağı için topladığımız 4972 örnekte hata oranı ortalaması 7,7, en kötü gün 65,9 oldu; medyan ise 87,8 seviyesinde kaldı. Poyraz ödeme ağı için 24,0 olan hedefi geçen çeyrekte 60,6 olarak revize etmiştik; ölçüm bugün 88,6 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Poyraz ödeme ağı konusunda 9584 kullanıcı geri bildirimi geldi, 74 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Poyraz ödeme ağı için topladığımız 3399 örnekte günlük aktif kullanıcı sayısı ortalaması 13,4, en kötü gün 96,2 oldu; medyan ise 93,7 seviyesinde kaldı. Poyraz ödeme ağı ekranındaki 4863 kayıttan 45 tanesi Samsun bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü. Bayi portalı tarafında Poyraz ödeme ağı kurulumu 8 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Sumru abonelik ekranı tarafında ortalama yanıt süresi bu hafta 83,6 çıktı, geçen hafta 65,7 idi; aradaki fark 20,5 puan ve iki ölçüm de aynı sayaçtan geliyor. Sumru abonelik ekranı tarafında iki farklı ölçüm duruyor, biri 48,1 diğeri 42,7; hangisinin doğru olduğunu şu an bilmiyoruz. Geçen ay Sumru abonelik ekranı üzerinde 4319 değişiklik yapıldı, bunların 29 tanesi aynı hafta içinde geri alındı. Sumru abonelik ekranı günlüklerinde 4878 uyarı satırı var, 18 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Sumru abonelik ekranı yükü 32,4 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 12,8 saniyeye kadar gidiyor. Sumru abonelik ekranı için ayrılan bütçenin 3,1 kısmı kullanıldı, kalan 37,1 kısmı duruyor; bu rakam geçen çeyrekte 33,9 idi. Sumru abonelik ekranı testlerinde tamamlanma oranı 87,9 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kurumsal müşteri tarafında Sumru abonelik ekranı kurulumu 9 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Ozan Fidan",
+      "text": "Meltem bildirim servisi günlüklerinde 1564 uyarı satırı var, 6 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 43,8 diğeri 27,7; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 6867 değişiklik yapıldı, bunların 12 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi için ayrılan bütçenin 73,3 kısmı kullanıldı, kalan 24,8 kısmı duruyor; bu rakam geçen çeyrekte 43,0 idi. Meltem bildirim servisi konusunda 9444 kullanıcı geri bildirimi geldi, 34 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Meltem bildirim servisi yükü 53,7 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 21,3 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Toplantının sonunda bir düzeltme: Sumru abonelik ekranını Poyraz ödeme ağına taşıma kararını iptal ediyoruz, eski hatta kalıyoruz."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kunduz yedekleme testlerinde yeniden deneme sayısı 91,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kunduz yedekleme için 86,9 olan hedefi geçen çeyrekte 92,9 olarak revize etmiştik; ölçüm bugün 63,3 seviyesinde. Kunduz yedekleme ekranındaki 6346 kayıttan 6 tanesi Konya bölgesinden geldi, kalanı mağaza panosu üzerinden düştü."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kunduz yedekleme tarafında gecikme bu hafta 23,8 çıktı, geçen hafta 8,2 idi; aradaki fark 20,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Kunduz yedekleme için topladığımız 8290 örnekte yeniden deneme sayısı ortalaması 27,5, en kötü gün 32,8 oldu; medyan ise 5,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Poyraz ödeme ağı testlerinde günlük aktif kullanıcı sayısı 62,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Poyraz ödeme ağı için topladığımız 4025 örnekte günlük aktif kullanıcı sayısı ortalaması 45,1, en kötü gün 48,5 oldu; medyan ise 85,6 seviyesinde kaldı."
+    }
+  ],
+  "expected_actions": 1,
+  "forbidden_action_terms": [
+    "poyraz",
+    "taşı",
+    "sunucu kira"
+  ],
+  "expected_owners": [
+    "Selin Arat"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "meltem",
+        "sessiz"
+      ],
+      "owner": "Selin Arat",
+      "due_text": "önümüzdeki perşembeye kadar"
+    }
+  ],
+  "required_decision_terms": [
+    [
+      "sumru",
+      "poyraz",
+      "iptal"
+    ]
+  ],
+  "expected_topic_terms": [
+    [
+      "poyraz"
+    ],
+    [
+      "sumru"
+    ],
+    [
+      "meltem"
+    ],
+    [
+      "kunduz"
+    ]
+  ]
+}

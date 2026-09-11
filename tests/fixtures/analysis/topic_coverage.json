@@ -1,0 +1,234 @@
+{
+  "title": "Kurgu test — Dokuz ayrı konu, tek parça (kapsam ölçümü)",
+  "note": "Tamamen kurgudur: kişiler, ürünler, sayılar ve cümleler scripts/make-fixture.py tarafından yapısal bir tarifden üretildi. Gerçek bir toplantının metni, düzeltmesi veya yeniden yazılmış hâli değildir. Gerçek boyutta parça ölçmek için uzundur; kısaltmak ölçtüğü şeyi ortadan kaldırır. Dolu bir parçada dokuz ayrı konu konuşuluyor. Ölçtüğü şey yalnız kapsam: özet hangi konuyu düşürüyor. Gate bir görev ve bir karar bekliyor; asıl sayı expected_topic_terms üzerinden okunan eksik konu sayısıdır.",
+  "segments": [
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kavak mobil uygulaması yükü 32,7 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 50,9 saniyeye kadar gidiyor. Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 28,9 diğeri 45,1; hangisinin doğru olduğunu şu an bilmiyoruz. Kavak mobil uygulaması testlerinde ortalama yanıt süresi 64,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kurumsal müşteri tarafında Kavak mobil uygulaması kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kavak mobil uygulaması için topladığımız 9611 örnekte hata oranı ortalaması 58,4, en kötü gün 13,4 oldu; medyan ise 43,4 seviyesinde kaldı. Kavak mobil uygulaması konusunda 7535 kullanıcı geri bildirimi geldi, 88 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Kavak mobil uygulaması için ayrılan bütçenin 44,4 kısmı kullanıldı, kalan 10,4 kısmı duruyor; bu rakam geçen çeyrekte 73,1 idi. Kavak mobil uygulaması tarafında işlem hacmi bu hafta 34,8 çıktı, geçen hafta 42,1 idi; aradaki fark 20,4 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Zeytin veri hattı ekranındaki 9342 kayıttan 82 tanesi Bursa bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Zeytin veri hattı günlüklerinde 6920 uyarı satırı var, 64 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Geçen ay Zeytin veri hattı üzerinde 9276 değişiklik yapıldı, bunların 65 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Zeytin veri hattı için 25,2 olan hedefi geçen çeyrekte 10,4 olarak revize etmiştik; ölçüm bugün 49,3 seviyesinde. Zeytin veri hattı için ayrılan bütçenin 54,2 kısmı kullanıldı, kalan 87,4 kısmı duruyor; bu rakam geçen çeyrekte 3,5 idi."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Poyraz ödeme ağı tarafında gecikme bu hafta 12,2 çıktı, geçen hafta 43,2 idi; aradaki fark 26,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Poyraz ödeme ağı konusunda 9155 kullanıcı geri bildirimi geldi, 5 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Poyraz ödeme ağı günlüklerinde 8577 uyarı satırı var, 21 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Poyraz ödeme ağı testlerinde bellek kullanımı 38,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Geçen ay Poyraz ödeme ağı üzerinde 7472 değişiklik yapıldı, bunların 90 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Bayi portalı tarafında Lodos arama motoru kurulumu 3 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 16,6 diğeri 68,6; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Lodos arama motoru ekranındaki 9279 kayıttan 42 tanesi Konya bölgesinden geldi, kalanı test grubu üzerinden düştü. Lodos arama motoru için 4,5 olan hedefi geçen çeyrekte 18,9 olarak revize etmiştik; ölçüm bugün 11,5 seviyesinde. Lodos arama motoru yükü 34,2 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 76,1 saniyeye kadar gidiyor. Lodos arama motoru için topladığımız 6391 örnekte günlük aktif kullanıcı sayısı ortalaması 47,6, en kötü gün 74,1 oldu; medyan ise 65,0 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Meltem bildirim servisi günlüklerinde 2423 uyarı satırı var, 11 tanesi tek bir sunucudan; kalanlar Eskişehir kenar düğümünde. Kurumsal müşteri tarafında Meltem bildirim servisi kurulumu 6 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 18,7 diğeri 77,2; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi için ayrılan bütçenin 48,6 kısmı kullanıldı, kalan 32,9 kısmı duruyor; bu rakam geçen çeyrekte 68,7 idi. Meltem bildirim servisi konusunda 5973 kullanıcı geri bildirimi geldi, 66 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Geçen ay Meltem bildirim servisi üzerinde 3630 değişiklik yapıldı, bunların 21 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi tarafında işlem hacmi bu hafta 22,9 çıktı, geçen hafta 95,9 idi; aradaki fark 15,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Çınar raporlama paneli testlerinde yeniden deneme sayısı 38,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Çınar raporlama paneli yükü 79,7 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 44,4 saniyeye kadar gidiyor. Çınar raporlama paneli için 82,7 olan hedefi geçen çeyrekte 78,4 olarak revize etmiştik; ölçüm bugün 76,8 seviyesinde."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Çınar raporlama paneli için topladığımız 7353 örnekte gecikme ortalaması 40,7, en kötü gün 41,8 oldu; medyan ise 14,5 seviyesinde kaldı. Çınar raporlama paneli ekranındaki 8821 kayıttan 19 tanesi Sakarya bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Çınar raporlama paneli testlerinde bellek kullanımı 32,7 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kurumsal müşteri tarafında Çınar raporlama paneli kurulumu 12 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kestane depo sistemi yükü 58,6 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 50,4 saniyeye kadar gidiyor. Geçen ay Kestane depo sistemi üzerinde 3311 değişiklik yapıldı, bunların 87 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kestane depo sistemi için topladığımız 2129 örnekte önbellek isabet oranı ortalaması 75,7, en kötü gün 33,4 oldu; medyan ise 20,1 seviyesinde kaldı. Kestane depo sistemi için 78,6 olan hedefi geçen çeyrekte 20,1 olarak revize etmiştik; ölçüm bugün 93,0 seviyesinde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Yelkovan zamanlayıcı konusunda 6266 kullanıcı geri bildirimi geldi, 13 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Yelkovan zamanlayıcı tarafında iki farklı ölçüm duruyor, biri 34,6 diğeri 73,4; hangisinin doğru olduğunu şu an bilmiyoruz. Yelkovan zamanlayıcı için ayrılan bütçenin 70,7 kısmı kullanıldı, kalan 94,5 kısmı duruyor; bu rakam geçen çeyrekte 18,2 idi."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Yelkovan zamanlayıcı tarafında ortalama yanıt süresi bu hafta 36,2 çıktı, geçen hafta 60,4 idi; aradaki fark 24,7 puan ve iki ölçüm de aynı sayaçtan geliyor. Yelkovan zamanlayıcı ekranındaki 6718 kayıttan 80 tanesi Trabzon bölgesinden geldi, kalanı test grubu üzerinden düştü. Yelkovan zamanlayıcı günlüklerinde 2483 uyarı satırı var, 37 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Yelkovan zamanlayıcı için topladığımız 2706 örnekte ortalama yanıt süresi ortalaması 4,9, en kötü gün 68,5 oldu; medyan ise 37,4 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Karaca kurulum sihirbazı için ayrılan bütçenin 29,2 kısmı kullanıldı, kalan 48,8 kısmı duruyor; bu rakam geçen çeyrekte 83,7 idi. Geçen ay Karaca kurulum sihirbazı üzerinde 6173 değişiklik yapıldı, bunların 16 tanesi aynı hafta içinde geri alındı. Karaca kurulum sihirbazı tarafında iki farklı ölçüm duruyor, biri 37,1 diğeri 4,1; hangisinin doğru olduğunu şu an bilmiyoruz. Karaca kurulum sihirbazı yükü 93,6 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 34,6 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Karaca kurulum sihirbazı testlerinde yeniden deneme sayısı 17,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Karaca kurulum sihirbazı için 69,8 olan hedefi geçen çeyrekte 13,4 olarak revize etmiştik; ölçüm bugün 38,8 seviyesinde. Karaca kurulum sihirbazı günlüklerinde 9417 uyarı satırı var, 77 tanesi tek bir sunucudan; kalanlar Konya kenar düğümünde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kavak mobil uygulaması konusunda 6336 kullanıcı geri bildirimi geldi, 36 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı. Kavak mobil uygulaması ekranındaki 8098 kayıttan 87 tanesi Adana bölgesinden geldi, kalanı mağaza panosu üzerinden düştü."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Çağrı merkezi tarafında Kavak mobil uygulaması kurulumu 8 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Kavak mobil uygulaması tarafında önbellek isabet oranı bu hafta 22,7 çıktı, geçen hafta 3,7 idi; aradaki fark 4,6 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Zeytin veri hattı için ayrılan bütçenin 32,6 kısmı kullanıldı, kalan 83,7 kısmı duruyor; bu rakam geçen çeyrekte 38,9 idi. Test grubu tarafında Zeytin veri hattı kurulumu 7 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı günlüklerinde 8781 uyarı satırı var, 60 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Zeytin veri hattı ekranındaki 8188 kayıttan 74 tanesi Bursa bölgesinden geldi, kalanı test grubu üzerinden düştü."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Poyraz ödeme ağı yükü 34,0 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 97,7 saniyeye kadar gidiyor. Poyraz ödeme ağı konusunda 8319 kullanıcı geri bildirimi geldi, 14 tanesi aynı ekranı işaret ediyor; metinler Samsun ağırlıklı. Poyraz ödeme ağı için topladığımız 6405 örnekte işlem hacmi ortalaması 26,1, en kötü gün 55,8 oldu; medyan ise 74,2 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Geçen ay Poyraz ödeme ağı üzerinde 244 değişiklik yapıldı, bunların 4 tanesi aynı hafta içinde geri alındı. Poyraz ödeme ağı testlerinde gecikme 59,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 87,6 diğeri 62,7; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Lodos arama motoru için 4,3 olan hedefi geçen çeyrekte 74,1 olarak revize etmiştik; ölçüm bugün 8,2 seviyesinde. Lodos arama motoru tarafında hata oranı bu hafta 48,8 çıktı, geçen hafta 20,1 idi; aradaki fark 17,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Lodos arama motoru için 69,8 olan hedefi geçen çeyrekte 63,2 olarak revize etmiştik; ölçüm bugün 34,9 seviyesinde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Yelkovan zamanlayıcısının gece işlerini ben ayıracağım, salı sabahına kadar ayrımı bitiririm."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Lodos arama motoru konusunda 8849 kullanıcı geri bildirimi geldi, 81 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Lodos arama motoru için ayrılan bütçenin 75,1 kısmı kullanıldı, kalan 19,6 kısmı duruyor; bu rakam geçen çeyrekte 67,9 idi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Meltem bildirim servisi yükü 94,3 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 32,2 saniyeye kadar gidiyor. Meltem bildirim servisi testlerinde tamamlanma oranı 65,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Meltem bildirim servisi için topladığımız 1617 örnekte gecikme ortalaması 28,2, en kötü gün 5,9 oldu; medyan ise 10,0 seviyesinde kaldı. Meltem bildirim servisi tarafında ortalama yanıt süresi bu hafta 8,6 çıktı, geçen hafta 69,6 idi; aradaki fark 7,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 18,7 diğeri 90,9; hangisinin doğru olduğunu şu an bilmiyoruz. Çağrı merkezi tarafında Meltem bildirim servisi kurulumu 10 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Çınar raporlama paneli ekranındaki 9360 kayıttan 45 tanesi Denizli bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Geçen ay Çınar raporlama paneli üzerinde 4659 değişiklik yapıldı, bunların 47 tanesi aynı hafta içinde geri alındı. Çınar raporlama paneli günlüklerinde 4512 uyarı satırı var, 21 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Çınar raporlama paneli ekranındaki 301 kayıttan 75 tanesi Samsun bölgesinden geldi, kalanı test grubu üzerinden düştü. Çınar raporlama paneli için 41,0 olan hedefi geçen çeyrekte 50,4 olarak revize etmiştik; ölçüm bugün 91,4 seviyesinde. Test grubu tarafında Çınar raporlama paneli kurulumu 4 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 59,9 diğeri 15,2; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi günlüklerinde 2497 uyarı satırı var, 74 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Geçen ay Kestane depo sistemi üzerinde 3483 değişiklik yapıldı, bunların 61 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Karaca kurulum sihirbazını iki adıma indirmeye karar verdik; bu kararı bugün aldık."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kestane depo sistemi için ayrılan bütçenin 61,1 kısmı kullanıldı, kalan 5,6 kısmı duruyor; bu rakam geçen çeyrekte 71,7 idi. Kestane depo sistemi için topladığımız 2261 örnekte kuyruk derinliği ortalaması 24,5, en kötü gün 77,5 oldu; medyan ise 15,8 seviyesinde kaldı. Kestane depo sistemi konusunda 6452 kullanıcı geri bildirimi geldi, 10 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Kestane depo sistemi tarafında kuyruk derinliği bu hafta 13,2 çıktı, geçen hafta 91,8 idi; aradaki fark 10,0 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Yelkovan zamanlayıcı testlerinde hata oranı 18,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Yelkovan zamanlayıcı yükü 61,1 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 92,7 saniyeye kadar gidiyor. Yelkovan zamanlayıcı için 16,8 olan hedefi geçen çeyrekte 53,9 olarak revize etmiştik; ölçüm bugün 41,0 seviyesinde. Geçen ay Yelkovan zamanlayıcı üzerinde 2341 değişiklik yapıldı, bunların 80 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Yelkovan zamanlayıcı tarafında yeniden deneme sayısı bu hafta 44,0 çıktı, geçen hafta 59,3 idi; aradaki fark 24,8 puan ve iki ölçüm de aynı sayaçtan geliyor. Yelkovan zamanlayıcı ekranındaki 1125 kayıttan 62 tanesi Sakarya bölgesinden geldi, kalanı saha ekibi üzerinden düştü."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Karaca kurulum sihirbazı için ayrılan bütçenin 61,9 kısmı kullanıldı, kalan 34,2 kısmı duruyor; bu rakam geçen çeyrekte 55,9 idi. Karaca kurulum sihirbazı günlüklerinde 9201 uyarı satırı var, 70 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Karaca kurulum sihirbazı için topladığımız 4421 örnekte hata oranı ortalaması 6,0, en kötü gün 15,1 oldu; medyan ise 88,9 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Karaca kurulum sihirbazı tarafında iki farklı ölçüm duruyor, biri 1,8 diğeri 27,9; hangisinin doğru olduğunu şu an bilmiyoruz. Test grubu tarafında Karaca kurulum sihirbazı kurulumu 8 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kestane depo sistemindeki eski raf etiketleri geçen çeyrekte tamamen değiştirildi, orada açık iş yok."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Kavak mobil uygulaması testlerinde bellek kullanımı 48,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kavak mobil uygulaması konusunda 8450 kullanıcı geri bildirimi geldi, 9 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Kavak mobil uygulaması yükü 30,3 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 26,0 saniyeye kadar gidiyor. Kavak mobil uygulaması için 77,1 olan hedefi geçen çeyrekte 42,7 olarak revize etmiştik; ölçüm bugün 61,6 seviyesinde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kavak mobil uygulaması tarafında günlük aktif kullanıcı sayısı bu hafta 56,9 çıktı, geçen hafta 57,1 idi; aradaki fark 18,3 puan ve iki ölçüm de aynı sayaçtan geliyor. Mağaza panosu tarafında Kavak mobil uygulaması kurulumu 10 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Zeytin veri hattı konusunda 7332 kullanıcı geri bildirimi geldi, 72 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Zeytin veri hattı yükü 13,9 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 71,4 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Zeytin veri hattı için topladığımız 1954 örnekte kuyruk derinliği ortalaması 10,8, en kötü gün 41,6 oldu; medyan ise 51,0 seviyesinde kaldı. Zeytin veri hattı günlüklerinde 5858 uyarı satırı var, 16 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Poyraz ödeme ağı tarafında iki farklı ölçüm duruyor, biri 81,1 diğeri 14,1; hangisinin doğru olduğunu şu an bilmiyoruz. Poyraz ödeme ağı için ayrılan bütçenin 15,0 kısmı kullanıldı, kalan 87,2 kısmı duruyor; bu rakam geçen çeyrekte 17,2 idi. Geçen ay Poyraz ödeme ağı üzerinde 7895 değişiklik yapıldı, bunların 10 tanesi aynı hafta içinde geri alındı."
+    }
+  ],
+  "expected_actions": 1,
+  "forbidden_action_terms": [
+    "raf etiket"
+  ],
+  "expected_owners": [
+    "Umut Serçe"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "yelkovan",
+        "gece"
+      ],
+      "owner": "Umut Serçe",
+      "due_text": "salı sabahına kadar"
+    }
+  ],
+  "required_decision_terms": [
+    [
+      "karaca",
+      "iki adım"
+    ]
+  ],
+  "expected_topic_terms": [
+    [
+      "kavak"
+    ],
+    [
+      "zeytin"
+    ],
+    [
+      "poyraz"
+    ],
+    [
+      "lodos"
+    ],
+    [
+      "meltem"
+    ],
+    [
+      "çınar"
+    ],
+    [
+      "kestane"
+    ],
+    [
+      "yelkovan"
+    ],
+    [
+      "karaca"
+    ]
+  ]
+}

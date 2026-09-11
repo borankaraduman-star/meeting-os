@@ -399,7 +399,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
                             'cost_usd': spend['cost'], 'calls': spend['calls'], 'cost_estimated': spend['estimated'], 'created': analysis['created']}
     duration = round(max((r['end'] for r in rows), default=0.0), 1)
     report = {
-        'report_version': 1, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
+        'report_version': 2, 'host': host_name(), 'macos': platform.mac_ver()[0], 'app_version': version, 'commit': commit,
         'written': datetime.now(timezone.utc).isoformat(), 'meeting': row['id'], 'title': row['title'] if include_text else None, 'created': row['created'], 'status': row['status'],
         'engine': meta.get('engine'), 'model': meta.get('model'), 'cloud_mode': meta.get('cloud_mode'),
         'duration_seconds': duration, 'segments': len(rows), 'words': sum(len((r.get('text') or '').split()) for r in rows),
@@ -409,7 +409,10 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         'echo_windows_skipped': meta.get('echo_windows_skipped'), 'mic_gated_windows': meta.get('mic_gated_windows'), 'echo_segments': meta.get('echo_segments'), 'identity': meta.get('identity'), 'identity_error': meta.get('identity_error'),
         'markers': len(meta.get('markers') or []), 'glossary_suggestions': len(meta.get('glossary_suggestions') or []),
         'job_usage': meta.get('job_usage'),
-        'speakers': speakers, 'review_queue': kinds, 'analysis': analysis_summary, 'scorecard': identity_report(store), 'errors': _errors(Path(data_dir) / 'last-job.log'),
+        # THIS meeting's identity scorecard, not the database's. Until 1.2.82 every report carried the DB-wide
+        # one, so two reports from the same Mac added up to twice the same clusters; `scope` says which it is and
+        # `summarize` adds up only the per-meeting kind.
+        'speakers': speakers, 'review_queue': kinds, 'analysis': analysis_summary, 'scorecard': identity_report(store, mid), 'errors': _errors(Path(data_dir) / 'last-job.log'),
     }
     if include_text:
         from .intelligence import row_label
@@ -529,9 +532,23 @@ def build_heartbeat(store, data_dir, *, app=None):
         # reaches the server through the same whitelist as everything else (telemetry_schema).
         'learning': _learning(store),
         'team_cloud': _team_cloud(data),   # is the shared knowledge base reaching the server, and how many Macs are on it
+        # Numbers only, one record per (device, day, app_version), REPLACED on every upload rather than added
+        # to: a heartbeat that is written again must not make the fleet count the same day twice.
+        'quality_daily': _quality_daily(store, data, version),
         # What this Mac takes from the shared knowledge base and what it puts back in. Counts only: no name, no word.
         **_team_counts(store),
     }
+
+
+def _quality_daily(store, data_dir, version):
+    """This Mac's daily quality numbers (quality.daily_summary): names reviewed/overruled, taught words that
+    came back wrong, summary and task corrections, Kontrol results, exports, analysis seconds. No text, no
+    person, no meeting — counts and their denominators. Never raises: observability is not a job."""
+    try:
+        from .quality import daily_for_heartbeat
+        return daily_for_heartbeat(store, data_dir, version=version)
+    except Exception:
+        return []
 
 
 def _team_cloud(data_dir):
@@ -642,9 +659,11 @@ def summarize(report_dir, limit=30):
         except ValueError: continue
         named = sum(1 for s in (r.get('speakers') or {}).values() if s.get('named') or s.get('name'))   # `name` only in older reports and share_text ones
         out.append({'host': r.get('host'), 'file': path.name, 'title': r.get('title'), 'status': r.get('status'), 'duration_min': round((r.get('duration_seconds') or 0) / 60, 1), 'cost_usd': r.get('cost_usd'), 'model': r.get('model'),
-                    'speakers': len(r.get('speakers') or {}), 'named': named, 'review': r.get('review_queue'), 'analysis': (r.get('analysis') or {}).get('counts'), 'errors': len(r.get('errors') or []), 'commit': r.get('commit'), 'app_version': r.get('app_version')})
+                    'speakers': len(r.get('speakers') or {}), 'named': named, 'review': r.get('review_queue'), 'analysis': (r.get('analysis') or {}).get('counts'), 'errors': len(r.get('errors') or []), 'commit': r.get('commit'), 'app_version': r.get('app_version'),
+                    'scorecard': r.get('scorecard') if isinstance(r.get('scorecard'), dict) else None})
     hosts = {}
     for r in out: hosts.setdefault(r['host'], {'reports': 0, 'errors': 0, 'cost_usd': 0.0}); hosts[r['host']]['reports'] += 1; hosts[r['host']]['errors'] += r['errors']; hosts[r['host']]['cost_usd'] = round(hosts[r['host']]['cost_usd'] + (r['cost_usd'] or 0), 4)
+    for host, aggregate in add_scorecards(out).items(): hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})['identity'] = aggregate
     for path in sorted(root.glob('*/'+HEARTBEAT_FILE)):   # a host that has written no report can still be alive
         try: beat = json.loads(path.read_text(encoding='utf-8'))
         except (OSError, ValueError): continue
@@ -658,7 +677,8 @@ def summarize(report_dir, limit=30):
                                     'probe': beat.get('probe'), 'cloud_blocked': beat.get('cloud_blocked'), 'errors': len(beat.get('errors') or []),
                                     'team_profiles': beat.get('team_profiles'), 'team_words': beat.get('team_words'),
                                     'shared_profiles': beat.get('shared_profiles'), 'shared_words': beat.get('shared_words'),
-                                    'error_journal': beat.get('error_journal')}
+                                    'error_journal': beat.get('error_journal'),
+                                    'quality_daily': beat.get('quality_daily') if isinstance(beat.get('quality_daily'), list) else []}
     for path in sorted(root.glob('*/'+RECORDING_HEARTBEAT_FILE)):   # a Mac that is in a meeting right now says so
         beat = read_recording_heartbeat(path)
         if not beat: continue
@@ -666,7 +686,45 @@ def summarize(report_dir, limit=30):
         hosts.setdefault(host, {'reports': 0, 'errors': 0, 'cost_usd': 0.0})
         hosts[host]['recording'] = {'line': beat.get('line') or recording_line(beat), 'meeting': beat.get('meeting'), 'elapsed_seconds': beat.get('elapsed_seconds'),
                                     'last_chunk_age_seconds': beat.get('last_chunk_age_seconds'), 'restarts': beat.get('restarts'), 'relaunches': beat.get('relaunches')}
-    return {'hosts': hosts, 'reports': out, 'alerts': alerts(hosts)}
+    trend = quality_trend(hosts)
+    return {'hosts': hosts, 'reports': out, 'quality_trend': trend, 'alerts': alerts(hosts, trend=trend)}
+
+
+SCORECARD_FIELDS = ('clusters', 'auto_correct', 'auto_wrong', 'suggestion_confirmed', 'suggestion_rejected', 'missed_known', 'still_unnamed')
+
+
+def add_scorecards(reports):
+    """Per host: this fleet's identity numbers added up over its meetings — and ONLY over reports that carry
+    their own meeting's numbers.
+
+    A report written before 1.2.82 put the whole database's scorecard into every file (and so does anything
+    that marks itself `snapshot`). Adding two of those from one Mac doubled numbers that describe one Mac
+    once, which is exactly the double counting the review asked to stop. Such a report is not added; it is
+    counted in `snapshots_skipped` so the fleet can see why a host has fewer meetings than reports."""
+    hosts = {}
+    for r in reports:
+        card = r.get('scorecard')
+        if not isinstance(card, dict): continue
+        slot = hosts.setdefault(r['host'], {**{k: 0 for k in SCORECARD_FIELDS}, 'meetings': 0, 'snapshots_skipped': 0})
+        if card.get('scope') != 'meeting' or card.get('snapshot'):
+            slot['snapshots_skipped'] += 1; continue
+        slot['meetings'] += 1
+        for key in SCORECARD_FIELDS:
+            value = card.get(key)
+            if isinstance(value, int) and not isinstance(value, bool): slot[key] += value
+    for slot in hosts.values():
+        named = slot['auto_correct'] + slot['auto_wrong']
+        slot['auto_precision'] = round(slot['auto_correct'] / named, 3) if named else None
+    return hosts
+
+
+def quality_trend(hosts, **kw):
+    """The fleet's own numbers over two consecutive periods (quality.quality_trend). Never raises."""
+    try:
+        from .quality import quality_trend as compute
+        return compute(hosts, **kw)
+    except Exception:
+        return {'current': None, 'previous': None, 'alerts': []}
 
 
 STALE_HEARTBEAT_SECONDS = 3*24*3600
@@ -756,7 +814,7 @@ def text_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DAY
                     'Saklamak için toplantının “Sesi koru” anahtarını açın ya da Ayarlar → Sistem → Gelişmiş → Eski toplantıların yazısı'}
 
 
-def alerts(hosts, *, now=None):
+def alerts(hosts, *, now=None, trend=None):
     """What the person maintaining the fleet should look at today, one Turkish line each. Derived only from the
     shared folder, so it works on the dev Mac without touching the other machines."""
     now = now or datetime.now(timezone.utc); out = []
@@ -810,4 +868,7 @@ def alerts(hosts, *, now=None):
             out.append({'host': host, 'level': 'warning', 'key': 'error_journal',
                         'line': f'{host}: son 24 saatte {counted} hata kaydı' + (f' · en son: {newest}' if newest else '')})
         if h.get('errors'): out.append({'host': host, 'level': 'note', 'key': 'errors', 'line': f'{host}: son raporlarda {h["errors"]} hata satırı'})
+    # One fleet-wide quality line at most, and never per person: the rate rose by 30 % or more with at least
+    # 20 eligible observations in BOTH periods. Below that the review says to raise nothing at all.
+    out.extend((quality_trend(hosts) if trend is None else trend).get('alerts') or [])
     return out

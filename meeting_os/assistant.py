@@ -42,8 +42,13 @@ def analyze(store,mid,llm=None,force=False):
     glossary=analysis_context(load_glossary(data,ROOT))
     from .reports import settings_owner
     owner=settings_owner(data)   # a cloud mic row carries the label in `speaker`; only Settings knows who 'Ben' is
+    import time
+    started=time.monotonic()
     with usage_context(store,mid):
         result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner)
+    # How long this analysis took, in the record itself: the daily quality summary reports p50/p95 from it,
+    # and a model that answers correctly in four minutes is a different product from one that takes forty.
+    result['elapsed_seconds']=round(time.monotonic()-started,2)
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
     auto_title(store,mid,result)
     from .reports import write_meeting_report

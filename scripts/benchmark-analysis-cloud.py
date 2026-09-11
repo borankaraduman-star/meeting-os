@@ -100,6 +100,24 @@ def missing_decisions(result,case):
     return [{'terms':g} for g in groups if not any(all(normalize(t) in text for t in g) for text in texts)]
 
 
+def missing_topics(result,case):
+    """Optional per-fixture coverage gate (1.2.82): each term group must be carried by ONE summary bullet.
+
+    A real-size chunk is where the summary quietly collapses to three bullets and loses whole topics — the
+    failure the 41-minute meeting showed and the short fixtures never could. `section_summaries` (what each
+    chunk said before the merge compacted it) is checked too, so the report can tell "the chunk never saw
+    this topic" from "the compaction dropped it"."""
+    groups=case.get('expected_topic_terms') or []
+    if not groups: return []
+    def uncovered(items):
+        texts=[normalize(i.get('text') or '') for i in items]
+        return [g for g in groups if not any(all(normalize(t) in text for t in g) for text in texts)]
+    final=uncovered(result.get('summary',[]))
+    sections=uncovered(result.get('section_summaries') or result.get('summary',[]))
+    lost={tuple(g) for g in final}-{tuple(g) for g in sections}
+    return [{'terms':g,'lost_in_compaction':tuple(g) in lost} for g in final]
+
+
 def missing_expected(result,case):
     """Which reference tasks are absent, and whether the loss is the task, its owner or its date."""
     actions=result.get('actions',[])
@@ -172,6 +190,9 @@ def main(argv=None):
     p.add_argument('--allow-upload',action='store_true',help='explicit consent to send fixture text to OpenRouter')
     p.add_argument('--max-calls',type=int,default=60,help='hard cloud request budget for the whole run')
     p.add_argument('--fixtures',type=Path,default=FIXTURES)
+    # One run of one fixture is an anecdote: the 10 Sep table already carried a case that passed in one run
+    # and failed in the next. Three repeats is what the review asks of every candidate.
+    p.add_argument('--repeat',type=int,default=1,help='run the whole case list N times (the budget still applies)')
     args=p.parse_args(argv)
     if not args.allow_upload:p.error('Bulut analizi için --allow-upload ile açık onay gerekir.')
     paths=[path for path in sorted(args.fixtures.glob('*.json')) if not args.case or path.stem in set(args.case)]
@@ -180,12 +201,17 @@ def main(argv=None):
     args.output.parent.mkdir(parents=True,exist_ok=True)
     raw_log=args.output.with_suffix('.raw.txt')
     client=OpenRouterClient();llm=client.analysis(model,consent=True)
-    spend={'calls':0,'prompt_tokens':0,'completion_tokens':0}
+    spend={'calls':0,'failed_calls':0,'prompt_tokens':0,'completion_tokens':0}
     post=client._post
     def counted(endpoint,payload,timeout=90):
         if spend['calls']>=args.max_calls:raise SystemExit(f'Çağrı bütçesi doldu ({args.max_calls}); istek gönderilmedi.')
         spend['calls']+=1
-        result=post(endpoint,payload,timeout=timeout)
+        try:
+            result=post(endpoint,payload,timeout=timeout)
+        except Exception:
+            # A request that never came back is the measurement: a model that answers correctly nine times out
+            # of ten is not the same product as one that answers ten times, and a retry hides exactly that.
+            spend['failed_calls']+=1;raise
         usage=result.get('usage') or {}
         for key,field in (('prompt_tokens','prompt_tokens'),('completion_tokens','completion_tokens')):
             value=usage.get(field)
@@ -203,68 +229,107 @@ def main(argv=None):
     intelligence.validate_record=recorder.wrap(original_validate)
     results=[]
     try:
+      for run in range(1,max(1,args.repeat)+1):
         for path in paths:
             case=json.loads(path.read_text())
             rows=fixture_rows(case)   # a fixture segment marked "source":"mic" becomes an owner row with no speaker_name
             recorder.reset();before=dict(spend);started=time.monotonic()
+            asked=llm.model_id;llm.fell_back=False   # per case: which model was ASKED, and which one answered
             try:
                 result=analyze_rows(rows,llm,glossary=case.get('glossary'),owner=case.get('owner'))   # a fixture may carry a (possibly poisoned) glossary, like a team folder would
                 checks={'valid_evidence_schema':True,**check_fixture_analysis(result,case)}
                 leaks,elsewhere=forbidden_leaks(result,case['forbidden_action_terms'])
-                item={'case':path.stem,'checks':checks,'passed':all(checks.values()),
+                item={'case':path.stem,'run':run,'checks':checks,'passed':all(checks.values()),
                       'counts':{key:len(result.get(key,[])) for key in CATEGORIES},
                       'coverage':result.get('coverage'),
                       'evidence':{**recorder.report(result),**evidence_stats(result,rows)},
                       'forbidden_leaks':leaks,'forbidden_mentions_elsewhere':elsewhere,
                       'missing_expected':missing_expected(result,case),
                       'missing_decisions':missing_decisions(result,case),
+                      'missing_topics':missing_topics(result,case),
                       'duplicates':duplicates(result),
                       'turkish_issues':turkish_issues(result),
                       'result':result}
             except Exception as exc:
-                item={'case':path.stem,'passed':False,'error':f'{type(exc).__name__}: {exc}','evidence':recorder.report({})}
+                item={'case':path.stem,'run':run,'passed':False,'error':f'{type(exc).__name__}: {exc}','evidence':recorder.report({})}
             item['elapsed_seconds']=round(time.monotonic()-started,2)
             item['calls']=spend['calls']-before['calls']
+            item['failed_calls']=spend['failed_calls']-before['failed_calls']
+            # The model that ANSWERED. When the asked model fails after its own retries the client tries
+            # ANALYSIS_FALLBACK_MODEL once and keeps it — so a table row saying "deepseek" may be gpt-4.1-mini's
+            # score. That is the single most misleading thing a benchmark can hide, so it is a column.
+            item['model_asked']=asked;item['model_answered']=llm.model_id;item['fell_back']=bool(llm.fell_back) or llm.model_id!=asked
             item['tokens']={'prompt':spend['prompt_tokens']-before['prompt_tokens'],'completion':spend['completion_tokens']-before['completion_tokens']}
             results.append(item);print(scorecard_line(item),flush=True)
     finally:
         intelligence.validate_record=original_validate
         rate=PRICING.get(model)
         cost=round(spend['prompt_tokens']/1e6*rate[0]+spend['completion_tokens']/1e6*rate[1],5) if rate else None
-        payload={'model':model,'cases':results,'spend':{**spend,'estimated_cost_usd':cost},
+        timing=seconds_report(results)
+        payload={'model':model,'repeat':args.repeat,'cases':results,'timing':timing,
+                 'models_that_answered':sorted({r.get('model_answered') or model for r in results}),
+                 'fell_back_cases':[r['case'] for r in results if r.get('fell_back')],
+                 'spend':{**spend,'estimated_cost_usd':cost},
                  'requires_independent_semantic_review':True,
                  'scope':'Kurgu fixture + sözlüksel kapılar; gerçek toplantı veya bağımsız anlam doğruluğu değildir.'}
         args.output.write_text(json.dumps(payload,ensure_ascii=False,indent=2))
         print('\n'+table(results))
-        print(f"\ncalls={spend['calls']} prompt_tokens={spend['prompt_tokens']} completion_tokens={spend['completion_tokens']} estimated_cost_usd={cost}")
+        print(f"\ncalls={spend['calls']} failed_calls={spend['failed_calls']} "
+              f"seconds p50={timing['p50']} p95={timing['p95']} max={timing['max']} "
+              f"prompt_tokens={spend['prompt_tokens']} completion_tokens={spend['completion_tokens']} estimated_cost_usd={cost}")
+        answered=payload['models_that_answered']
+        if len(answered)>1 or (answered and answered[0]!=model):
+            print(f"! yanıtı veren model(ler): {', '.join(answered)} · yedeğe düşen vaka: {', '.join(payload['fell_back_cases']) or '-'}")
     return 0 if results and all(r['passed'] for r in results) else 1
 
 
+def percentile(values,pct):
+    if not values:return None
+    ordered=sorted(values);k=(len(ordered)-1)*pct/100.0;low=int(k);high=min(low+1,len(ordered)-1)
+    return round(ordered[low]+(ordered[high]-ordered[low])*(k-low),2)
+
+
+def seconds_report(results):
+    """Wall-clock seconds per case (every chunk of it, plus the merge calls). p95 is the number that decides
+    whether a model is usable on a two-hour meeting; a mean hides the one case that took four minutes."""
+    values=[r['elapsed_seconds'] for r in results if isinstance(r.get('elapsed_seconds'),(int,float))]
+    per_case={}
+    for r in results:
+        if isinstance(r.get('elapsed_seconds'),(int,float)):per_case.setdefault(r['case'],[]).append(r['elapsed_seconds'])
+    return {'cases':len(values),'p50':percentile(values,50),'p95':percentile(values,95),'max':max(values) if values else None,
+            'mean':round(sum(values)/len(values),2) if values else None,
+            'per_case':{case:{'runs':len(v),'p50':percentile(v,50),'p95':percentile(v,95),'max':max(v)} for case,v in per_case.items()}}
+
+
 def scorecard_line(item):
-    if 'error' in item:return f"{item['case']:<12} FAIL  {item['error'][:120]}"
+    tail=f" model={item['model_answered']}" if item.get('fell_back') else ''
+    if 'error' in item:return f"{item['case']:<20} run{item.get('run',1)} FAIL  {item['error'][:120]}{tail}"
     e=item['evidence'];checks=item['checks']
-    return (f"{item['case']:<12} {'PASS' if item['passed'] else 'FAIL'}  "
+    return (f"{item['case']:<20} run{item.get('run',1)} {'PASS' if item['passed'] else 'FAIL'}  "
             f"checks={sum(1 for v in checks.values() if v)}/{len(checks)} "
             f"verbatim={e['verbatim_ratio']} verified={e['verified_ratio']} "
             f"leaks={len(item['forbidden_leaks'])} missing={len(item['missing_expected'])} "
-            f"misdec={len(item['missing_decisions'])} "
+            f"misdec={len(item['missing_decisions'])} topics={len(item.get('missing_topics') or [])} "
             f"dupe={len(item['duplicates']['exact'])}/{len(item['duplicates']['near'])} "
-            f"tr={len(item['turkish_issues'])} chunks={(item.get('coverage') or {}).get('chunks')}")
+            f"tr={len(item['turkish_issues'])} chunks={(item.get('coverage') or {}).get('chunks')} "
+            f"{item['elapsed_seconds']}s{tail}")
 
 
-COLUMNS=('case','checks','verbatim','verified','leaks','missing','misdec','dup','near','tr_issue','chunks','calls')
+COLUMNS=('case','run','checks','verbatim','verified','leaks','missing','misdec','topics','dup','near','tr_issue','chunks','calls','failed','seconds','answered')
 
 def table(results):
     rows=[]
     for item in results:
-        if 'error' in item:rows.append((item['case'],'error')+('-',)*9+(str(item.get('calls','-')),));continue
+        common=(str(item.get('calls','-')),str(item.get('failed_calls',0)),str(item.get('elapsed_seconds','-')),
+                (item.get('model_answered') or '-') if item.get('fell_back') else '=')
+        if 'error' in item:rows.append((item['case'],str(item.get('run',1)),'error')+('-',)*10+common);continue
         e=item['evidence'];checks=item['checks']
-        rows.append((item['case'],f"{sum(1 for v in checks.values() if v)}/{len(checks)}",
+        rows.append((item['case'],str(item.get('run',1)),f"{sum(1 for v in checks.values() if v)}/{len(checks)}",
             str(e['verbatim_ratio']),str(e['verified_ratio']),str(len(item['forbidden_leaks'])),
-            str(len(item['missing_expected'])),str(len(item['missing_decisions'])),
+            str(len(item['missing_expected'])),str(len(item['missing_decisions'])),str(len(item.get('missing_topics') or [])),
             str(len(item['duplicates']['exact'])),
             str(len(item['duplicates']['near'])),str(len(item['turkish_issues'])),
-            str((item.get('coverage') or {}).get('chunks')),str(item.get('calls'))))
+            str((item.get('coverage') or {}).get('chunks')))+common)
     widths=[max(len(str(r[i])) for r in ((COLUMNS,)+tuple(rows))) for i in range(len(COLUMNS))]
     line=lambda r:'  '.join(str(v).ljust(w) for v,w in zip(r,widths))
     return '\n'.join([line(COLUMNS),'  '.join('-'*w for w in widths)]+[line(r) for r in rows])
