@@ -114,7 +114,11 @@ enum SetupStatus {
         let clock=DateFormatter(); clock.dateFormat="HH:mm"
         return clock.string(from:date)
     }
-    static func serviceChecks(_ r:[String:Any],repo:String="",divergedNotice:String="")->[SetupCheck] {
+    /// `bundled`/`bundleVersion` come from `runtime.json`. A downloaded package has no checkout behind it, so
+    /// the two rows that talk about one have to go: "İmzalama izni" names a script in a repo the user does not
+    /// have, and "Sürüm" would offer a git update that cannot run. The version row keeps its `update` id and
+    /// reads the package version instead — the bundle update channel fills the rest of it in.
+    static func serviceChecks(_ r:[String:Any],repo:String="",divergedNotice:String="",bundled:Bool=false,bundleVersion:String="")->[SetupCheck] {
         let key=r["api_key"] as? Bool ?? false
         let keychain=r["api_key_keychain"] as? Bool ?? false
         let glossary=r["glossary_terms"] as? Int ?? 0
@@ -130,15 +134,19 @@ enum SetupStatus {
         // A key that lives only in the Keychain is not missing: the app copies it into the file the first time it reads it.
         let keyState:SetupCheck.State = key ? .ok : (keychain ? .optional : .missing)
         let keyHint = key ? "anahtar dosyasında kayıtlı (openrouter.key)" : (keychain ? "Anahtar Keychain’de; uygulama bir kez okuyunca dosyaya alınır" : "OpenRouter ile yazıya çevirmede istenir; Ayarlar → Sistem → OpenRouter anahtarı")
-        return [
+        // A package is never behind its own checkout and can never diverge from one: only the bundle channel
+        // can say it is out of date, and it does that through the same `update_behind` field.
+        let currentHint = bundled ? "Paket sürümü "+(bundleVersion.isEmpty ? "—" : bundleVersion) : "güncel"
+        var out:[SetupCheck]=[
             SetupCheck(id:"key",title:"OpenRouter anahtarı",state:keyState,hint:keyHint),
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
-            SetupCheck(id:"signing",title:"İmzalama izni",state:signing ? .ok : .missing,hint:signing ? "verildi" : signingFix(repo:repo)),
-            teamRootCheck(r),
-            SetupCheck(id:"update",title:"Sürüm",
-                       state:diverged ? .missing : (!updateError.isEmpty ? .optional : (behind==0 ? .ok : .missing)),
-                       hint:diverged ? divergedLine : (!updateError.isEmpty ? "kontrol edilemedi · "+updateError : (behind==0 ? "güncel" : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"))),
-            reportsCheck(r),
         ]
+        if !bundled { out.append(SetupCheck(id:"signing",title:"İmzalama izni",state:signing ? .ok : .missing,hint:signing ? "verildi" : signingFix(repo:repo))) }
+        out.append(teamRootCheck(r))
+        out.append(SetupCheck(id:"update",title:bundled ? "Paket sürümü" : "Sürüm",
+                              state:(diverged && !bundled) ? .missing : (!updateError.isEmpty ? .optional : (behind==0 ? .ok : .missing)),
+                              hint:(diverged && !bundled) ? divergedLine : (!updateError.isEmpty ? "kontrol edilemedi · "+updateError : (behind==0 ? currentHint : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"))))
+        out.append(reportsCheck(r))
+        return out
     }
 }

@@ -10,7 +10,10 @@ struct WelcomeView:View {
     /// team, key included when the sender ticked the box. Shown only while this Mac has neither a key nor a
     /// team — a second Mac of Boran's, or a colleague on day one.
     @State private var invite=""
-    private var needsInvite:Bool { OpenRouterCredential.cached()==nil && !model.teamConfigured }
+    /// A downloaded package carries its own invite and applies it on first launch, so this whole card stays
+    /// away: that Mac is asked for a name and nothing else. It comes back only if the shipped invite could
+    /// not be applied, because then pasting one is the only way in.
+    private var needsInvite:Bool { OpenRouterCredential.cached()==nil && !model.teamConfigured && !model.bundleInvitePending }
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
             Text("Hoş geldiniz").font(.system(size:27,weight:.bold,design:.rounded))

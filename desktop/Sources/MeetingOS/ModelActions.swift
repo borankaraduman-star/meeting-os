@@ -291,14 +291,31 @@ extension Model {
         var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
         let settings=await UNUserNotificationCenter.current().notificationSettings()
         checks.append(SetupStatus.notificationCheck(settings))
+        var answer:[String:Any]?
         if let r=try? await request(["action":"setup_status"]) {
-            checks+=SetupStatus.serviceChecks(r,repo:runtime.repo,divergedNotice:update?.divergedNotice ?? "")
+            answer=r
+            checks+=SetupStatus.serviceChecks(r,repo:runtime.repo,divergedNotice:update?.divergedNotice ?? "",bundled:runtime.bundled,bundleVersion:runtime.version ?? "")
             // The same answer, read once more as the one line Ayarlar → Ekip opens with — and as the flag that
             // decides whether the three share switches mean anything at all.
             teamTarget=TeamInvite.target(r,home:NSHomeDirectory())
             teamConfigured=teamTarget.kind == .cloud
         }
         setupChecks=checks
+        if let answer { await importBundleInviteIfNeeded(answer) }
+    }
+    /// First launch of a downloaded package, on a Mac with neither a key nor a team: the invite that was built
+    /// into it is applied once, silently, so the teammate meets the name field and the permission buttons and
+    /// nothing else. The flag is written BEFORE the join so a join that comes back with an error cannot loop
+    /// through `joinTeam` → `loadSetupStatus` → here forever.
+    func importBundleInviteIfNeeded(_ r:[String:Any]) async {
+        let hasKey=(r["api_key"] as? Bool ?? false) || (r["api_key_keychain"] as? Bool ?? false)
+        let hasTeam=TeamInvite.target(r).sharing
+        guard BundleInvite.shouldImportInvite(bundled:runtime.bundled,hasKey:hasKey,hasTeam:hasTeam,
+                                              alreadyImported:UserDefaults.standard.bool(forKey:BundleInvite.importedKey)) else { return }
+        guard let text=BundleInvite.text(resources:Bundle.main.resourceURL) else { bundleInviteFailed=true; return }
+        UserDefaults.standard.set(true,forKey:BundleInvite.importedKey)
+        await joinTeam(text)   // the same path a pasted link takes: it refreshes the setup card itself
+        if teamJoin?.ok != true { bundleInviteFailed=true }
     }
 
     // MARK: - Ekip daveti

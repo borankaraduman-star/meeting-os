@@ -69,4 +69,22 @@ final class SetupStatusTests: XCTestCase {
         // The bridge's own flag is enough when the sidebar has not checked yet.
         XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":0,"update_diverged":true,"update_hint":"Dal ayrıştı"])[4].hint,"Dal ayrıştı")
     }
+    /// A downloaded package has no checkout: the row that tells the user to run a script in one, and the row
+    /// that offers a git update, cannot stand there. What is left is the package version.
+    func testBundledCardDropsTheCheckoutRows() {
+        let answer:[String:Any]=["api_key":true,"signing_partition":false,"update_behind":0]
+        let plain=SetupStatus.serviceChecks(answer)
+        XCTAssertEqual(plain.map(\.id),["key","glossary","signing","team","update","reports"])
+        let bundled=SetupStatus.serviceChecks(answer,bundled:true,bundleVersion:"1.2.72")
+        XCTAssertEqual(bundled.map(\.id),["key","glossary","team","update","reports"])
+        XCTAssertFalse(bundled.contains { $0.id=="signing" })   // names scripts/fix-signing-prompts.sh in a repo nobody has
+        let version=bundled[3]
+        XCTAssertEqual(version.title,"Paket sürümü")
+        XCTAssertEqual(version.hint,"Paket sürümü 1.2.72")
+        XCTAssertEqual(version.state,.ok)
+        // A package cannot diverge from a branch it does not have; the bundle channel speaks through update_behind.
+        let diverged=SetupStatus.serviceChecks(["update_behind":0,"update_diverged":true],bundled:true,bundleVersion:"1.2.72")[3]
+        XCTAssertEqual(diverged.state,.ok); XCTAssertEqual(diverged.hint,"Paket sürümü 1.2.72")
+        XCTAssertEqual(SetupStatus.serviceChecks(["update_behind":2],bundled:true,bundleVersion:"1.2.72")[3].state,.missing)
+    }
 }
