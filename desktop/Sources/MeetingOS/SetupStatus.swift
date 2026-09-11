@@ -93,11 +93,17 @@ enum SetupStatus {
     /// human-verified evidence says about the voice-matching threshold. It is a RECOMMENDATION and the row
     /// says so — nothing is applied until the user runs `quality calibrate --apply`. Below the evidence bar
     /// it reads "veri yetersiz (n=…)", which is the honest answer and never a state worth colouring red.
+    /// 1.2.85 adds two things to the same row: the calibration line gains "· otomatik uygulama kapalı" while
+    /// automatic promotion is off (a recommendation the machine will not act on has to say so where it is
+    /// read), and the live policy version rides on the end once one has been promoted.
     static func qualityCheck(_ r:[String:Any])->SetupCheck? {
         let trend=r["quality_trend"] as? [String:Any] ?? [:]
         let line=(trend["line"] as? String ?? "").trimmingCharacters(in:.whitespaces)
         let calibration=(r["calibration"] as? [String:Any])?["line"] as? String ?? ""
-        let parts=[line,calibration.trimmingCharacters(in:.whitespaces)].filter { !$0.isEmpty }
+        // Which policy version this Mac is running (1.2.85). Absent until something has actually been
+        // promoted: a row reading "politika v0" would announce a thing that never happened.
+        let policy=(r["policy"] as? [String:Any])?["line"] as? String ?? ""
+        let parts=[line,calibration.trimmingCharacters(in:.whitespaces),policy.trimmingCharacters(in:.whitespaces)].filter { !$0.isEmpty }
         if parts.isEmpty { return nil }
         let change=trend["change"] as? Double ?? 0
         let eligible=trend["eligible"] as? Bool ?? false

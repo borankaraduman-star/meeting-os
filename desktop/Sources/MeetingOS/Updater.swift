@@ -132,8 +132,12 @@ struct ReportSettings:Equatable {
     /// out of a single item is per row (a team word can be switched off, a person's team samples deleted); these
     /// two switch the whole exchange off for this Mac, in both directions.
     var shareWords:Bool=true; var shareProfiles:Bool=true
+    /// May a measured experiment APPLY itself (1.2.85)? Off. The idle pass measures either way and writes the
+    /// result down; with this off the setup card says "otomatik uygulama kapalı" and the user applies the
+    /// recommendation deliberately. Nothing here leaves this Mac, and every promotion is one rollback away.
+    var autoPromotePolicies:Bool=false
     static func parse(_ d:[String:Any])->ReportSettings {
-        ReportSettings(shareReports:d["share_reports"] as? Bool ?? true,shareText:d["share_text"] as? Bool ?? false,autoUpdate:d["auto_update"] as? Bool ?? false,reportDir:d["report_dir"] as? String ?? "",audioRetentionDays:d["audio_retention_days"] as? Int ?? 30,autoRetry:d["auto_retry"] as? Bool ?? true,userName:d["user_name"] as? String ?? "",textRetentionDays:d["text_retention_days"] as? Int ?? 0,teamDir:d["team_dir"] as? String ?? "",shareGlossary:d["share_glossary"] as? Bool ?? true,shareWords:d["share_words"] as? Bool ?? true,shareProfiles:d["share_profiles"] as? Bool ?? true)
+        ReportSettings(shareReports:d["share_reports"] as? Bool ?? true,shareText:d["share_text"] as? Bool ?? false,autoUpdate:d["auto_update"] as? Bool ?? false,reportDir:d["report_dir"] as? String ?? "",audioRetentionDays:d["audio_retention_days"] as? Int ?? 30,autoRetry:d["auto_retry"] as? Bool ?? true,userName:d["user_name"] as? String ?? "",textRetentionDays:d["text_retention_days"] as? Int ?? 0,teamDir:d["team_dir"] as? String ?? "",shareGlossary:d["share_glossary"] as? Bool ?? true,shareWords:d["share_words"] as? Bool ?? true,shareProfiles:d["share_profiles"] as? Bool ?? true,autoPromotePolicies:d["auto_promote_policies"] as? Bool ?? false)
     }
-    var changes:[String:Any] { ["share_reports":shareReports,"share_text":shareText,"auto_update":autoUpdate,"report_dir":reportDir,"audio_retention_days":audioRetentionDays,"auto_retry":autoRetry,"user_name":userName,"text_retention_days":textRetentionDays,"team_dir":teamDir,"share_glossary":shareGlossary,"share_words":shareWords,"share_profiles":shareProfiles] }
+    var changes:[String:Any] { ["share_reports":shareReports,"share_text":shareText,"auto_update":autoUpdate,"report_dir":reportDir,"audio_retention_days":audioRetentionDays,"auto_retry":autoRetry,"user_name":userName,"text_retention_days":textRetentionDays,"team_dir":teamDir,"share_glossary":shareGlossary,"share_words":shareWords,"share_profiles":shareProfiles,"auto_promote_policies":autoPromotePolicies] }
 }

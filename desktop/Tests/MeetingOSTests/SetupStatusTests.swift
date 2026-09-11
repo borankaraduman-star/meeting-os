@@ -60,6 +60,29 @@ final class SetupStatusTests: XCTestCase {
         XCTAssertEqual(SetupStatus.serviceChecks(["team_root_kind":"team","team_root":"/Volumes/Ekip"]).first { $0.id=="team" }?.hint,
                        "ortak bilgi tabanı: /Volumes/Ekip")
     }
+
+    /// 1.2.85. Two things share the quality row with the calibration: whether the machine will ACT on the
+    /// recommendation it just printed, and which policy version is live. A Mac that has never promoted one
+    /// gets no policy sentence — "politika v0" would announce something that never happened.
+    func testThePolicyVersionAndTheOffSwitchAppearOnTheQualityRow() {
+        let off=SetupStatus.qualityCheck(["calibration":["line":"kalibrasyon önerisi: eşik 0.85 (+2 doğru, 0 yanlış, n=24) · otomatik uygulama kapalı"],
+                                          "policy":["line":""]])
+        XCTAssertEqual(off?.state,.optional)
+        XCTAssertEqual(off?.hint,"kalibrasyon önerisi: eşik 0.85 (+2 doğru, 0 yanlış, n=24) · otomatik uygulama kapalı")
+        let promoted=SetupStatus.qualityCheck(["calibration":["line":"kalibrasyon: mevcut eşik en iyisi (n=31)"],
+                                               "policy":["line":"politika v2 · eşik 0.85 · marj 0.05 · kuyruk recency"]])
+        XCTAssertEqual(promoted?.hint,"kalibrasyon: mevcut eşik en iyisi (n=31) · politika v2 · eşik 0.85 · marj 0.05 · kuyruk recency")
+        // A policy version alone still draws the row: it is the one place the user can see what got applied.
+        XCTAssertEqual(SetupStatus.qualityCheck(["policy":["line":"politika v1 · eşik 0.85 · marj 0.05"]])?.hint,
+                       "politika v1 · eşik 0.85 · marj 0.05")
+    }
+
+    /// The promotion switch is a setting like any other: parsed with a safe default and sent back verbatim.
+    func testAutomaticPromotionIsOffUnlessTheSettingsFileSaysOtherwise() {
+        XCTAssertFalse(ReportSettings.parse([:]).autoPromotePolicies)
+        XCTAssertTrue(ReportSettings.parse(["auto_promote_policies":true]).autoPromotePolicies)
+        XCTAssertEqual(ReportSettings.parse(["auto_promote_policies":true]).changes["auto_promote_policies"] as? Bool,true)
+    }
     /// P1-4: the signing partition is the step that silently stops every update on a second Mac.
     func testSigningRowCarriesTheOneLineFix() {
         let missing=SetupStatus.serviceChecks(["signing_partition":false],repo:"/Users/x/repo")[2]

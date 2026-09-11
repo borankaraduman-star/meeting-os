@@ -40,6 +40,10 @@ ACTIONS = (
     # the team's knowledge actually ARRIVED and when it first produced a name a human then verified. Each is
     # written once, ever — they are the start and the end of a stopwatch, not a running count.
     'team_knowledge_ready', 'team_first_value',
+    # Codex #11. A policy version is the ONLY way a measured improvement reaches production, and both
+    # directions are recorded: `source='auto'` when an experiment promoted it, `human` when a person did.
+    # Promotion writes one event, not one per affected meeting — the same rule as a taught word.
+    'policy_promote', 'policy_rollback',
 )
 # The stopwatch, in order. `summary` reports the two durations between them when both ends exist.
 TEAM_STAGES = ('team_join', 'team_knowledge_ready', 'team_first_value')

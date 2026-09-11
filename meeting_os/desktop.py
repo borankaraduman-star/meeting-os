@@ -185,11 +185,21 @@ def _identity_learning(data_dir):
     calibration recommendation and what the team's profiles bought. Never measured here — a Settings sheet
     must not pay for a replay, and a Mac that has never been idle simply has nothing to show yet."""
     try:
+        from . import policy as P
+        from .experiments import auto_promote
         from .quality import calibration_line,load_calibration,load_team_effect
         calibration=load_calibration(data_dir) or {}
         effect=load_team_effect(data_dir) or {}
-        return {'calibration':{'n':calibration.get('n'),'enough':bool(calibration.get('enough')),
-                               'line':calibration.get('line') or calibration_line(calibration)},
+        line=calibration.get('line') or calibration_line(calibration)
+        # A recommendation the machine will NOT act on has to say so on the same line it appears. Otherwise a
+        # user reads "kalibrasyon önerisi: eşik 0.85" every week and reasonably assumes it happened (1.2.85).
+        automatic=auto_promote(data_dir)
+        if line and ((calibration.get('recommendation') or {}).get('change')) and not automatic: line+=' · otomatik uygulama kapalı'
+        record=P.current(data_dir)
+        return {'calibration':{'n':calibration.get('n'),'enough':bool(calibration.get('enough')),'line':line},
+                'auto_promote_policies':automatic,
+                'policy':{'version':record['version'],'review_order':record['review_order'],'hint_ranking':record['hint_ranking'],
+                          'identity':record['identity'],'line':P.line(record)},
                 'team_profile_effect':{**{k:effect.get(k) for k in ('right','wrong','clusters','team_samples')},'line':effect.get('line') or ''}}
     except Exception:
         return {}
@@ -802,7 +812,13 @@ def dispatch(request, db=None):
             # from the setup card or the heartbeat — both of those read the file this writes.
             from .quality import calibration_refresh,team_effect_refresh
             calibration=calibration_refresh(store,data);team_effect=team_effect_refresh(store,data)
+            # …and the silent experiments (1.2.85, Codex #11): the same idle pass, at most one a day, no cloud
+            # call, and by default nothing is applied — only measured and written to quality/experiments.jsonl.
+            from .experiments import run_due as run_experiments
+            experiments=run_experiments(store,data)
             return {'learning':learning,'calibration':{k:calibration.get(k) for k in ('date','n','enough','line','fresh')},
+                    'experiments':{'ran':experiments.get('ran'),'reason':experiments.get('reason'),'promoted':experiments.get('promoted') or [],
+                                   'verdicts':{r.get('candidate'):r.get('verdict') for r in experiments.get('results') or []}},
                     'team_effect':{k:team_effect.get(k) for k in ('right','wrong','clusters','team_samples','fresh')},
                     'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],

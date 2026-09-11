@@ -143,7 +143,7 @@ def parser():
     # The app passes the question in the environment: a question typed into the sidebar can start with '-' or
     # carry a newline, and argv is visible to every process on the Mac.
     a=sub.add_parser('ask'); a.add_argument('question',nargs='?',default=os.environ.get('MEETING_OS_QUESTION')); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
-    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay','daily','calibrate']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--timeline',action='store_true',help='replay: time-ordered cold start (only evidence older than the meeting)'); q.add_argument('--day',help='daily: the day to measure (YYYY-MM-DD), default today'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary'); q.add_argument('--apply',action='store_true',help='calibrate: write the recommended identity threshold/margin into settings.json')
+    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay','daily','calibrate','policy','experiments']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--timeline',action='store_true',help='replay: time-ordered cold start (only evidence older than the meeting)'); q.add_argument('--day',help='daily: the day to measure (YYYY-MM-DD), default today'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary'); q.add_argument('--apply',action='store_true',help='calibrate: write the recommended identity threshold/margin into settings.json'); q.add_argument('--rollback',action='store_true',help='policy: step one version back (the previous policy becomes the live one again)')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
     dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); dg.add_argument('--output',type=Path)
     wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); wt.add_argument('--output',type=Path)
@@ -442,6 +442,20 @@ def main(supervised=False):
                 elif args.action=='daily':
                     from . import __version__
                     output(quality.daily_summary(store,args.db.parent,args.day,version=__version__))
+                elif args.action=='policy':
+                    # What this Mac's switches are, when they changed and on what evidence — plus the one way
+                    # back. A rollback is a new version carrying the previous version's values, so the history
+                    # only ever grows forwards and "which bars were live on the 12th?" stays answerable.
+                    from . import policy as P
+                    if args.rollback: output(P.rollback(args.db.parent,store=store))
+                    else:
+                        record=P.current(args.db.parent)
+                        output({'version':record['version'],'since':record['since'],'source':record['source'],
+                                'identity':record['identity'],'review_order':record['review_order'],'hint_ranking':record['hint_ranking'],
+                                'line':P.line(record),'versions':P.versions(args.db.parent)})
+                elif args.action=='experiments':
+                    from .experiments import records,summary
+                    output({**summary(args.db.parent),'recent':records(args.db.parent,limit=args.limit)})
                 elif args.action=='calibrate':
                     # Measure only; `--apply` is the one deliberate act that changes what recognition does.
                     report=quality.calibrate(store,args.db.parent)

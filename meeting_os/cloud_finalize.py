@@ -620,15 +620,27 @@ IDENTITY_MARGIN=0.05
 
 
 def identity_bars(data_dir=None):
-    """(threshold, margin) for this Mac: the shipped constants, unless the user has applied a calibration.
+    """(threshold, margin) for this Mac. THREE sources, in this order, and the order is the whole contract:
 
-    `quality calibrate` measures a small grid against this Mac's own time-ordered, human-verified evidence and
-    writes a recommendation; it changes nothing. Only `quality calibrate --apply` puts the two numbers into
-    settings.json, and only a value inside the validated range is read back — anything else, an unreadable
-    settings file included, is simply the constant. Nobody's recognition silently changes because a file got
-    edited by hand (Codex #5: "veri yetersizse aday etkinleşmez")."""
+    1. **`quality/policy.json`** (1.2.85) — a measured, dated, reversible promotion. Written only by
+       `policy.promote`, which refuses a value outside the validated range, and undone by `policy.rollback`.
+    2. **`settings.json`** — `identity_threshold` / `identity_margin`, what `quality calibrate --apply`
+       writes. That path promotes a policy version at the same time, so step 1 and step 2 cannot disagree
+       about a bar the user deliberately applied.
+    3. **The shipped constants.**
+
+    `quality calibrate` on its own measures a small grid against this Mac's own time-ordered, human-verified
+    evidence and writes a recommendation; it changes nothing. At every step only a value inside the validated
+    range is read back — anything else, an unreadable file included, falls through to the next step. Nobody's
+    recognition silently changes because a file got edited by hand (Codex #5: "veri yetersizse aday
+    etkinleşmez")."""
     threshold, margin = IDENTITY_THRESHOLD, IDENTITY_MARGIN
     if data_dir is None: return threshold, margin
+    try:
+        from .policy import identity as policy_identity
+        bars = policy_identity(data_dir)
+        if bars: return bars
+    except Exception: pass   # a broken policy file must never stop a job; the next step is the old behaviour
     try:
         from .reports import load_settings
         from .store import IDENTITY_MARGIN_RANGE, IDENTITY_THRESHOLD_RANGE

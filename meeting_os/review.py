@@ -21,6 +21,47 @@ MIN_NAMEABLE_SECONDS=4.0   # below this a diarization cluster is noise, not a vo
 # Nothing here treats silence, a skip or an export as confirmation.
 # ---------------------------------------------------------------------------
 RESULTS=('correct','corrected','skipped')
+# Only one of the three is a statement that something was WRONG and got fixed. 'correct' says the item was
+# fine; 'skipped' says nothing at all and is never counted as approval (Codex #11: "dokunmama onay sayılmaz").
+CORRECTED='corrected'
+
+# What each kind of item costs a person, as `review_queue` assigns it. Named here so the weekly debt, the
+# ordering switch and the offline ordering experiment cannot drift apart: a severity that lived in one sort
+# lambda was a severity nothing else could read.
+SEVERITY={'marker':0,'suggested_name':1,'ambiguous':1,'unnamed_speaker':2,'glossary':2,'word':2,
+          'task_owner':2,'task_review':2,'short_match':3,'asr':3}
+DEFAULT_SEVERITY=2
+
+def severity_of(kind):
+    """The severity of a kind name, including one read back out of an `item_key` prefix."""
+    return SEVERITY.get((kind or '').split(':')[0],DEFAULT_SEVERITY)
+
+def queue_order(data_dir=None):
+    """Which key the weekly Kontrol queue sorts on FIRST — `'severity'` (what this app has always done) or
+    `'recency'`. The answer comes from `quality/policy.json`, so changing it is a promoted, dated, reversible
+    policy version rather than an edit to a sort lambda (1.2.85).
+
+    Only the cross-meeting debt reads it. Inside ONE meeting the queue stays in transcript order under its
+    severity: "recency" there would mean the end of the meeting first, which is not the alternative anybody
+    measured and not a thing a person reading along wants."""
+    if data_dir is None: return 'severity'
+    try:
+        from .policy import review_order
+        return review_order(data_dir)
+    except Exception: return 'severity'
+
+def order_debt(items,order='severity'):
+    """Sort the weekly debt in place-free fashion and return it. `severity`: worst first, newest meeting
+    inside one severity. `recency`: newest meeting first, worst first inside one meeting. Both are stable and
+    both end on `start`, so two runs over the same list give the same list."""
+    rows=sorted(items,key=lambda i:i['start'] if i.get('start') is not None else 1e9)
+    if order=='recency':
+        rows.sort(key=lambda i:i.get('severity') if i.get('severity') is not None else DEFAULT_SEVERITY)
+        rows.sort(key=lambda i:i.get('created') or '',reverse=True)
+    else:
+        rows.sort(key=lambda i:i.get('created') or '',reverse=True)
+        rows.sort(key=lambda i:i.get('severity') if i.get('severity') is not None else DEFAULT_SEVERITY)
+    return rows
 
 try:   # the metrics half of the learning loop lands on its own branch; the merge must not need this file changed
     from .learning import record_event
@@ -211,7 +252,6 @@ def review_debt(store, days=7, data_dir=None):
         for item in queue['items']:
             items.append({**item,'meeting':row['id'],'meeting_title':row['title'],'created':row['created']})
             counts[item['kind']]=counts.get(item['kind'],0)+1
-    items.sort(key=lambda i:i['start'] if i['start'] is not None else 1e9)
-    items.sort(key=lambda i:i['created'] or '',reverse=True)   # stable: newest meeting first within one severity
-    items.sort(key=lambda i:i['severity'])
-    return {'days':int(days),'meetings':len(meetings),'counts':counts,'items':items,'count':len(items),'resolved':resolved,'skipped':skipped}
+    order=queue_order(data_dir)
+    items=order_debt(items,order)
+    return {'days':int(days),'meetings':len(meetings),'counts':counts,'items':items,'count':len(items),'resolved':resolved,'skipped':skipped,'order':order}

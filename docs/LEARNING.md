@@ -15,8 +15,8 @@ Kullanıcı eylemi → yerel karar kaydı (learning_events) → kapsam/kanıt de
       → sonraki toplantıda ölçüm → (gerileme varsa) geri alma
 ```
 
-1.2.80 bu zincirin **ilk iki halkasını** kurar: karar kaydı ve dürüst sayım. Aday kural üretimi, kıyas ve
-politika sürümleri sonraki sürümlerin işi (1.2.82 ve 1.2.85).
+1.2.80 bu zincirin **ilk iki halkasını** kurar: karar kaydı ve dürüst sayım. Kıyas, sınırlı etkinleştirme ve
+geri alma 1.2.85 ile geldi — aşağıdaki “Deney ve geri dönüş” bölümü.
 
 ## `learning_events` tablosu
 
@@ -38,6 +38,7 @@ Yerel SQLite veritabanında, diğer geç tablolar gibi ilk kullanımda oluşur (
 **Eylemler:** `record_start`, `record_stop`, `name_confirm`, `name_correct`, `name_reject`, `segment_pin`,
 `word_teach`, `word_forget`, `word_dismiss`, `glossary_apply`, `glossary_dismiss`, `review_resolve`,
 `task_edit`, `task_due`, `summary_edit` (1.2.81 için ayrılmış, henüz hiçbir şey yazmıyor), `export_ok`,
+`policy_promote`, `policy_rollback` (1.2.85; `source='auto'`),
 `team_join`, `team_knowledge_ready`, `team_first_value`, `undo`.
 
 ### Hangi eylem nereden yazılır
@@ -211,10 +212,100 @@ bir hatayı ödeyip barajı yeniden küresel eşiğin altına çekebiliyordu; on
 eşleştiğini söyler, hata ise **başkasının sesiyle de** eşleştiğini söyler ve baraj hakkındaki tek argüman
 ikincisidir.
 
+## Deney ve geri dönüş (1.2.85)
+
+Kaynağı: Codex #11. Bu sürüme kadar **ölçülen** her iyileşme bir kartta cümle olarak kalıyordu: kalibrasyon
+öneri üretip duruyordu, Kontrol kuyruğu yazıldığı gibi sıralanıyordu, bir ayarın ne zaman ve hangi kanıtla
+değiştiğini hiçbir yer tutmuyordu. Geri alınamayan bir değişiklik ise kendiliğinden yapılmaması gereken
+değişikliktir.
+
+### Politika sürümleri — `quality/policy.json`
+
+Üç alan, bir sürüm numarası ve öncekilerin tamamı:
+
+| Alan | Ne söyler |
+| --- | --- |
+| `identity` | ses eşleştirme barajları (`threshold`, `margin`) — sürüm bunları **sabitlemiyorsa** `null` |
+| `review_order` | `severity` (bugünkü) ya da `recency`: haftalık Kontrol borcu önce neye göre sıralanır |
+| `hint_ranking` | `ranked` (bugünkü) ya da `legacy`: 900 karakterlik STT ipucu nasıl doldurulur |
+| `version` · `since` · `evidence` | kaçıncı sürüm, ne zaman yürürlüğe girdi, hangi ölçüme dayanıyor (yalnız sayılar) |
+| `previous` | önceki sürümlerin yığını (en fazla 20); `rollback` bunun tepesini alır |
+
+```python
+policy.current(data_dir)     # yürürlükteki sürüm (dosya yoksa bugünkü sabitler, source='default')
+policy.promote(data_dir, {'identity_threshold': 0.85}, evidence, store=store)
+policy.rollback(data_dir, store=store)    # bir adım geri
+policy.review_order(data_dir); policy.hint_ranking(data_dir)
+```
+
+`promote` aralık dışında bir değeri **kırpmaz, reddeder** (`ValueError`): eşik 0,80–0,95, marj 0,02–0,15.
+Kuyruk sıralamasıyla ilgili bir yükseltme barajlar hakkında hiçbir şey söylemediği için onları
+sabitlemez — kullanıcının uyguladığı kalibrasyon çalışmaya devam eder.
+
+### Öncelik sırası — bir tane, ve yalnız bir tane
+
+`cloud_finalize.identity_bars` barajları şu sırayla okur:
+
+1. **`quality/policy.json`** — ölçülmüş, tarihli, geri alınabilir bir yükseltme. Yalnız `policy.promote` yazar.
+2. **`settings.json`** — `identity_threshold` / `identity_margin`, yani `quality calibrate --apply`.
+3. **Sabitler** (`IDENTITY_THRESHOLD` 0,87 · `IDENTITY_MARGIN` 0,05).
+
+Her adımda yalnız **doğrulanmış aralıktaki** bir değer okunur; bozuk dosya, elle yazılmış bir sayı ya da
+aralık dışı bir değer sessizce bir alt adıma düşer. `quality calibrate --apply` artık ayarlarla birlikte bir
+politika sürümü de yükseltir, böylece 1. ve 2. adım kullanıcının bilerek uyguladığı bir baraj konusunda
+birbiriyle çelişemez.
+
+### Sessiz ve ucuz deneyler — `quality/experiments.jsonl`
+
+`storage_housekeeping` (saatlik, boşta) `experiments.run_due` çağırır. Kurallar kodda, çağıranın alışkanlığında
+değil:
+
+- **Buluta hiçbir çağrı yok.** Üç aday da diskteki satırlar üzerinde aritmetiktir. `quality compare` ayrı bir
+  araçtır ve buradan erişilemez.
+- **Kayıt ya da iş sürerken asla.** Canlı kayıt nabzı, `processing` durumundaki toplantı, `MEETING_OS_LOW_PRIORITY`
+  ya da çağıranın verdiği bayrak — dördü de geçişi durdurur.
+- **Cihaz başına günde en fazla bir deney.** Sonuç dosyası defterdir: günü zaten yazılmış bir geçiş hiçbir şey yapmaz.
+- **Sonuçlar üretim verisi değildir.** `samples`, `rejections`, `taught_words`, `tasks` hiç yazılmaz; bu modülün
+  o tablolara giden bir yolu yoktur. Dosyada toplantı kimliği, kelime ya da kişi adı bulunmaz.
+- **Sessizlik onay değildir.** Kullanıcının cevaplamadığı bir Kontrol maddesi havuza hiç girmez; `geçildi`
+  yalnız bir sıra tutar, asla onay sayılmaz.
+
+| Aday | Nasıl ölçülür | Önceden ilan edilmiş hedef |
+| --- | --- | --- |
+| `identity_bars` | `quality.calibrate` (zaman sıralı, yalnız insan doğrulamalı kümeler) | doğru ↑, yanlış ↑ değil, n ≥ 20, aralık içinde |
+| `review_order` | son 400 çözülmüş Kontrol maddesi, iki sıralamada da konumlandırılır | `düzeltildi` maddelerinin ortanca konumu ≥1 basamak öne gelsin, n ≥ 20 |
+| `hint_ranking` | `quality.replay_rules` (1.2.84 dalında) | ham STT'de tekrar eden hata ↓, yeni hata ↑ değil, n ≥ 20 |
+
+Ölçüm yapılamıyorsa sonuç **“ölçülemedi”** olur — “ölçtük, iyi değil” ile aynı şey değildir.
+
+### Otomatik uygulama varsayılan olarak kapalı
+
+Ayarlar → Sistem → Gelişmiş: **“Ölçülmüş iyileştirmeler kendiliğinden uygulansın (yalnız yerel ayarlar; kayıt
+sırasında asla; her değişiklik geri alınabilir)”** — `auto_promote_policies`, varsayılan `False`.
+
+Kapalıyken geçiş yine ölçer ve bulduğunu yazar, ama hiçbir şeyi değiştirmez: Kurulum durumu kartının kalite
+satırı öneriyi gösterir ve sonuna **“· otomatik uygulama kapalı”** ekler. Açıkken hedefi tutan ve aralıkta
+kalan aday `policy.promote` ile yükselir; bu da bir `policy.rollback` uzaklıktadır.
+
+### Geri alma
+
+```bash
+meeting_os quality policy              # yürürlükteki sürüm, kanıtı ve bütün geçmiş sürümler
+meeting_os quality policy --rollback   # bir adım geri
+meeting_os quality experiments         # son deney sonuçları
+```
+
+Geri alma **yeni bir sürüm** üretir: değerler geriye gider, tarih ileriye. “12'sinde hangi baraj yürürlükteydi?”
+sorusu bir geri almadan sonra da cevaplanabilir kalır. İlk yükseltme de geri alınabilir — yığının dibinde
+sürüm 0, yani uygulamanın geldiği sabitler durur. Her iki yön de `learning_events` içine bir satır yazar
+(`policy_promote` / `policy_rollback`, `source='auto'`).
+
 ## Saklama
 
-- **90 gün / 20 MB.** Saatlik bakım geçişi (`storage_housekeeping`) önce süresi dolanları, sonra bütçe
-  aşılıyorsa en eskileri siler (`learning.prune`).
+- **Olay kaydı: 90 gün / 20 MB.** Saatlik bakım geçişi (`storage_housekeeping`) önce süresi dolanları, sonra
+  bütçe aşılıyorsa en eskileri siler (`learning.prune`).
+- **Deney sonuçları: 7 gün / 20 MB** (`experiments.prune`, her geçişte). Bu, uygulamanın tuttuğu en kısa
+  ömürlü şeydir: zaten verilmiş ya da verilmemiş bir kararın kanıtıdır ve bir hafta okumaya yeter.
 - Kaynak toplantı silindiğinde ona ait metinli öğrenme örneği de gider (mevcut `text_retention` yolu);
   öğrenilmiş kelime ve profil ayrı kalır — bu mevcut ürün sözleşmesidir.
 - Olay kaydı ayrı bir veri platformuna dönüşmez: kullanıcı işleminde yalnız küçük yerel yazım, model çağrısı
@@ -226,8 +317,11 @@ ikincisidir.
 meeting_os quality report      # kimlik karnesi: verified / falsified / unreviewed
 meeting_os quality replay --timeline   # zaman sıralı kimlik değerlendirmesi
 meeting_os quality calibrate   # eşik ızgarası ve öneri (hiçbir şeyi değiştirmez)
+meeting_os quality policy      # yürürlükteki politika sürümü ve geçmişi
+meeting_os quality experiments # son deney sonuçları (sayılar ve kararlar)
 meeting_os reports heartbeat   # learning bloğu dahil nabız
 ```
 
 Python'dan: `learning.events(store, since=...)`, `learning.summary(store, days=7)`,
-`learning.team_stopwatch(store)`, `store.team_profile_effect(store)`, `quality.calibrate(store, data_dir)`.
+`learning.team_stopwatch(store)`, `store.team_profile_effect(store)`, `quality.calibrate(store, data_dir)`,
+`policy.current(data_dir)`, `experiments.records(data_dir)`.
