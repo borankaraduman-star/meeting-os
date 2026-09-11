@@ -102,6 +102,21 @@ görevler ve eksiklik sebebi, parça birleştirmesinden sağ çıkan tekrarlar,
 `required_decision_terms` ile karşılanmayan kararlar ve Türkçe çıktıdaki
 İngilizce bölüm adları/etiketleri.
 
+1.2.86 ile her vaka ve toplam için **birlikte** raporlanan dört sayı eklendi
+(hesap tamamen çevrimdışıdır, ek istek atmaz): `recall` (referans görevlerin
+kaçı yakalandı), `precision` (üretilen görevlerin kaçı gerçek bir referansa
+karşılık geliyor), `owner_mismatch` / `owner_abstained` ve `due_mismatch`. Görev
+uyarlamasının kabul ölçütü bu çifttir: sahip düzeltmesi düşerken yakalama
+düşmemeli — her şeyi sahipsiz bırakan bir koşu da `owner_mismatch`'i düşürür,
+bu yüzden çekimserlik ayrı sayılır. Toplamlar pay/payda toplanarak hesaplanır,
+oranların ortalaması alınarak değil.
+
+`--prefs` bayrağı özet tercihi şablonunu isteme enjekte eder
+(`--prefs detail=kısa,bullet_length=kısa,merge_duplicates=çok`; çıplak hâli
+varsayılan üçlüyü kullanır) — ileride tercihli/tercihsiz bir karşılaştırma
+yapılabilsin diye. Şablon sabittir; bayrak yalnız `preferences.TEMPLATES`
+tablosundaki ad/değer çiftlerini kabul eder, serbest metin isteme giremez.
+
 10 Eylül 2026, `openai/gpt-4.1-mini`, beş kurgu fixture. Önce = 39b8095'teki
 `intelligence.py`, sonra = bu daldaki hâli; fixture'lar iki koşuda da aynıdır.
 

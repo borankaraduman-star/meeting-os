@@ -802,7 +802,15 @@ def dispatch(request, db=None):
             # from the setup card or the heartbeat — both of those read the file this writes.
             from .quality import calibration_refresh,team_effect_refresh
             calibration=calibration_refresh(store,data);team_effect=team_effect_refresh(store,data)
+            # Two more cheap local derivations (Codex #8, #9): the three summary preferences and the task
+            # error class distribution. Both are one indexed read and no model call, both are recomputed at
+            # most once a day, and the analysis only ever READS the files they write.
+            from .preferences import refresh as refresh_preferences
+            from .task_errors import refresh as refresh_task_errors
+            preferences=refresh_preferences(store,data);task_errors=refresh_task_errors(store,data)
             return {'learning':learning,'calibration':{k:calibration.get(k) for k in ('date','n','enough','line','fresh')},
+                    'preferences':{**{k:(preferences.get(k) or {}).get('value') for k in ('detail','bullet_length','merge_duplicates')},'fresh':preferences.get('fresh')},
+                    'task_errors':{'classes':(task_errors.get('distribution') or {}).get('classes') or {},'review':task_errors.get('review') or [],'fresh':task_errors.get('fresh')},
                     'team_effect':{k:team_effect.get(k) for k in ('right','wrong','clusters','team_samples','fresh')},
                     'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],

@@ -211,6 +211,105 @@ bir hatayı ödeyip barajı yeniden küresel eşiğin altına çekebiliyordu; on
 eşleştiğini söyler, hata ise **başkasının sesiyle de** eşleştiğini söyler ve baraj hakkındaki tek argüman
 ikincisidir.
 
+## Özet tercihleri (1.2.86, #8)
+
+`meeting_os/preferences.py`. Özet maddelerine verdiğiniz kararlardan (`insight_edits`: **Düzelt · Kaldır ·
+Doğru**) **en fazla üç** sınırlı tercih çıkarılır. Hiçbiri model ağırlığı değiştirmez; tek etkisi analiz
+istemine eklenen **tek bir sabit cümle** ve özet hedefinin ±%25 kaydırılmasıdır.
+
+| Tercih | Değerler | Kanıt |
+| --- | --- | --- |
+| `detail` | `kısa` · `orta` · `ayrıntılı` | "Gereksiz ayrıntı" nedeniyle kaldırmalar ↔ maddeyi **uzatan** düzeltmeler |
+| `bullet_length` | `kısa` · `uzun` | **Yalnız anlatım** düzeltmelerinde, sizin metninizin model metnine oranının **medyanı** (≤0,85 kısa; ≥1,15 uzun) |
+| `merge_duplicates` | `az` · `çok` | "Tekrar" nedeniyle kaldırmalar |
+
+### Üç kural
+
+**1. Gerçek düzeltme buluta çıkmaz.** İsteme eklenen cümle `preferences.TEMPLATES` tablosundan seçilir;
+tablo kapalıdır. Sizin yazdığınız hiçbir kelime, hiçbir ad, hiçbir sayı bu yoldan dışarı çıkamaz. Bütçe
+**≤300 token** (`preferences.PROMPT_TOKEN_BUDGET`) ve **ek model çağrısı sıfır** — cümle mevcut SYSTEM
+isteminin sonuna eklenir, ikinci bir istek atılmaz.
+
+```
+Kullanıcı tercihi: özette ana hatlar yeterli, ayrıntıya girme; maddeler kısa olsun (en fazla 20 kelime);
+aynı konudaki tekrarları tek maddede birleştir. Bu tercih yalnızca anlatım biçimidir; hiçbir konuyu,
+sayıyı, adı veya kararı atlama.
+```
+
+Son cümle her zaman eklenir: bu iterasyonun kabul ölçütü **"daha az düzenleme **ve** kaçırılan konu
+artmasın"** çiftidir, tek başına "daha kısa" değil.
+
+**2. Olgusal düzeltme üslup tercihi değildir.** `preferences.classify_edit` bir düzeltmede **sayı**, **ad**
+veya **olumsuzluk** değiştiyse onu `factual` sayar ve uzunluk hesabına **hiç** katmaz. Türkçe her cümlenin
+ilk kelimesini büyük harfle yazdığı için kural bilerek temkinlidir: bir düzeltme cümlenin baştaki büyük
+harfli kelimesini tamamen değiştiriyorsa da `factual` sayılır. Bir üslup örneğini kaybetmek ucuzdur; olgu
+düzelten bir kararı "kısa madde seviyor" diye öğrenmek değildir.
+
+**3. Bir toplantı tercih değildir.** Her değer **en az üç farklı toplantıdan** en az üç karar ister
+(`MIN_MEETINGS`, `MIN_EVIDENCE`). Altındaysa değer `None` olur ve isteme **hiçbir şey** eklenmez.
+`merge_duplicates = az` daha yüksek bir bar ister (`MIN_AGAINST`, altı kaldırma): "hiç tekrar kaldırmadı"
+kanıtın zayıf tarafıdır.
+
+`summary_target` yalnızca `detail` ile ve **±%25** oynar; `SUMMARY_MIN`/`SUMMARY_MAX` (6–24) sınırları
+aynen geçerlidir. Toplantının uzunluğu madde sayısına hâlâ tek başına karar verir.
+
+Dosya: `<data_dir>/quality/preferences.json` — değerler ve **kanıt sayıları** (kaç kaldırma, kaç anlatım
+düzeltmesi, kaç toplantı, medyan oran). Saatlik boştaki bakım geçişi günde en fazla bir kez yeniden
+hesaplar (`preferences.refresh`); analiz yalnız dosyayı **okur**, kendi hesabını yapmaz.
+
+## Görev hata sınıfları (1.2.86, #9)
+
+`meeting_os/task_errors.py`. #3'te ayrılan **"Çıkarım hatası"** işaretli görev düzeltmeleri, görevin kendi
+**kanıt alıntısından** ve kullanıcının değiştirdiği **alandan** sabit sınıflara ayrılır:
+
+| Sınıf | Ne zaman |
+| --- | --- |
+| `reported_speech` | alıntıda "dedi ki / söyledi / aktardı" kalıbı var — başkasının sözü aktarılmış |
+| `conditional` | mevcut `intelligence.commitment_doubt` (koşul, olumsuzlama, devretme) alıntıda eşleşiyor |
+| `mic_echo` | kanıt yalnız mikrofon satırlarından ya da `possible_echo` bayraklı — **ve** değişen alan sahip |
+| `date_parse` | değişen alan `due_date` / `due_text` |
+| `owner_attribution` | değişen alan `owner`, yukarıdakilerin hiçbiri değil |
+| `other` | başlık değişikliği ve geri kalan her şey |
+
+**Nedeni bilinmeyen veya "Sonradan değişti" işaretli değişiklik hiç sayılmaz.** Sayaç yereldir ve
+`<data_dir>/quality/task-errors.json` içinde durur: **90 günlük** dağılım, **30 günlük** pencere ve
+kararın kendisi.
+
+### İlk uyarlama: yalnız daha çok inceleme
+
+Bir sınıf 30 günde **≥5 hata** yapmış **ve** o pencerenin **≥%30**'unu oluşturuyorsa (iki bar birden,
+`MIN_ERRORS` / `MIN_SHARE`), analiz o sınıfa giren **yeni** maddeleri `needs_review=True` ile döndürür.
+
+- **Sahip hiçbir zaman kendiliğinden değişmez**, tarih değişmez, madde düşmez. Tek etki Kontrol rozetidir.
+- **Kişiye bağlı kural üretilmez.** Sınıflar kanıtın biçimi hakkındadır; "bu işi hep Ayşe yapar" diye bir
+  kural ne vardır ne de üretilebilir — sayaçlarda ad geçmez.
+- `other` hiçbir zaman uyarlamaya girmez: "geri kalan her şey" bir hata biçimi değildir.
+
+Dağılım **yalnız sayı** olarak `learning.summary`'nin `task_errors` bloğunda ve günlük özetin
+`task_error_<sınıf>` oranlarında görünür; ikisi de `telemetry_schema` beyaz listesinden geçer.
+
+```json
+"task_errors": { "days": 90, "total": 12,
+                 "classes": { "reported_speech": 5, "conditional": 2, "mic_echo": 1,
+                              "date_parse": 3, "owner_attribution": 1, "other": 0 } }
+```
+
+### Kabul nasıl ölçülür
+
+Tek başına "sahip düzeltmesi azaldı" bir başarı değildir: her şeyi sahipsiz bırakan bir model de aynı
+sayıyı düşürür. `scripts/benchmark-analysis-cloud.py` bu yüzden her vaka ve toplam için **birlikte**
+raporlar (bu hesap **çevrimdışıdır**, hiçbir istek atmaz):
+
+- `recall` — kurgu referans görevlerinden kaçı yakalandı,
+- `precision` — üretilen görevlerden kaçı gerçek bir referans göreve karşılık geliyor,
+- `owner_mismatch` / `owner_abstained` — sahibi yanlış olanlar ve **çekimser kalınanlar** ayrı ayrı,
+- `due_mismatch` — sahibi doğru olup söylenen tarihi tutmayanlar.
+
+`--prefs` bayrağı (`--prefs detail=kısa,bullet_length=kısa,merge_duplicates=çok`, çıplak hâli
+`PREFS_DEFAULT`) **sabit şablonu** isteme enjekte eder; ileride ücretli bir koşuda "tercihli / tercihsiz"
+karşılaştırması yapılabilsin diye. Bayrak yalnız tablodaki ad/değer çiftlerini kabul eder — serbest metin
+bu yoldan isteme giremez.
+
 ## Saklama
 
 - **90 gün / 20 MB.** Saatlik bakım geçişi (`storage_housekeeping`) önce süresi dolanları, sonra bütçe
@@ -229,5 +328,11 @@ meeting_os quality calibrate   # eşik ızgarası ve öneri (hiçbir şeyi deği
 meeting_os reports heartbeat   # learning bloğu dahil nabız
 ```
 
+```bash
+meeting_os quality preferences  # özet tercihleri: değerler + kanıt sayıları (yalnız ölçer)
+meeting_os quality task-errors  # görev hata sınıfı dağılımı ve hangi sınıf daha çok inceleniyor
+```
+
 Python'dan: `learning.events(store, since=...)`, `learning.summary(store, days=7)`,
-`learning.team_stopwatch(store)`, `store.team_profile_effect(store)`, `quality.calibrate(store, data_dir)`.
+`learning.team_stopwatch(store)`, `store.team_profile_effect(store)`, `quality.calibrate(store, data_dir)`,
+`preferences.derive(store)`, `task_errors.measure(store)`.

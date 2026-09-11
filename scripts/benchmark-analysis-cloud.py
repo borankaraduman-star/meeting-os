@@ -40,6 +40,24 @@ ENGLISH=re.compile(r'(?i)(?<![\wğüşıöçĞÜŞİÖÇ])(the|and|will|that|thi
 ISO_DATE=re.compile(r'\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b')
 
 
+PREFS_DEFAULT='detail=kısa,bullet_length=kısa,merge_duplicates=çok'
+
+
+def parse_prefs(value):
+    """`--prefs` into the mapping `analyze_rows` takes. Only names and values the template table knows are
+    accepted: the flag exists to test a FIXED sentence, and free text must not be able to enter a prompt
+    through it."""
+    if not value:return {}
+    from meeting_os.preferences import KEYS,TEMPLATES
+    out={}
+    for part in str(value).split(','):
+        if '=' not in part:continue
+        key,_,setting=part.partition('=')
+        key,setting=key.strip(),setting.strip()
+        if key in KEYS and (key,setting) in TEMPLATES:out[key]=setting
+    return out
+
+
 def item_text(key,item):return item.get('title') if key=='actions' else item.get('text')
 
 
@@ -132,6 +150,63 @@ def missing_expected(result,case):
     return out
 
 
+def accuracy(result,case):
+    """Task capture and task correctness, separated (Codex #9).
+
+    The acceptance rule for the task adaptation is explicitly a PAIR: owner corrections must fall AND
+    recall must not. A run that abstains from every owner scores zero `owner_mismatch` and is worse, and a
+    single "missing=3" column cannot tell those two apart, so each is its own number here.
+
+    * `recall`  — reference tasks whose wording was found at all (owner and date ignored).
+    * `precision` — produced actions that match some reference task; anything else is an invented task.
+    * `owner_mismatch` / `due_mismatch` — of the tasks that WERE found, how many carry the wrong owner or
+      the wrong spoken date. Abstention (`owner=null` where the reference names one) is counted apart,
+      because refusing to guess is not the same failure as guessing wrong.
+
+    Offline: it reads the result of a run, never makes a call, and is the same arithmetic whether the run
+    came from the cloud, from a local model or from a saved JSON."""
+    gold=case.get('expected_action_fields') or []
+    actions=result.get('actions') or []
+    found=owner_bad=owner_abstained=due_bad=0
+    matched_actions=set()
+    for want in gold:
+        loose=[(i,a) for i,a in enumerate(actions) if all(normalize(t) in normalize(a.get('title','')) for t in want['title_terms'])]
+        if not loose:continue
+        found+=1
+        matched_actions.update(i for i,_ in loose)
+        owner_ok=[a for _,a in loose if normalize(a.get('owner') or '')==normalize(want.get('owner') or '')]
+        if not owner_ok:
+            owner_bad+=1
+            if want.get('owner') and not any((a.get('owner') or '').strip() for _,a in loose):owner_abstained+=1
+            continue
+        if not any(normalize(a.get('due_text') or '')==normalize(want.get('due_text') or '') for a in owner_ok):due_bad+=1
+    ratio=lambda n,d:round(n/d,3) if d else None
+    return {'expected':len(gold),'found':found,'produced':len(actions),'matched_actions':len(matched_actions),
+            'recall':ratio(found,len(gold)),'precision':ratio(len(matched_actions),len(actions)),
+            'owner_mismatch':owner_bad,'owner_abstained':owner_abstained,'due_mismatch':due_bad,
+            'owner_accuracy':ratio(found-owner_bad,found),'due_accuracy':ratio(found-owner_bad-due_bad,found)}
+
+
+def totals(results):
+    """The same numbers pooled over every case and repeat: numerators and denominators, never a mean of
+    rates. A run with no scored case reports `null`, not 100 %."""
+    keys=('expected','found','produced','matched_actions','owner_mismatch','owner_abstained','due_mismatch')
+    out={k:0 for k in keys};out['cases']=0;out['failed_cases']=0
+    for item in results:
+        stats=item.get('accuracy')
+        if not stats:
+            out['failed_cases']+=1
+            continue
+        out['cases']+=1
+        for k in keys:out[k]+=int(stats.get(k) or 0)
+    ratio=lambda n,d:round(n/d,3) if d else None
+    out['recall']=ratio(out['found'],out['expected'])
+    out['precision']=ratio(out['matched_actions'],out['produced'])
+    out['owner_accuracy']=ratio(out['found']-out['owner_mismatch'],out['found'])
+    out['due_accuracy']=ratio(out['found']-out['owner_mismatch']-out['due_mismatch'],out['found'])
+    return out
+
+
 def evidence_stats(result,rows):
     """Every stored quote must still be a literal substring of its segment; a miss is a harness bug."""
     by_id={r['id']:r['text'] for r in rows};total=bad=0
@@ -193,7 +268,14 @@ def main(argv=None):
     # One run of one fixture is an anecdote: the 10 Sep table already carried a case that passed in one run
     # and failed in the next. Three repeats is what the review asks of every candidate.
     p.add_argument('--repeat',type=int,default=1,help='run the whole case list N times (the budget still applies)')
+    # Codex #8: the preference sentence is a FIXED template, so "with" and "without" can be compared on the
+    # same fixtures without any real correction ever entering a prompt. Bare --prefs uses PREFS_DEFAULT;
+    # a value is key=value pairs, e.g. --prefs detail=kısa,bullet_length=kısa.
+    p.add_argument('--prefs',nargs='?',const=PREFS_DEFAULT,default=None,
+                   help='inject the summary preference template into the analysis prompt (fixed text, no user data)')
     args=p.parse_args(argv)
+    prefs=parse_prefs(args.prefs)
+    if args.prefs is not None and not prefs:p.error('Tanınmayan tercih; örnek: --prefs detail=kısa,bullet_length=kısa,merge_duplicates=çok')
     if not args.allow_upload:p.error('Bulut analizi için --allow-upload ile açık onay gerekir.')
     paths=[path for path in sorted(args.fixtures.glob('*.json')) if not args.case or path.stem in set(args.case)]
     if not paths:p.error('Eşleşen analiz fixture bulunamadı; hiçbir istek gönderilmedi.')
@@ -236,7 +318,7 @@ def main(argv=None):
             recorder.reset();before=dict(spend);started=time.monotonic()
             asked=llm.model_id;llm.fell_back=False   # per case: which model was ASKED, and which one answered
             try:
-                result=analyze_rows(rows,llm,glossary=case.get('glossary'),owner=case.get('owner'))   # a fixture may carry a (possibly poisoned) glossary, like a team folder would
+                result=analyze_rows(rows,llm,glossary=case.get('glossary'),owner=case.get('owner'),prefs=prefs or None)   # a fixture may carry a (possibly poisoned) glossary, like a team folder would
                 checks={'valid_evidence_schema':True,**check_fixture_analysis(result,case)}
                 leaks,elsewhere=forbidden_leaks(result,case['forbidden_action_terms'])
                 item={'case':path.stem,'run':run,'checks':checks,'passed':all(checks.values()),
@@ -245,6 +327,7 @@ def main(argv=None):
                       'evidence':{**recorder.report(result),**evidence_stats(result,rows)},
                       'forbidden_leaks':leaks,'forbidden_mentions_elsewhere':elsewhere,
                       'missing_expected':missing_expected(result,case),
+                      'accuracy':accuracy(result,case),
                       'missing_decisions':missing_decisions(result,case),
                       'missing_topics':missing_topics(result,case),
                       'duplicates':duplicates(result),
@@ -267,6 +350,8 @@ def main(argv=None):
         cost=round(spend['prompt_tokens']/1e6*rate[0]+spend['completion_tokens']/1e6*rate[1],5) if rate else None
         timing=seconds_report(results)
         payload={'model':model,'repeat':args.repeat,'cases':results,'timing':timing,
+                 'totals':totals(results),
+                 'preferences':prefs,'preference_prompt':intelligence.preference_line(prefs) if prefs else '',
                  'models_that_answered':sorted({r.get('model_answered') or model for r in results}),
                  'fell_back_cases':[r['case'] for r in results if r.get('fell_back')],
                  'spend':{**spend,'estimated_cost_usd':cost},
@@ -274,7 +359,13 @@ def main(argv=None):
                  'scope':'Kurgu fixture + sözlüksel kapılar; gerçek toplantı veya bağımsız anlam doğruluğu değildir.'}
         args.output.write_text(json.dumps(payload,ensure_ascii=False,indent=2))
         print('\n'+table(results))
-        print(f"\ncalls={spend['calls']} failed_calls={spend['failed_calls']} "
+        pooled=payload['totals']
+        print(f"\nrecall={pooled['recall']} precision={pooled['precision']} owner_mismatch={pooled['owner_mismatch']} "
+              f"owner_abstained={pooled['owner_abstained']} due_mismatch={pooled['due_mismatch']} "
+              f"owner_accuracy={pooled['owner_accuracy']} due_accuracy={pooled['due_accuracy']} "
+              f"(found {pooled['found']}/{pooled['expected']} of the reference tasks, {pooled['cases']} scored cases)")
+        if prefs:print('tercih şablonu: '+(intelligence.preference_line(prefs) or '-'))
+        print(f"calls={spend['calls']} failed_calls={spend['failed_calls']} "
               f"seconds p50={timing['p50']} p95={timing['p95']} max={timing['max']} "
               f"prompt_tokens={spend['prompt_tokens']} completion_tokens={spend['completion_tokens']} estimated_cost_usd={cost}")
         answered=payload['models_that_answered']
@@ -309,24 +400,29 @@ def scorecard_line(item):
             f"checks={sum(1 for v in checks.values() if v)}/{len(checks)} "
             f"verbatim={e['verbatim_ratio']} verified={e['verified_ratio']} "
             f"leaks={len(item['forbidden_leaks'])} missing={len(item['missing_expected'])} "
+            f"recall={item['accuracy']['recall']} prec={item['accuracy']['precision']} "
+            f"owner!={item['accuracy']['owner_mismatch']} due!={item['accuracy']['due_mismatch']} "
             f"misdec={len(item['missing_decisions'])} topics={len(item.get('missing_topics') or [])} "
             f"dupe={len(item['duplicates']['exact'])}/{len(item['duplicates']['near'])} "
             f"tr={len(item['turkish_issues'])} chunks={(item.get('coverage') or {}).get('chunks')} "
             f"{item['elapsed_seconds']}s{tail}")
 
 
-COLUMNS=('case','run','checks','verbatim','verified','leaks','missing','misdec','topics','dup','near','tr_issue','chunks','calls','failed','seconds','answered')
+COLUMNS=('case','run','checks','verbatim','verified','leaks','missing','recall','prec','owner!','due!','misdec','topics','dup','near','tr_issue','chunks','calls','failed','seconds','answered')
 
 def table(results):
     rows=[]
     for item in results:
         common=(str(item.get('calls','-')),str(item.get('failed_calls',0)),str(item.get('elapsed_seconds','-')),
                 (item.get('model_answered') or '-') if item.get('fell_back') else '=')
-        if 'error' in item:rows.append((item['case'],str(item.get('run',1)),'error')+('-',)*10+common);continue
+        if 'error' in item:rows.append((item['case'],str(item.get('run',1)),'error')+('-',)*14+common);continue
         e=item['evidence'];checks=item['checks']
         rows.append((item['case'],str(item.get('run',1)),f"{sum(1 for v in checks.values() if v)}/{len(checks)}",
             str(e['verbatim_ratio']),str(e['verified_ratio']),str(len(item['forbidden_leaks'])),
-            str(len(item['missing_expected'])),str(len(item['missing_decisions'])),str(len(item.get('missing_topics') or [])),
+            str(len(item['missing_expected'])),
+            str(item['accuracy']['recall']),str(item['accuracy']['precision']),
+            str(item['accuracy']['owner_mismatch']),str(item['accuracy']['due_mismatch']),
+            str(len(item['missing_decisions'])),str(len(item.get('missing_topics') or [])),
             str(len(item['duplicates']['exact'])),
             str(len(item['duplicates']['near'])),str(len(item['turkish_issues'])),
             str((item.get('coverage') or {}).get('chunks')))+common)
