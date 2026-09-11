@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 88 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 89 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.84](#v1284) | 2026-09-12 00:30 | v1.2.84 — Kelime döngüsü: sıralı yazım ipucu, ekipte çelişen yazım sorusu, tekrar hatası ölçümü |
 | [v1.2.83](#v1283) | 2026-09-11 23:40 | v1.2.83 — Kişi tanıma: kaynak sınıfları, ekip profiline ölçülü güven, eşik kalibrasyon önerisi |
 | [v1.2.82](#v1282) | 2026-09-11 22:40 | v1.2.82 — Tekrarlanabilir ölçüm: günlük kalite sayıları, ekip trend alarmı, gerçek boyutta senaryolar, zaman sıralı kimlik değerlendirmesi |
 | [v1.2.81](#v1281) | 2026-09-11 21:30 | v1.2.81 — Güvenilir sinyal: her karar bir kez kaydedilir, dokunulmamış tahmin başarı sayılmaz |
@@ -108,6 +109,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1284"></a>
+### v1.2.84 — Kelime döngüsü: sıralı yazım ipucu, ekipte çelişen yazım sorusu, tekrar hatası ölçümü
+
+2026-09-12 00:30 · yerel not · GitHub sürüm sayfası yok
+
+Öğrenme döngüsü serisi 5. sürüm (`docs/reviews/2026-09-11-codex-learning-loop.md` #7). Exact-only otomatik düzeltme ve yakın yazımların yalnız öneri olması aynen sürüyor.
+
+- **Yazıya çevirme ipucu sıralı:** aynı 900 karakterlik bütçede önce hâlâ yanlış çıkan öğretilmiş kelimeler (tekrar edenler), sonra son 30 günde öğretilenler, yerelde doğrulananlar, ekip kelimeleri, sözlük (kaynak sayısına göre), en son kelime dağarcığı; katlanmış biçime göre tekrarsız. Hangi terimlerin girdiği ve kaçının dışarıda kaldığı son işlem sonucunda ve raporda (yalnız sayı) görünür; `meeting_os glossary hint` gösterir.
+- **Ekipte iki yazım varsa artık en yenisi sessizce kazanmaz:** Kontrol'e "Ekipte iki yazım: X / Y — hangisi?" sorusu gelir; cevabınız yerelde öğretilir, kaynak "ekip çelişkisi" olarak kaydedilir. Yerel kuralınız her zaman sessizce kazanır; kimsenin reddi ekip çapında yasak olmaz.
+- **Tekrar hatası ölçümü:** her öğretilmiş kelime için sonraki toplantıların ham metninde aynı hatanın tekrar sayısı ve otomatik düzeltmenin yakalayıp yakalamadığı; Ayarlar → Öğrenilen kelimeler'de "3 kez tekrar etti, hepsi düzeltildi" (düzeltilmeyen varsa turuncu). Günlük kalite özeti bu sayıyı kullanır.
+- **Kural replay'i:** kayıtlı (ham metin, son metin) çiftleri bugünkü kurallarla yeniden çalıştırılır; eşleşen/eşleşmeyen/değişmeyen ve kural bazında "şimdi uygulanır / o zaman uygulandı", emekli kurallar (`quality replay` metin bölümü).
+- Testler: Python 1156, Swift 307.
 
 <a id="v1283"></a>
 ### v1.2.83 — Kişi tanıma: kaynak sınıfları, ekip profiline ölçülü güven, eşik kalibrasyon önerisi
