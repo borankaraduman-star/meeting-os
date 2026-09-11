@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 89 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 90 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.85](#v1285) | 2026-09-12 01:20 | v1.2.85 — Deney ve geri dönüş: sürümlü yerel politika, sessiz ucuz deneyler |
 | [v1.2.84](#v1284) | 2026-09-12 00:30 | v1.2.84 — Kelime döngüsü: sıralı yazım ipucu, ekipte çelişen yazım sorusu, tekrar hatası ölçümü |
 | [v1.2.83](#v1283) | 2026-09-11 23:40 | v1.2.83 — Kişi tanıma: kaynak sınıfları, ekip profiline ölçülü güven, eşik kalibrasyon önerisi |
 | [v1.2.82](#v1282) | 2026-09-11 22:40 | v1.2.82 — Tekrarlanabilir ölçüm: günlük kalite sayıları, ekip trend alarmı, gerçek boyutta senaryolar, zaman sıralı kimlik değerlendirmesi |
@@ -109,6 +110,18 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1285"></a>
+### v1.2.85 — Deney ve geri dönüş: sürümlü yerel politika, sessiz ucuz deneyler
+
+2026-09-12 01:20 · yerel not · GitHub sürüm sayfası yok
+
+Öğrenme döngüsü serisi 6. sürüm (`docs/reviews/2026-09-11-codex-learning-loop.md` #11). Bulut çağrısı yok; kayıt sırasında hiçbir deney çalışmaz.
+
+- **Politika sürümleri** (`quality/policy.json`): kimlik eşiği/marjı, Kontrol sıralaması, ipucu sıralaması; her değişiklik yeni sürüm, öncekiler saklanır; `quality policy [--rollback]` bir adım geri alır (geri alma da yeni bir sürümdür). Öncelik: politika → ayarlar → sabitler. `quality calibrate --apply` artık hem ayarları yazar hem politika sürümü açar.
+- **Sessiz deneyler:** boşta bakımda günde en fazla bir kez, üç ucuz aday çevrimdışı puanlanır: kimlik eşiği (1.2.83 kalibrasyonu, zaman sıralı ve yalnız doğrulanmış kanıt), Kontrol sıralaması (kullanıcının "düzeltildi" dediği maddeler "yenilik" sırasında daha erken mi gelirdi; son 400 cevap; "geç" onay değildir), ipucu sıralaması (kural replay'i). Sonuçlar `quality/experiments.jsonl` (7 gün / 20 MB); görev, profil, kelime tablolarına asla yazılmaz.
+- **Terfi kapalı varsayılan:** Ayarlar → Sistem → "Ölçülmüş iyileştirmeler kendiliğinden uygulansın" (kapalı). Kapalıyken yalnız öneri (kurulum kartı "otomatik uygulama kapalı"); açıkken ön kayıtlı hedef (doğru ↑, yanlış ↑ değil, n ≥ 20; sıralamada medyan konum ≥1 iyileşme) ve sınırlar (eşik 0,80–0,95, marj 0,02–0,15) tutarsa politika terfi eder, `learning_events` `policy_promote/rollback` yazar.
+- Testler: Python 1180 (24 yeni), Swift 309.
 
 <a id="v1284"></a>
 ### v1.2.84 — Kelime döngüsü: sıralı yazım ipucu, ekipte çelişen yazım sorusu, tekrar hatası ölçümü
