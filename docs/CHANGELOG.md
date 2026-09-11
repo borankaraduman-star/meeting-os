@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 87 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 88 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.83](#v1283) | 2026-09-11 23:40 | v1.2.83 — Kişi tanıma: kaynak sınıfları, ekip profiline ölçülü güven, eşik kalibrasyon önerisi |
 | [v1.2.82](#v1282) | 2026-09-11 22:40 | v1.2.82 — Tekrarlanabilir ölçüm: günlük kalite sayıları, ekip trend alarmı, gerçek boyutta senaryolar, zaman sıralı kimlik değerlendirmesi |
 | [v1.2.81](#v1281) | 2026-09-11 21:30 | v1.2.81 — Güvenilir sinyal: her karar bir kez kaydedilir, dokunulmamış tahmin başarı sayılmaz |
 | [v1.2.80](#v1280) | 2026-09-11 20:40 | v1.2.80 — Özetteki kararınız korunur; Kontrol kararları bir daha sorulmaz |
@@ -107,6 +108,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1283"></a>
+### v1.2.83 — Kişi tanıma: kaynak sınıfları, ekip profiline ölçülü güven, eşik kalibrasyon önerisi
+
+2026-09-11 23:40 · yerel not · GitHub sürüm sayfası yok
+
+Öğrenme döngüsü serisi 4. sürüm (`docs/reviews/2026-09-11-codex-learning-loop.md` #5 + #6). Üretim eşikleri değişmedi; değişiklik öneri olarak gelir.
+
+- **Ses örnekleri sınıflı:** insanın adlandırdığı yerel örnek, otomatik yerel örnek, ekipten gelen örnek. Puanlama hangi sınıfın eşleştiğini söyler. **Yalnız ekip örneğine dayanan eşleşme** otomatik ad vermez, öneri olur; ancak eşiğin 0,03 üstünü aşarsa ad verir. Bu Mac'te aynı kişinin bir insan örneği varsa ek bar kalkar.
+- **Ekip profillerinin gerçek etkisi ölçülür:** boşta bakımda günde bir kez, zaman sıralı replay ekip örnekleriyle ve onlarsız koşulur → "ekipten gelen profiller: +N doğru / −M yanlış" (kurulum kartı ve nabız `learning`). Katılım → bilgi hazır → ilk doğrulanmış yarar süreleri olay olarak kaydedilir.
+- **Eşik kalibrasyonu:** `quality calibrate` sabit bir ızgarayı (eşik 0,85/0,87/0,89 × marj 0,04/0,05/0,06) yalnız insan doğrulamalı, zaman sıralı kanıtla puanlar; yanlış ad sayısı bugünkünü aşmamak ve bilinmeyen kişide çekimserlik korunmak şartıyla en çok doğru adı veren ayarı önerir. Öneri `quality/calibration.json`'a yazılır; kurulum kartında n ≥ 20 doğrulanmış kümede görünür ("kalibrasyon önerisi: eşik 0,85 (+2 doğru, 0 yanlış, n=24)"), altında "veri yetersiz". Uygulamak isteyen `quality calibrate --apply` der (ayarlara yazılır, aralık denetimli); otomatik uygulanmaz.
+- Bir kez yanlış otomatik ad alan kişinin eşiği bir daha düşürülmez.
+- Testler: Python 1131 (+30), Swift 303. Canlı: ölçümler ilk boşta bakım geçişinden sonra görünür.
 
 <a id="v1282"></a>
 ### v1.2.82 — Tekrarlanabilir ölçüm: günlük kalite sayıları, ekip trend alarmı, gerçek boyutta senaryolar, zaman sıralı kimlik değerlendirmesi
