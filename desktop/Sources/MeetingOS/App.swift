@@ -50,14 +50,57 @@ struct Row: Identifiable, Equatable {
     var time:String { flags.contains("untimed") ? "" : String(format:"%02d:%02d",Int(start)/60,Int(start)%60) }
 }
 struct Profile:Identifiable, Equatable { let name:String; let model:String; let samples:Int; var id:String { name+model } }
-struct Runtime:Decodable { let python:String; let repo:String }
+/// Where the Python side lives. `runtime.json` in a development build names absolute paths (the venv and the
+/// checkout); in a downloaded bundle it names RELATIVE ones — "runtime/bin/python3" and "repo" — which are
+/// resolved against `Bundle.main.resourceURL`, so the app works from wherever the user dragged it.
+struct Runtime:Decodable {
+    let python:String; let repo:String
+    /// True only in a packaged app: it decides the update channel, the setup card's git rows, the shipped
+    /// invite and the PATH the children get. Absent in every runtime.json build-desktop.sh has ever written.
+    let bundled:Bool
+    /// CFBundleShortVersionString's twin, written by build-bundle.sh so the Python side and the setup card
+    /// agree about which package this is.
+    let version:String?
+    init(python:String,repo:String,bundled:Bool=false,version:String?=nil) {
+        self.python=python; self.repo=repo; self.bundled=bundled; self.version=version
+    }
+    enum Keys:String,CodingKey { case python, repo, bundled, version }
+    init(from decoder:Decoder) throws {
+        let c=try decoder.container(keyedBy:Keys.self)
+        python=try c.decode(String.self,forKey:.python)
+        repo=try c.decode(String.self,forKey:.repo)
+        bundled=try c.decodeIfPresent(Bool.self,forKey:.bundled) ?? false
+        version=try c.decodeIfPresent(String.self,forKey:.version)
+    }
+    /// A path that does not begin with "/" is inside the app. Anything absolute is left exactly as it is.
+    static func absolute(_ path:String,resources:URL?)->String {
+        guard !path.hasPrefix("/"), let resources else { return path }
+        return resources.appendingPathComponent(path).path
+    }
+    func resolved(resources:URL?)->Runtime {
+        Runtime(python:Runtime.absolute(python,resources:resources),repo:Runtime.absolute(repo,resources:resources),bundled:bundled,version:version)
+    }
+    /// `runtime/bin`, the directory the bundled python3 and the bundled ffmpeg share.
+    var binDirectory:String { (python as NSString).deletingLastPathComponent }
+    /// What every child process (the bridge and every job) gets on top of the app's own environment. Putting
+    /// the bundle's own bin directory FIRST on PATH is the whole point: `shutil.which('ffmpeg')`, which every
+    /// assembly pass calls, has to find the ffmpeg inside the app on a Mac that has never heard of Homebrew.
+    /// A development build changes nothing — the venv's python and the Mac's own ffmpeg are already on PATH.
+    func childEnvironment(path:String?)->[String:String] {
+        guard bundled, !binDirectory.isEmpty else { return [:] }
+        let rest=(path ?? "").isEmpty ? "/usr/bin:/bin:/usr/sbin:/sbin" : path!
+        return ["PATH":binDirectory+":"+rest]
+    }
+    var childEnvironment:[String:String] { childEnvironment(path:ProcessInfo.processInfo.environment["PATH"]) }
+}
 
 /// One bridge call. `timeout` is the watchdog: ten seconds is right for the poll and for everything the user
 /// is waiting on, and wrong for the hourly housekeeping sweep, whose FLAC archive pass takes seconds per
 /// meeting and was being SIGTERMed mid-archive every hour. Callers that know they are slow pass their own.
 func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) throws -> [String:Any] {
     let p=Process(); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os.desktop"]; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo)
-    let key=OpenRouterCredential.environment(); if !key.isEmpty { p.environment=ProcessInfo.processInfo.environment.merging(key) { _,new in new } }
+    let extra=OpenRouterCredential.environment().merging(runtime.childEnvironment) { _,new in new }
+    if !extra.isEmpty { p.environment=ProcessInfo.processInfo.environment.merging(extra) { _,new in new } }
     let input=Pipe(), output=Pipe(); p.standardInput=input; p.standardOutput=output; p.standardError=FileHandle.nullDevice
     try p.run()
     let deadline=DispatchWorkItem { if p.isRunning { kill(-p.processIdentifier,SIGTERM); p.terminate() } }
@@ -110,8 +153,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     @Published var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
     let playback=PlaybackState()   // which span is playing; observed only by the play buttons, not the transcript layout
     init() {
-        let url=Bundle.main.resourceURL!.appendingPathComponent("runtime.json")
-        runtime=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
+        let resources=Bundle.main.resourceURL
+        let url=resources!.appendingPathComponent("runtime.json")
+        let declared=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
+        runtime=declared.resolved(resources:resources)
         AppDelegate.model=self
         let pressure=DispatchSource.makeMemoryPressureSource(eventMask:[.warning,.critical],queue:.main)
         pressure.setEventHandler { [weak self] in Task { @MainActor in self?.memoryPressureAt=Date(); self?.stopForResources() } }
@@ -421,7 +466,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             let zoomOpen=zoomMeetingOpen || recordProcess != nil
             let throttled = !JobPriority.environment(args:args,zoomOpen:zoomOpen,idle:idle).isEmpty
             if !isRecord { jobKind=args.first;jobStopsOnPressure=ResourceGuard.stopsOnPressure(jobArguments:args); progressURL=progress;jobStarted=Date();jobLowPriority=throttled;jobs.jobProgress="İşlem başlatılıyor" }
-            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(jobEnvironment) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomOpen,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomOpen,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
+            let p=Process();p.environment=ProcessInfo.processInfo.environment.merging(["MEETING_OS_PROGRESS_PATH":progress.path]) { _,new in new }.merging(jobEnvironment) { _,new in new }.merging(JobPriority.environment(args:args,zoomOpen:zoomOpen,idle:idle)) { _,new in new }.merging(["MEETING_OS_LOW_PRIORITY_FLAG":lowPriorityFlag.path]) { _,new in new }.merging(OpenRouterCredential.environment()) { _,new in new }.merging(runtime.childEnvironment) { _,new in new };p.qualityOfService=JobPriority.qos(args:args,zoomOpen:zoomOpen,idle:idle); p.executableURL=URL(fileURLWithPath:runtime.python); p.arguments=["-m","meeting_os"]+args; p.currentDirectoryURL=URL(fileURLWithPath:runtime.repo); p.standardOutput=handle; p.standardError=handle
             p.terminationHandler={ [weak self] process in
                 try? handle.close()
                 let jobError=ErrorPresentation.logSummary(log)
@@ -632,6 +677,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     @Published var teamTarget=TeamTarget.off
     @Published var teamConfigured=false
     @Published var teamJoin:TeamJoinOutcome?
+    /// Whether this is a downloaded, self-contained app rather than a checkout. Read by the setup card (no
+    /// git rows), the welcome screen and the update channel.
+    var bundled:Bool { runtime.bundled }
+    /// Set when the invite that shipped inside the bundle could not be applied — then, and only then, the
+    /// welcome screen puts the paste field back, because otherwise there is no way in at all.
+    @Published var bundleInviteFailed=false
+    /// A shipped invite is still on its way in: the welcome screen must not ask for one it already has.
+    var bundleInvitePending:Bool { bundled && !bundleInviteFailed && BundleInvite.exists(resources:Bundle.main.resourceURL) }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false
     /// Per-second recording state lives on its own object: the panel and the menu bar observe it, the main

@@ -40,7 +40,9 @@ paketteki ffmpeg'i bulsun (Swift `jobEnvironment` + bridge `Process.environment`
    `requirements-macos-tested.txt` içinden bulut yolunun gerektirdiği alt küme (numpy, scipy, soundfile,
    huggingface-hub, resemblyzer + torch, silero-vad, sherpa-onnx, librosa/numba/llvmlite, scikit-learn, webrtcvad,
    setuptools) + `imageio-ffmpeg` (statik ffmpeg ikilisi → `runtime/bin/ffmpeg` kopyası). mlx, mlx-lm, mlx-whisper,
-   outlines, transformers, pyarrow, torchaudio PAKETE GİRMEZ (yerel model dönemi). `pip cache purge`, `__pycache__`,
+   outlines, transformers, pyarrow PAKETE GİRMEZ (yerel model dönemi). torchaudio 4 MB ile GİRER: tasarımın
+   ilk hâli onu da dışarıda bırakıyordu, ama `silero_vad/utils_vad.py` modül düzeyinde `import torchaudio`
+   yapar, yani `import silero_vad` (her VAD geçişi) onsuz patlar. `pip cache purge`, `__pycache__`,
    `*/tests/`, `*.dist-info/RECORD` dışı gereksizler silinir; hedef ≤ 1,3 GB.
 3. `repo/`: yukarıdaki dosyalar `rsync` ile; `.git`, `build/*` (MeetingCapture.app hariç), `models/*` (sherpa hariç),
    `tests/`, `desktop/` girmez.
