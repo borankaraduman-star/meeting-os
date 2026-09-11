@@ -1,15 +1,16 @@
 # Meeting OS — Başlangıç (ekip arkadaşları için)
 
-Canlı sürüm (paylaşılabilir sayfa): https://claude.ai/code/artifact/c82309a9-1730-4b60-b1f4-d9f4ceadfdb1
+Canlı sürüm, görselli (paylaşılabilir sayfa): https://claude.ai/code/artifact/c82309a9-1730-4b60-b1f4-d9f4ceadfdb1
 
-**Şartlar:** Apple Silicon Mac (M1 ve sonrası), macOS 15+. Boran'ın gönderdiği indirme bağlantısı (ekip daveti ve anahtar paketin içindedir).
+**Şartlar:** Apple Silicon Mac (M1 ve sonrası), macOS 15+. Boran'dan iki bağlantı: uygulamanın indirme bağlantısı ve size özel `meetingos://…` kişisel bağlantı (yazıya çevirme anahtarınız içindedir).
 
-**Kurulum (5 adım):**
+**Kurulum (6 adım):**
 1. Bağlantıdan `Meeting-OS-1.2.x.zip` indirin (≈350 MB); çift tıklayınca *Meeting OS* çıkar.
 2. *Meeting OS*'u Finder'daki *Uygulamalar* klasörüne sürükleyin.
 3. Açın. "Apple bu uygulamayı doğrulayamadı" derse: *Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç* (yalnız ilk sefer).
-4. Adınızı yazın (mikrofonunuz bu adla etiketlenir). Ekip bağlantısı kendiliğinden kurulur.
-5. Üç izni verin: Mikrofon, Ekran Kaydı (karşı tarafın sesi için; görüntü alınmaz), Bildirimler. *Kurulum durumu* kartı yeşilse hazırsınız.
+4. Adınızı yazın (mikrofonunuz bu adla etiketlenir).
+5. Kişisel bağlantınıza tıklayın (tıklanmıyorsa karşılama ekranındaki *Kişisel bağlantınızı yapıştırın* alanına yapıştırıp *Katıl*). Ekip ve anahtar böyle gelir.
+6. Üç izni verin: Mikrofon, Ekran Kaydı (karşı tarafın sesi için; görüntü alınmaz), Bildirimler. *Kurulum durumu* kartı yeşilse hazırsınız.
 
 **İlk toplantı:** Zoom başlayınca "Kaydedeyim mi?" sorar → *Kaydet*. Diğer uygulamalarda menü çubuğundaki simgeden *Kaydı başlat* ya da ⌃⌥R. Bitince *Kaydı bitir*; birkaç dakikada transkript, özet ve görevler gelir.
 
