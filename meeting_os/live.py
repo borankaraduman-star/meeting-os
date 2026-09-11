@@ -36,6 +36,15 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     from .recovery import current_job_metadata
     mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True,
         **({'cloud_intent':'capture'} if cloud else {})}) if store else None   # marker only: finalize still writes cloud_mode
+    def learn(action,outcome='applied'):
+        """One learning_event from the recorder. Bounded, local, never on the audio path: the write happens
+        once at the start and once at the end, and a failure here is silent (meeting_os/learning.py)."""
+        if store is None or mid is None: return
+        try:
+            from .learning import record_event
+            record_event(store,action,object=mid,scope='meeting',outcome=outcome)
+        except Exception: pass
+    learn('record_start')
     relaunches=0; relaunched_at=[]; last_end=0.0; last_chunk_at=None; per_source={}
     process=None; guardian=None; lifeline=None; thread=None; launched_at=0.0; error_mark=0; marker=None
     last_beat=0.0   # read by the finally; must exist before the first thing that can fail (model warm-up)
@@ -120,6 +129,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     except Exception as exc:
         if store: store.status(mid,'failed')
         note_error(f'Kayıt yardımcısı başlatılamadı: {type(exc).__name__}: {exc}')
+        learn('record_stop','noop')   # a start with no stop would read as a recording still running
         raise
     started=time.monotonic()
     print(json.dumps({'meeting':mid,'capture_dir':str(directory),'status':'capturing'},ensure_ascii=False),flush=True)
@@ -263,4 +273,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         # "Kayıt tamamlanamadı", nothing auto-finalizes and retry_candidates never learns the meeting exists.
         # A capture that produced nothing has nothing to hand over and stays a plain error.
         if captured[0] or outcome=='canceled': completed(outcome or 'provisional')
+        # The stop is recorded however the recording ended — a recording that started and left no stop would
+        # read as one still running. A cancel is `reverted`; a capture that produced nothing is `noop`.
+        learn('record_stop','reverted' if outcome=='canceled' else ('applied' if captured[0] else 'noop'))
     return mid

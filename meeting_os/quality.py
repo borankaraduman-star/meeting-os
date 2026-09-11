@@ -36,24 +36,47 @@ def wer_no_filler(reference, hypothesis):
     return wer(strip_fillers(reference),strip_fillers(hypothesis))
 
 
+def _reference_item(store, mid, sid, original, reference, via, _meta):
+    """One (model said / user meant) pair, with the audio and the model behind it, or None when the pair is a
+    no-op. Shared by the two ways a user corrects text: the Düzelt box and "Düzelt ve öğret"."""
+    if reference is None or original is None: return None
+    if reference.strip()==original.strip(): return None
+    seg=store.db.execute('SELECT start,end,source,payload FROM segments WHERE meeting=? AND id=?',(mid,sid)).fetchone()
+    if not seg: return None
+    payload=json.loads(seg['payload'])
+    if mid not in _meta: _meta[mid]=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+    paths=_meta[mid].get('paths') or {}
+    return {'meeting':mid,'segment':sid,'start':seg['start'],'end':seg['end'],'source':seg['source'],'audio':paths.get(seg['source']) or paths.get('system'),
+            'model':(payload.get('metrics') or {}).get('model') or _meta[mid].get('model'),'model_text':original,'reference':reference,'via':via,
+            'wer':wer(reference,original),'wer_no_filler':wer_no_filler(reference,original)}
+
+
 def reference_set(store):
     """Segments whose text the user corrected: the corrected text is the reference, the model text the hypothesis.
-    An edit later reverted to the original (a no-op pair) is not a correction and is dropped."""
-    items=[]
+    An edit later reverted to the original (a no-op pair) is not a correction and is dropped.
+
+    BOTH ways of correcting a word count. The Düzelt box writes `text_edits`; "Düzelt ve öğret" (the word the
+    user teaches from the transcript) rewrites the segment itself and writes no edit row at all, so half of
+    the user's text corrections were invisible to every measurement built on this set — the teaching path,
+    which is the one the product pushes (Codex, 11 Sep 2026, P0 #1). A segment that has both is counted once:
+    the hand-typed text is the user's last word on it."""
+    items=[];meta={}
     first={};latest={}
     for row in store.db.execute('SELECT meeting,segment,previous,replacement,created FROM text_edits ORDER BY created,id'):
         first.setdefault((row['meeting'],row['segment']),row);latest[(row['meeting'],row['segment'])]=row
     for (mid,sid),edit in latest.items():
-        seg=store.db.execute('SELECT start,end,source,payload FROM segments WHERE meeting=? AND id=?',(mid,sid)).fetchone()
+        seg=store.db.execute('SELECT payload FROM segments WHERE meeting=? AND id=?',(mid,sid)).fetchone()
         if not seg: continue
-        payload=json.loads(seg['payload']);meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
-        original=payload.get('original_text') or first[(mid,sid)]['previous']
-        if edit['replacement'].strip()==(original or '').strip(): continue
-        paths=meta.get('paths') or {}
-        items.append({'meeting':mid,'segment':sid,'start':seg['start'],'end':seg['end'],'source':seg['source'],'audio':paths.get(seg['source']) or paths.get('system'),
-                      'model':(payload.get('metrics') or {}).get('model') or meta.get('model'),'model_text':original,'reference':edit['replacement'],
-                      'wer':wer(edit['replacement'],original),'wer_no_filler':wer_no_filler(edit['replacement'],original)})
-    return items
+        original=json.loads(seg['payload']).get('original_text') or first[(mid,sid)]['previous']
+        item=_reference_item(store,mid,sid,original,edit['replacement'],'text_edit',meta)
+        if item: items.append(item)
+    for row in store.db.execute("""SELECT meeting,id,payload FROM segments
+            WHERE json_extract(payload,'$.metrics.word_corrections') IS NOT NULL AND json_extract(payload,'$.pre_word_text') IS NOT NULL"""):
+        if (row['meeting'],row['id']) in latest: continue   # the user later retyped this segment; that is the reference
+        payload=json.loads(row['payload'])
+        item=_reference_item(store,row['meeting'],row['id'],payload.get('pre_word_text'),payload.get('word_text') or payload.get('text'),'word_teach',meta)
+        if item: items.append(item)
+    return sorted(items,key=lambda r:(r['meeting'],r['segment']))
 
 
 def _pinned(store):
@@ -66,17 +89,32 @@ def _pinned(store):
     return out
 
 def identity_report(store):
-    """Per cluster: what the voiceprint said vs what the user finally called it."""
+    """Per cluster: what the voiceprint said vs what the user finally called it.
+
+    An automatic name the user NEVER TOUCHED is `unreviewed`, not a success. The transcript shows the
+    automatic name in `speaker_name`, so comparing the final label with the guess used to agree with itself
+    and every untouched cluster was counted as proof the model was right — twenty automatic names nobody
+    looked at read as twenty human confirmations (Codex, 11 Sep 2026, P0 #1, the risk paragraph). Only a
+    naming the user actually made judges the guess: it either confirms it (`verified`) or overrules it
+    (`falsified`), compared folded, so retyping "Ayşe" as "Ayse" confirms the person.
+
+    `auto_correct`/`auto_wrong` stay as the names the scorecard and the reports already read; what changed is
+    that `auto_correct` now means verified, and `auto_precision` is measured over reviewed clusters only."""
+    from .store import fold_name
     corrected={(r['meeting'],r['speaker']):r['name'] for r in store.db.execute('SELECT meeting,speaker,name FROM corrections WHERE speaker NOT LIKE ? ORDER BY created',('segment:%',))}
     pinned=_pinned(store)
-    seen=set();auto_ok=auto_wrong=suggest_ok=suggest_wrong=missed=unnamed=0
+    seen=set();auto_ok=auto_wrong=auto_untouched=suggest_ok=suggest_wrong=missed=unnamed=0
     for row in store.db.execute("SELECT id,meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
         p=json.loads(row['payload']);m=p.get('metrics') or {};cl=m.get('cluster')
         if cl is None or (row['meeting'],cl) in seen or (row['meeting'],row['id']) in pinned: continue   # a pinned piece is not the cluster's verdict
         seen.add((row['meeting'],cl));ident=m.get('identity') or {}
-        auto=ident.get('name');suggested=ident.get('suggested');final=corrected.get((row['meeting'],row['speaker'])) or row['speaker_name']
+        auto=ident.get('name');suggested=ident.get('suggested')
+        # What the user decided, if anything: a naming row for this cluster, or the verdict a naming settled.
+        decided=corrected.get((row['meeting'],row['speaker'])) or ident.get('settled')
+        final=decided or row['speaker_name']
         if auto:
-            if final==auto: auto_ok+=1
+            if not decided: auto_untouched+=1
+            elif fold_name(decided)==fold_name(auto): auto_ok+=1
             else: auto_wrong+=1
         elif suggested:
             if final==suggested: suggest_ok+=1
@@ -84,8 +122,9 @@ def identity_report(store):
             else: unnamed+=1
         elif final: missed+=1
         else: unnamed+=1
-    total=auto_ok+auto_wrong+suggest_ok+suggest_wrong+missed+unnamed
-    return {'clusters':total,'auto_correct':auto_ok,'auto_wrong':auto_wrong,'suggestion_confirmed':suggest_ok,'suggestion_rejected':suggest_wrong,'missed_known':missed,'still_unnamed':unnamed,
+    total=auto_ok+auto_wrong+auto_untouched+suggest_ok+suggest_wrong+missed+unnamed
+    return {'clusters':total,'auto_verified':auto_ok,'auto_falsified':auto_wrong,'auto_unreviewed':auto_untouched,
+            'auto_correct':auto_ok,'auto_wrong':auto_wrong,'suggestion_confirmed':suggest_ok,'suggestion_rejected':suggest_wrong,'missed_known':missed,'still_unnamed':unnamed,
             'auto_precision':round(auto_ok/(auto_ok+auto_wrong),3) if auto_ok+auto_wrong else None}
 
 

@@ -762,10 +762,14 @@ MEETING_KEY = 'meeting'
 def _anonymous(report):
     """One diagnostic report with everything that names a meeting or a person taken out: the transcript gone,
     the title emptied, the meeting id replaced by its eight-character hash, the speakers back to S1, S2…
+    …and then the whole thing rebuilt from the upload whitelist, so the diagnostic half travels by the same
+    contract as the error journal does: `_errors` log lines, a probe's sentence, the updater's message and
+    the newest journal messages have no field on the list and do not leave (`telemetry_schema`).
 
     This runs at UPLOAD time, not at write time, because the setting can change after the file was written:
     a report written while "Raporlara transkript metnini de ekle" was on must stop travelling the moment the
     user turns it off, and the file it was written from stays on this Mac untouched (Codex P0 #6)."""
+    from . import telemetry_schema
     clean = {k: v for k, v in report.items() if k not in TEXT_KEYS}
     for key in TITLE_KEYS:
         if key in clean: clean[key] = None
@@ -777,23 +781,38 @@ def _anonymous(report):
     if isinstance(speakers, dict) and speakers:
         clean['speakers'] = {f'S{i}': ({**s, 'name': None, 'suggested': None} if isinstance(s, dict) else s)
                              for i, s in enumerate(speakers.values(), 1)}
-    return clean, mid
+    return telemetry_schema.filter(telemetry_schema.kind_of(clean), clean), mid
+
+
+def _consented(report):
+    """With "Raporlara transkript metnini de ekle" ON the user asked for the CONTENT of their own meeting to
+    travel — the transcript and the title, and nothing else gains a licence from that switch. The diagnostic
+    half still goes through the whitelist: `last-job.log` lines can carry another meeting's paths and another
+    person's words, and no switch in the app ever promised to send those."""
+    from . import telemetry_schema
+    clean = telemetry_schema.filter(telemetry_schema.kind_of(report), report)
+    for key in TITLE_KEYS + TEXT_KEYS + (MEETING_KEY,):
+        if key in report: clean[key] = report[key]
+    speakers = report.get('speakers')
+    if isinstance(speakers, dict): clean['speakers'] = speakers
+    return clean
 
 
 def _report_for_upload(path, share_text):
     """(name on the server, bytes) for one file in this host's report folder, or (None, None) when it must not
-    leave at all. With `share_text` on the file goes as it is — that switch is the user saying so. With it off
-    the payload is the anonymous one above and the file NAME loses the meeting id too: `2026-09-10_<mid>.json`
-    is itself a meeting id, and the docs promise that one never travels."""
+    leave at all. With `share_text` on the report's own content travels under its own name — that switch is the
+    user saying so — while its diagnostics still pass the whitelist. With it off the payload is the anonymous
+    one above and the file NAME loses the meeting id too: `2026-09-10_<mid>.json` is itself a meeting id, and
+    the docs promise that one never travels."""
     try: raw = path.read_bytes()
     except OSError: return None, None
-    if share_text: return path.name, raw
     try: report = json.loads(raw.decode('utf-8'))
     except (ValueError, UnicodeDecodeError): return None, None   # unreadable: we cannot promise what is in it
     if not isinstance(report, dict): return None, None
+    if share_text:
+        return path.name, json.dumps(_consented(report), ensure_ascii=False, indent=1).encode('utf-8')
     clean, mid = _anonymous(report)
     if any(k in clean for k in TEXT_KEYS): return None, None      # belt and braces: never upload what we meant to drop
-    if clean == report: return path.name, raw                     # a heartbeat names nothing; it travels unchanged
     # Only the `_<mid>.json` tail is the meeting id; a bare `replace` also ate matching digits inside the date
     # (a meeting called "4" turned 2026-09-04 into 2026-09-0ef2d127d).
     name = path.name[:-len(f'_{mid}.json')] + f'_{clean[MEETING_KEY]}.json' if mid and path.name.endswith(f'_{mid}.json') else path.name

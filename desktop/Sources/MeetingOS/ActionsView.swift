@@ -7,7 +7,7 @@ struct ActionsView:View {
     @State var draftEdit:DraftItem?;@State var draftText=""
     /// The choice sticks: changing meetings — or relaunching — must not move the filter under the user.
     @AppStorage(ActionsFilter.key) var stored="mine"
-    @State var edit:ActionItem?;@State var title="";@State var owner="";@State var due=""
+    @State var edit:ActionItem?;@State var title="";@State var owner="";@State var due="";@State var reason:TaskEditReason = .unsaid
     var filter:String { ActionsFilter.normalize(stored) }
     /// "Bana ait" compares against the name in Ayarlar → Genel → Adınız through the same fold the bridge uses
     /// (store.fold_name): lowercasing alone left "Ayşe" and "Ayse" — and every unset name — as different people.
@@ -61,7 +61,7 @@ struct ActionsView:View {
                 HStack(spacing:10) {
                     statePicker(item); dueChip(item); Spacer(minLength:6)
                     Menu {
-                        Button("Düzenle…") { edit=item;title=item.title;owner=item.owner;due=item.due }
+                        Button("Düzenle…") { edit=item;title=item.title;owner=item.owner;due=item.due;reason = .unsaid }
                         Button("Hatırlatıcılar’a ekle") { m.addReminder(item) }.disabled(["done","dismissed"].contains(item.state)).help("Görevi Apple Hatırlatıcılar’daki varsayılan listeye ekler; kaynak toplantı ve zaman notu ile").accessibilityIdentifier("addReminder-\(item.id)")
                         Button(m.drafts.contains { $0.task==item.id && !$0.stale } ? "Taslağı yeniden hazırla" : "Taslak hazırla") { m.prepareAction(item,force:m.drafts.contains { $0.task==item.id && !$0.stale }) }.disabled(m.busy || item.stale || ["done","dismissed"].contains(item.state))
                         Button("\(item.route) için paket kaydet…") { Task { await m.exportHandoff(item) } }.disabled(item.stale || ["done","dismissed"].contains(item.state))
@@ -72,5 +72,19 @@ struct ActionsView:View {
             }.padding(20).meetingCard() }
         }.padding(24).readingColumn() }
         }
-    }.sheet(item:$draftEdit) { draft in VStack(alignment:.leading,spacing:16) { TextEditor(text:$draftText).frame(height:340);HStack { Button("Vazgeç") { draftEdit=nil };Spacer();Button("Kaydet") { Task { do { _=try await m.request(["action":"draft_update","draft":draft.id,"text":draftText]);try await m.refreshIntelligence(m.selected ?? "");draftEdit=nil } catch { m.error=error.localizedDescription } } } } }.padding(24).sheetChrome(title:"Taslağı düzenle") { draftEdit=nil }.frame(width:650) }.sheet(item:$edit) { item in VStack(alignment:.leading,spacing:16) { TextField("Görev",text:$title);TextField("Sahibi",text:$owner);TextField("Kaynakta geçen tarih",text:$due);Text("Otomatik çıkarım öneridir. Sahip ve tarihi kaynak konuşmayla doğrulayın.").font(.caption).foregroundStyle(.secondary);HStack { Button("Vazgeç") { edit=nil };Spacer();Button("Kaydet") { Task { await m.updateAction(item,changes:["title":title,"owner":owner,"due_text":due]);edit=nil } }.disabled(title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty) } }.padding(24).sheetChrome(title:"Görevi düzenle") { edit=nil }.frame(width:500) } }
+    }.sheet(item:$draftEdit) { draft in VStack(alignment:.leading,spacing:16) { TextEditor(text:$draftText).frame(height:340);HStack { Button("Vazgeç") { draftEdit=nil };Spacer();Button("Kaydet") { Task { do { _=try await m.request(["action":"draft_update","draft":draft.id,"text":draftText]);try await m.refreshIntelligence(m.selected ?? "");draftEdit=nil } catch { m.error=error.localizedDescription } } } } }.padding(24).sheetChrome(title:"Taslağı düzenle") { draftEdit=nil }.frame(width:650) }.sheet(item:$edit) { item in VStack(alignment:.leading,spacing:16) { TextField("Görev",text:$title);TextField("Sahibi",text:$owner);TextField("Kaynakta geçen tarih",text:$due);Text("Otomatik çıkarım öneridir. Sahip ve tarihi kaynak konuşmayla doğrulayın.").font(.caption).foregroundStyle(.secondary);reasonPicker;HStack { Button("Vazgeç") { edit=nil };Spacer();Button("Kaydet") { Task { await m.updateAction(item,changes:["title":title,"owner":owner,"due_text":due],reason:reason);edit=nil } }.disabled(title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty) } }.padding(24).sheetChrome(title:"Görevi düzenle") { edit=nil }.frame(width:500) } }
+    /// Optional and off by default: a change nobody explained stays unexplained rather than becoming a wrong
+    /// training label. Picking the chosen one again clears it.
+    var reasonPicker:some View {
+        VStack(alignment:.leading,spacing:6) {
+            Text("Neden değişti? (isteğe bağlı)").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing:16) {
+                ForEach(TaskEditReason.choices) { choice in
+                    Button { reason=reason.toggled(choice) } label: {
+                        Label(choice.label,systemImage:reason==choice ? "largecircle.fill.circle" : "circle").labelStyle(.titleAndIcon)
+                    }.buttonStyle(.plain).accessibilityIdentifier("taskReason-\(choice.rawValue)").accessibilityAddTraits(reason==choice ? .isSelected : [])
+                }
+            }.font(.caption)
+        }
+    }
 }

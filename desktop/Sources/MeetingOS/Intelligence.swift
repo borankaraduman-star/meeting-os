@@ -52,8 +52,10 @@ extension Model {
         guard let data=try? Data(contentsOf:url), let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return nil }
         return result["meeting"] as? String
     }
-    func updateAction(_ item:ActionItem,changes:[String:Any]) async {
-        do { _=try await request(["action":"action_update","task":item.id,"changes":changes]); try await refreshIntelligence(selected ?? "") } catch { self.error=error.localizedDescription }
+    func updateAction(_ item:ActionItem,changes:[String:Any],reason:TaskEditReason = .unsaid) async {
+        var body:[String:Any]=["action":"action_update","task":item.id,"changes":changes]
+        if let reason=reason.payload { body["reason"]=reason }   // absent, not empty: "unknown" is a real answer
+        do { _=try await request(body); try await refreshIntelligence(selected ?? "") } catch { self.error=error.localizedDescription }
     }
     func prepareAction(_ item:ActionItem,force:Bool=false) {
         activity="Görev için yerel taslak hazırlanıyor…"
