@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 User=meetingos
 Group=meetingos
-ExecStart=/usr/bin/python3 /opt/meetingos-sync/sync_server.py --root /var/lib/meetingos-sync
+ExecStart=/usr/bin/python3 /opt/meetingos-sync/sync_server.py --root /var/lib/meetingos-sync --downloads /var/lib/meetingos-sync/_downloads --download-secret-file /etc/meetingos-sync/download.secret
 Restart=always
 RestartSec=3
 
@@ -24,6 +24,8 @@ ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
 ReadWritePaths=/var/lib/meetingos-sync
+# /etc/meetingos-sync/download.secret is root:meetingos 0640 and is only ever read (ProtectSystem=strict
+# already makes /etc read-only for this unit).
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes

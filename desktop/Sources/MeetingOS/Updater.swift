@@ -54,17 +54,65 @@ enum UpdateStatusLine {
         let f=DateFormatter(); f.dateFormat="yyyy-MM-dd HH:mm:ss"; f.locale=Locale(identifier:"en_US_POSIX"); f.timeZone=TimeZone.current
         return f.date(from:raw)
     }
+    /// The bundle channel's own states (meeting_os/updater.py): the download is minutes long and the app is
+    /// still open for it, so unlike a git rebuild these are worth saying out loud.
+    static let downloadingPrefix="Yeni sürüm indiriliyor"
+    static let swappingMessage="Yeni sürüm yerine konuyor · uygulama yeniden açılacak"
     /// nil = say nothing. `failed` is also worth a notification; the caller decides that from the state.
-    static func line(state:String,message:String,time:String,now:Date=Date())->String? {
+    /// `percent` is `update-status.json`'s `percent` key (bundle channel only, 0 when it is not there); the
+    /// worker also writes the same number into `message`, so a caller that does not read the key still shows
+    /// a percentage.
+    static func line(state:String,message:String,time:String,percent:Int=0,now:Date=Date())->String? {
         switch state {
         case "done": return "Güncelleme tamam · "+message
         case "failed": return "Güncelleme başarısız · "+message
         case "refused": return "Güncelleme yapılmadı · "+message   // a recording, local edits or a second run: not a failure, no notification
+        case "downloading":
+            if percent>0 { return downloadingPrefix+" · %\(percent)" }
+            return message.isEmpty ? downloadingPrefix : message
+        case "verifying": return "Paket doğrulanıyor"
+        case "extracting": return "Paket açılıyor"
+        case "swapping": return message.isEmpty ? swappingMessage : message
         case "running":
             guard let started=parseTime(time), now.timeIntervalSince(started) >= stallSeconds else { return nil }
             return stalledMessage
         default: return nil
         }
+    }
+    /// The bundle swap moves the running .app aside, so the app has to be gone first: scripts/swap-update.sh
+    /// waits up to 60 s for the pid and then gives up, leaving the old version installed. `swapping` in the
+    /// status file is the app's cue to quit itself.
+    static func shouldQuit(state:String)->Bool { state=="swapping" }
+}
+
+/// Whether this copy runs from a self-contained app bundle (docs/BUNDLE.md) rather than a git checkout, read
+/// straight from `Contents/Resources/runtime.json`. `Runtime` in App.swift decodes the same file for the
+/// python/repo paths; this reads it again, on its own, so the update path never has to wait on that struct
+/// gaining a field — and so it can be tested without a real bundle (`override`).
+enum BundleInfo {
+    /// Test seam: a runtime.json dictionary to use instead of the running bundle's.
+    static var override:[String:Any]?
+    static var runtime:[String:Any]? {
+        if let override { return override }
+        guard let url=Bundle.main.resourceURL?.appendingPathComponent("runtime.json"),
+              let data=try? Data(contentsOf:url),
+              let dict=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { return nil }
+        return dict
+    }
+    static var bundled:Bool { runtime?["bundled"] as? Bool == true }
+    /// The bundle the app is running FROM, which is where the swap puts the new one: an app opened from
+    /// ~/Downloads updates in ~/Downloads. Never /Applications by name — the swap script uses no sudo and
+    /// must not need a writable /Applications.
+    static var appPath:String { Bundle.main.bundleURL.path }
+    /// The `update_start` bridge request. The git channel needs nothing; the bundle channel needs the path to
+    /// replace and the pid to wait for, because scripts/swap-update.sh moves the bundle only after the app
+    /// that was running it has exited.
+    static func updateStartRequest(bundled:Bool?=nil,appPath:String?=nil,pid:Int32?=nil)->[String:Any] {
+        var request:[String:Any]=["action":"update_start"]
+        guard bundled ?? Self.bundled else { return request }
+        request["app_path"]=appPath ?? Self.appPath
+        request["pid"]=Int(pid ?? ProcessInfo.processInfo.processIdentifier)
+        return request
     }
 }
 

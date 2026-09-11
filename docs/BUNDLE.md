@@ -60,22 +60,90 @@ sistem sesi, bildirim). Davet zaten alınmışsa hiçbir şey sormaz.
 
 ## Güncelleme (paket kanalı)
 
-- Sunucu (`server/sync_server.py`): `GET /dl/<secret>/<dosya>` — `/var/lib/meetingos-sync/_downloads/` altından statik
-  dosya (zip ve `latest.json`), `secret` = `/etc/meetingos-sync/download.secret` (32+ hex; `deploy.sh` yoksa üretir).
-  Tarayıcıdan da çalışır (kimlik başlığı yok; gizli yol yeter). `HEAD` ve `Range` desteklenir (1,3 GB indirme
-  kaldığı yerden sürsün). Yanlış secret 404. `latest.json`: `{"version":"1.2.72","file":"Meeting-OS-1.2.72.zip",
-  "sha256":"…","size":n,"published":"<utc>","notes":"docs/releases/v1.2.72.md ilk satırı"}`.
-- Yayınlama: `scripts/publish-bundle.sh build/Meeting-OS-<sürüm>.zip` → scp `_downloads/`'a, `wc -c` doğrulama,
-  `latest.json` yazar, indirme bağlantısını basar: `https://hermes-vps.tail2d8c7e.ts.net/meetingos/dl/<secret>/Meeting-OS-<sürüm>.zip`.
-- İstemci (`meeting_os/updater.py`): `bundled` ise `check` → `latest.json` (5 sn), sürüm karşılaştırma (`vkey`),
-  `{'available':bool,'version','size','notes'}`; `start` → zip'i `~/Library/Caches/MeetingOS/update/` altına indirir
-  (ilerleme dosyası `update-status.json`: `downloading` yüzde), sha256 doğrular, `ditto -x -k` ile açar, sonra
-  `swap-update.sh <yeni.app> <hedef.app> <pid>` betiğini `nohup`/`setsid` ile bağımsız başlatır ve uygulamaya çıkmasını
-  söyler. Betik: pid bitene kadar bekler (≤60 sn), hedefi `<hedef>.previous` olarak yana alır, yeniyi yerine koyar,
-  `open` ile açar, `.previous`'ı 7 gün sonra siler (bir sonraki güncelleme siler). Takas başarısızsa `.previous` geri
-  gelir. Uygulama kendisi indirdiği için karantina yok (`LSFileQuarantineEnabled` yok).
-- Swift (`Updater.swift`): `bundled` iken kenar çubuğu düğmesi aynı ("Güncelle ve yeniden başlat"), ama git yolu yerine
-  paket kanalını çağırır; ilerleme yüzdesi gösterir; kayıt sürerken ertelenir (mevcut kural).
+Uygulama kendini günceller: yeni zip'i indirir, sha256 ile doğrular, açar ve kendi yerine koyar. Git yolu
+(geliştirici Mac'i, `scripts/update.sh`) olduğu gibi durur; kanalı `meeting_os/updater.py` **tek başına**
+`ROOT`'a bakarak seçer — `ROOT`'un adı `repo` ve bir üstünde `bundled: true` yazan `runtime.json` varsa paket
+kanalı, yoksa git kanalı. Köprü eylemleri aynı: `update_check`, `update_start`, `update_status`.
+
+### Sunucu: `GET|HEAD /dl/<secret>/<dosya>` (ve `/meetingos/dl/…`)
+
+`server/sync_server.py` içinde, ekip eşitlemesiyle aynı portta ama ondan tamamen ayrı: `<root>/_downloads/`
+altındaki statik dosyaları verir, **kimlik başlığı yoktur** (1,3 GB'lık zip tarayıcıdan da `curl`'den de
+inebilmeli), yani **gizli yolun kendisi paroladır**. Bu yüzden yol asla günlüğe yazılmaz (`/dl/<secret>/…`
+diye maskelenir).
+
+- Seçenekler: `--downloads` (varsayılan `<root>/_downloads`), `--download-secret-file` (varsayılan
+  **`/etc/meetingos-sync/download.secret`**, 32–128 hex). Dosya yoksa veya bozuksa route **her şeye 404**
+  verir; `deploy.sh` dosyayı `openssl rand -hex 32` ile bir kez üretir, sahibi `root:meetingos`, izni `0640`
+  (servis kullanıcısı yalnız okur). Değer hiçbir zaman ekrana basılmaz, yalnız "var/yok" yazılır. Secret her
+  istekte dosyadan okunur: döndürmek için servisi yeniden başlatmak gerekmez.
+- Karşılaştırma sabit zamanlı (`hmac.compare_digest`). Dosya adı `^[A-Za-z0-9._-]{1,120}$` ve nokta ile
+  başlayamaz; sınıfta `/` yok, yani `_downloads` dışına çıkılamaz. Yanlış secret, eksik secret dosyası, kötü
+  ad ve olmayan dosya **aynı 404**'ü verir (hangisi olduğu sızmasın).
+- `Range: bytes=s-` ve `bytes=s-e` → `206` + `Content-Range` (yarıda kalan indirme sürsün), her yanıtta
+  `Accept-Ranges: bytes`; aşan aralık `416`, bozuk başlık yok sayılır. `Content-Type` uzantıdan
+  (`.zip` → `application/zip`, `.json` → `application/json`). `ETag` = yanındaki `<dosya>.sha256` varsa onun
+  özeti, yoksa `mtime-size`; `If-None-Match` → `304`. Dosya parça parça (256 KB) akıtılır, belleğe alınmaz.
+- `_downloads` bir **ekip değildir**: ekip dizinleri `sha256(token)[:32]` adlıdır, `_downloads` hiçbir
+  `/index` yanıtında görünmez ve o yoldan hiçbir şey yazılamaz (GET/HEAD dışı → 405). `server/backup.sh`
+  günlük yedeğin dışında tutar (yoksa 14 günlük yedek = ~18 GB).
+
+### Yayınlama: `sh scripts/publish-bundle.sh build/Meeting-OS-<sürüm>.zip`
+
+Sürümü dosya adından okur (`Meeting-OS-<sürüm>.zip`), `<zip>.sha256` yanında olmalıdır (yoksa hesaplar,
+varsa zip ile **eşleştiğini doğrular**), zip'i ve sha dosyasını `root@100.87.35.111:/var/lib/meetingos-sync/_downloads/`
+altına `scp`'ler, iki tarafta `wc -c` ile boyutu karşılaştırır, `chown meetingos`, en son `latest.json` yazar
+(sıra önemli: latest.json var olmayan bir dosyayı asla göstermez), sonra secret'i ssh ile okuyup **iki
+bağlantıyı** basar:
+
+    https://hermes-vps.tail2d8c7e.ts.net/meetingos/dl/<secret>/Meeting-OS-<sürüm>.zip
+    https://hermes-vps.tail2d8c7e.ts.net/meetingos/dl/<secret>/latest.json
+
+`latest.json`: `{"version":"1.2.72","file":"Meeting-OS-1.2.72.zip","sha256":"…","size":n,
+"published":"<utc>","notes":"docs/releases/v1.2.72.md ilk satırı (baştaki '# ' olmadan)"}`.
+
+### İstemci: `meeting_os/updater.py`
+
+**Secret pakette nerede:** önce `Contents/Resources/download.secret` (yalnız secret'in kendisi; `build-bundle.sh`
+bunu yazmaz, imzalarken Boran koyar — böylece secret build betiğinin çıktısında hiç bulunmaz), yoksa
+`runtime.json` içindeki `download_secret` anahtarı. İkisi de yoksa kart "Güncelleme adresi bu pakette yok"
+der ve hiçbir yere bağlanmaz. `BUNDLE_BASE_URL` = `https://hermes-vps.tail2d8c7e.ts.net/meetingos/dl/<secret>`;
+`runtime.json`'daki `download_base` anahtarı tüm adresi ezer (taşınan sunucu ve testler).
+
+- `check` → `latest.json` (5 sn, urllib, `User-Agent: MeetingOS-updater/1`), sürümü `vkey` ile sayısal
+  karşılaştırır (`1.2.10 > 1.2.9`). Yanıt git yolununkiyle **aynı sözlük**: `available`, `behind` (yeni varsa
+  1), `remote`/`target` = sürüm dizgesi, `subjects` = `[notes]`, hata olursa `error`. Okunamayan yerel sürüm
+  "eski" sayılır: bir daha hiç güncellenemeyen Mac'ten iyidir.
+- `start` → ayrı oturumda (`start_new_session=True`) bağımsız bir işçi başlatır:
+  `python -m meeting_os.updater --bundle-download --base … --app <çalışan .app> --pid <uygulamanın pid'i>`.
+  `app_path`/`pid` Swift'ten gelir; gelmezse paketin kendi yolu ve `os.getppid()` (köprünün ebeveyni zaten
+  uygulamadır) kullanılır.
+- İşçi: zip'i `~/Library/Caches/MeetingOS/update/<dosya>` altına **kaldığı yerden** indirir (`Range`), her
+  yüzde değişiminde `update-status.json`'a yazar (`state: downloading`, `percent`), sha256 doğrular
+  (`verifying`), `ditto -x -k` ile geçici klasöre açar (`extracting`), `swap-update.sh`'yi bağımsız başlatıp
+  `swapping` yazar. Her hata `state: failed` + `error`. Yarım zip **durur** (sonraki koşu Range ile sürdürür),
+  sha256 **tutmayan** zip silinir (yoksa her denemeyi zehirler).
+- `update-status.json` sözleşmesi `scripts/update.sh` ile aynıdır (`state`,`from`,`to`,`message`,`time`); tek
+  eklenen anahtar `percent`. Böylece uygulamanın mevcut yoklaması değişmeden çalışır.
+
+### Takas: `scripts/swap-update.sh <yeni.app> <hedef.app> <pid>`
+
+Depoda `scripts/` altındadır; `updater.py` önce `runtime.json`'ın yanına (`Contents/Resources/swap-update.sh`)
+bakar, yoksa `scripts/` altındakini kullanır — `build-bundle.sh` `scripts/`'i zaten kopyaladığı için ikisi de
+aynı dosyadır. Sudo **yoktur**: hedef, uygulamanın o an çalıştığı yoldur (Swift gönderir), klasör yazılabilir
+değilse takas reddedilir ve kurulu sürüm yerinde kalır. pid bitene kadar ≤60 sn bekler, `hedef` →
+`hedef.previous` (eski `.previous` silinir), `yeni` → `hedef`, karantina özniteliği temizlenir, `open`. Takas
+başarısızsa `.previous` geri gelir. Günlük: `~/Library/Application Support/MeetingOS/update.log` (uygulamanın
+gösterdiği günlük), durum aynı `update-status.json`.
+
+### Swift (`Updater.swift`)
+
+`BundleInfo` `Contents/Resources/runtime.json`'ı kendi okur (`bundled`), `update_start` isteğine paket
+kanalında `app_path` (= `Bundle.main.bundleURL.path`) ve `pid` ekler; `UpdateStatusLine` yeni durumları tek
+cümleye çevirir (`downloading` → "Yeni sürüm indiriliyor · %42", `verifying`, `extracting`, `swapping`) ve
+`shouldQuit(state:)` `swapping` için doğrudur — takas betiği pid'in bitmesini beklediği için uygulama kendini
+kapatmalıdır. Kenar çubuğu düğmesinin adı değişmez ("Güncelle ve yeniden başlat"), kayıt sürerken erteleme
+kuralı da aynıdır.
 
 ## Gatekeeper (tek seferlik, iki tık)
 

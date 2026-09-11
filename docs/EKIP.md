@@ -152,7 +152,7 @@ Betik gerekli araçları (Homebrew, python3.12, ffmpeg, cmake) eksikse kurar, Py
 ## Bir şey çalışmazsa
 
 1. **Ayarlar (⌘,) → Sistem → Kurulum durumu**: izinler, OpenRouter anahtarı, sözlük, sürüm ve rapor klasörü tek listede. Kırmızı madde olmadan kayıt/güncelleme çalışmaz.
-2. **Güncelleyin:** kenar çubuğundaki “Güncelle ve yeniden başlat”, ya da terminalden `sh ~/meeting-os/scripts/update.sh`. Kurulum bozulduysa `sh ~/meeting-os/scripts/install.sh` yeniden çalıştırılabilir.
+2. **Güncelleyin:** kenar çubuğundaki “Güncelle ve yeniden başlat” — uygulamayı zip olarak indirip Uygulamalar’a sürüklediyseniz güncelleme de uygulamanın kendi içinden gelir: yeni sürümü indirir, doğrular ve kendini değiştirip yeniden açılır; terminale hiç gerek yoktur. Depodan kurulu bir Mac’te aynı düğme derlemeyi yapar, ya da terminalden `sh ~/meeting-os/scripts/update.sh`. Kurulum bozulduysa `sh ~/meeting-os/scripts/install.sh` yeniden çalıştırılabilir.
 3. Hâlâ olmuyorsa Boran’a şunu gönderin (sırayla, elinizde ne varsa):
    - Kenar çubuğunda Ayarlar’ın yanındaki **⋯ → Tanılama raporu kaydet** (ya da Ayarlar → Sistem → Hatalar → **Tanılama raporunu dışa aktar**) ile kaydettiğiniz JSON. İçinde sürüm/bellek/disk sayıları **ve hata günlüğünüzün son 20 kaydı** (çökme özetleri dâhil) vardır; **toplantı içeriği yoktur**. Sorun bildirirken gönderilecek ilk dosya budur — bir çökme yaşadıysanız neredeyse her zaman tek başına yeter.
    - Ayarlar → Sistem → **Gelişmiş** → **Öz-test** düğmesine basıp sonucun ekran görüntüsü.

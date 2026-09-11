@@ -438,7 +438,7 @@ def dispatch(request, db=None):
         if action in ('update_check','update_start','update_status'):
             from . import updater
             if action=='update_check': return updater.check(ROOT)
-            if action=='update_start': return updater.start(ROOT,DATA_DIR)
+            if action=='update_start': return updater.start(ROOT,DATA_DIR,request)   # app_path/pid when the app runs from a bundle
             return updater.status(DATA_DIR)
         if action in ('report_settings','report_settings_set','report_write','reports_summary','heartbeat'):
             from . import reports
