@@ -16,7 +16,10 @@ STAMP=$(date -u +%Y%m%d)
 OUT="$DEST/sync-$STAMP.tar.gz"
 TMP="$OUT.part"
 
-tar -czf "$TMP" -C "$(dirname "$SRC")" "$(basename "$SRC")"
+# _downloads holds published app bundles (≈1,3 GB each) that already exist on Boran's Mac and can be
+# republished at any time; 14 daily copies of them would be the largest thing on this VPS by far.
+tar -czf "$TMP" --exclude "$(basename "$SRC")/_downloads" \
+    -C "$(dirname "$SRC")" "$(basename "$SRC")"
 chmod 600 "$TMP"
 mv -f "$TMP" "$OUT"
 

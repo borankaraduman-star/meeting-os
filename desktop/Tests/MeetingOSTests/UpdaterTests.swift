@@ -76,3 +76,78 @@ final class UpdateStatusLineTests:XCTestCase {
         XCTAssertNil(UpdateStatusLine.parseTime("10 Eyl 2026"))
     }
 }
+
+/// The bundle update channel (docs/BUNDLE.md). The same two bridge actions carry it — the Python side picks
+/// the channel — so what Swift owns is: telling the bridge WHICH bundle to replace and which pid to wait for,
+/// and turning the extra `update-status.json` states into one line of Turkish.
+final class BundleUpdateTests:XCTestCase {
+    override func tearDown() { BundleInfo.override=nil; super.tearDown() }
+
+    func testAGitCheckoutSendsNoAppPathOrPid() {
+        BundleInfo.override=[:]
+        XCTAssertFalse(BundleInfo.bundled)
+        let r=BundleInfo.updateStartRequest()
+        XCTAssertEqual(r["action"] as? String,"update_start")
+        XCTAssertNil(r["app_path"]); XCTAssertNil(r["pid"])
+    }
+    func testABundleSendsTheRunningAppPathAndThisProcessesPid() {
+        BundleInfo.override=["bundled":true,"version":"1.2.72"]
+        XCTAssertTrue(BundleInfo.bundled)
+        let r=BundleInfo.updateStartRequest(appPath:"/Applications/Meeting OS.app",pid:4242)
+        XCTAssertEqual(r["app_path"] as? String,"/Applications/Meeting OS.app")
+        XCTAssertEqual(r["pid"] as? Int,4242)
+        // and by default they are this app's own two answers, never a hard-coded /Applications
+        let live=BundleInfo.updateStartRequest()
+        XCTAssertEqual(live["app_path"] as? String,Bundle.main.bundleURL.path)
+        XCTAssertEqual(live["pid"] as? Int,Int(ProcessInfo.processInfo.processIdentifier))
+    }
+    func testARuntimeJsonWithoutTheFlagIsNotABundle() {
+        BundleInfo.override=["python":"runtime/bin/python3","repo":"repo"]
+        XCTAssertFalse(BundleInfo.bundled)
+        XCTAssertNil(BundleInfo.updateStartRequest()["pid"])
+    }
+
+    func testTheDownloadPercentageIsShown() {
+        XCTAssertEqual(UpdateStatusLine.line(state:"downloading",message:"Yeni sürüm indiriliyor · %3",time:"",percent:42),
+                       "Yeni sürüm indiriliyor · %42")
+        // a caller that does not read the percent key still gets the worker's own sentence
+        XCTAssertEqual(UpdateStatusLine.line(state:"downloading",message:"Yeni sürüm indiriliyor · %3",time:""),
+                       "Yeni sürüm indiriliyor · %3")
+        XCTAssertEqual(UpdateStatusLine.line(state:"downloading",message:"",time:""),UpdateStatusLine.downloadingPrefix)
+    }
+    func testTheOtherBundleStatesEachSayOneThing() {
+        XCTAssertEqual(UpdateStatusLine.line(state:"verifying",message:"",time:""),"Paket doğrulanıyor")
+        XCTAssertEqual(UpdateStatusLine.line(state:"extracting",message:"",time:""),"Paket açılıyor")
+        XCTAssertEqual(UpdateStatusLine.line(state:"swapping",message:"",time:""),UpdateStatusLine.swappingMessage)
+    }
+    func testAFailedDownloadReadsLikeEveryOtherFailure() {
+        XCTAssertEqual(UpdateStatusLine.line(state:"failed",message:"İndirilen paket doğrulanamadı (sha256); yeniden deneyin",time:""),
+                       "Güncelleme başarısız · İndirilen paket doğrulanamadı (sha256); yeniden deneyin")
+    }
+    func testOnlySwappingAsksTheAppToQuit() {
+        XCTAssertTrue(UpdateStatusLine.shouldQuit(state:"swapping"))
+        for state in ["downloading","verifying","extracting","done","failed","running",""] {
+            XCTAssertFalse(UpdateStatusLine.shouldQuit(state:state),state)
+        }
+    }
+    /// The git channel's own states must read exactly as they did before the second channel existed.
+    func testTheGitChannelIsUnchanged() {
+        XCTAssertEqual(UpdateStatusLine.line(state:"done",message:"Güncellendi: a → b",time:""),"Güncelleme tamam · Güncellendi: a → b")
+        XCTAssertNil(UpdateStatusLine.line(state:"kim bilir",message:"x",time:""))
+    }
+
+    /// The bundle channel's check answers the same dict shape, so the sidebar and the card keep one reader.
+    func testABundleReleaseReadsLikeAGitRelease() {
+        let u=UpdateInfo.parse(["available":true,"behind":1,"subjects":["Tek parça uygulama paketi"],
+                                "local":"1.2.71","remote":"1.2.72","target":"1.2.72","bundled":true])
+        XCTAssertTrue(u.canUpdate)
+        XCTAssertEqual(u.headline,"Yeni sürüm hazır · 1 değişiklik · Tek parça uygulama paketi")
+        XCTAssertEqual(UpdateInfo.sidebarLine(version:"1.2.71",info:u),"Sürüm 1.2.71 · yeni sürüm hazır")
+    }
+    func testABundleWithoutADownloadSecretSaysSoInsteadOfSayingUpToDate() {
+        let u=UpdateInfo.parse(["available":false,"behind":0,"local":"1.2.72",
+                                "error":"Güncelleme adresi bu pakette yok · Boran’a bildirin"])
+        XCTAssertFalse(u.canUpdate)
+        XCTAssertEqual(u.headline,"Güncelleme adresi bu pakette yok · Boran’a bildirin")
+    }
+}

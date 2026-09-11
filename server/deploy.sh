@@ -41,6 +41,24 @@ chmod 755 /opt/meetingos-sync
 chown -R meetingos:meetingos /var/lib/meetingos-sync
 chmod 700 /var/lib/meetingos-sync
 chmod 700 /var/backups/meetingos-sync
+
+# Download channel (docs/BUNDLE.md): the app bundle zip and latest.json live here and are served from
+# /dl/<secret>/<name>. The secret is the whole credential, so it is generated ONCE and never printed:
+# re-running deploy.sh must not invalidate every download link already handed to the team.
+mkdir -p /var/lib/meetingos-sync/_downloads
+chown meetingos:meetingos /var/lib/meetingos-sync/_downloads
+chmod 750 /var/lib/meetingos-sync/_downloads
+mkdir -p /etc/meetingos-sync
+chown root:root /etc/meetingos-sync
+chmod 755 /etc/meetingos-sync
+if [ ! -s /etc/meetingos-sync/download.secret ]; then
+    umask 077
+    openssl rand -hex 32 > /etc/meetingos-sync/download.secret
+    echo "created /etc/meetingos-sync/download.secret"
+fi
+# root writes it, the service user only reads it.
+chown root:meetingos /etc/meetingos-sync/download.secret
+chmod 640 /etc/meetingos-sync/download.secret
 REMOTE
 
 # 2. copy files ---------------------------------------------------------
@@ -91,6 +109,18 @@ i=1
 while [ "$i" -le 10 ]; do
     if OUT=$(ssh "$TARGET" "curl -fsS $PING_URL" 2>/dev/null); then
         echo "$OUT"
+        # Presence only, never the value: this script's output ends up in terminal scrollback and transcripts.
+        ssh "$TARGET" 'sh -s' <<'REMOTE'
+set -eu
+SECRET_FILE=/etc/meetingos-sync/download.secret
+if [ -s "$SECRET_FILE" ] && grep -Eq '^[0-9a-fA-F]{32,128}$' "$SECRET_FILE"; then
+    echo "==> download secret present ($(stat -c '%U:%G %a' "$SECRET_FILE")) · value not printed"
+    echo "    links: sh scripts/publish-bundle.sh build/Meeting-OS-<version>.zip"
+else
+    echo "==> WARNING: $SECRET_FILE missing or malformed; /dl/ answers 404" >&2
+fi
+echo "==> downloads: $(ls -1 /var/lib/meetingos-sync/_downloads 2>/dev/null | wc -l | tr -d ' ') file(s)"
+REMOTE
         echo "==> ok"
         exit 0
     fi

@@ -25,16 +25,26 @@ assert _spec.loader is not None
 _spec.loader.exec_module(sync_server)
 
 TOKEN = "a" * 40
+SECRET = "c" * 64
 OTHER_TOKEN = "b" * 40
 HOST_A = "Mac-A"
 HOST_B = "Mac-B"
 
 
 class _Server:
-    def __init__(self, max_file: int = 4 * 1024 * 1024, max_team: int = 500 * 1024 * 1024):
+    def __init__(self, max_file: int = 4 * 1024 * 1024, max_team: int = 500 * 1024 * 1024,
+                 secret: str | None = SECRET, downloads: str | None = None):
         self.root = tempfile.mkdtemp(prefix="sync-test-")
+        self.secret_file = os.path.join(self.root, "download.secret")
+        if secret is not None:
+            with open(self.secret_file, "w", encoding="utf-8") as fh:
+                fh.write(secret + "\n")
+        self.downloads = downloads or os.path.join(self.root, "_downloads")
+        os.makedirs(self.downloads, exist_ok=True)
         self.httpd = sync_server.make_server("127.0.0.1", 0, self.root,
-                                             max_file=max_file, max_team=max_team)
+                                             max_file=max_file, max_team=max_team,
+                                             downloads=self.downloads,
+                                             download_secret_file=self.secret_file)
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever,
                                        kwargs={"poll_interval": 0.01}, daemon=True)
@@ -67,6 +77,142 @@ def request(server: _Server, method: str, path: str, *, token: str | None = TOKE
             return resp.status, resp.read(), dict(resp.headers)
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read(), dict(exc.headers)
+
+
+def fetch(server: _Server, path: str, *, method: str = "GET", headers: dict | None = None):
+    """The download route the way a browser or `curl -C -` hits it: no Authorization header at all."""
+    req = urllib.request.Request(server.base + path, method=method)
+    for key, value in (headers or {}).items():
+        req.add_header(key, value)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, resp.read(), dict(resp.headers)
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read(), dict(exc.headers)
+
+
+class DownloadRouteTest(unittest.TestCase):
+    """`/dl/<secret>/<name>` — the app bundle update channel (docs/BUNDLE.md). The secret IS the credential:
+    there is no header to send, because a 1.3 GB zip has to be fetchable by a browser and resumable by the
+    updater."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        logging.getLogger("meetingos-sync").setLevel(logging.CRITICAL)
+        cls.server = _Server()
+        cls.payload = bytes(range(256)) * 40      # 10240 bytes, every byte value
+        with open(os.path.join(cls.server.downloads, "Meeting-OS-1.2.72.zip"), "wb") as fh:
+            fh.write(cls.payload)
+        cls.latest = json.dumps({"version": "1.2.72", "file": "Meeting-OS-1.2.72.zip"}).encode()
+        with open(os.path.join(cls.server.downloads, "latest.json"), "wb") as fh:
+            fh.write(cls.latest)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.server.close()
+
+    def zip_url(self, secret: str = SECRET, prefix: str = "/dl") -> str:
+        return "%s/%s/Meeting-OS-1.2.72.zip" % (prefix, secret)
+
+    def test_the_zip_is_served_with_no_auth_header_under_both_prefixes(self):
+        for prefix in ("/dl", "/meetingos/dl"):
+            status, body, headers = fetch(self.server, self.zip_url(prefix=prefix))
+            self.assertEqual(status, 200, prefix)
+            self.assertEqual(body, self.payload)
+            self.assertEqual(headers["Content-Type"], "application/zip")
+            self.assertEqual(headers["Content-Length"], str(len(self.payload)))
+            self.assertEqual(headers["Accept-Ranges"], "bytes")
+            self.assertTrue(headers["ETag"].startswith('"'))
+
+    def test_a_wrong_secret_is_404_not_403(self):
+        for bad in ("d" * 64, SECRET[:-1] + "d", "", "short", SECRET + "d"):
+            status, _, _ = fetch(self.server, "/dl/%s/Meeting-OS-1.2.72.zip" % bad)
+            self.assertEqual(status, 404, bad[:8])
+
+    def test_without_a_secret_file_the_whole_route_is_404(self):
+        blind = _Server(secret=None)
+        try:
+            with open(os.path.join(blind.downloads, "latest.json"), "wb") as fh:
+                fh.write(b"{}")
+            self.assertEqual(fetch(blind, "/dl/%s/latest.json" % SECRET)[0], 404)
+            self.assertEqual(fetch(blind, "/dl//latest.json")[0], 404)
+            self.assertEqual(request(blind, "GET", "/ping", token=None)[0], 200)   # the rest still works
+        finally:
+            blind.close()
+
+    def test_a_short_or_malformed_secret_file_is_refused(self):
+        for bad_secret in ("abc", "z" * 64, ""):
+            blind = _Server(secret=bad_secret)
+            try:
+                with open(os.path.join(blind.downloads, "latest.json"), "wb") as fh:
+                    fh.write(b"{}")
+                self.assertEqual(fetch(blind, "/dl/%s/latest.json" % bad_secret)[0], 404, bad_secret)
+            finally:
+                blind.close()
+
+    def test_traversal_and_dotfiles_are_404(self):
+        outside = os.path.join(self.server.root, "outside.txt")
+        with open(outside, "wb") as fh:
+            fh.write(b"nope")
+        with open(os.path.join(self.server.downloads, ".hidden"), "wb") as fh:
+            fh.write(b"nope")
+        for name in ("../outside.txt", "%2e%2e%2foutside.txt", "..%2Foutside.txt", ".hidden",
+                     "..", ".", "sub/dir.zip", "a" * 121 + ".zip", "hop%00.zip", ""):
+            status, _, _ = fetch(self.server, "/dl/%s/%s" % (SECRET, name))
+            self.assertEqual(status, 404, name)
+
+    def test_a_range_resumes_the_download(self):
+        status, body, headers = fetch(self.server, self.zip_url(),
+                                      headers={"Range": "bytes=4096-"})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, self.payload[4096:])
+        self.assertEqual(headers["Content-Range"], "bytes 4096-10239/10240")
+        self.assertEqual(headers["Content-Length"], str(len(self.payload) - 4096))
+
+        status, body, headers = fetch(self.server, self.zip_url(),
+                                      headers={"Range": "bytes=10-19"})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, self.payload[10:20])
+        self.assertEqual(headers["Content-Range"], "bytes 10-19/10240")
+
+        # past the end is 416, a malformed header is simply ignored
+        self.assertEqual(fetch(self.server, self.zip_url(), headers={"Range": "bytes=99999-"})[0], 416)
+        status, body, _ = fetch(self.server, self.zip_url(), headers={"Range": "elma-armut"})
+        self.assertEqual((status, body), (200, self.payload))
+
+    def test_head_gives_the_size_without_the_body(self):
+        status, body, headers = fetch(self.server, self.zip_url(), method="HEAD")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers["Content-Length"], str(len(self.payload)))
+        self.assertEqual(headers["Accept-Ranges"], "bytes")
+        self.assertEqual(fetch(self.server, "/dl/%s/yok.zip" % SECRET, method="HEAD")[0], 404)
+
+    def test_json_gets_its_own_content_type_and_the_sidecar_becomes_the_etag(self):
+        status, body, headers = fetch(self.server, "/dl/%s/latest.json" % SECRET)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["version"], "1.2.72")
+        self.assertEqual(headers["Content-Type"], "application/json")
+
+        digest = hashlib.sha256(self.payload).hexdigest()
+        with open(os.path.join(self.server.downloads, "Meeting-OS-1.2.72.zip.sha256"), "w") as fh:
+            fh.write("%s  Meeting-OS-1.2.72.zip\n" % digest)
+        _status, _body, headers = fetch(self.server, self.zip_url())
+        self.assertEqual(headers["ETag"], '"%s"' % digest)
+        # and an unchanged file is answered 304
+        status, body, _ = fetch(self.server, self.zip_url(), headers={"If-None-Match": '"%s"' % digest})
+        self.assertEqual((status, body), (304, b""))
+
+    def test_downloads_are_not_a_team_and_never_reach_the_index(self):
+        status, _, _ = request(self.server, "PUT", "/file/words/%s.jsonl" % HOST_A,
+                               host=HOST_A, body=b'{"w":1}')
+        self.assertEqual(status, 200)
+        status, body, _ = request(self.server, "GET", "/index")
+        index = json.loads(body)
+        self.assertNotIn("_downloads", index["hosts"])
+        self.assertFalse([p for p in index["files"] if "_downloads" in p or "Meeting-OS" in p])
+        # and the download route cannot be used as a writer
+        self.assertEqual(fetch(self.server, self.zip_url(), method="PUT")[0], 405)
 
 
 class SyncServerTest(unittest.TestCase):
