@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 90 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 91 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.86](#v1286) | 2026-09-12 02:10 | v1.2.86 — Özet ve görev uyarlaması: düzenlemelerden tercih, görev hata sınıfları |
 | [v1.2.85](#v1285) | 2026-09-12 01:20 | v1.2.85 — Deney ve geri dönüş: sürümlü yerel politika, sessiz ucuz deneyler |
 | [v1.2.84](#v1284) | 2026-09-12 00:30 | v1.2.84 — Kelime döngüsü: sıralı yazım ipucu, ekipte çelişen yazım sorusu, tekrar hatası ölçümü |
 | [v1.2.83](#v1283) | 2026-09-11 23:40 | v1.2.83 — Kişi tanıma: kaynak sınıfları, ekip profiline ölçülü güven, eşik kalibrasyon önerisi |
@@ -110,6 +111,20 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1286"></a>
+### v1.2.86 — Özet ve görev uyarlaması: düzenlemelerden tercih, görev hata sınıfları
+
+2026-09-12 02:10 · yerel not · GitHub sürüm sayfası yok
+
+Öğrenme döngüsü serisinin 7. ve son sürümü (`docs/reviews/2026-09-11-codex-learning-loop.md` #8 + #9). Gerçek düzeltme metni bulut istemine asla girmez; ek model çağrısı yok.
+
+- **Özet tercihleri** (`quality/preferences.json`): en az üç farklı toplantıdaki tutarlı **anlatım** düzeltmelerinden üç sınırlı tercih türetilir: ayrıntı düzeyi (kısa/orta/ayrıntılı), madde uzunluğu, tekrar birleştirme derecesi. Sayı, ad ya da olumsuzlama değiştiren düzeltmeler olgusaldır, tercih sayılmaz. Bulut istemine yalnız sabit şablon cümlesi eklenir (≤300 token; ölçülen ≈119), kullanıcı metni asla. Özet hedef uzunluğu tercihe göre ±%25 kayar.
+- **Görev hata sınıfları** (`quality/task-errors.json`): "çıkarım hatası" diye işaretlenen görev düzeltmeleri sabit sınıflara ayrılır: aktarılan söz, koşullu/olumsuz söz, mikrofon/yankı, tarih yorumu, sahip atfı, diğer. Son 30 günde bir sınıfta ≥5 hata ve pay ≥%30 ise o sınıftaki yeni maddeler "incele" işaretiyle gelir; sahip asla otomatik değişmez, kişiye özel kural yok. Dağılım nabızda yalnız sayı.
+- `quality preferences`, `quality task-errors`; kıyas betiğinde vaka ve toplam bazında sahip/tarih uyuşmazlığı, precision/recall ve `--prefs` (tercih şablonu ile/siz karşılaştırma; ücretli koşu yapılmadı).
+- Testler: Python 1224 (44 yeni), Swift 309.
+
+Seri özeti (1.2.80–1.2.86): kullanıcı kararı korunur → her karar bir kez kaydedilir → ölçüm tekrarlanabilir → kişi tanıma kalibre edilir → kelime ipucu öğrenir → deneyler sessiz ve geri alınabilir → özet/görev uyarlanır. Hepsi yerel; buluta yalnız sayılar.
 
 <a id="v1285"></a>
 ### v1.2.85 — Deney ve geri dönüş: sürümlü yerel politika, sessiz ucuz deneyler
