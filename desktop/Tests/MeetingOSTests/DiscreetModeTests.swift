@@ -75,6 +75,16 @@ final class DiscreetModeTests:XCTestCase {
         XCTAssertEqual(DiscreetMode.windowSharingType(discreet:false,inMeeting:true,sharing:true),NSWindow.SharingType.readOnly)
     }
 
+    /// `scripts/verify-privacy.sh` writes this preference to stand in for "a Zoom meeting is on screen" — and for
+    /// nothing else. Discreet mode still decides, so what the script proves on the screen is the path the user
+    /// actually gets, not a back door built for the proof. The key name is part of the script's contract.
+    func testThePrivacyProbeOnlyStandsInForAMeetingOnScreen() {
+        XCTAssertEqual(DiscreetMode.probeKey,"privacyProbe")
+        let probing=true
+        XCTAssertEqual(DiscreetMode.windowSharingType(discreet:true,inMeeting:false || probing,sharing:false),NSWindow.SharingType.none)
+        XCTAssertEqual(DiscreetMode.windowSharingType(discreet:false,inMeeting:false || probing,sharing:false),NSWindow.SharingType.readOnly)
+    }
+
     func testNothingIsDeliveredWhileRecordingInAMeetingOrSharing() {
         XCTAssertTrue(DiscreetMode.mayNotify(recording:false,meetingOpen:false,sharing:false))
         XCTAssertFalse(DiscreetMode.mayNotify(recording:true,meetingOpen:false,sharing:false))

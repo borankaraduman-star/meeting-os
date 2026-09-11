@@ -49,6 +49,24 @@ enum DiscreetMode {
     /// kararları screenshot alamıyorum" — outside a meeting the windows are ordinary again.
     static func windowSharingType(discreet:Bool,inMeeting:Bool=true,sharing:Bool=true)->NSWindow.SharingType { discreet && (inMeeting || sharing) ? .none : .readOnly }
 
+    /// The proof flag (`scripts/verify-privacy.sh`). The claim "the app's windows do not appear in a shared
+    /// screen" rests entirely on `sharingType = .none`, and nothing in the test suite can see a window server,
+    /// so the proof has to be run against the live app: the script captures the display with this flag off and
+    /// then on, and compares the pixels inside the window's own rect. Codex P0 #7 asked for exactly that.
+    ///
+    /// The flag stands in for "a Zoom meeting is on screen" and nothing else — `discreetMode` still has to be
+    /// on, so what the script proves is the production path, not a special case built for it. It is a plain
+    /// preference (`defaults write local.boran.meeting-os privacyProbe -bool true`), so the script needs no
+    /// Accessibility grant, no bridge and no running helper.
+    static let probeKey="privacyProbe"
+    /// Read through cfprefsd rather than the cached `UserDefaults.standard`: the value is written by another
+    /// process while the app is running, and `applyWindowPrivacy()` runs on every two-second poll, so the switch
+    /// has to land within a tick. Off unless somebody deliberately set it; the script clears it when it is done.
+    static var privacyProbe:Bool {
+        CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+        return CFPreferencesCopyAppValue(probeKey as CFString,kCFPreferencesCurrentApplication) as? Bool ?? false
+    }
+
     /// A banner is the loudest thing the app can do on a shared screen, so nothing is delivered while a meeting
     /// is on screen, a recording is running, or the user is sharing. (Deliveries queue and land afterwards.)
     static func mayNotify(recording:Bool,meetingOpen:Bool,sharing:Bool)->Bool { !recording && !meetingOpen && !sharing }

@@ -605,7 +605,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         guard !enroll || meeting?.metadata["text_only"] as? Bool != true else { return }
         do {
             _=try await request(["action":enroll ? "enroll":"label","meeting":mid,"segment":row.id,"name":editName,"confirmed_clean":clean])
-            editRow=nil; await refresh()
+            editRow=nil
+            activity=enroll ? "İsim kaydedildi · bu bölümden ses profili öğrendi" : "İsim bu bölüme yazıldı"   // the sheet's one button always leaves a line saying what was learned
+            await refresh()
         } catch where enroll {
             // A short or unclean segment cannot become a voice sample; the name itself must still land.
             do { _=try await request(["action":"label","meeting":mid,"segment":row.id,"name":editName]); editRow=nil; activity="İsim kaydedildi · bu bölümden ses profili alınamadı (en az 6 sn temiz konuşma gerekir)"; await refresh() }
@@ -942,7 +944,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// left alone: it sets `.none` for itself and must never be turned back on. Windows are created and recreated
     /// over a session (the main window, sheets), so this is re-applied rather than set once at launch.
     func applyWindowPrivacy() {
-        let want=DiscreetMode.windowSharingType(discreet:discreetMode,inMeeting:zoomInMeeting,sharing:screenSharing)
+        // `privacyProbe` is the proof script standing in for a Zoom meeting (`scripts/verify-privacy.sh`).
+        // Discreet mode still decides: the script proves the path the user actually gets, not a back door.
+        let want=DiscreetMode.windowSharingType(discreet:discreetMode,inMeeting:zoomInMeeting || DiscreetMode.privacyProbe,sharing:screenSharing)
         for w in NSApp.windows where !(w is NSPanel) { if w.sharingType != want { w.sharingType=want } }
     }
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }

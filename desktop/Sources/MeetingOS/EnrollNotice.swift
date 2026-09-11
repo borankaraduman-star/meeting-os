@@ -1,6 +1,6 @@
 import Foundation
 
-/// What to say after "Adlandır ve öğren". The sample length is the one number that predicts whether this voice
+/// What to say after "Adlandır" with the default scope (the whole voice, and the voice learns). The sample length is the one number that predicts whether this voice
 /// will be recognised next week, so it belongs in the line rather than in a support answer three meetings later.
 enum EnrollNotice {
     /// `seconds` and `profile_saved` come from store.enroll_speaker through the label_speaker bridge action.

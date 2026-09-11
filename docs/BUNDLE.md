@@ -164,6 +164,46 @@ paket notarize edilir ve bu adım tamamen kalkar; Boran'ın kararı.
   (+ `/dl/` route, Range, 404), Swift `RuntimeTests` (göreli yol), `UpdaterTests` (bundled dal).
 
 
+## Göze batmama kanıtı: `sh scripts/verify-privacy.sh`
+
+“Meeting OS pencereleri paylaşılan ekranda görünmez” iddiasının tamamı tek satıra dayanıyor —
+`DiscreetMode.windowSharingType` → `NSWindow.sharingType = .none`. Birim testi bunu ancak değer olarak
+doğrulayabilir (pencere sunucusu yok), bu yüzden iddia canlı uygulamada kanıtlanır (Codex incelemesi P0 #7).
+
+**Çalıştırma:** uygulama açık, ekran kilidi kapalı, Meeting OS penceresi ana ekranda ve önde:
+
+    sh scripts/verify-privacy.sh          # çıkış 0 = GEÇTİ, 1 = KALDI, 2 = ön koşul eksik (atlandı)
+
+**Ne yapar:**
+
+1. Ekran kilidi (`ioreg -n Root -d1` → `CGSSessionScreenIsLocked`), uygulamanın çalışıyor olması ve göze batma
+   ayarının açık olması kontrol edilir; biri eksikse Türkçe bir satırla **çıkış 2**. Kilitli ekranda görüntü
+   alınamaz, bu yüzden hiç denenmez.
+2. `defaults write local.boran.meeting-os privacyProbe -bool true` — `applyWindowPrivacy()` bunu “ekranda
+   toplantı var” gibi okur (`DiscreetMode.privacyProbe`, iki saniyelik yoklamada cfprefsd'den taze okunur).
+   Bayrak yalnız *toplantı* koşulunun yerine geçer: **göze batma kapalıysa hiçbir şey değişmez**, yani betik
+   kullanıcının gerçekten kullandığı yolu kanıtlar, kendisi için açılmış bir arka kapıyı değil.
+3. `swift scripts/privacy-probe.swift rect` pencereyi öne alır (`NSRunningApplication.activate`; Erişilebilirlik
+   izni gerekmez, AppleScript/System Events kullanılmaz) ve çerçevesini `CGWindowListCopyWindowInfo` ile okur —
+   `QuickControl.swift`'in Zoom için yaptığı çağrının aynısı. Pencerenin önünde başka bir pencere varsa ya da
+   pencere ana ekranda değilse **çıkış 2**.
+4. Bayrak **kapalıyken** ve **açıkken** birer `screencapture -x` alınır (geçici klasöre; betik bitince silinir).
+5. `swift scripts/privacy-probe.swift compare` iki PNG'yi üç bölgede karşılaştırır: pencerenin 8 px içeriden
+   dikdörtgeni (**içeri**), çevresindeki 96 px'lik gölge bandı (**sayılmaz** — yakalamadan çıkan pencere kendi
+   gölgesini de götürür) ve gerisi (**dışarı**).
+
+**GEÇTİ ölçütü:** içerideki piksellerin ≥ %20'si değişmiş (ortalama fark ≥ 3/255) **ve** dışarıdaki piksellerin
+≤ %2'si değişmiş. Yani koruma açıkken pencerenin dikdörtgeninde uygulama içeriği yok, ekranın geri kalanı ise
+aynı görüntü. Betik ölçülen dikdörtgeni, piksel oranlarını ve değişen bölgenin sınırlayıcı kutusunu yazar.
+
+**Yanlış GEÇTİ üretmez:** terminale Ekran Kaydı izni verilmemişse her iki görüntü de uygulamayı göstermez, iki
+görüntü içeride de aynı olur ve sonuç **KALDI** olur. Ekranda hareketli bir şey (video, animasyon) varsa dışarı
+oranı yükselir ve yine KALDI çıkar.
+
+**Kabul ölçütü hâlâ açık:** bu betik bu Mac'in kendi `screencapture` akışını kanıtlar. Gerçek kabul, ikinci bir
+Mac'ten izlenen canlı bir Zoom tam-ekran paylaşımında alıcının gördüğü görüntüdür; o yapılana kadar davranış
+“ölçülmüş”tür, “garanti” değil (Codex P0 #7 aynı şeyi söylüyor).
+
 ## İndirme kanalı: GitHub Releases (11 Eylül 2026, 12:30)
 
 Funnel yolu (`/dl/<gizli>/`) tailnet içinde 4,5 MB/s, tailnet dışındaki bir ekip arkadaşı için DERP aracıları

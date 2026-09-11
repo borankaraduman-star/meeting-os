@@ -14,7 +14,7 @@ Canlı sürüm, görselli (paylaşılabilir sayfa): https://claude.ai/code/artif
 
 **İlk toplantı:** Zoom başlayınca "Kaydedeyim mi?" sorar → *Kaydet*. Diğer uygulamalarda menü çubuğundaki simgeden *Kaydı başlat* ya da ⌃⌥R. Bitince *Kaydı bitir*; birkaç dakikada transkript, özet ve görevler gelir. Zoom'da mikrofonunuz kapalıyken odadaki konuşmalar kayda girmez; sesinizi kaydetmesi için Zoom'da sesinizi açın ya da ⌃⌥V.
 
-**Sonrası:** Transkript (⌘1), Özet (⌘2, maddeye tıkla → kanıt; "Ayrıntılı özet"), Görevlerim (⌘3), Kontrol (⌘4), Hafıza (⌘5). Konuşana bir kez ad verin (*Adlandır ve öğren*); yanlış kelimeye tıklayıp düzeltin (*Düzelt ve öğret*): ekip de öğrenir.
+**Sonrası:** Transkript (⌘1), Özet (⌘2, maddeye tıkla → kanıt; "Ayrıntılı özet"), Görevlerim (⌘3), Kontrol (⌘4), Hafıza (⌘5). Konuşana bir kez ad verin (*Adlandır*; kapsam varsayılanı “Bu konuşmacının tamamı” sesi de öğrenir); yanlış kelimeye tıklayıp düzeltin (*Düzelt ve öğret*): ekip de öğrenir.
 
 **Gizlilik:** ses ve transkript Mac'te kalır (ses 30 gün); yazıya çevirme ve özet için OpenRouter'a gider (saklanmaması istenir); ekiple yalnız ad + ses parmak izi, kelimeler, sözlük paylaşılır; ekran görüntüsü alınmaz.
 
