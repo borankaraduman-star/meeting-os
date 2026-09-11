@@ -141,6 +141,11 @@ ALLOWED = {
         'team_cloud': {'last_ok': STAMP, 'last_error_code': TOKEN, 'hosts': List(LABEL), 'device': TOKEN},
         'team_profiles': NUM, 'team_words': NUM, 'shared_profiles': NUM, 'shared_words': NUM,
         'learning': _LEARNING,
+        # `quality.daily_summary` records (1.2.82): one per (device, day, app_version), numbers as n/d/rate,
+        # analysis seconds as percentiles. No word, no name, no meeting id can be expressed in this shape.
+        'quality_daily': List({'day': TOKEN, 'device': TOKEN, 'app_version': TOKEN, 'written': STAMP, 'meetings': NUM,
+                               'metrics': Map({'n': NUM, 'd': NUM, 'rate': NUM}),
+                               'analysis_seconds': {'p50': NUM, 'p95': NUM, 'n': NUM}}, 14),
     },
     'report': {
         'report_version': NUM, 'host': LABEL, 'macos': TOKEN, 'app_version': TOKEN, 'commit': TOKEN,

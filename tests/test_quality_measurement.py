@@ -111,7 +111,7 @@ class DailySummaryTests(unittest.TestCase):
             self.assertEqual((m['meetings_analysed']['n'],m['meetings_analysed']['d']),(1,1))
             self.assertEqual((m['task_edits']['n'],m['task_edits']['d']),(1,1))
             self.assertEqual(record['analysis_seconds'],{'p50':41.0,'p95':41.0,'n':1})
-            self.assertEqual((m['summary_edits']['n'],m['summary_edits']['d']),(0,0))   # no table records them yet: no claim
+            self.assertEqual((m['summary_edits']['n'],m['summary_edits']['d']),(0,3))   # 1.2.80's insight_edits exists: three items shown, none edited
             store.close()
 
     def test_the_record_is_replaced_by_key_not_added_to(self):

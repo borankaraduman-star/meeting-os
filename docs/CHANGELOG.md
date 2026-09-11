@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 86 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 87 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.82](#v1282) | 2026-09-11 22:40 | v1.2.82 — Tekrarlanabilir ölçüm: günlük kalite sayıları, ekip trend alarmı, gerçek boyutta senaryolar, zaman sıralı kimlik değerlendirmesi |
 | [v1.2.81](#v1281) | 2026-09-11 21:30 | v1.2.81 — Güvenilir sinyal: her karar bir kez kaydedilir, dokunulmamış tahmin başarı sayılmaz |
 | [v1.2.80](#v1280) | 2026-09-11 20:40 | v1.2.80 — Özetteki kararınız korunur; Kontrol kararları bir daha sorulmaz |
 | [v1.2.79](#v1279) | 2026-09-11 18:10 | v1.2.79 — Açık listenin ilk altısı: saklama süresi, kalıcı gönderim, tanılama sözleşmesi, sade düzeltme, disk bütçesi, gizlilik kanıtı |
@@ -106,6 +107,20 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1282"></a>
+### v1.2.82 — Tekrarlanabilir ölçüm: günlük kalite sayıları, ekip trend alarmı, gerçek boyutta senaryolar, zaman sıralı kimlik değerlendirmesi
+
+2026-09-11 22:40 · yerel not · GitHub sürüm sayfası yok
+
+Öğrenme döngüsü serisi 3. sürüm (`docs/reviews/2026-09-11-codex-learning-loop.md` #10 + #12 + #5'in ölçüm koşulu). Bu sürüm hiçbir model veya eşik değiştirmez.
+
+- **Günlük sayısal kalite özeti** (`quality daily`; nabızda `quality_daily`, son 14 gün, cihaz+gün+sürüm anahtarıyla yerine koyarak): incelenen/yanlışlanan/incelenmemiş isimler, tekrar eden kelime hataları, özet ve görev düzeltmeleri, Kontrol sonuçları (doğru/düzeltildi/geçildi), başarılı dışa aktarmalar, analiz süresi p50/p95, analiz edilen toplantı — her biri pay/payda (payda 0 → null). Metin, ad, toplantı kimliği yok.
+- **Ekip kalite trendi:** iki ardışık 7 günlük dönemde hata oranı ≥%30 artarsa ve her iki dönemde ≥20 uygun gözlem varsa tek alarm; hata türüne göre, kişiye göre asla. Kurulum kartında bir satır (ölçüm yoksa satır yok).
+- **Raporlar iki kez sayılmaz:** toplantı raporu artık yalnız o toplantının kimlik karnesini taşır (`scope: meeting`); eski DB-çapında kartlar toplamda atlanır.
+- **Gerçek boyutta kurgu senaryolar:** `scripts/make-fixture.py` (yapısal tarif → tamamen uydurma Türkçe toplantı) ile 6 yeni senaryo: tek tam parça (≈6,6k token), 3 parçalı uzun (≈20,7k), geç iptal edilen karar, konu kapsamı (9 konu), geç devredilen sahip, geç kayan vade. Kıyas betiği: p50/p95 süre, başarısız istek, cevaplayan model, `--repeat N`, konu kapsamı ölçümü. Bulut kıyası bu sürümde koşulmadı (ücretli); ilk koşuda kapıların düşmesi beklenir, ölçüm budur.
+- **Zaman sıralı kimlik değerlendirmesi:** `quality replay --timeline` her toplantıyı yalnız ondan ÖNCE oluşmuş örnek/ret/eşiklerle puanlar; bilinmeyen kişide çekimserlik doğru sayılır (beş sonuç: doğru otomatik ad, yanlış otomatik ad, yanlış çekimserlik, doğru çekimserlik, bilinmeyene ad). Eski replay regresyon kontrolü olarak kalır.
+- Testler: Python 1101 (26 yeni), Swift 302. Canlı (bu Mac): `quality daily` → bugün 0 toplantı, özet maddeleri 18 (0 düzenleme), görev 2; `replay --timeline` → 8 küme, 0 yanlış otomatik ad, 8 doğru çekimserlik, 78 tarihsiz örnek (ekipten gelenler; zaman sıralı puanlama dışında). Merge kesişmesi: nabız `quality_daily` alanı beyaz listeye eklendi.
 
 <a id="v1281"></a>
 ### v1.2.81 — Güvenilir sinyal: her karar bir kez kaydedilir, dokunulmamış tahmin başarı sayılmaz
