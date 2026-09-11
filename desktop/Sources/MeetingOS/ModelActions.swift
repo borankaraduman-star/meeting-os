@@ -130,6 +130,7 @@ extension Model {
             // Not on the poll's bridge: the archive pass is seconds per meeting and the ten-second watchdog was
             // SIGTERMing it every hour, so a library that had fallen behind could never catch up.
             if !recording, recordProcess==nil, job==nil, let r=try? await requestSlow(["action":"storage_housekeeping"]) {
+                if let box=r["outbox"] as? [String:Any] { adoptTeamOutbox(["outbox":box]) }   // the hourly pass is a flush too
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
                 // One retention setting deletes a whole week of recordings on the same day; the warning comes first,
                 // while marking a meeting "Sesi koru" (or widening the setting) can still save it.
@@ -146,6 +147,37 @@ extension Model {
                 }
                 else if let gone=r["removed_text_meetings"] as? Int, gone>0 { activity="Depolama · metin saklama süresi doldu, \(gone) toplantı tümüyle silindi" }
                 else if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
+            }
+        }
+    }
+
+    /// What the Python side says it still owes the team, adopted by the app's flush loop. `nil` means the
+    /// answer carried no outbox at all (an old bridge, a failed call): the app's own state is left alone.
+    func adoptTeamOutbox(_ answer:[String:Any]?) {
+        guard let answer else { return }
+        let since=(answer["pending_since"] as? String) ?? ((answer["outbox"] as? [String:Any])?["since"] as? String) ?? (answer["outbox_pending_since"] as? String)
+        let pending=(answer["pending"] as? Bool) ?? ((answer["outbox"] as? [String:Any])?["pending"] as? Bool) ?? (since != nil)
+        if !pending { teamOutboxSince=nil; return }
+        // Keep the app's own (earlier, in-session) stamp when it has one: what matters is how long the user
+        // has been waiting, and the Python `since` is the same moment seen from the other side.
+        if teamOutboxSince==nil { teamOutboxSince=SetupStatus.syncDate(since ?? "") ?? Date() }
+    }
+    /// The one background loop that keeps the outbox's promise (Codex P1 #8). Twenty seconds after the last
+    /// local change, then every five minutes while anything is still owed, and again the moment the Mac wakes.
+    /// Never while a recording or a job is running: the team can wait, the meeting cannot.
+    func flushTeamOutboxIfDue() {
+        guard job==nil, recordProcess==nil,
+              TeamOutbox.shouldFlush(dirtySince:teamOutboxSince,lastAttempt:lastTeamFlush,recording:recording) else { return }
+        lastTeamFlush=Date()
+        Task { [weak self] in
+            guard let self else { return }
+            // The slow bridge: a naming's pass must not sit behind the poll's ten-second watchdog.
+            guard let r=try? await self.requestSlow(["action":"team_flush"],timeout:120) else { return }
+            self.adoptTeamOutbox(r)
+            if r["flushed"] as? Bool == true, let team=r["team"] as? [String:Any] {
+                let words=(team["words"] as? [String:Any])?["imported"] as? Int ?? 0
+                let people=(team["profiles"] as? [String:Any])?["imported"] as? Int ?? 0
+                if words+people>0 { await self.loadWordRules(); await self.loadMaintenance() }   // a pass brings the others' work back too
             }
         }
     }
@@ -286,6 +318,7 @@ extension Model {
     /// while it was closed. Quiet — nothing on screen unless it actually brought something in.
     func syncTeamKnowledge() async {
         guard let r=try? await requestSlow(["action":"team_sync"]) else { return }
+        adoptTeamOutbox(r)   // launch is the flush loop's first beat: whatever the last session could not deliver
         let words=(r["words"] as? [String:Any])?["imported"] as? Int ?? 0
         let people=(r["profiles"] as? [String:Any])?["imported"] as? Int ?? 0
         if words+people>0 { activity="Ekip klasöründen alındı · \(words) kelime, \(people) ses örneği"; await loadWordRules(); await loadMaintenance() }
@@ -312,6 +345,7 @@ extension Model {
             // decides whether the three share switches mean anything at all.
             teamTarget=TeamInvite.target(r,home:NSHomeDirectory())
             teamConfigured=teamTarget.kind == .cloud
+            adoptTeamOutbox(r["team_cloud"] as? [String:Any])   // a report a job wrote while nobody was looking
         }
         setupChecks=checks
         if let answer { await importBundleInviteIfNeeded(answer) }

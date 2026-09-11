@@ -33,9 +33,14 @@ bir NAS'ı tercih eden ekip için), iCloud da bulut yoksa yedek olarak kalır.
   kancaları `sync_async` (arka plan iş parçacığı, tek seferde bir eşitleme) çağırır; saatlik `storage_housekeeping`
   ve açılıştaki `team_sync` (yavaş köprü) bloklayan `sync` çağırır. Bağlantı 5 sn, toplam bütçe 20 sn. Hata asla
   yükselmez; `team-cloud-state.json`'a yazılır, kurulum kartı gösterir.
-- **Gizlilik, klasörle aynı.** Yüklenen şey klasöre yazılanın aynısı: ad + ses vektörü, öğretilen kelimeler, sözlük,
-  tanılama raporları (`share_text` kapalıysa metin yok), redakte edilmiş hata günlüğü. Ses, transkript, toplantı
-  başlığı yok. Sunucu Boran'ın VPS'inde, TLS Tailscale Funnel'dan.
+- **Teslim borcu diskte durur (1.2.78).** `sync_async` bir güvence değildi: köprü süreci yanıtı verir vermez
+  kapanıyor, daemon iş parçacığı onunla gidiyordu. Her yayımlanabilir değişiklik artık ağdan ÖNCE
+  `team-outbox.json` yazar; borcu yalnız tamamlanan bir `sync` siler. Ayrıntı aşağıda "Gönderim borcu".
+- **Gizlilik bir sözleşmedir, redaksiyon umudu değil (1.2.78).** Yüklenen: ad + ses vektörü, öğretilen kelimeler,
+  sözlük, **anonimleştirilmiş** tanılama raporları ve hata günlüğünün **beyaz listeli dışa aktarımı**. Ham
+  `errors.jsonl` ve toplantı numarası/başlığı/transkripti (`share_text` kapalıyken) sunucuya hiç çıkmaz.
+  Ayrıntı aşağıda "Dışarı çıkan alanlar"; kullanıcıya dönük hâli docs/EKIP.md. Sunucu Boran'ın VPS'inde, TLS
+  Tailscale Funnel'dan.
 
 ## Sunucu
 
@@ -122,6 +127,63 @@ host sahipliği, atomik yazım, 304, boyut sınırı, önek toleransı.
   hiç denenmemiş → `.optional` "ekip bulutu · ilk eşitleme bekleniyor".
 - Nabız (`build_heartbeat`): `team_cloud: {last_ok, last_error, hosts}`.
 
+### Gönderim borcu (1.2.78): öğrenim kalıcı bir iş olarak ulaşır
+
+Codex P1 #8: "Swift her köprü çağrısında ayrı Python süreci başlatıyor… `sync_async` bir `daemon=True` iş
+parçacığı ve köprü yanıtı verdikten sonra süreç kapanıyor. Dolayısıyla anında teslim garanti değil."
+
+- `team-outbox.json` (veri klasörü, 0600): `{"pending": true, "since": <utc iso>, "reasons": [...]}`.
+  `since` ilk gönderilmemiş değişikliğin anıdır ve borç kapanana kadar **kıpırdamaz** (kart yaşlanmalı).
+  `reasons` en fazla 8 kayıt: `words` · `profiles` · `glossary` · `report`.
+- **Kim işaretler:** `correction_memory.share_words` (öğret/unut), `desktop.share_profiles` (adlandır/kaydet/
+  yeniden adlandır/sil), `glossary.import_file`, `reports.write_meeting_report`. Hepsi `sync_async`'ten **önce**
+  `team_cloud.mark_outbox` çağırır. Belirteci olmayan Mac hiç işaretlemez.
+- **Kim siler:** yalnız `team_cloud.sync`, yalnız hatasız bittiğinde ve yalnız borç **başladığı gibiyse**
+  (`clear_outbox(keep=…)`): eşitleme sürerken yapılan bir düzeltme, o eşitlemenin taşımadığı düzeltmedir.
+  Bütçeyle kısalan bir tur da silmez.
+- **Köprü `team_flush`:** borç yoksa (ve `force` değilse) ağ yok, dosya okumasıyla biter
+  (`{flushed:false, pending:false, pending_since:null}`); varsa `team_knowledge.sync` çalışır ve
+  `{flushed, pending, pending_since, reasons, error, team}` döner. Bulut yapılandırılmamışsa (ekip klasörü
+  seçilmiş) klasöre yayımlamak teslimin kendisidir, borç orada kapanır. `team_sync` ve
+  `storage_housekeeping` yanıtlarına da `outbox` eklendi; `setup_status.team_cloud` `outbox_pending_since` +
+  `outbox_reasons` taşır.
+- **Swift (`TeamOutbox` + `Model.flushTeamOutboxIfDue`):** uygulamanın sahip olduğu **tek** arka plan döngüsü,
+  `heartbeatIfDue`'nun yanında, iki saniyelik yoklamada. `shouldFlush(now:dirtySince:lastAttempt:recording:)`
+  saf karar: kayıt varsa asla; son değişiklikten **20 sn** sonra (dört sesi arka arkaya adlandırmak dört tur
+  değil bir tur olsun diye); bekleyen borç için **5 dakikada bir**; uyanmada `lastTeamFlush` sıfırlanır, yani
+  ilk yoklamada hemen. Çağrı **yavaş köprüde** (`team_flush`), 10 sn bekçinin arkasında değil. `Model.request`
+  yayımlanabilir eylemleri (`label*`, `enroll`, `*_profile`, `teach_word`, `forget_word`, `reject_rule`,
+  `glossary_*`, `report_write`) görünce `teamOutboxSince`'i kurar; `team_sync`/`team_flush`/`setup_status`/
+  `storage_housekeeping` yanıtları Python'daki gerçeği geri yükler (`adoptTeamOutbox`).
+- **Kart:** hata > bekleyen borç > son başarı. Bekleyen borç varken satır **yeşil değildir**:
+  "ekip bulutu · 2 Mac · eşitleme bekliyor · 12:34'ten beri".
+
+### Dışarı çıkan alanlar (1.2.78): tanılama sözleşmesi
+
+Codex P0 #6: "Bağlam anahtarları olay türüne göre beyaz listeyle sınırlandırılmıyor… günlük buluta ham dosya
+olarak yükleniyor… rapor varsayılan durumda bile toplantı kimliği içeriyor."
+
+- **`errors/<host>.jsonl` = `errors.export_for_team(data_dir)`**, ham günlük değil. Satır başına **yalnız**
+  `time`, `kind`, `version`, `code`, `context`.
+  - `code` (≤40): sırayla çökme hata türü (`EXC_BAD_ACCESS/SIGSEGV`, `· ` alanlarından `^[A-Z][A-Z0-9_]{2,30}
+    (/[A-Z0-9_]{2,30})?$` olanı) → ilk `:`'ten önceki **çıplak ASCII tanımlayıcı** (`ValueError`, `auth`) →
+    `HTTP\s*(\d{3})` → uygulamanın kendi cümlelerinin ön ek eşlemesi (`team-sync`, `update-failed`,
+    `capture-helper`, `no-key`, `resource-guard`) → `other`. **İletinin serbest metni asla.**
+  - `context`: `ui` → `state`; `job` → `command`, `supervised`, `state`, `seconds`, `pieces`; `cloud` →
+    `http`, `model`, `state`, `seconds`, `pieces`; `capture` → `state`, `seconds`, `pieces`; `update` →
+    `state`; `crash` → `state`. Değer: bool/int/sonlu float ya da ≤40 karakterlik, **yol gibi görünmeyen**
+    metin (`/`, `~`, `.` ile başlayan, `\` içeren, ` /` içeren ya da birden çok `/` taşıyan metin düşer;
+    `openai/gpt-4.1-mini` geçer). Listeye girmeyen her anahtar düşer — çökmenin çağrı adları, toplantı karması,
+    `app_version`, `where`, `attempt` dâhil. Yereldeki `errors.jsonl` **değişmedi**.
+- **Raporlar (`_report_for_upload`)**, yükleme anında, `share_text` o andaki değerine göre:
+  - açık → dosya olduğu gibi, kendi adıyla;
+  - kapalı → `transcript` **yok**, `title` `null`, `meeting` = `errors.meeting_key(mid)` (8 onaltılık),
+    **dosya adındaki mid de aynı karmayla değişir**, `speakers` `S1…Sn` (ad/öneri `null`). JSON okunamıyorsa
+    **hiç yüklenmez**. Hiçbir alan değişmediyse baytlar olduğu gibi gider — `heartbeat.json` bu yüzden aynen
+    yükselir.
+  - Ayar açıktan kapalıya dönerse eski kimlikli yol `own` kümesinden düşer, `_push_deletions` onu sunucudan
+    **siler** ve yerine anonim adlı kopya çıkar. Aynadaki yerel dosya hiçbir durumda değişmez.
+
 ### Davet (1.2.68): terminalsiz katılma
 
 Ekibe katılmanın tek yolu kurulum satırıydı; "kullanacak insanlar terminal yazamaz" (Boran, 10 Eyl 2026). Aynı
@@ -154,6 +216,14 @@ yük artık iki zarfla taşınıyor — bir **bağlantı** ve bir **dosya** — 
 
 ## Doğrulama
 
+- Python (1.2.78): `tests/test_team_cloud.py` → `OutboxTests` (her kanca borcu yazar, `since` kıpırdamaz,
+  belirteçsiz Mac hiç yazmaz; biten tur siler, başarısız tur silmez, tur sırasında yapılan değişiklik silinmez;
+  `team_flush` borç yokken tek istek bile atmaz, borç varken öğretilen kelime diğer Mac'e ulaşır; kart
+  `outbox_pending_since` görür) + `DiagnosticsContractTests` (hata iletisine enjekte edilen belirteç, kişi adı,
+  toplantı cümlesi ve ev dizini sunucudaki satırda **yok**; beş alan; sınıflandırma tablosu; yol/uzun metin
+  bağlam değeri düşer; `share_text` açıkken yazılmış rapor kapatılınca anonim adla gider ve kimlikli kopya
+  sunucudan silinir; `heartbeat.json` baytı baytına) + `tests/test_errors.py` → `TeamExportTests`.
+- Swift (1.2.78): `TeamOutboxTests` (yerleşme/yeniden deneme/kayıt kapısı, kart satırı, `syncDate`).
 - Python: `tests/test_team_cloud.py` (yerel test sunucusuyla uçtan uca: iki sahte host, kelime/profil/rapor
   yükle-indir, `forget` yayılımı, ağ yokken sessiz hata, ayna kökü çözümü, token türetimi, `save_settings` `_mirror`
   düşürür) + `InviteTests` (bağlantı/dosya gidiş-dönüşü, anahtarın asla ezilmemesi, bozuk davetin cümleye dönmesi,

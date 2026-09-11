@@ -421,6 +421,9 @@ def share_words(store, data_dir):
         result = sync(store, data_dir, profiles=False, cloud=False)   # a teach runs on the fast bridge: no network here
         try:
             from . import team_cloud
+            # The promise first, the network second: this bridge process exits the moment it has answered, so
+            # the background pass below may never finish. The outbox is what the app's flush loop picks up.
+            team_cloud.mark_outbox(data_dir, 'words')
             team_cloud.sync_async(data_dir)   # the team learns the word in the background, one pass at a time
         except Exception: pass
         return result

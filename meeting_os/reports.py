@@ -425,7 +425,14 @@ def write_meeting_report(store, mid, data_dir, *, version=None, commit=None):
         if not settings.get('share_reports'): return None
         report = redact_paths(build_meeting_report(store, mid, data_dir, include_text=bool(settings.get('share_text')), version=version, commit=commit))
         folder, shared = prepare_folder(settings)
-        return str(publish(folder / f"{report['created'][:10]}_{mid}.json", json.dumps(report, ensure_ascii=False, indent=1), shared=shared))
+        written = publish(folder / f"{report['created'][:10]}_{mid}.json", json.dumps(report, ensure_ascii=False, indent=1), shared=shared)
+        # A report the team cloud has not uploaded yet is exactly what the outbox is for; the mirror holds it
+        # until a pass delivers it (sanitised at that point, never before — the file here stays as written).
+        try:
+            from . import team_cloud
+            if not (settings.get('team_dir') or '').strip(): team_cloud.mark_outbox(data_dir, 'report')
+        except Exception: pass
+        return str(written)
     except Exception as exc:  # reporting must never break a job
         import sys; print(f'Meeting OS: Rapor yazılamadı: {type(exc).__name__}', file=sys.stderr); return None
 

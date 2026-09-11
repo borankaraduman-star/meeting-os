@@ -163,6 +163,10 @@ def import_file(source, data_dir, shared=False):
         try: result['team'] = merge_into(team, good)
         except OSError as exc:  # an unmounted share must not fail the user's own import
             result['team_error'] = type(exc).__name__
+        try:
+            from . import team_cloud
+            team_cloud.mark_outbox(data_dir, 'glossary')   # an import is a publish; the team has not seen it yet
+        except Exception: pass
     return result
 
 

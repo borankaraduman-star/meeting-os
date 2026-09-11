@@ -23,11 +23,12 @@
 - **Ses kayıtları ve transkriptler Mac’inizde kalır** (`~/Library/Application Support/MeetingOS/`). Ses hiçbir yerde saklanmaz; transkript metni yalnız “Raporlara transkript metnini de ekle” açıksa rapora (iCloud/ekip klasörü) girer. OpenRouter isteklerinde sağlayıcıdan veri saklamaması istenir (`data_collection: deny`); hesabınızın kendi gizlilik ayarını da <https://openrouter.ai/settings/privacy> adresinden kontrol edin.
 - **OpenRouter’a giden iki şey var:** (1) yazıya çevrilmek üzere ses parçaları (Opus 32 kbps, saatte ≈14 MB), (2) özet/karar/görev analizi. Analiz her toplantıdan sonra **kendiliğinden başlar** ve transkriptin tamamını, konuşmacı adları ve mikrofon satırlarında Ayarlar’daki kendi adınızla birlikte (1.2.47’den beri; görev sahipliği bundan çıkar), ≈2800 token’lık gruplar hâlinde `openai/gpt-4.1-mini` modeline gönderir — “ilgili bölümler” değil, hepsi. Bunu istemiyorsanız tek yol Ayarlar → Sistem → Yazıya çevirme → **Yerel model**: o zaman ses de metin de OpenRouter’a gitmez.
 - **Ses profilleri yalnız ekip klasörüne çıkar, oraya da ses kaydı olarak değil.** Ekip klasörü seçilmemişse hiçbir yere gitmez: kişi tanıma bu Mac’te yapılır. Seçilmişse aşağıdaki “ekip bilgisi” başlığına bakın.
-- **Teşhis raporları sayısaldır:** süre, parça sayısı, ücret, hata satırı, konuşmacı sayısı ve puanlar. Toplantı başlığı ve konuşmacılara verdiğiniz adlar 1.2.37’den itibaren yalnız “Raporlara transkript metnini de ekle” açıkken rapora girer (kapalıyken konuşmacılar S1, S2… olarak geçer). Transkript metninin kendisi yalnız Ayarlar → Sistem → **Gelişmiş** → “Raporlara transkript metnini de ekle (varsayılan kapalı)” açıksa girer. Rapor yazma varsayılan olarak **açıktır**; kapatmak için Ayarlar → Sistem → **Gelişmiş** → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz” anahtarını kapatın.
-- **Hata günlüğü (1.2.63+) bu Mac’te kalır.** Bir şey ters gittiğinde `~/Library/Application Support/MeetingOS/errors.jsonl` dosyasına **tek satır** düşer (yalnız size açık, 0600; 1 MB’ı geçince `errors.jsonl.1` olarak döner). Satırda **yalnız şunlar vardır:** zaman, tür (`ui` arayüz · `job` işlem · `cloud` bulut · `capture` kayıt · `update` güncelleme · `crash` çökme), en fazla 300 karakterlik kısa bir ileti, uygulama sürümü ve birkaç küçük alan (komut adı, çıkış kodu, toplantının **karması** — numarası ya da adı değil). **Transkript metni, konuşulan hiçbir söz, konuşmacı adı, toplantı başlığı ve ses asla girmez;** dosya yollarındaki kullanıcı adınız `/Users/…` olarak kısaltılır. Aynı hata on dakika içinde tekrarlarsa tek satır sayılır.
+- **Teşhis raporları sayısaldır:** süre, parça sayısı, ücret, hata satırı, konuşmacı sayısı ve puanlar. Toplantı başlığı ve konuşmacılara verdiğiniz adlar 1.2.37’den itibaren yalnız “Raporlara transkript metnini de ekle” açıkken rapora girer (kapalıyken konuşmacılar S1, S2… olarak geçer). 1.2.78’den beri aynı kural **yükleme anında** ikinci kez uygulanır: ayar kapalıyken ekip bulutuna giden kopyada toplantı numarası da (dosya adı dâhil) karmaya çevrilir, ayarı kapattığınız anda eski raporun kimlikli kopyası sunucudan silinir. Transkript metninin kendisi yalnız Ayarlar → Sistem → **Gelişmiş** → “Raporlara transkript metnini de ekle (varsayılan kapalı)” açıksa girer. Rapor yazma varsayılan olarak **açıktır**; kapatmak için Ayarlar → Sistem → **Gelişmiş** → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz” anahtarını kapatın.
+- **Hata günlüğü (1.2.63+) bu Mac’te kalır; ekip bulutuna yalnız beş alanlık özeti çıkar (1.2.78+, yukarıdaki sözleşme).** Bir şey ters gittiğinde `~/Library/Application Support/MeetingOS/errors.jsonl` dosyasına **tek satır** düşer (yalnız size açık, 0600; 1 MB’ı geçince `errors.jsonl.1` olarak döner). Satırda **yalnız şunlar vardır:** zaman, tür (`ui` arayüz · `job` işlem · `cloud` bulut · `capture` kayıt · `update` güncelleme · `crash` çökme), en fazla 300 karakterlik kısa bir ileti, uygulama sürümü ve birkaç küçük alan (komut adı, çıkış kodu, toplantının **karması** — numarası ya da adı değil). **Transkript metni, konuşulan hiçbir söz, konuşmacı adı, toplantı başlığı ve ses asla girmez;** dosya yollarındaki kullanıcı adınız `/Users/…` olarak kısaltılır. Aynı hata on dakika içinde tekrarlarsa tek satır sayılır.
 - **Çökme raporları:** macOS bir çökmede zaten `~/Library/Logs/DiagnosticReports/` altına rapor yazar. Uygulama bunlardan yalnız kendi süreçlerine ait olanları (`MeetingOS-*.ips`, `MeetingCapture-*.ips`) açar ve günlüğe **özetini** koyar: süreç adı, sürüm, hata türü/sinyali, sonlanma nedeni ve **yalnız kendi kodumuza ait en fazla 8 çağrı adı** (adres yok). Raporun kendisi hiçbir yere kopyalanmaz.
 - **Ne görürsünüz, nasıl silersiniz:** Ayarlar (⌘,) → **Sistem → Hatalar** kartında son 5 kayıt durur; **Hata günlüğünü temizle** hepsini siler. Günlük özeti, rapor paylaşımı açıkken nabızla birlikte paylaşılan klasöre de gider (yukarıdaki liste, madde 2) — kapatmak için aynı anahtar: Ayarlar → Sistem → Gelişmiş → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz”.
 - **Metin saklama süresi ayarlanabilir:** Ayarlar → Sistem → Gelişmiş → **Eski toplantıların yazısı** (varsayılan “silinmesin”) bir süre dolunca toplantının transkriptini, özetini ve görevlerini bu Mac’ten tümüyle siler — teşhis raporunun ekip klasöründeki kopyası da onunla gider.
+- **Ne görürsünüz, nasıl silersiniz:** Ayarlar (⌘,) → **Sistem → Hatalar** kartında son 5 kayıt durur; **Hata günlüğünü temizle** hepsini siler. Günlük özeti, rapor paylaşımı açıkken nabızla birlikte paylaşılan klasöre de gider (yukarıdaki liste, madde 2; ekip bulutuna giden kopya ise yalnız yukarıdaki beş alanı taşır) — kapatmak için aynı anahtar: Ayarlar → Sistem → Gelişmiş → “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz”.
 - Ekran kareleri saklanmaz; ekran kaydı izni yalnız sistem sesini almak için gerekir.
 
 ### Ekip bilgisi buluta gider (1.2.67+) — ayarlanacak bir şey yok
@@ -37,15 +38,53 @@ Ekip bilgi tabanı artık bir klasöre bağlı değil. Uygulamayı kurduğunuz a
 türetilir (anahtarın kendisi asla dışarı çıkmaz, yalnız geri döndürülemez özeti kullanılır), yani **aynı anahtarla
 kurulan Mac'ler aynı ekiptir.**
 
-- **Paylaşılan şey klasör döneminin aynısı:** öğretilen kelimeler, ses profilleri (kişi adı + ses vektörü),
-  proje sözlüğü, teşhis raporları ve redakte edilmiş hata günlüğü. **Ses kaydı, transkript metni, toplantı adı ve
-  toplantı numarası hiçbir zaman gitmez.** Rapor ve hata günlüğü, “Her toplantıdan sonra teşhis raporunu paylaşılan
-  klasöre yaz” anahtarı kapalıysa gönderilmez; kelime ve profil anahtarları da eskisi gibi çalışır.
+- **Sunucuya çıkan her alan sayılıdır (1.2.78+).** Aşağıdaki “Buluta ne çıkar — tam sözleşme” başlığı listenin
+  kendisidir. Kısaca: öğretilen kelimeler, ses profilleri (kişi adı + ses vektörü), proje sözlüğü, teşhis
+  raporlarının **anonimleştirilmiş** kopyası ve hata günlüğünün **beş alanlık dışa aktarımı**. **Ses kaydı,
+  transkript metni, toplantı adı, toplantı numarası ve hata iletisinin serbest metni hiçbir zaman gitmez** —
+  “Raporlara transkript metnini de ekle” açıkken raporun tamamı gider, ki o anahtarın tanımı zaten budur. Rapor
+  ve hata dışa aktarımı, “Her toplantıdan sonra teşhis raporunu paylaşılan klasöre yaz” anahtarı kapalıysa hiç
+  gönderilmez; kelime ve profil anahtarları da eskisi gibi çalışır.
 - **Kim görür:** yalnız aynı ekip belirtecine sahip Mac'ler. Sunucu ekip başına ve Mac başına dosya saklar; her Mac
   yalnız **kendi** dosyalarını yükler, ötekilerinkini indirir. Kimse kimsenin dosyasının üzerine yazamaz.
 - **Sunucu kapalıyken hiçbir şey kaybolmaz.** Uygulama her şeyi önce yerel aynaya
   (`~/Library/Application Support/MeetingOS/team/`) yazar ve oradan okur; bağlantı gelince eşitlenir. Kurulum
   durumu kartındaki **Ekip bilgi tabanı** satırı son eşitlemeyi ya da “bulut şu an erişilemiyor” bilgisini söyler.
+- **Öğrettiğiniz şey gerçekten gider (1.2.78+).** Bir kelime öğretmek, bir sesi adlandırmak, sözlük içe aktarmak
+  ya da bir rapor yazmak önce diske bir **gönderim borcu** (`team-outbox.json`) bırakır, ağı sonra dener. Borç
+  ancak tamamlanan bir eşitlemeyle silinir; silinmediği sürece uygulama 20 saniye sonra, ardından beş dakikada
+  bir, açılışta ve Mac uyanınca yeniden dener (kayıt sürerken asla). Kurulum kartı bu arada **“eşitleme bekliyor ·
+  12:34’ten beri”** der: bekleyen bir gönderim varken satır yeşil görünmez.
+
+### Buluta ne çıkar — tam sözleşme (1.2.78+)
+
+**Hata günlüğü.** Sunucudaki `errors/<mac-adı>.jsonl`, yereldeki `errors.jsonl`’in kopyası **değildir**; ondan
+üretilen ve **yalnız şu beş alanı** taşıyan bir dışa aktarımdır (`errors.export_for_team`):
+
+| Alan | İçindeki tek şey |
+| --- | --- |
+| `time` | olayın zamanı (UTC) |
+| `kind` | `ui` · `job` · `cloud` · `capture` · `update` · `crash` |
+| `version` | uygulama sürümü |
+| `code` | en fazla 40 karakterlik **sınıflandırma**: çökmenin hata türü (`EXC_BAD_ACCESS/SIGSEGV`), ilk iki nokta üst üsteden önceki tanımlayıcı (`ValueError`, `auth`, `credit`), HTTP durumu (`http-429`), uygulamanın kendi yazdığı cümlelerden biri (`team-sync`, `update-failed`, `capture-helper`, `no-key`, `resource-guard`) ya da `other` |
+| `context` | türe göre **beyaz listeden** en fazla birkaç küçük alan (aşağıda) |
+
+`context` beyaz listesi: `ui` → `state`; `job` → `command`, `supervised`, `state`, `seconds`, `pieces`;
+`cloud` → `http`, `model`, `state`, `seconds`, `pieces`; `capture` → `state`, `seconds`, `pieces`;
+`update` → `state`; `crash` → `state`. Değer yalnız sayı, doğru/yanlış ya da **en fazla 40 karakterlik, dosya
+yolu gibi görünmeyen** bir metin olabilir; başka her şey (liste, sözlük, uzun cümle, klasör adı) **düşer**.
+**Hata iletisinin serbest metni hiçbir zaman gitmez** — yerelde tam hâliyle durur, dışarıya `code` olarak
+özetlenir. Çökme raporunun çağrı adları, toplantı karması, komut yolu ve uygulama sürümü gibi alanlar da
+sunucuya **çıkmaz**; onlar yalnız bu Mac’teki günlükte ve elle kaydettiğiniz tanılama raporunda vardır.
+
+**Teşhis raporları.** “Raporlara transkript metnini de ekle” **kapalıyken** (varsayılan) sunucuya giden kopya
+yükleme anında anonimleştirilir: `transcript` alanı **yoktur**, `title` **boştur**, `meeting` alanı toplantı
+numarası değil onun **8 karakterlik karmasıdır**, **dosya adındaki toplantı numarası da aynı karmayla
+değiştirilir** ve konuşmacılar `S1`, `S2`… olur (ad ve öneri boş). Bu denetim **yükleme anında** yapılır: ayar
+açıkken yazılmış eski bir rapor, ayarı kapattığınız anda sunucudan **silinir** ve yerine anonim kopyası gider.
+Ayar **açıkken** rapor olduğu gibi, kendi adıyla gider — o anahtarın anlamı budur. Okunamayan bir JSON hiç
+yüklenmez. `heartbeat.json` bunların hiçbirinden etkilenmez: kimseyi ve hiçbir toplantıyı adlandırmadığı için
+baytı baytına gider. Mac’teki özgün rapor dosyası her durumda olduğu gibi kalır; değişen yalnız giden kopyadır.
 
 #### Ekibe katılmak: bir bağlantı, bir tıklama (1.2.68+)
 

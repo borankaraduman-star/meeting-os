@@ -106,11 +106,18 @@ enum SetupStatus {
             let macs=max((cloud["hosts"] as? [Any])?.count ?? 0,1)
             let lastOK=cloud["last_ok"] as? String ?? ""
             let lastError=cloud["last_error"] as? String ?? ""
+            let waiting=cloud["outbox_pending_since"] as? String ?? ""
             // An error outranks an older success: a Mac that synced this morning and has been failing since
             // lunch used to read "son eşitleme 09:14" and nothing else (Codex, 10 Sep 2026, P1 #8 note).
             if !lastError.isEmpty {
                 let since=lastOK.isEmpty ? "" : " · son başarılı eşitleme "+syncClock(lastOK)
                 return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"bulut şu an erişilemiyor (\(lastError))"+(since.isEmpty ? "; yerel bilgi korunuyor, bağlanınca eşitlenir" : since))
+            }
+            // …and a pending outbox outranks an older success for the same reason: a word taught at 12:34 that
+            // is still here at 15:00 must not read "son eşitleme 09:14 ✓". Green means the team HAS it.
+            if !waiting.isEmpty {
+                return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,
+                                  hint:"ekip bulutu · \(macs) Mac · eşitleme bekliyor · \(syncClock(waiting))’ten beri")
             }
             if !lastOK.isEmpty { return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.ok,hint:"ekip bulutu · \(macs) Mac · son eşitleme "+syncClock(lastOK)) }
             return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.optional,hint:"ekip bulutu · ilk eşitleme bekleniyor")
@@ -123,12 +130,17 @@ enum SetupStatus {
     /// which ISO8601DateFormatter refuses, so they are cut before parsing; an unparseable stamp falls back to
     /// the UTC clock inside the string rather than to nothing.
     static func syncClock(_ iso:String)->String {
+        guard let date=syncDate(iso) else { return String(iso.dropFirst(11).prefix(5)) }
+        let clock=DateFormatter(); clock.dateFormat="HH:mm"
+        return clock.string(from:date)
+    }
+    /// The same parse as a `Date`, for the places that need to know how OLD a stamp is rather than how to
+    /// print it (the outbox's "…'ten beri", the flush loop adopting the Python side's `since`).
+    static func syncDate(_ iso:String)->Date? {
         var text=iso
         if let dot=text.firstIndex(of:"."), let end=text[dot...].firstIndex(where:{ $0=="+" || $0=="-" || $0=="Z" }) { text.removeSubrange(dot..<end) }
         let parser=ISO8601DateFormatter(); parser.formatOptions=[.withInternetDateTime]
-        guard let date=parser.date(from:text) else { return String(iso.dropFirst(11).prefix(5)) }
-        let clock=DateFormatter(); clock.dateFormat="HH:mm"
-        return clock.string(from:date)
+        return parser.date(from:text)
     }
     /// `bundled`/`bundleVersion` come from `runtime.json`. A downloaded package has no checkout behind it, so
     /// the two rows that talk about one have to go: "İmzalama izni" names a script in a repo the user does not

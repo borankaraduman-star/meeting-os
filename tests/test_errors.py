@@ -279,4 +279,31 @@ class HookTests(unittest.TestCase):
             store.close()
 
 
+class TeamExportTests(unittest.TestCase):
+    """`export_for_team` is the only thing the team cloud ever uploads as `errors/<host>.jsonl`. The journal
+    beside it keeps everything — this is the contract half (Codex, 10 Sep 2026, P0 #6)."""
+
+    def test_a_crash_keeps_its_fault_and_loses_everything_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)
+            reports=data/'DiagnosticReports';reports.mkdir()
+            ips(reports,'MeetingOS-2026-09-10-115900.ips')
+            self.assertEqual(len(E.collect_crashes(data,directory=reports)),1)
+            local=E.entries(data)[0]
+            self.assertIn('MeetingOS.Model.refresh()',json.dumps(local,ensure_ascii=False))   # the local journal has the frames
+            line=json.loads(E.export_for_team(data).strip())
+            self.assertEqual(sorted(line),sorted(E.TEAM_FIELDS))
+            self.assertEqual(line['code'],'EXC_BAD_ACCESS/SIGSEGV')
+            self.assertEqual(line['context'],{})          # process, frames, termination: none of them is on the list
+            self.assertEqual(line['kind'],'crash')
+            self.assertNotIn('refresh',E.export_for_team(data))
+            self.assertNotIn('gizli',E.export_for_team(data))   # the image path in the report never reaches here
+
+    def test_an_empty_journal_exports_nothing_at_all(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(E.export_for_team(Path(tmp)),'')
+            E.record('ui','bir şey oldu',data_dir=Path(tmp))
+            self.assertEqual(E.export_for_team(Path(tmp)).count(chr(10)),1)
+
+
 if __name__=='__main__': unittest.main()
