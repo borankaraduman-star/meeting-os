@@ -71,12 +71,12 @@ enum ZoomWatch {
 }
 
 /// System-wide shortcuts through Carbon hot keys: work while Zoom is frontmost, need no Accessibility grant.
-/// ⌃⌥R starts/ends the recording, ⌃⌥M marks a moment.
+/// ⌃⌥R starts/ends the recording, ⌃⌥M marks a moment, ⌃⌥V records my own voice too.
 enum GlobalHotkeys {
-    static let record:UInt32=1, mark:UInt32=2
+    static let record:UInt32=1, mark:UInt32=2, mic:UInt32=3
     private static var refs:[EventHotKeyRef?]=[]
     private static var installed=false
-    static func keyName(_ id:UInt32)->String { id==record ? "⌃⌥R" : "⌃⌥M" }
+    static func keyName(_ id:UInt32)->String { id==record ? "⌃⌥R" : (id==mic ? "⌃⌥V" : "⌃⌥M") }
     static func install(handler:@escaping (UInt32)->Void) {
         guard !installed else { return }   // the window can reappear; one handler, one registration
         installed=true
@@ -90,7 +90,7 @@ enum GlobalHotkeys {
         let box=HotkeyBox(handler:handler)
         InstallEventHandler(GetApplicationEventTarget(),callback,1,&spec,Unmanaged.passRetained(box).toOpaque(),nil)
         let mods=UInt32(controlKey|optionKey)
-        for (id,code) in [(record,UInt32(kVK_ANSI_R)),(mark,UInt32(kVK_ANSI_M))] {
+        for (id,code) in [(record,UInt32(kVK_ANSI_R)),(mark,UInt32(kVK_ANSI_M)),(mic,UInt32(kVK_ANSI_V))] {
             var ref:EventHotKeyRef?
             RegisterEventHotKey(code,mods,EventHotKeyID(signature:OSType(0x4D4F5321),id:id),GetApplicationEventTarget(),0,&ref)
             refs.append(ref)
@@ -112,17 +112,28 @@ struct QuickMenu:View {
         Divider()
         Button(model.recording ? "Kaydı bitir  ⌃⌥R" : "Yeni kayıt  ⌃⌥R") { if model.recording { model.stop() } else { model.beginRecording() } }.disabled(!model.recording && model.recordProcess != nil)
         if model.recording {
+            Text(model.micStatusLine).foregroundStyle(.secondary)
+            Button(MicGate.overrideLabel(model.micManualOn)) { model.toggleMicManual() }
+            micModeMenu
             Button("An  ⌃⌥M") { model.markMoment("important") }
             Button("Karar") { model.markMoment("decision") }
             Button("Görev") { model.markMoment("task") }
             Button("Sonra") { model.markMoment("later") }
         }
+        if !model.recording { micModeMenu }
         if let u=model.update, u.canUpdate { Divider(); Button((model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")+" · \(u.behind) değişiklik") { model.startUpdate() }.disabled(model.busy || model.recording || model.updating || model.zoomMeetingOpen) }
         Divider()
         Button("Uygulamayı göster") { model.showMainWindow() }
         if !model.recording, let last=model.meetings.first { Button("Son toplantıyı aç · \(String(last.title.prefix(28)))") { model.selected=last.id; model.tab="analysis"; model.showMainWindow() } }
         if !model.recording, model.meeting != nil { Button("Kontrol sekmesini aç") { model.tab="review"; model.showMainWindow() } }
         Button("Meeting OS’i kapat") { NSApp.terminate(nil) }
+    }
+    /// The same three-way choice as Ayarlar → Genel, one click from the menu bar: the mic gate is the setting
+    /// somebody wants to change *because of* the meeting they are in, not before it.
+    @ViewBuilder var micModeMenu:some View {
+        Menu("Mikrofonum · "+MicGate.label(model.micMode)) {
+            Picker("Mikrofonum",selection:$model.micMode) { ForEach(MicGate.modes,id:\.self) { Text(MicGate.label($0)).tag($0) } }.pickerStyle(.inline).labelsHidden()
+        }
     }
 }
 

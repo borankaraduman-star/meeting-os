@@ -68,6 +68,35 @@ def chunk_events(directory):
     return events
 
 
+MIC_GATE_JOURNAL = 'mic-gate.jsonl'
+
+
+def gate_events(directory):
+    """Every `mic_gate` line the app wrote while this recording ran, in the order it wrote them.
+
+    The app owns `mic-gate.jsonl` the way it owns `markers.jsonl`: the capture journals belong to the helper
+    process (`capture-native.jsonl` must open with the helper's own `started` line, and `events.jsonl` must not
+    exist before the recorder creates it), so the gate keeps its own file next to them. A gate line found
+    inside either journal is read too, so a build that ever writes one there needs no change here.
+
+    Returns [] for a recording made before the gate existed — the caller then keeps the old behaviour and
+    transcribes the whole microphone track."""
+    directory = Path(directory).resolve()
+    out = []
+    names = [MIC_GATE_JOURNAL]
+    if not (directory/MIC_GATE_JOURNAL).is_file(): names = ['capture-native.jsonl', 'events.jsonl']
+    for name in names:
+        path = directory/name
+        try: lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+        except OSError: continue
+        for line in lines:
+            try: e = json.loads(line)
+            except ValueError: continue   # crash-truncated final line
+            if isinstance(e, dict) and e.get('kind') == 'mic_gate': out.append(e)
+        if out: break
+    return out
+
+
 def journal_source_ends(directory):
     """{source: seconds of audio the journal accounts for}, or None when there is no readable journal.
 

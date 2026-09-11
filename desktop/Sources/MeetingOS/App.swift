@@ -169,6 +169,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             guard let self=self else { return }
             self.pollTick+=1
             if RefreshCadence.shouldRefresh(tick:self.pollTick,recording:self.recording,busy:self.busy,active:NSApp.isActive) { await self.refresh() }
+            await self.pollMicGate()   // every two seconds while recording: Zoom's mute state decides whether the mic track counts
         } }
         // Sleep/wake is the one moment a recording can lose minutes without anything else noticing. No timer and
         // no extra polling: the wake notification simply runs the poll that was due anyway, right now.
@@ -517,13 +518,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
         recordingNavigation.begin()
         let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
-        recordingDir=dir; recording=true; markerCount=0; recorder.recordingNotice=""; recorder.lowDiskNotice=diskNotice ?? ""; continuitySeen=nil; sleptAt=nil; activity=diskNotice ?? "Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); updateRecorderPanel()
+        recordingDir=dir; recording=true; markerCount=0; micManualOn=false; micGateWritten=nil; zoomMuted=nil; recorder.recordingNotice=""; recorder.lowDiskNotice=diskNotice ?? ""; continuitySeen=nil; sleptAt=nil; activity=diskNotice ?? "Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); updateRecorderPanel()
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
         if title.isEmpty, diskNotice==nil, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
         recordingTitle=name
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         jobTitle=name
+        defer {
+            // The gate's opening state belongs to second zero of the recording, before the first chunk lands.
+            // `launch` has set `recordStartedAt` by now; a refused launch cleared `recording` and writes nothing.
+            evaluateMicGate()
+            if recording { Task { await pollMicGate() } }   // and ask Zoom straight away rather than at the next tick
+        }
         return launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
             guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recorder.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
@@ -859,6 +866,58 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Hands-free Zoom: start when a meeting window has been open ~10 s, stop an auto-started recording 60 s after it closes.
     @Published var zoomAutoRecord=UserDefaults.standard.object(forKey:"zoomAutoRecord") as? Bool ?? false { didSet { UserDefaults.standard.set(zoomAutoRecord,forKey:"zoomAutoRecord") } }
     var zoomAuto=ZoomAutoRecord()
+    /// Mikrofon kapısı. Default `zoom`: the mic track counts as meeting audio only while Zoom says the local
+    /// microphone is open. `manual` keeps it shut until ⌃⌥V, `always` is the behaviour that shipped before.
+    @Published var micMode=MicGate.normalize(UserDefaults.standard.string(forKey:MicGate.key)) {
+        didSet { UserDefaults.standard.set(micMode,forKey:MicGate.key); if recording { evaluateMicGate() } }
+    }
+    /// "Sesimi de kaydet" — forces the gate open for this recording only; cleared at every start.
+    @Published var micManualOn=false
+    /// What the gate decided last, and why. The menu bar reads them; `micGateWritten` is nil until the first
+    /// line of a recording has been journalled, so the initial state is always written even when it is `off`.
+    @Published var micGateOn=false
+    @Published var micGateReason="zoom"
+    var micGateWritten:Bool?
+    /// Zoom's own answer: true muted, false live, nil unknown (no meeting, no Accessibility grant, unreadable menu).
+    @Published var zoomMuted:Bool?
+    /// Whether this Mac has granted Accessibility. Re-read on every gate poll; the setup card shows it too.
+    @Published var axTrusted=ZoomMute.trusted()
+    var micStatusLine:String { MicGate.statusLine(mode:micMode,zoomOpen:zoomMeetingOpen,zoomMuted:zoomMuted,manualOn:micManualOn,trusted:axTrusted) }
+    /// ⌃⌥V / menu bar: flip the per-recording override and journal the change at once.
+    func toggleMicManual() {
+        guard recording else { return }
+        micManualOn.toggle(); evaluateMicGate()
+        activity=micStatusLine
+    }
+    /// Poll (every 2 s while recording) → Zoom's mute state → the gate. Only asks Zoom in `zoom` mode: the
+    /// other two modes do not depend on the answer, and an AX walk per meeting-second is not free.
+    func pollMicGate() async {
+        guard recording else { return }
+        let trusted=ZoomMute.trusted()
+        if axTrusted != trusted { axTrusted=trusted }
+        if micMode=="zoom", !micManualOn {
+            let muted=trusted ? await ZoomMute.stateAsync() : nil
+            if zoomMuted != muted { zoomMuted=muted }
+        }
+        evaluateMicGate()
+    }
+    /// The one place the gate changes. Writes a journal line whenever the verdict moves — and once at the start
+    /// of every recording, so finalize always knows what the gate was before the first change.
+    func evaluateMicGate() {
+        guard recording, let dir=recordingDir, let started=recordStartedAt else { return }
+        let verdict=MicGate.state(mode:micMode,zoomOpen:zoomMeetingOpen,zoomMuted:zoomMuted,manualOn:micManualOn)
+        guard micGateWritten != verdict.on || micGateReason != verdict.reason else { return }
+        micGateOn=verdict.on; micGateReason=verdict.reason; micGateWritten=verdict.on
+        let line=MicGate.line(on:verdict.on,reason:verdict.reason,seconds:Date().timeIntervalSince(started))+"\n"
+        // The capture folder is created by the recorder process, which may not have run yet: the opening line
+        // is written within milliseconds of `launch`, and an ENOENT here would lose the state the gate started in.
+        try? FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+        let url=dir.appendingPathComponent(MicGate.journal)
+        // O_APPEND, one short write: a line can never land inside another, whoever else has the file open.
+        let fd=open(url.path,O_WRONLY|O_APPEND|O_CREAT,0o600)
+        if fd>=0 { _=line.withCString { write(fd,$0,strlen($0)) }; close(fd) }
+        else { micGateWritten=nil }   // the folder is not there yet: say it again on the next poll rather than lose it
+    }
     @Published var showRecorderPanel=UserDefaults.standard.object(forKey:"showRecorderPanel") as? Bool ?? true { didSet { UserDefaults.standard.set(showRecorderPanel,forKey:"showRecorderPanel"); updateRecorderPanel() } }
     /// Göze batma. Default ON: while recording the menu bar item is indistinguishable from an idle one, the
     /// floating panel leaves the screen for as long as the user is sharing it, and the app's own windows are
@@ -942,7 +1001,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         explanation=(try? await request(["action":"explain_identity","meeting":mid,"speaker":row.speaker])).map(IdentityExplanation.parse)
     }
     func showMainWindow() { NSApp.activate(ignoringOtherApps:true); NSApp.windows.first(where:{ $0.title=="Meeting OS" })?.makeKeyAndOrderFront(nil); applyWindowPrivacy() }
-    /// Global hot key dispatch (⌃⌥R / ⌃⌥M) — same guards as the buttons.
+    /// Global hot key dispatch (⌃⌥R / ⌃⌥M / ⌃⌥V) — same guards as the buttons.
     func hotkey(_ id:UInt32) {
         if id==GlobalHotkeys.record {
             if recording {
@@ -953,6 +1012,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             } else { beginRecording() }
         }
         else if id==GlobalHotkeys.mark, recording { markMoment("important") }
+        else if id==GlobalHotkeys.mic, recording { toggleMicManual() }
     }
     @Published var update:UpdateInfo?; @Published var updating=false; @Published var reportSettings=ReportSettings(shareReports:true,shareText:false,autoUpdate:false,reportDir:"")
     /// The person this Mac belongs to (Ayarlar → Genel → Adınız); never a hard-coded name. Empty until they

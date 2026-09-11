@@ -12,7 +12,7 @@ Canlı sürüm, görselli (paylaşılabilir sayfa): https://claude.ai/code/artif
 5. Kişisel bağlantınıza tıklayın (tıklanmıyorsa karşılama ekranındaki *Ekipten davet aldınız mı?* kutusuna yapıştırıp *Katıl*). Ekip ve anahtar böyle gelir.
 6. Üç izni verin: Mikrofon, Ekran Kaydı (karşı tarafın sesi için; görüntü alınmaz), Bildirimler. *Kurulum durumu* kartı yeşilse hazırsınız.
 
-**İlk toplantı:** Zoom başlayınca "Kaydedeyim mi?" sorar → *Kaydet*. Diğer uygulamalarda menü çubuğundaki simgeden *Kaydı başlat* ya da ⌃⌥R. Bitince *Kaydı bitir*; birkaç dakikada transkript, özet ve görevler gelir.
+**İlk toplantı:** Zoom başlayınca "Kaydedeyim mi?" sorar → *Kaydet*. Diğer uygulamalarda menü çubuğundaki simgeden *Kaydı başlat* ya da ⌃⌥R. Bitince *Kaydı bitir*; birkaç dakikada transkript, özet ve görevler gelir. Zoom'da mikrofonunuz kapalıyken odadaki konuşmalar kayda girmez; sesinizi kaydetmesi için Zoom'da sesinizi açın ya da ⌃⌥V.
 
 **Sonrası:** Transkript (⌘1), Özet (⌘2, maddeye tıkla → kanıt; "Ayrıntılı özet"), Görevlerim (⌘3), Kontrol (⌘4), Hafıza (⌘5). Konuşana bir kez ad verin (*Adlandır ve öğren*); yanlış kelimeye tıklayıp düzeltin (*Düzelt ve öğret*): ekip de öğrenir.
 

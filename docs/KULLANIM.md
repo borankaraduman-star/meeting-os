@@ -23,6 +23,7 @@ Ekran görüntüleri 1.2.37 arayüzünden alınmıştır; yalnız panel, karne v
 | Nasıl | Nerede |
 |---|---|
 | **⌃⌥R** | Her yerden başlat/bitir (Zoom öndeyken de). |
+| **⌃⌥V** | Her yerden “sesimi de kaydet”: o kayıt için mikrofon kapısını açar/kapatır. |
 | Menü çubuğu simgesi (dalga) | Kayıt başlat/bitir, süre, an işaretleri, “Son toplantıyı aç”, **Kontrol sekmesini aç**, güncelleme. |
 | Kenar çubuğu → **Yeni kayıt** | Üstteki alana ad yazarsanız başlık o olur. |
 | Zoom bildirimi | Zoom toplantı penceresi açılınca bildirim gelir; “Kaydı başlat” düğmesi vardır (Ayarlar → Genel). |
@@ -30,6 +31,14 @@ Ekran görüntüleri 1.2.37 arayüzünden alınmıştır; yalnız panel, karne v
 
 Kayıt sırasında:
 
+- **Mikrofonunuz yalnız toplantıdayken:** Ayarlar → Genel → *Kayıt sırasında* → **Mikrofonum**:
+  - **Zoom’u izle** (varsayılan): kendi sesiniz yalnız Zoom’da mikrofonunuz açıkken kayda girer. Zoom sessizdeyken odada konuşulanlar, telefon görüşmeniz ya da koridordaki sohbet toplantı notuna dönüşmez.
+  - **Elle**: kendi sesiniz ⌃⌥V’ye basana kadar hiç alınmaz.
+  - **Her zaman**: eski davranış; mikrofon bütün kayıt boyunca alınır.
+  - **⌃⌥V — “Sesimi de kaydet”:** her yerden, o kayda özel mikrofonu açar (menü çubuğu menüsünde de aynı satır var). Tekrar basınca kapanır, kayıt bitince kendiliğinden sıfırlanır. Menü çubuğu menüsü durumu tek satırda yazar: *Mikrofon: kapalı · Zoom sessizde* / *Mikrofon: açık · Zoom’da ses açık* / *Mikrofon: açık · elle*.
+  - Karşı tarafın sesi bu ayardan etkilenmez; kapı yalnız sizin mikrofonunuz içindir.
+  - Kapalı geçen mikrofon parçaları **hiç yüklenmez ve yazıya çevrilmez** (ücret de çıkmaz); raporda `mic_gated_windows` sayısı olarak durur. Ses dosyası her zamanki gibi Mac’te tam olarak kalır — kesilen yalnız buluta gidenlerdir.
+  - **Erişilebilirlik izni neden:** Zoom mikrofon durumunu bir arayüzle bildirmez; Meeting OS bunu yalnız Zoom’un **Toplantı** menüsündeki *Sesi Aç / Sesi Kapat* satırından okur ve bunun için macOS’ta **Erişilebilirlik** izni ister (Ayarlar → Sistem → Kurulum durumu → *Erişilebilirlik* satırındaki düğme, ya da Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik). Tuş vuruşu ya da ekran içeriği okunmaz. İzin yokken durum “bilinmiyor” sayılır ve **kapalı** kabul edilir: “Zoom’u izle” modunda sesiniz yalnız ⌃⌥V ile kaydedilir.
 
 - **Ekranda panel yok (1.2.74+):** kayıt sırasında hiçbir pencere ya da panel görünmez (11 Eylül: yüzen panel canlı Zoom görüşmesinde odadakilerce görüldü ve kaldırıldı). Süre ve “kayıt sürüyor” bilgisi menü çubuğu simgesinin menüsünde; bitirmek ⌃⌥R ya da o menüden, an işareti ⌃⌥M.
 - **An işaretleri:** ⌃⌥M (her yerden) veya ⌘M önemli an, ⌘⇧M karar, ⌘⌥M bana görev, ⌘⌃M sonra bak. İşaretler kayıt bitince Kontrol sekmesinin üstünde ve ilgili paragrafın yanında görünür.
