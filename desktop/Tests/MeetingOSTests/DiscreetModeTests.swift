@@ -68,6 +68,11 @@ final class DiscreetModeTests:XCTestCase {
     func testDiscreetModeExcludesWindowsFromCaptureAndRestoresTheDefault() {
         XCTAssertEqual(DiscreetMode.windowSharingType(discreet:true),NSWindow.SharingType.none)
         XCTAssertEqual(DiscreetMode.windowSharingType(discreet:false),NSWindow.SharingType.readOnly)
+        // Outside a meeting the user's own screenshots must work (11 Sep 2026); in a meeting or while sharing, hidden.
+        XCTAssertEqual(DiscreetMode.windowSharingType(discreet:true,inMeeting:false,sharing:false),NSWindow.SharingType.readOnly)
+        XCTAssertEqual(DiscreetMode.windowSharingType(discreet:true,inMeeting:true,sharing:false),NSWindow.SharingType.none)
+        XCTAssertEqual(DiscreetMode.windowSharingType(discreet:true,inMeeting:false,sharing:true),NSWindow.SharingType.none)
+        XCTAssertEqual(DiscreetMode.windowSharingType(discreet:false,inMeeting:true,sharing:true),NSWindow.SharingType.readOnly)
     }
 
     func testNothingIsDeliveredWhileRecordingInAMeetingOrSharing() {

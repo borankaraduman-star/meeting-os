@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 81 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 82 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.77](#v1277) | 2026-09-11 15:40 | v1.2.77 — Ekran görüntüsü toplantı dışında çalışır; Özet sekmesinde dışa aktarma |
 | [v1.2.76](#v1276) | 2026-09-11 15:00 | v1.2.76 — Mikrofon kapısı: yalnız Zoom'da sesiniz açıkken ya da "sesimi de al" deyince |
 | [v1.2.75](#v1275) | 2026-09-11 14:20 | v1.2.75 — Güncelleme düğmesi yalnız gerçek toplantıda bekler |
 | [v1.2.74](#v1274) | 2026-09-11 13:40 | v1.2.74 — Yüzen kayıt paneli kaldırıldı |
@@ -101,6 +102,18 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1277"></a>
+### v1.2.77 — Ekran görüntüsü toplantı dışında çalışır; Özet sekmesinde dışa aktarma
+
+2026-09-11 15:40 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "Özet ve kararları screenshot alamıyorum ya da dışa aktaramıyorum."
+
+- **Ekran görüntüsü:** göze batma modu uygulama pencerelerini ekran yakalamadan gizliyordu; bu, kendi ⌘⇧4 görüntülerinizi de karartıyordu. Gizleme artık yalnız gerçek bir Zoom toplantısı sürerken ya da ekran paylaşımı algılanmışken uygulanır; toplantı dışında ekran görüntüsü normal çalışır.
+- **Özet → Dışa aktar** menüsü: "Panoya kopyala (Markdown)", "Dosyaya kaydet…", "Paylaşım önizlemesi… (maskeleme, yalnız kararlar)". Çıktı: kararlar, özet, riskler, açık sorular, görevler ve her maddenin kaynak alıntıları; transkript yok, maskeleme yok.
+- Paylaşım metnine **Riskler** ve **Açık sorular** bölümleri eklendi (ekranda vardı, dışa aktarımda yoktu).
+- Testler: Swift 262, Python 983. Canlı: gerçek toplantı özeti Markdown olarak üretildi (5.365 karakter).
 
 <a id="v1276"></a>
 ### v1.2.76 — Mikrofon kapısı: yalnız Zoom'da sesiniz açıkken ya da "sesimi de al" deyince

@@ -44,7 +44,10 @@ enum DiscreetMode {
     /// Main-window privacy. With `.none` the app's windows are excluded from screen capture entirely, so a
     /// shared full screen never shows the transcript — which is exactly what is wanted. `.readOnly` is the
     /// system default and is what discreet mode restores when it is switched off.
-    static func windowSharingType(discreet:Bool)->NSWindow.SharingType { discreet ? .none : .readOnly }
+    /// `.none` also blocks the user's OWN screenshots (⌘⇧4 draws the window black), so it is applied only while
+    /// there is somebody to hide from: a real Zoom meeting or an active screen share. Boran, 11 Sep 2026: "özet ve
+    /// kararları screenshot alamıyorum" — outside a meeting the windows are ordinary again.
+    static func windowSharingType(discreet:Bool,inMeeting:Bool=true,sharing:Bool=true)->NSWindow.SharingType { discreet && (inMeeting || sharing) ? .none : .readOnly }
 
     /// A banner is the loudest thing the app can do on a shared screen, so nothing is delivered while a meeting
     /// is on screen, a recording is running, or the user is sharing. (Deliveries queue and land afterwards.)

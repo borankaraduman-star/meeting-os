@@ -125,6 +125,14 @@ struct AnalysisView:View {
         HStack(alignment:.firstTextBaseline) {
             Text("Özet").font(.system(size:23,weight:.bold,design:.rounded))
             Spacer()
+            if m.analysis != nil {
+                Menu("Dışa aktar") {
+                    Button("Panoya kopyala (Markdown)") { Task { await m.copySummary() } }
+                    Button("Dosyaya kaydet…") { Task { await m.saveSummary() } }
+                    Divider()
+                    Button("Paylaşım önizlemesi… (maskeleme, yalnız kararlar)") { m.showShare=true }
+                }.fixedSize().accessibilityIdentifier("summaryExportMenu")
+            }
             Button(m.analysis == nil ? "Özet ve görevleri hazırla":"Özeti güncelle") { m.analyzeMeeting() }.disabled(m.busy || m.meeting?.status != "complete").accessibilityIdentifier("analyzeButton")
         }
         Text(SummaryUX.statsLine(segments:m.rows.count,openTasks:m.openTaskCount,hasSummary:m.analysis != nil,stale:stale)).font(.callout).foregroundStyle(.secondary).accessibilityIdentifier("summaryStats")

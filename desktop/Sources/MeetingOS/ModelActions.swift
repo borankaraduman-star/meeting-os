@@ -327,6 +327,29 @@ extension Model {
     }
     /// The invite, on the pasteboard. With `includeKey` the teammate never meets the OpenRouter key step —
     /// which also means the link now carries a password that pays Boran's bill, so the confirmation says so.
+    /// Boran, 11 Sep 2026: "özet ve kararları dışa aktaramıyorum" — the Özet tab gets its own two-click export:
+    /// the same Markdown the share preview builds (summary, decisions, risks, questions, tasks with their quotes),
+    /// no transcript, no masking, straight to the clipboard or a file.
+    func summaryMarkdown()->[String:Any] { guard let mid=selected else { return [:] }; return ["action":"share_preview","meeting":mid,"kinds":["summary"],"mask_names":false,"only_decisions":false] }
+    func copySummary() async {
+        let req=summaryMarkdown(); guard !req.isEmpty else { return }
+        do {
+            let r=try await request(req); let text=r["text"] as? String ?? ""
+            guard !text.isEmpty else { self.error="Kopyalanacak özet yok"; return }
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text,forType:.string)
+            activity="Özet panoya kopyalandı (Markdown) · \(text.count) karakter"
+        } catch { self.error=error.localizedDescription }
+    }
+    func saveSummary() async {
+        guard let mid=selected else { return }
+        let panel=NSSavePanel(); let base=(meeting?.title ?? "Toplantı").replacingOccurrences(of:"/",with:"-").replacingOccurrences(of:":",with:"-")
+        panel.nameFieldStringValue="\(base) · özet.md"; panel.allowedContentTypes=[UTType.plainText]
+        guard panel.runModal() == .OK, let url=panel.url else { return }
+        do {
+            _=try await request(["action":"share_export","meeting":mid,"path":url.path,"kinds":["summary"],"mask_names":false,"only_decisions":false])
+            activity="Özet kaydedildi · \(url.lastPathComponent)"
+        } catch { self.error=error.localizedDescription }
+    }
     func copyInviteLink(includeKey:Bool,personalKey:String="") async {
         do {
             let r=try await request(["action":"team_invite","include_key":includeKey,"key":personalKey.trimmingCharacters(in:.whitespacesAndNewlines)])

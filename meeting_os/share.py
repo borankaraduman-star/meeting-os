@@ -147,6 +147,13 @@ def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, m
         summary = payload.get('summary', [])
         if not summary: lines.append('- Özet yok.')
         for s in summary: lines += [f"- {m(s.get('text', ''))}"] + cite(s)
+        # Risks and open questions were on screen but never in the export (Boran, 11 Sep 2026: "özet ve kararları
+        # dışa aktaramıyorum"); a summary that leaves them out is not the summary the user saw.
+        for key, heading, empty in (('risks', '## Riskler', '- Kayıtlı risk yok.'), ('questions', '## Açık sorular', '- Açık soru yok.')):
+            items = payload.get(key, [])
+            lines += ['', heading]
+            if not items: lines.append(empty)
+            for it in items: lines += [f"- {m(it.get('text', ''))}"] + cite(it)
         lines += ['', '## Görevler']
         tasks = [t for t in memory.actions(meeting=mid) if t.get('state') not in RETIRED]
         if not tasks: lines.append('- Kayıtlı görev yok.')

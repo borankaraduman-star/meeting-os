@@ -425,7 +425,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord && !zoomState.sharing { ZoomNotifier.notifyIfNeeded() }   // never a banner onto a screen that is being shared
             if !zoomNow { ZoomNotifier.reset(); nameRefusalNotified=false }
             if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
-            if zoomInMeeting != zoomState.strict { zoomInMeeting=zoomState.strict }
+            if zoomInMeeting != zoomState.strict { zoomInMeeting=zoomState.strict; applyWindowPrivacy() }
             if screenSharing != zoomState.sharing { screenSharing=zoomState.sharing }
             updateRecorderPanel()
             applyWindowPrivacy()
@@ -942,7 +942,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// left alone: it sets `.none` for itself and must never be turned back on. Windows are created and recreated
     /// over a session (the main window, sheets), so this is re-applied rather than set once at launch.
     func applyWindowPrivacy() {
-        let want=DiscreetMode.windowSharingType(discreet:discreetMode)
+        let want=DiscreetMode.windowSharingType(discreet:discreetMode,inMeeting:zoomInMeeting,sharing:screenSharing)
         for w in NSApp.windows where !(w is NSPanel) { if w.sharingType != want { w.sharingType=want } }
     }
     @Published var zoomNotify=UserDefaults.standard.object(forKey:"zoomNotify") as? Bool ?? true { didSet { UserDefaults.standard.set(zoomNotify,forKey:"zoomNotify"); if zoomNotify { ZoomNotifier.register() } } }
