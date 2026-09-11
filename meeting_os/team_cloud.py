@@ -64,6 +64,7 @@ REPORTS_DIR = 'reports'
 ERRORS_FILE = 'errors.jsonl'
 ICLOUD_REPORTS = ICLOUD / 'MeetingOS-Reports'
 HEARTBEAT_FILE = 'heartbeat.json'
+RECORDING_HEARTBEAT_FILE = 'recording-heartbeat.json'   # reports.RECORDING_HEARTBEAT_FILE; named here too so pruning never needs that import
 
 TOKEN_SALT = 'meetingos-team-v1:'
 TOKEN_RE = re.compile(r'^[0-9a-fA-F]{32,128}$')
@@ -82,6 +83,7 @@ MIRROR_MODE = 0o700
 CONNECT_TIMEOUT = 5.0        # a server that does not answer in five seconds is a server that is down
 BUDGET = 20.0                # the whole pass, uploads and downloads together
 PULL_REPORTS = 300           # the newest reports of the other Macs; a team's history is not a download
+PULL_REPORT_BYTES = 50*1024*1024   # …and a hard disk ceiling for them: 300 is a per-pass selection, not a cap
 MAX_FILE_BYTES = 4*1024*1024  # the server refuses more; refusing it here keeps one big file out of the budget
 ERROR_JOURNAL_EVERY = 3600   # a Mac offline for a week must leave one line an hour, not one line a minute
 CLIENT_AGENT = 'MeetingOS-team-cloud/1'
@@ -856,6 +858,43 @@ def _sweep(mirror, files, host, pulled):
     return removed
 
 
+def _prune_reports(mirror, host, *, keep=None, budget=None):
+    """A real disk ceiling for the reports pulled from the other Macs: the newest `keep` of them, and at most
+    `budget` bytes. `PULL_REPORTS` alone only limits what ONE pass selects — pass after pass, a busy team's
+    older reports pile up on every Mac and the Storage card cannot explain the difference (Codex P2 #11).
+
+    Only files this Mac downloaded and can download again are dropped: never this host's own folder, never a
+    heartbeat (that is what makes an offline teammate visible), and nothing outside `reports/`. The state's
+    `pulled` digests are deliberately KEPT, so the next pass does not fetch back what this one just pruned.
+    Never raises: pruning a cache is not worth failing a sync over."""
+    keep = PULL_REPORTS if keep is None else keep; budget = PULL_REPORT_BYTES if budget is None else budget
+    reports = Path(mirror) / REPORTS_DIR
+    keeps = {HEARTBEAT_FILE, RECORDING_HEARTBEAT_FILE}
+    files = []
+    try:
+        if not reports.is_dir(): return 0
+        for folder in sorted(p for p in reports.iterdir() if p.is_dir()):
+            if folder.name == host: continue   # our own reports are not a cache; losing one loses the only copy
+            for path in sorted(folder.glob('*.json')):
+                if path.name in keeps or not REPORT_RE.match(path.name): continue
+                try: size = path.stat().st_size
+                except OSError: continue
+                files.append((path.name, path, size))
+    # Newest first by the report's OWN date: `reports.write_report` names every file `<YYYY-MM-DD>_<meeting>.json`,
+    # so the name sorts by age. The file's mtime would sort by when THIS Mac downloaded it, which within one pass
+    # runs backwards — the newest report is fetched first and so carries the oldest mtime.
+    except OSError: return 0
+    files.sort(reverse=True)
+    pruned = 0; used = 0; full = False
+    for index, (_, path, size) in enumerate(files):
+        if not full and index < keep and used + size <= budget: used += size; continue
+        full = True   # past the ceiling everything older goes, so the cache is always a newest-first prefix
+        try: path.unlink()
+        except OSError: continue
+        pruned += 1
+    return pruned
+
+
 def _run(data_dir, settings, http, mirror, host, state, result):
     files, hosts = http.index()
     state['hosts'] = hosts
@@ -877,6 +916,7 @@ def _run(data_dir, settings, http, mirror, host, state, result):
             if not REPORT_RE.match(name): continue
             _pull_file(http, path, meta, mirror / REPORTS_DIR / _owner(path) / name, pulled, result)
         result['removed'] = _sweep(mirror, files, host, pulled)
+        result['pruned'] = _prune_reports(mirror, host)
     except _OutOfTime:
         incomplete = True
     finally:
@@ -888,7 +928,7 @@ def sync(data_dir, settings=None, budget=BUDGET):
     """One pass: upload this Mac's files, download everybody else's, write the state file. NEVER raises — the
     caller is a naming, a housekeeping tick or app launch, and none of them may fail because a server did."""
     data = Path(data_dir)
-    result = {'pushed': 0, 'pulled': 0, 'deleted': 0, 'removed': 0, 'hosts': []}
+    result = {'pushed': 0, 'pulled': 0, 'deleted': 0, 'removed': 0, 'pruned': 0, 'hosts': []}
     try: seconds = float(BUDGET if budget is None else budget)
     except (TypeError, ValueError): seconds = BUDGET
     deadline = time.monotonic() + max(0.0, seconds)

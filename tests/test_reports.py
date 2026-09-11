@@ -631,3 +631,58 @@ class AudioRetentionWarningTests(unittest.TestCase):
             self.assertEqual(dispatch({'action': 'storage_housekeeping'}, db)['retention_warning']['meetings'], 1)
             reports.save_settings(data, {'audio_retention_days': 0})
             self.assertIsNone(dispatch({'action': 'storage_housekeeping'}, db)['retention_warning'])
+
+
+class TextRetentionTests(unittest.TestCase):
+    """`text_retention_days` deletes the meeting itself, not just its audio, so both halves of it are tested:
+    what the setting will accept, and who the pass would take."""
+    def meeting(self, store, title, age_days, status='complete', **meta):
+        from datetime import datetime, timedelta, timezone
+        mid = store.create_meeting(title, meta)
+        store.add_segment(mid, Segment(0, 5, 'Merhaba', 'system', 'S0'))
+        with store.db: store.db.execute('UPDATE meetings SET created=?,status=? WHERE id=?', ((datetime.now(timezone.utc) - timedelta(days=age_days)).isoformat(), status, mid))
+        return mid
+
+    def test_the_setting_is_off_by_default_and_only_accepts_a_day_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            self.assertEqual(reports.load_settings(data)['text_retention_days'], 0)
+            self.assertEqual(reports.save_settings(data, {'text_retention_days': 365})['text_retention_days'], 365)
+            self.assertEqual(reports.save_settings(data, {'text_retention_days': 0})['text_retention_days'], 0)
+            self.assertEqual(reports.save_settings(data, {'text_retention_days': 3650})['text_retention_days'], 3650)
+            for bad in (3651, -1, True, '30', 30.0, None):
+                self.assertEqual(reports.save_settings(data, {'text_retention_days': bad})['text_retention_days'], 3650)   # refused, the stored value stands
+            self.assertEqual(json.loads((data / 'settings.json').read_text(encoding='utf-8'))['text_retention_days'], 3650)
+
+    def test_it_counts_only_the_meetings_the_next_pass_would_really_take(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'meeting-os.sqlite'; s = Store(db)
+            self.meeting(s, 'Eski', 28); self.meeting(s, 'Korunan', 40, keep=True); self.meeting(s, 'Yeni', 2)
+            self.meeting(s, 'Yarım', 60, status='incomplete'); self.meeting(s, 'Bulut bekliyor', 60, cloud_error={'kind': 'credit'})
+            self.assertIsNone(reports.text_retention_warning(s, 0))     # off
+            self.assertIsNone(reports.text_retention_warning(s, 90))    # nothing is close
+            warning = reports.text_retention_warning(s, 30)
+            self.assertEqual((warning['meetings'], warning['retention_days'], warning['days_left']), (1, 30, 1))
+            self.assertIn('1 toplantının yazısı yarın tümüyle silinecek (30 gün)', warning['line'])
+            self.assertIn('transkript, özet ve görevler', warning['line'])
+            self.assertEqual([row['title'] for row, _ in reports.text_retention_candidates(s, 30)], [])   # not due yet without the lookahead
+            self.assertEqual([row['title'] for row, _ in reports.text_retention_candidates(s, 20)], ['Eski'])
+            s.close()
+
+    def test_a_meeting_a_job_is_running_on_is_never_a_candidate(self):
+        from meeting_os.recovery import current_job_metadata
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'meeting-os.sqlite'; s = Store(db)
+            self.meeting(s, 'İş sürüyor', 60, status='complete', **current_job_metadata())
+            self.assertEqual(reports.text_retention_candidates(s, 30), [])
+            self.assertIsNone(reports.text_retention_warning(s, 30)); s.close()
+
+    def test_the_storage_card_and_the_housekeeping_answer_both_carry_it(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp); db = data / 'meeting-os.sqlite'; s = Store(db); self.meeting(s, 'Eski', 28); s.close()
+            reports.save_settings(data, {'text_retention_days': 30, 'audio_retention_days': 0})
+            self.assertEqual(dispatch({'action': 'storage_report'}, db)['text_retention_warning']['meetings'], 1)
+            self.assertEqual(dispatch({'action': 'storage_housekeeping'}, db)['text_retention_warning']['meetings'], 1)
+            reports.save_settings(data, {'text_retention_days': 0})
+            self.assertIsNone(dispatch({'action': 'storage_report'}, db)['text_retention_warning'])

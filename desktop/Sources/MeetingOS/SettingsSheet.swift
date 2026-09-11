@@ -416,8 +416,14 @@ struct StorageSection:View {
     var body:some View {
         VStack(alignment:.leading,spacing:8) {
             Text("Depolama").font(.headline)
-            Text("Toplam \(StorageReport.format(bytes:storage.total)) · Kayıtlar \(StorageReport.format(bytes:storage.recordings)) · İçe aktarımlar \(StorageReport.format(bytes:storage.imports)) · Veritabanı \(StorageReport.format(bytes:storage.database))")
+            // Ses / Veritabanı / Ekip önbelleği / Günlükler: the whole data folder, not only the part made of
+            // meetings. Before this, a Mac whose team cache had grown read as smaller than it really was.
+            Text("Toplam \(StorageReport.format(bytes:storage.total)) · Ses \(StorageReport.format(bytes:storage.audio)) · Veritabanı \(StorageReport.format(bytes:storage.database)) · Ekip önbelleği \(StorageReport.format(bytes:storage.teamCache)) · Günlükler \(StorageReport.format(bytes:storage.logs))")
                 .font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("storageTotals")
+            if let warning=storage.textRetentionWarning {
+                Text(warning).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("textRetentionWarning")
+            }
             if storage.meetings.isEmpty {
                 Text("Ses dosyası olan toplantı yok.").font(.caption).foregroundStyle(.secondary)
             } else {
@@ -451,6 +457,11 @@ struct StorageCleanupSection:View {
                 Text("Eski toplantıların sesi").font(.callout)
                 Picker("",selection:Binding(get:{ model.reportSettings.audioRetentionDays },set:{ v in model.reportSettings.audioRetentionDays=v; Task { await model.saveReportSettings() } })) { Text("silinmesin").tag(0); Text("14 gün sonra").tag(14); Text("30 gün sonra").tag(30); Text("60 gün sonra").tag(60); Text("90 gün sonra").tag(90) }.labelsHidden().frame(width:150).accessibilityIdentifier("audioRetentionPicker")
                 Text("silinir; yazı, özet ve görevler kalır. “Sesi koru” işaretli toplantılara dokunulmaz. Saatte bir, kayıt yokken çalışır.").font(.caption2).foregroundStyle(.secondary)
+            }
+            HStack(spacing:8) {
+                Text("Eski toplantıların yazısı").font(.callout)
+                Picker("",selection:Binding(get:{ model.reportSettings.textRetentionDays },set:{ v in model.reportSettings.textRetentionDays=v; Task { await model.saveReportSettings() } })) { Text("silinmesin").tag(0); Text("90 gün sonra").tag(90); Text("180 gün sonra").tag(180); Text("365 gün sonra").tag(365); Text("730 gün sonra").tag(730) }.labelsHidden().frame(width:150).accessibilityIdentifier("textRetentionPicker")
+                Text("0 = hiç silme. Süre dolunca toplantının transkripti, özeti ve görevleri bu Mac’ten silinir; ses zaten kendi süresinde silinir. Kriz senaryosu için önceden belirlenmiş bir süre, sonradan toplu silmeden daha güvenlidir.").font(.caption2).foregroundStyle(.secondary)
             }
             Text("Eski sesleri temizle").font(.caption.weight(.semibold))
             Text("Transkript, özet, görevler ve ses profilleri kalır; yalnız tamamlanmış eski toplantıların ses dosyaları silinir. “Sesi koru” işaretli toplantılara dokunulmaz. Önce liste gösterilir.").font(.caption2).foregroundStyle(.secondary)

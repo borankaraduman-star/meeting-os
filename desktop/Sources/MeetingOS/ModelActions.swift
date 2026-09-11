@@ -134,10 +134,17 @@ extension Model {
                 // One retention setting deletes a whole week of recordings on the same day; the warning comes first,
                 // while marking a meeting "Sesi koru" (or widening the setting) can still save it.
                 // Said once per countdown step (3 → 2 → 1 → 0 days), not every hour: the status line belongs to what the user just did.
-                if let w=r["retention_warning"] as? [String:Any], let line=w["line"] as? String {
+                // The text horizon goes first when both are counting down: losing the audio is losing a recording,
+                // losing the text is losing the meeting, and only one of the two can be said in one line.
+                if let w=r["text_retention_warning"] as? [String:Any], let line=w["line"] as? String {
+                    let key="textRetentionWarned:\(w["days_left"] as? Int ?? -1):\(w["meetings"] as? Int ?? 0)"
+                    if !UserDefaults.standard.bool(forKey:key) { UserDefaults.standard.set(true,forKey:key); activity=line }
+                }
+                else if let w=r["retention_warning"] as? [String:Any], let line=w["line"] as? String {
                     let key="retentionWarned:\(w["days_left"] as? Int ?? -1):\(w["meetings"] as? Int ?? 0)"
                     if !UserDefaults.standard.bool(forKey:key) { UserDefaults.standard.set(true,forKey:key); activity=line }
                 }
+                else if let gone=r["removed_text_meetings"] as? Int, gone>0 { activity="Depolama · metin saklama süresi doldu, \(gone) toplantı tümüyle silindi" }
                 else if archived+removed>0 { activity="Depolama · \(StorageReport.format(bytes:archived)) sıkıştırıldı, \(StorageReport.format(bytes:removed)) eski ses silindi" }
             }
         }
