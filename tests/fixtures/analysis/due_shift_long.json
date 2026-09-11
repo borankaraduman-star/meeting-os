@@ -1,0 +1,394 @@
+{
+  "title": "Kurgu test — Uzun toplantıda vadenin sonradan kayması",
+  "note": "Tamamen kurgudur: kişiler, ürünler, sayılar ve cümleler scripts/make-fixture.py tarafından yapısal bir tarifden üretildi. Gerçek bir toplantının metni, düzeltmesi veya yeniden yazılmış hâli değildir. Gerçek boyutta parça ölçmek için uzundur; kısaltmak ölçtüğü şeyi ortadan kaldırır. İki gerçek boyutta parça. Bir taahhüdün vadesi ilk parçada söyleniyor, son parçada açıkça erteleniyor; ikinci bir taahhüdün vadesi hiç değişmiyor. Ölçtüğü şey: kayan vade tek görev olarak ve SON söylenen vadeyle mi çıkıyor, yoksa iki ayrı görev mi oluyor.",
+  "segments": [
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sistemi yükü 67,6 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 76,4 saniyeye kadar gidiyor. Kestane depo sistemi için ayrılan bütçenin 11,4 kısmı kullanıldı, kalan 47,5 kısmı duruyor; bu rakam geçen çeyrekte 2,0 idi. Kestane depo sistemi için 69,2 olan hedefi geçen çeyrekte 1,8 olarak revize etmiştik; ölçüm bugün 5,5 seviyesinde. Kestane depo sistemi tarafında gecikme bu hafta 8,1 çıktı, geçen hafta 65,3 idi; aradaki fark 6,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi ekranındaki 2691 kayıttan 30 tanesi Denizli bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 49,4 diğeri 44,7; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi günlüklerinde 7199 uyarı satırı var, 67 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Bayi portalı tarafında Kestane depo sistemi kurulumu 9 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi için topladığımız 4252 örnekte hata oranı ortalaması 16,3, en kötü gün 28,7 oldu; medyan ise 68,2 seviyesinde kaldı. Meltem bildirim servisi testlerinde bellek kullanımı 73,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi konusunda 9570 kullanıcı geri bildirimi geldi, 17 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Geçen ay Meltem bildirim servisi üzerinde 1060 değişiklik yapıldı, bunların 7 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı için ayrılan bütçenin 72,4 kısmı kullanıldı, kalan 11,1 kısmı duruyor; bu rakam geçen çeyrekte 28,0 idi. Saha ekibi tarafında Zeytin veri hattı kurulumu 12 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Zeytin veri hattı için 94,5 olan hedefi geçen çeyrekte 85,4 olarak revize etmiştik; ölçüm bugün 55,7 seviyesinde. Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 62,2 diğeri 40,0; hangisinin doğru olduğunu şu an bilmiyoruz. Zeytin veri hattı ekranındaki 6186 kayıttan 6 tanesi Adana bölgesinden geldi, kalanı mağaza panosu üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Turna harita katmanı testlerinde hata oranı 53,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Turna harita katmanı yükü 92,7 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 71,0 saniyeye kadar gidiyor. Turna harita katmanı için topladığımız 4166 örnekte önbellek isabet oranı ortalaması 47,7, en kötü gün 89,5 oldu; medyan ise 91,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sisteminin sayaç raporunu ben çıkaracağım, bu cumaya kadar sizde olur."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Turna harita katmanı tarafında işlem hacmi bu hafta 19,9 çıktı, geçen hafta 34,5 idi; aradaki fark 20,5 puan ve iki ölçüm de aynı sayaçtan geliyor. Turna harita katmanı günlüklerinde 3427 uyarı satırı var, 61 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi konusunda 4737 kullanıcı geri bildirimi geldi, 15 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Geçen ay Kestane depo sistemi üzerinde 1652 değişiklik yapıldı, bunların 86 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kestane depo sistemi tarafında yeniden deneme sayısı bu hafta 2,2 çıktı, geçen hafta 87,7 idi; aradaki fark 15,8 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi yükü 32,3 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 6,0 saniyeye kadar gidiyor. Kestane depo sistemi için topladığımız 2452 örnekte hata oranı ortalaması 25,9, en kötü gün 18,5 oldu; medyan ise 54,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 51,2 diğeri 3,6; hangisinin doğru olduğunu şu an bilmiyoruz. Geçen ay Meltem bildirim servisi üzerinde 8316 değişiklik yapıldı, bunların 20 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi ekranındaki 296 kayıttan 28 tanesi Samsun bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Meltem bildirim servisi için ayrılan bütçenin 38,8 kısmı kullanıldı, kalan 30,1 kısmı duruyor; bu rakam geçen çeyrekte 87,2 idi. Meltem bildirim servisi konusunda 6949 kullanıcı geri bildirimi geldi, 48 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Meltem bildirim servisi için 50,1 olan hedefi geçen çeyrekte 76,2 olarak revize etmiştik; ölçüm bugün 55,9 seviyesinde."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Çağrı merkezi tarafında Zeytin veri hattı kurulumu 12 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Zeytin veri hattı testlerinde gecikme 10,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı günlüklerinde 1281 uyarı satırı var, 86 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Zeytin veri hattı tarafında işlem hacmi bu hafta 74,5 çıktı, geçen hafta 48,9 idi; aradaki fark 21,3 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 85,0 diğeri 38,3; hangisinin doğru olduğunu şu an bilmiyoruz. Zeytin veri hattı konusunda 6375 kullanıcı geri bildirimi geldi, 30 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Zeytin veri hattı yükü 24,2 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 91,9 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Turna harita katmanı günlüklerinde 1515 uyarı satırı var, 19 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde. Turna harita katmanı için 81,9 olan hedefi geçen çeyrekte 53,1 olarak revize etmiştik; ölçüm bugün 81,8 seviyesinde. Saha ekibi tarafında Turna harita katmanı kurulumu 11 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Turna harita katmanı için ayrılan bütçenin 26,7 kısmı kullanıldı, kalan 77,1 kısmı duruyor; bu rakam geçen çeyrekte 13,9 idi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Turna harita katmanı testlerinde hata oranı 92,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Turna harita katmanı için topladığımız 8228 örnekte kuyruk derinliği ortalaması 49,6, en kötü gün 88,6 oldu; medyan ise 20,3 seviyesinde kaldı. Turna harita katmanı ekranındaki 3695 kayıttan 79 tanesi Bursa bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Geçen ay Kestane depo sistemi üzerinde 4463 değişiklik yapıldı, bunların 45 tanesi aynı hafta içinde geri alındı. Bayi portalı tarafında Kestane depo sistemi kurulumu 5 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kestane depo sistemi tarafında hata oranı bu hafta 11,5 çıktı, geçen hafta 98,1 idi; aradaki fark 5,2 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi konusunda 5924 kullanıcı geri bildirimi geldi, 65 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi günlüklerinde 8019 uyarı satırı var, 36 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 63,8 diğeri 5,9; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi için ayrılan bütçenin 94,0 kısmı kullanıldı, kalan 31,5 kısmı duruyor; bu rakam geçen çeyrekte 53,2 idi. Meltem bildirim servisi için 33,2 olan hedefi geçen çeyrekte 23,4 olarak revize etmiştik; ölçüm bugün 95,7 seviyesinde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Geçen ay Zeytin veri hattı üzerinde 7721 değişiklik yapıldı, bunların 90 tanesi aynı hafta içinde geri alındı. Zeytin veri hattı yükü 65,3 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 22,1 saniyeye kadar gidiyor. Zeytin veri hattı için topladığımız 3343 örnekte gecikme ortalaması 17,3, en kötü gün 40,3 oldu; medyan ise 71,8 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Zeytin veri hattı ekranındaki 1572 kayıttan 32 tanesi Samsun bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Zeytin veri hattı testlerinde tamamlanma oranı 1,3 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Turna harita katmanı tarafında iki farklı ölçüm duruyor, biri 31,1 diğeri 77,2; hangisinin doğru olduğunu şu an bilmiyoruz. Turna harita katmanı için 64,4 olan hedefi geçen çeyrekte 61,6 olarak revize etmiştik; ölçüm bugün 33,5 seviyesinde. Turna harita katmanı yükü 15,4 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 17,7 saniyeye kadar gidiyor. Turna harita katmanı için ayrılan bütçenin 85,8 kısmı kullanıldı, kalan 93,0 kısmı duruyor; bu rakam geçen çeyrekte 77,4 idi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Turna harita katmanı üzerinde 8682 değişiklik yapıldı, bunların 88 tanesi aynı hafta içinde geri alındı. Turna harita katmanı için topladığımız 8588 örnekte yeniden deneme sayısı ortalaması 75,2, en kötü gün 61,3 oldu; medyan ise 11,2 seviyesinde kaldı. Turna harita katmanı günlüklerinde 5749 uyarı satırı var, 90 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Turna harita katmanı ekranındaki 4587 kayıttan 50 tanesi Adana bölgesinden geldi, kalanı bayi portalı üzerinden düştü."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Çağrı merkezi tarafında Kestane depo sistemi kurulumu 12 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Kestane depo sistemi testlerinde hata oranı 81,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kestane depo sistemi konusunda 7110 kullanıcı geri bildirimi geldi, 86 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı. Kestane depo sistemi tarafında gecikme bu hafta 42,7 çıktı, geçen hafta 12,0 idi; aradaki fark 28,5 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sistemi tarafında ortalama yanıt süresi bu hafta 41,0 çıktı, geçen hafta 5,3 idi; aradaki fark 7,4 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi için 95,9 olan hedefi geçen çeyrekte 38,2 olarak revize etmiştik; ölçüm bugün 74,2 seviyesinde. Kestane depo sistemi yükü 91,9 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 92,7 saniyeye kadar gidiyor. Kestane depo sistemi ekranındaki 6753 kayıttan 24 tanesi Denizli bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 1385 değişiklik yapıldı, bunların 5 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi konusunda 8947 kullanıcı geri bildirimi geldi, 42 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Test grubu tarafında Meltem bildirim servisi kurulumu 11 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Meltem bildirim servisi testlerinde yeniden deneme sayısı 32,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Meltem bildirim servisi günlüklerinde 5453 uyarı satırı var, 56 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Zeytin veri hattı için topladığımız 7917 örnekte kuyruk derinliği ortalaması 28,7, en kötü gün 49,5 oldu; medyan ise 22,5 seviyesinde kaldı. Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 84,0 diğeri 41,5; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Zeytin veri hattının gece işini ben izleyeceğim, her hafta pazartesi sabahına kadar özetini geçerim."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı için ayrılan bütçenin 17,5 kısmı kullanıldı, kalan 75,6 kısmı duruyor; bu rakam geçen çeyrekte 94,5 idi. Zeytin veri hattı tarafında kuyruk derinliği bu hafta 97,0 çıktı, geçen hafta 61,0 idi; aradaki fark 25,0 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Turna harita katmanı tarafında iki farklı ölçüm duruyor, biri 82,9 diğeri 63,0; hangisinin doğru olduğunu şu an bilmiyoruz. Turna harita katmanı için topladığımız 5370 örnekte günlük aktif kullanıcı sayısı ortalaması 20,5, en kötü gün 50,0 oldu; medyan ise 36,3 seviyesinde kaldı. Turna harita katmanı konusunda 837 kullanıcı geri bildirimi geldi, 85 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Turna harita katmanı ekranındaki 1647 kayıttan 42 tanesi Konya bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Geçen ay Turna harita katmanı üzerinde 3420 değişiklik yapıldı, bunların 54 tanesi aynı hafta içinde geri alındı. Turna harita katmanı için ayrılan bütçenin 68,9 kısmı kullanıldı, kalan 29,1 kısmı duruyor; bu rakam geçen çeyrekte 48,3 idi."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Bayi portalı tarafında Kestane depo sistemi kurulumu 7 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Kestane depo sistemi testlerinde işlem hacmi 65,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kestane depo sistemi için 1,2 olan hedefi geçen çeyrekte 27,1 olarak revize etmiştik; ölçüm bugün 24,5 seviyesinde. Kestane depo sistemi günlüklerinde 7543 uyarı satırı var, 43 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi yükü 48,3 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 27,8 saniyeye kadar gidiyor. Kestane depo sistemi yükü 85,7 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 8,6 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi için 69,8 olan hedefi geçen çeyrekte 48,2 olarak revize etmiştik; ölçüm bugün 77,4 seviyesinde. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 16,5 diğeri 72,7; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Meltem bildirim servisi günlüklerinde 2315 uyarı satırı var, 12 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Meltem bildirim servisi ekranındaki 4344 kayıttan 56 tanesi Samsun bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Meltem bildirim servisi tarafında gecikme bu hafta 8,2 çıktı, geçen hafta 28,2 idi; aradaki fark 30,0 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Zeytin veri hattı için topladığımız 505 örnekte önbellek isabet oranı ortalaması 73,3, en kötü gün 96,0 oldu; medyan ise 40,4 seviyesinde kaldı. Geçen ay Zeytin veri hattı üzerinde 5511 değişiklik yapıldı, bunların 31 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Zeytin veri hattı testlerinde hata oranı 6,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı için ayrılan bütçenin 63,0 kısmı kullanıldı, kalan 63,6 kısmı duruyor; bu rakam geçen çeyrekte 96,9 idi. Çağrı merkezi tarafında Zeytin veri hattı kurulumu 3 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Zeytin veri hattı konusunda 6380 kullanıcı geri bildirimi geldi, 26 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Turna harita katmanı tarafında hata oranı bu hafta 39,5 çıktı, geçen hafta 49,5 idi; aradaki fark 26,8 puan ve iki ölçüm de aynı sayaçtan geliyor. Bayi portalı tarafında Turna harita katmanı kurulumu 10 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Turna harita katmanı yükü 4,8 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 52,3 saniyeye kadar gidiyor. Turna harita katmanı günlüklerinde 6544 uyarı satırı var, 87 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Turna harita katmanı tarafında iki farklı ölçüm duruyor, biri 85,5 diğeri 44,3; hangisinin doğru olduğunu şu an bilmiyoruz. Turna harita katmanı testlerinde kuyruk derinliği 56,9 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Turna harita katmanı için topladığımız 6746 örnekte hata oranı ortalaması 48,3, en kötü gün 79,7 oldu; medyan ise 87,0 seviyesinde kaldı. Turna harita katmanı için 27,7 olan hedefi geçen çeyrekte 55,7 olarak revize etmiştik; ölçüm bugün 39,0 seviyesinde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sistemi için ayrılan bütçenin 82,5 kısmı kullanıldı, kalan 66,8 kısmı duruyor; bu rakam geçen çeyrekte 33,7 idi. Geçen ay Kestane depo sistemi üzerinde 6933 değişiklik yapıldı, bunların 7 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi ekranındaki 9082 kayıttan 58 tanesi Bursa bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Kestane depo sistemi konusunda 1156 kullanıcı geri bildirimi geldi, 37 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Kestane depo sistemi yükü 66,8 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 39,1 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi için topladığımız 4345 örnekte tamamlanma oranı ortalaması 43,2, en kötü gün 65,3 oldu; medyan ise 53,9 seviyesinde kaldı. Meltem bildirim servisi tarafında önbellek isabet oranı bu hafta 39,7 çıktı, geçen hafta 21,7 idi; aradaki fark 13,1 puan ve iki ölçüm de aynı sayaçtan geliyor. Kurumsal müşteri tarafında Meltem bildirim servisi kurulumu 3 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 3927 değişiklik yapıldı, bunların 14 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi günlüklerinde 5017 uyarı satırı var, 41 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde. Meltem bildirim servisi ekranındaki 7533 kayıttan 23 tanesi Konya bölgesinden geldi, kalanı test grubu üzerinden düştü. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 12,7 diğeri 55,8; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı testlerinde gecikme 64,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı için ayrılan bütçenin 77,6 kısmı kullanıldı, kalan 5,2 kısmı duruyor; bu rakam geçen çeyrekte 1,3 idi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Zeytin veri hattı konusunda 5321 kullanıcı geri bildirimi geldi, 57 tanesi aynı ekranı işaret ediyor; metinler Eskişehir ağırlıklı. Zeytin veri hattı için 12,3 olan hedefi geçen çeyrekte 96,7 olarak revize etmiştik; ölçüm bugün 65,6 seviyesinde."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Turna harita katmanı için topladığımız 7362 örnekte kuyruk derinliği ortalaması 25,1, en kötü gün 84,9 oldu; medyan ise 97,0 seviyesinde kaldı. Turna harita katmanı yükü 40,7 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 51,9 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Turna harita katmanı için ayrılan bütçenin 63,6 kısmı kullanıldı, kalan 6,4 kısmı duruyor; bu rakam geçen çeyrekte 21,5 idi. Turna harita katmanı testlerinde yeniden deneme sayısı 88,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Turna harita katmanı konusunda 5678 kullanıcı geri bildirimi geldi, 54 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Kestane depo sistemi üzerinde 5414 değişiklik yapıldı, bunların 23 tanesi aynı hafta içinde geri alındı. Kestane depo sistemi günlüklerinde 3202 uyarı satırı var, 86 tanesi tek bir sunucudan; kalanlar Konya kenar düğümünde. Bayi portalı tarafında Kestane depo sistemi kurulumu 10 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Kestane depo sistemi ekranındaki 2086 kayıttan 63 tanesi Denizli bölgesinden geldi, kalanı test grubu üzerinden düştü."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 46,2 diğeri 41,7; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi tarafında gecikme bu hafta 51,1 çıktı, geçen hafta 91,4 idi; aradaki fark 10,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi için 79,5 olan hedefi geçen çeyrekte 53,4 olarak revize etmiştik; ölçüm bugün 13,6 seviyesinde."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 1153 değişiklik yapıldı, bunların 84 tanesi aynı hafta içinde geri alındı. Test grubu tarafında Meltem bildirim servisi kurulumu 5 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 69,3 diğeri 98,0; hangisinin doğru olduğunu şu an bilmiyoruz. Meltem bildirim servisi için topladığımız 4318 örnekte yeniden deneme sayısı ortalaması 14,9, en kötü gün 16,1 oldu; medyan ise 13,3 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Zeytin veri hattı ekranındaki 2673 kayıttan 64 tanesi Bursa bölgesinden geldi, kalanı saha ekibi üzerinden düştü. Zeytin veri hattı testlerinde hata oranı 95,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı tarafında bellek kullanımı bu hafta 61,1 çıktı, geçen hafta 6,1 idi; aradaki fark 7,0 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Zeytin veri hattı için 45,1 olan hedefi geçen çeyrekte 40,0 olarak revize etmiştik; ölçüm bugün 56,4 seviyesinde. Zeytin veri hattı konusunda 8806 kullanıcı geri bildirimi geldi, 86 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Zeytin veri hattı için ayrılan bütçenin 36,5 kısmı kullanıldı, kalan 69,0 kısmı duruyor; bu rakam geçen çeyrekte 56,2 idi. Zeytin veri hattı yükü 92,9 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 81,1 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Turna harita katmanı günlüklerinde 3850 uyarı satırı var, 80 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde. Turna harita katmanı yükü 19,0 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 56,9 saniyeye kadar gidiyor. Turna harita katmanı için ayrılan bütçenin 53,7 kısmı kullanıldı, kalan 75,2 kısmı duruyor; bu rakam geçen çeyrekte 65,7 idi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Turna harita katmanı testlerinde tamamlanma oranı 40,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Saha ekibi tarafında Turna harita katmanı kurulumu 4 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Turna harita katmanı ekranındaki 3506 kayıttan 11 tanesi Bursa bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi için 9,3 olan hedefi geçen çeyrekte 90,6 olarak revize etmiştik; ölçüm bugün 95,9 seviyesinde. Geçen ay Kestane depo sistemi üzerinde 7085 değişiklik yapıldı, bunların 30 tanesi aynı hafta içinde geri alındı. Kestane depo sistemi konusunda 2739 kullanıcı geri bildirimi geldi, 69 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 37,0 diğeri 38,8; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi tarafında önbellek isabet oranı bu hafta 98,7 çıktı, geçen hafta 88,5 idi; aradaki fark 1,4 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi için topladığımız 5969 örnekte önbellek isabet oranı ortalaması 62,8, en kötü gün 31,4 oldu; medyan ise 15,0 seviyesinde kaldı. Meltem bildirim servisi günlüklerinde 9673 uyarı satırı var, 47 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi günlüklerinde 734 uyarı satırı var, 86 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Meltem bildirim servisi yükü 9,9 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 15,6 saniyeye kadar gidiyor. Meltem bildirim servisi için ayrılan bütçenin 48,0 kısmı kullanıldı, kalan 87,0 kısmı duruyor; bu rakam geçen çeyrekte 64,5 idi. Geçen ay Meltem bildirim servisi üzerinde 9715 değişiklik yapıldı, bunların 34 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Zeytin veri hattı için 96,1 olan hedefi geçen çeyrekte 44,3 olarak revize etmiştik; ölçüm bugün 65,6 seviyesinde. Zeytin veri hattı için topladığımız 9278 örnekte yeniden deneme sayısı ortalaması 15,8, en kötü gün 59,0 oldu; medyan ise 21,9 seviyesinde kaldı. Zeytin veri hattı konusunda 4381 kullanıcı geri bildirimi geldi, 77 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Zeytin veri hattı tarafında kuyruk derinliği bu hafta 50,7 çıktı, geçen hafta 20,1 idi; aradaki fark 32,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Zeytin veri hattı testlerinde tamamlanma oranı 88,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 79,3 diğeri 49,3; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Bayi portalı tarafında Turna harita katmanı kurulumu 9 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Turna harita katmanı ekranındaki 1045 kayıttan 26 tanesi Eskişehir bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü. Turna harita katmanı ekranındaki 6719 kayıttan 35 tanesi Eskişehir bölgesinden geldi, kalanı mağaza panosu üzerinden düştü."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Turna harita katmanı tarafında iki farklı ölçüm duruyor, biri 46,7 diğeri 96,9; hangisinin doğru olduğunu şu an bilmiyoruz. Test grubu tarafında Turna harita katmanı kurulumu 7 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Turna harita katmanı için 7,1 olan hedefi geçen çeyrekte 55,9 olarak revize etmiştik; ölçüm bugün 69,5 seviyesinde. Turna harita katmanı testlerinde yeniden deneme sayısı 70,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kestane depo sistemi günlüklerinde 4440 uyarı satırı var, 3 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Kestane depo sistemi için topladığımız 5374 örnekte tamamlanma oranı ortalaması 56,0, en kötü gün 1,3 oldu; medyan ise 36,0 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sistemi yükü 25,0 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 72,4 saniyeye kadar gidiyor. Kestane depo sistemi konusunda 2604 kullanıcı geri bildirimi geldi, 55 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Kestane depo sistemi tarafında işlem hacmi bu hafta 88,1 çıktı, geçen hafta 29,9 idi; aradaki fark 35,4 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 4333 değişiklik yapıldı, bunların 36 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi için ayrılan bütçenin 28,5 kısmı kullanıldı, kalan 68,0 kısmı duruyor; bu rakam geçen çeyrekte 42,4 idi. Meltem bildirim servisi tarafında hata oranı bu hafta 43,5 çıktı, geçen hafta 71,0 idi; aradaki fark 17,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 15,6 diğeri 70,6; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi ekranındaki 6064 kayıttan 25 tanesi Trabzon bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Meltem bildirim servisi günlüklerinde 6496 uyarı satırı var, 64 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde. Kurumsal müşteri tarafında Meltem bildirim servisi kurulumu 12 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Zeytin veri hattı konusunda 7658 kullanıcı geri bildirimi geldi, 40 tanesi aynı ekranı işaret ediyor; metinler Trabzon ağırlıklı. Zeytin veri hattı için ayrılan bütçenin 42,8 kısmı kullanıldı, kalan 71,3 kısmı duruyor; bu rakam geçen çeyrekte 65,2 idi. Zeytin veri hattı için topladığımız 4544 örnekte işlem hacmi ortalaması 78,0, en kötü gün 83,3 oldu; medyan ise 93,3 seviyesinde kaldı. Geçen ay Zeytin veri hattı üzerinde 6719 değişiklik yapıldı, bunların 6 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı testlerinde önbellek isabet oranı 56,3 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı yükü 19,5 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 5,9 saniyeye kadar gidiyor. Zeytin veri hattı için 39,0 olan hedefi geçen çeyrekte 2,6 olarak revize etmiştik; ölçüm bugün 92,7 seviyesinde. Zeytin veri hattı konusunda 3625 kullanıcı geri bildirimi geldi, 75 tanesi aynı ekranı işaret ediyor; metinler Samsun ağırlıklı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Turna harita katmanı testlerinde günlük aktif kullanıcı sayısı 44,7 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Turna harita katmanı için ayrılan bütçenin 84,8 kısmı kullanıldı, kalan 12,3 kısmı duruyor; bu rakam geçen çeyrekte 91,8 idi. Turna harita katmanı ekranındaki 9223 kayıttan 65 tanesi Eskişehir bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Turna harita katmanı tarafında iki farklı ölçüm duruyor, biri 34,8 diğeri 44,9; hangisinin doğru olduğunu şu an bilmiyoruz. Turna harita katmanı yükü 3,3 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 13,2 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Kestane depo sistemi günlüklerinde 8451 uyarı satırı var, 43 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde. Geçen ay Kestane depo sistemi üzerinde 4586 değişiklik yapıldı, bunların 24 tanesi aynı hafta içinde geri alındı. Mağaza panosu tarafında Kestane depo sistemi kurulumu 6 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Kestane depo sistemi için topladığımız 7149 örnekte gecikme ortalaması 81,9, en kötü gün 65,7 oldu; medyan ise 62,9 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kestane depo sistemi tarafında ortalama yanıt süresi bu hafta 69,9 çıktı, geçen hafta 53,4 idi; aradaki fark 9,9 puan ve iki ölçüm de aynı sayaçtan geliyor. Kestane depo sistemi için 42,2 olan hedefi geçen çeyrekte 23,5 olarak revize etmiştik; ölçüm bugün 78,4 seviyesinde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi için 81,6 olan hedefi geçen çeyrekte 89,0 olarak revize etmiştik; ölçüm bugün 29,7 seviyesinde. Meltem bildirim servisi testlerinde kuyruk derinliği 34,0 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Meltem bildirim servisi ekranındaki 9701 kayıttan 62 tanesi Trabzon bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü. Meltem bildirim servisi konusunda 7225 kullanıcı geri bildirimi geldi, 83 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Meltem bildirim servisi için topladığımız 8698 örnekte bellek kullanımı ortalaması 32,8, en kötü gün 18,9 oldu; medyan ise 58,8 seviyesinde kaldı. Meltem bildirim servisi için ayrılan bütçenin 82,2 kısmı kullanıldı, kalan 32,0 kısmı duruyor; bu rakam geçen çeyrekte 18,2 idi. Meltem bildirim servisi günlüklerinde 2628 uyarı satırı var, 5 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Zeytin veri hattı yükü 82,6 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 48,5 saniyeye kadar gidiyor. Çağrı merkezi tarafında Zeytin veri hattı kurulumu 11 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Geçen ay Zeytin veri hattı üzerinde 6139 değişiklik yapıldı, bunların 90 tanesi aynı hafta içinde geri alındı. Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 88,7 diğeri 98,0; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Zeytin veri hattı tarafında işlem hacmi bu hafta 66,7 çıktı, geçen hafta 91,3 idi; aradaki fark 34,3 puan ve iki ölçüm de aynı sayaçtan geliyor. Zeytin veri hattı için 67,8 olan hedefi geçen çeyrekte 87,3 olarak revize etmiştik; ölçüm bugün 32,8 seviyesinde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Turna harita katmanı günlüklerinde 1647 uyarı satırı var, 51 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Turna harita katmanı için ayrılan bütçenin 16,2 kısmı kullanıldı, kalan 30,8 kısmı duruyor; bu rakam geçen çeyrekte 48,7 idi."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane sayaç raporu için bir düzeltme: bu cumaya yetişmiyor, ayın yirmi beşine kadar veriyorum; tarih değişti, iş aynı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Turna harita katmanı konusunda 5678 kullanıcı geri bildirimi geldi, 84 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Test grubu tarafında Turna harita katmanı kurulumu 10 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Turna harita katmanı yükü 74,0 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 43,3 saniyeye kadar gidiyor. Turna harita katmanı ekranındaki 4325 kayıttan 83 tanesi Adana bölgesinden geldi, kalanı saha ekibi üzerinden düştü."
+    },
+    {
+      "speaker": "Bade Kılıçer",
+      "text": "Kestane depo sistemi için topladığımız 2626 örnekte günlük aktif kullanıcı sayısı ortalaması 27,3, en kötü gün 43,2 oldu; medyan ise 57,1 seviyesinde kaldı. Geçen ay Kestane depo sistemi üzerinde 2981 değişiklik yapıldı, bunların 79 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Tolga Menteş",
+      "text": "Kestane depo sistemi tarafında iki farklı ölçüm duruyor, biri 57,3 diğeri 28,4; hangisinin doğru olduğunu şu an bilmiyoruz. Kestane depo sistemi testlerinde ortalama yanıt süresi 53,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Yaren Aksu",
+      "text": "Meltem bildirim servisi tarafında hata oranı bu hafta 38,1 çıktı, geçen hafta 11,5 idi; aradaki fark 34,4 puan ve iki ölçüm de aynı sayaçtan geliyor. Meltem bildirim servisi yükü 13,2 üzerine çıktığında kuyruk şişiyor, bayi portalı tarafında bekleme 56,7 saniyeye kadar gidiyor. Meltem bildirim servisi günlüklerinde 6385 uyarı satırı var, 52 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Meltem bildirim servisi testlerinde günlük aktif kullanıcı sayısı 75,5 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Saha ekibi tarafında Meltem bildirim servisi kurulumu 9 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    }
+  ],
+  "expected_actions": 2,
+  "forbidden_action_terms": [
+    "turna"
+  ],
+  "expected_owners": [
+    "Bade Kılıçer",
+    "Tolga Menteş"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "kestane",
+        "sayaç"
+      ],
+      "owner": "Bade Kılıçer",
+      "due_text": "ayın yirmi beşine kadar"
+    },
+    {
+      "title_terms": [
+        "zeytin",
+        "gece"
+      ],
+      "owner": "Tolga Menteş",
+      "due_text": "her hafta pazartesi sabahına kadar"
+    }
+  ],
+  "expected_topic_terms": [
+    [
+      "kestane"
+    ],
+    [
+      "meltem"
+    ],
+    [
+      "zeytin"
+    ],
+    [
+      "turna"
+    ]
+  ]
+}

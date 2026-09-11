@@ -1,0 +1,233 @@
+{
+  "title": "Kurgu test — Gerçek boyutta tek parça (haftalık ürün durumu)",
+  "note": "Tamamen kurgudur: kişiler, ürünler, sayılar ve cümleler scripts/make-fixture.py tarafından yapısal bir tarifden üretildi. Gerçek bir toplantının metni, düzeltmesi veya yeniden yazılmış hâli değildir. Gerçek boyutta parça ölçmek için uzundur; kısaltmak ölçtüğü şeyi ortadan kaldırır. Tek parça, ama gerçek bir toplantı parçası kadar: ≈6,6k token. Kurgu setinin geri kalanı ≈2k idi ve 11 Eylül 2026 model kararı tam bu yüzden geri alındı. Ölçtüğü şey: dolu bir parçada özet 3 maddeye çökmeden bütün konuları taşıyor mu, iki taahhüt sahibi ve söylenen vadesiyle çıkıyor mu.",
+  "segments": [
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Kavak mobil uygulaması üzerinde 5027 değişiklik yapıldı, bunların 42 tanesi aynı hafta içinde geri alındı. Kavak mobil uygulaması tarafında hata oranı bu hafta 8,6 çıktı, geçen hafta 66,6 idi; aradaki fark 30,8 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması günlüklerinde 7047 uyarı satırı var, 17 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Kavak mobil uygulaması konusunda 9471 kullanıcı geri bildirimi geldi, 10 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı. Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 19,6 diğeri 37,4; hangisinin doğru olduğunu şu an bilmiyoruz. Saha ekibi tarafında Kavak mobil uygulaması kurulumu 8 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Zeytin veri hattı ekranındaki 7317 kayıttan 5 tanesi Sakarya bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Zeytin veri hattı için ayrılan bütçenin 9,6 kısmı kullanıldı, kalan 52,8 kısmı duruyor; bu rakam geçen çeyrekte 77,4 idi."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı için topladığımız 6057 örnekte tamamlanma oranı ortalaması 5,8, en kötü gün 69,1 oldu; medyan ise 13,4 seviyesinde kaldı. Zeytin veri hattı testlerinde kuyruk derinliği 4,8 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı yükü 68,8 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 87,9 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Lodos arama motoru için 85,5 olan hedefi geçen çeyrekte 77,8 olarak revize etmiştik; ölçüm bugün 34,9 seviyesinde. Lodos arama motoru günlüklerinde 1583 uyarı satırı var, 46 tanesi tek bir sunucudan; kalanlar Adana kenar düğümünde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru tarafında bellek kullanımı bu hafta 33,1 çıktı, geçen hafta 67,2 idi; aradaki fark 10,3 puan ve iki ölçüm de aynı sayaçtan geliyor. Lodos arama motoru ekranındaki 3475 kayıttan 38 tanesi Trabzon bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Lodos arama motoru yükü 63,8 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 57,8 saniyeye kadar gidiyor. Lodos arama motoru konusunda 6711 kullanıcı geri bildirimi geldi, 42 tanesi aynı ekranı işaret ediyor; metinler Adana ağırlıklı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Bayi portalı tarafında Meltem bildirim servisi kurulumu 3 adımda tamamlanıyor, 1 adımda kullanıcı yardım istiyor. Meltem bildirim servisi için ayrılan bütçenin 88,0 kısmı kullanıldı, kalan 64,8 kısmı duruyor; bu rakam geçen çeyrekte 88,3 idi. Meltem bildirim servisi için 60,1 olan hedefi geçen çeyrekte 15,6 olarak revize etmiştik; ölçüm bugün 56,4 seviyesinde."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi testlerinde önbellek isabet oranı 60,4 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Geçen ay Meltem bildirim servisi üzerinde 1498 değişiklik yapıldı, bunların 10 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması için topladığımız 2466 örnekte hata oranı ortalaması 66,7, en kötü gün 18,7 oldu; medyan ise 5,5 seviyesinde kaldı. Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 53,9 diğeri 76,9; hangisinin doğru olduğunu şu an bilmiyoruz. Bayi portalı tarafında Kavak mobil uygulaması kurulumu 9 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Geçen ay Kavak mobil uygulaması üzerinde 1889 değişiklik yapıldı, bunların 55 tanesi aynı hafta içinde geri alındı. Kavak mobil uygulaması günlüklerinde 3606 uyarı satırı var, 65 tanesi tek bir sunucudan; kalanlar Samsun kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulamasının çöküş raporunu ben hazırlayacağım, önümüzdeki çarşambaya kadar sizde olur."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Zeytin veri hattı yükü 75,4 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 3,2 saniyeye kadar gidiyor. Zeytin veri hattı ekranındaki 3506 kayıttan 45 tanesi Trabzon bölgesinden geldi, kalanı test grubu üzerinden düştü."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı konusunda 8790 kullanıcı geri bildirimi geldi, 10 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı. Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 96,0 diğeri 65,3; hangisinin doğru olduğunu şu an bilmiyoruz. Zeytin veri hattı için topladığımız 7364 örnekte işlem hacmi ortalaması 46,9, en kötü gün 4,0 oldu; medyan ise 26,4 seviyesinde kaldı. Zeytin veri hattı tarafında yeniden deneme sayısı bu hafta 85,0 çıktı, geçen hafta 44,2 idi; aradaki fark 34,6 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Lodos arama motoru için 59,6 olan hedefi geçen çeyrekte 74,9 olarak revize etmiştik; ölçüm bugün 23,8 seviyesinde. Lodos arama motoru için ayrılan bütçenin 55,9 kısmı kullanıldı, kalan 2,2 kısmı duruyor; bu rakam geçen çeyrekte 55,1 idi. Lodos arama motoru testlerinde işlem hacmi 29,7 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru yükü 77,1 üzerine çıktığında kuyruk şişiyor, kurumsal müşteri tarafında bekleme 48,3 saniyeye kadar gidiyor. Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 70,7 diğeri 78,2; hangisinin doğru olduğunu şu an bilmiyoruz. Lodos arama motoru testlerinde önbellek isabet oranı 87,8 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Lodos arama motoru için ayrılan bütçenin 78,4 kısmı kullanıldı, kalan 33,0 kısmı duruyor; bu rakam geçen çeyrekte 6,9 idi."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Meltem bildirim servisi için 90,3 olan hedefi geçen çeyrekte 95,9 olarak revize etmiştik; ölçüm bugün 24,2 seviyesinde. Mağaza panosu tarafında Meltem bildirim servisi kurulumu 12 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi konusunda 3237 kullanıcı geri bildirimi geldi, 20 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Meltem bildirim servisi için topladığımız 8364 örnekte önbellek isabet oranı ortalaması 21,2, en kötü gün 28,1 oldu; medyan ise 89,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Kavak mobil uygulaması üzerinde 5625 değişiklik yapıldı, bunların 29 tanesi aynı hafta içinde geri alındı. Kavak mobil uygulaması tarafında bellek kullanımı bu hafta 59,5 çıktı, geçen hafta 21,1 idi; aradaki fark 6,5 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması ekranındaki 8692 kayıttan 7 tanesi Bursa bölgesinden geldi, kalanı bayi portalı üzerinden düştü. Kavak mobil uygulaması günlüklerinde 9540 uyarı satırı var, 25 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde. Kavak mobil uygulaması konusunda 921 kullanıcı geri bildirimi geldi, 22 tanesi aynı ekranı işaret ediyor; metinler Bursa ağırlıklı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Zeytin veri hattı tarafında gecikme bu hafta 56,3 çıktı, geçen hafta 33,9 idi; aradaki fark 8,5 puan ve iki ölçüm de aynı sayaçtan geliyor. Zeytin veri hattı için 44,6 olan hedefi geçen çeyrekte 27,4 olarak revize etmiştik; ölçüm bugün 76,6 seviyesinde. Zeytin veri hattı için topladığımız 1404 örnekte işlem hacmi ortalaması 56,7, en kötü gün 51,2 oldu; medyan ise 71,5 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı için ayrılan bütçenin 10,7 kısmı kullanıldı, kalan 97,1 kısmı duruyor; bu rakam geçen çeyrekte 65,5 idi. Zeytin veri hattı ekranındaki 6059 kayıttan 80 tanesi Samsun bölgesinden geldi, kalanı saha ekibi üzerinden düştü."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 37,6 diğeri 48,3; hangisinin doğru olduğunu şu an bilmiyoruz. Kurumsal müşteri tarafında Lodos arama motoru kurulumu 4 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru yükü 72,5 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 48,9 saniyeye kadar gidiyor. Lodos arama motoru günlüklerinde 4256 uyarı satırı var, 47 tanesi tek bir sunucudan; kalanlar Sakarya kenar düğümünde."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 400 değişiklik yapıldı, bunların 43 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi testlerinde günlük aktif kullanıcı sayısı 92,1 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Zeytin veri hattındaki tekrar eden kayıtları ben temizleyeceğim; ay sonuna kadar bitiririm."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Meltem bildirim servisi konusunda 3635 kullanıcı geri bildirimi geldi, 86 tanesi aynı ekranı işaret ediyor; metinler Denizli ağırlıklı. Meltem bildirim servisi yükü 25,8 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 95,8 saniyeye kadar gidiyor. Meltem bildirim servisi için topladığımız 4129 örnekte hata oranı ortalaması 16,3, en kötü gün 12,0 oldu; medyan ise 63,2 seviyesinde kaldı. Geçen ay Meltem bildirim servisi üzerinde 6796 değişiklik yapıldı, bunların 72 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması tarafında iki farklı ölçüm duruyor, biri 78,8 diğeri 38,7; hangisinin doğru olduğunu şu an bilmiyoruz. Kavak mobil uygulaması için 7,2 olan hedefi geçen çeyrekte 2,8 olarak revize etmiştik; ölçüm bugün 31,3 seviyesinde. Kavak mobil uygulaması için ayrılan bütçenin 86,4 kısmı kullanıldı, kalan 25,5 kısmı duruyor; bu rakam geçen çeyrekte 72,3 idi. Çağrı merkezi tarafında Kavak mobil uygulaması kurulumu 3 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Kavak mobil uygulaması testlerinde günlük aktif kullanıcı sayısı 77,3 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Kavak mobil uygulaması günlüklerinde 6950 uyarı satırı var, 27 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Kavak mobil uygulaması ekranındaki 3285 kayıttan 5 tanesi Sakarya bölgesinden geldi, kalanı test grubu üzerinden düştü."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Zeytin veri hattı tarafında kuyruk derinliği bu hafta 92,3 çıktı, geçen hafta 79,1 idi; aradaki fark 7,7 puan ve iki ölçüm de aynı sayaçtan geliyor. Zeytin veri hattı için topladığımız 2588 örnekte önbellek isabet oranı ortalaması 6,6, en kötü gün 83,9 oldu; medyan ise 39,8 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı ekranındaki 1638 kayıttan 24 tanesi Denizli bölgesinden geldi, kalanı test grubu üzerinden düştü. Zeytin veri hattı testlerinde kuyruk derinliği 26,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Zeytin veri hattı yükü 78,6 üzerine çıktığında kuyruk şişiyor, mağaza panosu tarafında bekleme 84,1 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Geçen ay Lodos arama motoru üzerinde 1500 değişiklik yapıldı, bunların 57 tanesi aynı hafta içinde geri alındı. Lodos arama motoru için ayrılan bütçenin 24,8 kısmı kullanıldı, kalan 22,0 kısmı duruyor; bu rakam geçen çeyrekte 10,0 idi. Mağaza panosu tarafında Lodos arama motoru kurulumu 10 adımda tamamlanıyor, 3 adımda kullanıcı yardım istiyor. Lodos arama motoru tarafında gecikme bu hafta 90,3 çıktı, geçen hafta 57,2 idi; aradaki fark 11,6 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Lodos arama motorunda eşanlamlı sözlüğü açmaya karar verdik; bu karar bugün alındı ve uygulanacak."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru için 6,6 olan hedefi geçen çeyrekte 29,4 olarak revize etmiştik; ölçüm bugün 36,3 seviyesinde. Lodos arama motoru günlüklerinde 5168 uyarı satırı var, 77 tanesi tek bir sunucudan; kalanlar Trabzon kenar düğümünde. Lodos arama motoru tarafında iki farklı ölçüm duruyor, biri 84,6 diğeri 66,6; hangisinin doğru olduğunu şu an bilmiyoruz. Lodos arama motoru konusunda 5529 kullanıcı geri bildirimi geldi, 88 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Meltem bildirim servisi ekranındaki 2111 kayıttan 63 tanesi Sakarya bölgesinden geldi, kalanı çağrı merkezi üzerinden düştü. Meltem bildirim servisi testlerinde yeniden deneme sayısı 63,2 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Meltem bildirim servisi konusunda 989 kullanıcı geri bildirimi geldi, 83 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Meltem bildirim servisi için topladığımız 8107 örnekte önbellek isabet oranı ortalaması 27,3, en kötü gün 71,1 oldu; medyan ise 51,1 seviyesinde kaldı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Geçen ay Meltem bildirim servisi üzerinde 8424 değişiklik yapıldı, bunların 41 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 75,2 diğeri 78,5; hangisinin doğru olduğunu şu an bilmiyoruz. Meltem bildirim servisi günlüklerinde 9680 uyarı satırı var, 67 tanesi tek bir sunucudan; kalanlar Denizli kenar düğümünde. Meltem bildirim servisi tarafında işlem hacmi bu hafta 56,4 çıktı, geçen hafta 40,1 idi; aradaki fark 19,1 puan ve iki ölçüm de aynı sayaçtan geliyor."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması için ayrılan bütçenin 95,6 kısmı kullanıldı, kalan 66,7 kısmı duruyor; bu rakam geçen çeyrekte 54,3 idi. Kavak mobil uygulaması yükü 82,6 üzerine çıktığında kuyruk şişiyor, çağrı merkezi tarafında bekleme 61,5 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Mağaza panosu tarafında Kavak mobil uygulaması kurulumu 8 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Kavak mobil uygulaması için 94,4 olan hedefi geçen çeyrekte 50,4 olarak revize etmiştik; ölçüm bugün 27,7 seviyesinde. Kavak mobil uygulaması yükü 25,0 üzerine çıktığında kuyruk şişiyor, test grubu tarafında bekleme 66,7 saniyeye kadar gidiyor."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Zeytin veri hattı konusunda 8417 kullanıcı geri bildirimi geldi, 27 tanesi aynı ekranı işaret ediyor; metinler Konya ağırlıklı. Zeytin veri hattı ekranındaki 5173 kayıttan 38 tanesi Adana bölgesinden geldi, kalanı mağaza panosu üzerinden düştü. Zeytin veri hattı tarafında iki farklı ölçüm duruyor, biri 13,4 diğeri 23,6; hangisinin doğru olduğunu şu an bilmiyoruz. Geçen ay Zeytin veri hattı üzerinde 4490 değişiklik yapıldı, bunların 17 tanesi aynı hafta içinde geri alındı."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Kunduz yedekleme taraması geçen ay bitti, orada kimseye iş kalmadı; sadece kapanış bilgisi."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Zeytin veri hattı için ayrılan bütçenin 85,2 kısmı kullanıldı, kalan 89,8 kısmı duruyor; bu rakam geçen çeyrekte 77,1 idi. Zeytin veri hattı tarafında günlük aktif kullanıcı sayısı bu hafta 21,8 çıktı, geçen hafta 44,2 idi; aradaki fark 22,6 puan ve iki ölçüm de aynı sayaçtan geliyor. Zeytin veri hattı günlüklerinde 8773 uyarı satırı var, 13 tanesi tek bir sunucudan; kalanlar Eskişehir kenar düğümünde."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Saha ekibi tarafında Lodos arama motoru kurulumu 7 adımda tamamlanıyor, 4 adımda kullanıcı yardım istiyor. Lodos arama motoru için 97,5 olan hedefi geçen çeyrekte 9,4 olarak revize etmiştik; ölçüm bugün 47,1 seviyesinde."
+    },
+    {
+      "speaker": "Kerem Doğu",
+      "text": "Lodos arama motoru için topladığımız 1782 örnekte ortalama yanıt süresi ortalaması 51,4, en kötü gün 76,9 oldu; medyan ise 79,7 seviyesinde kaldı. Lodos arama motoru testlerinde işlem hacmi 55,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi. Lodos arama motoru ekranındaki 1388 kayıttan 16 tanesi Trabzon bölgesinden geldi, kalanı kurumsal müşteri üzerinden düştü."
+    },
+    {
+      "speaker": "Nihal Peker",
+      "text": "Meltem bildirim servisi için 64,4 olan hedefi geçen çeyrekte 25,3 olarak revize etmiştik; ölçüm bugün 98,6 seviyesinde. Geçen ay Meltem bildirim servisi üzerinde 3450 değişiklik yapıldı, bunların 37 tanesi aynı hafta içinde geri alındı. Meltem bildirim servisi tarafında iki farklı ölçüm duruyor, biri 60,1 diğeri 97,4; hangisinin doğru olduğunu şu an bilmiyoruz."
+    },
+    {
+      "speaker": "Umut Serçe",
+      "text": "Çağrı merkezi tarafında Meltem bildirim servisi kurulumu 5 adımda tamamlanıyor, 2 adımda kullanıcı yardım istiyor. Meltem bildirim servisi testlerinde yeniden deneme sayısı 43,6 seviyesinde kaldı; ölçümü üç ayrı günde tekrarladık, sonuç değişmedi."
+    },
+    {
+      "speaker": "Selin Arat",
+      "text": "Kavak mobil uygulaması günlüklerinde 8572 uyarı satırı var, 88 tanesi tek bir sunucudan; kalanlar Bursa kenar düğümünde. Kavak mobil uygulaması için ayrılan bütçenin 39,6 kısmı kullanıldı, kalan 71,5 kısmı duruyor; bu rakam geçen çeyrekte 16,2 idi. Kavak mobil uygulaması konusunda 4422 kullanıcı geri bildirimi geldi, 57 tanesi aynı ekranı işaret ediyor; metinler Sakarya ağırlıklı. Kavak mobil uygulaması yükü 70,7 üzerine çıktığında kuyruk şişiyor, saha ekibi tarafında bekleme 55,7 saniyeye kadar gidiyor."
+    }
+  ],
+  "expected_actions": 2,
+  "forbidden_action_terms": [
+    "kunduz",
+    "yedekleme taraması"
+  ],
+  "expected_owners": [
+    "Selin Arat",
+    "Kerem Doğu"
+  ],
+  "expected_action_fields": [
+    {
+      "title_terms": [
+        "kavak",
+        "çöküş"
+      ],
+      "owner": "Selin Arat",
+      "due_text": "önümüzdeki çarşambaya kadar"
+    },
+    {
+      "title_terms": [
+        "zeytin",
+        "tekrar"
+      ],
+      "owner": "Kerem Doğu",
+      "due_text": "ay sonuna kadar"
+    }
+  ],
+  "required_decision_terms": [
+    [
+      "lodos",
+      "eşanlamlı"
+    ]
+  ],
+  "expected_topic_terms": [
+    [
+      "kavak"
+    ],
+    [
+      "zeytin"
+    ],
+    [
+      "lodos"
+    ],
+    [
+      "meltem"
+    ]
+  ]
+}

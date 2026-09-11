@@ -4,7 +4,7 @@ Nothing here trains a model. Text edits (text_edits table) give word-error refer
 renames (corrections table) and automatic identity results give a recognition scorecard."""
 import json
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 # Python twin of desktop Fillers.pattern (TranscriptBlocks.swift): “eee”, “ııı”, “hı hı”, stutters like “Bi-”.
@@ -65,12 +65,17 @@ def _pinned(store):
         except ValueError: pass
     return out
 
-def identity_report(store):
-    """Per cluster: what the voiceprint said vs what the user finally called it."""
+def identity_report(store, meeting=None):
+    """Per cluster: what the voiceprint said vs what the user finally called it.
+
+    `meeting` narrows the whole count to one meeting. A per-meeting report has to pass it (1.2.82): a report
+    carrying the DB-wide scorecard made every meeting repeat the same totals, and adding two reports from one
+    Mac counted the same clusters twice."""
     corrected={(r['meeting'],r['speaker']):r['name'] for r in store.db.execute('SELECT meeting,speaker,name FROM corrections WHERE speaker NOT LIKE ? ORDER BY created',('segment:%',))}
     pinned=_pinned(store)
     seen=set();auto_ok=auto_wrong=suggest_ok=suggest_wrong=missed=unnamed=0
-    for row in store.db.execute("SELECT id,meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"):
+    sql="SELECT id,meeting,speaker,speaker_name,payload FROM segments WHERE source='system'"+(' AND meeting=?' if meeting else '')
+    for row in store.db.execute(sql,(meeting,) if meeting else ()):
         p=json.loads(row['payload']);m=p.get('metrics') or {};cl=m.get('cluster')
         if cl is None or (row['meeting'],cl) in seen or (row['meeting'],row['id']) in pinned: continue   # a pinned piece is not the cluster's verdict
         seen.add((row['meeting'],cl));ident=m.get('identity') or {}
@@ -86,7 +91,10 @@ def identity_report(store):
         else: unnamed+=1
     total=auto_ok+auto_wrong+suggest_ok+suggest_wrong+missed+unnamed
     return {'clusters':total,'auto_correct':auto_ok,'auto_wrong':auto_wrong,'suggestion_confirmed':suggest_ok,'suggestion_rejected':suggest_wrong,'missed_known':missed,'still_unnamed':unnamed,
-            'auto_precision':round(auto_ok/(auto_ok+auto_wrong),3) if auto_ok+auto_wrong else None}
+            'auto_precision':round(auto_ok/(auto_ok+auto_wrong),3) if auto_ok+auto_wrong else None,
+            # `meeting`: these numbers are this meeting's own and may be added up across meetings.
+            # `snapshot`: the whole database as it stands, which may not — aggregation has to skip it.
+            'scope':'meeting' if meeting else 'database','snapshot':not meeting}
 
 
 def compare(store, models, client, *, consent=False, limit=20, encode=None, hint=None):
@@ -126,7 +134,6 @@ def report(store):
 def learning_progress(store, weeks=6):
     """Q10: is the tool getting better week by week? Per ISO week of the meeting date: how many voices it
     named by itself (and how many of those the user overruled), how much text the user still had to fix."""
-    from datetime import datetime
     corrected={(r['meeting'],r['speaker']):(r['name'],r['previous_name'] if 'previous_name' in r.keys() else None) for r in store.db.execute('SELECT * FROM corrections WHERE speaker NOT LIKE ? ORDER BY created',('segment:%',))}
     week_of={};title_of={}
     for r in store.db.execute("SELECT id,created FROM meetings WHERE status='complete'"):
@@ -214,10 +221,14 @@ def replay_text(store):
             'items':[{k:r[k] for k in ('meeting','segment','model','wer','wer_no_filler')} for r in refs]}
 
 
-def replay(store, data_dir=None, *, identity=True, text=True, threshold=None, margin=None):
-    """Run the replays, keep the full result under <data_dir>/quality/, return (summary, path)."""
+def replay(store, data_dir=None, *, identity=True, text=True, timeline=False, threshold=None, margin=None):
+    """Run the replays, keep the full result under <data_dir>/quality/, return (summary, path).
+
+    `identity` is the leave-one-meeting-out regression check and stays exactly what it was; `timeline` is the
+    honest cold-start measurement, where a meeting may only use evidence older than itself."""
     result={'date':date.today().isoformat()}
     if identity: result['identity']=replay_identity(store,threshold,margin)
+    if timeline: result['timeline']=replay_timeline(store,threshold,margin)
     if text: result['text']=replay_text(store)
     folder=Path(data_dir or Path(store.path).parent)/'quality';folder.mkdir(parents=True,exist_ok=True)
     path=folder/f"replay-{result['date']}.json";path.write_text(json.dumps(result,ensure_ascii=False,indent=1),encoding='utf-8')
@@ -225,5 +236,449 @@ def replay(store, data_dir=None, *, identity=True, text=True, threshold=None, ma
     if identity:
         i=result['identity'];summary['identity']={k:i[k] for k in ('clusters','ok','wrong','missed','abstained','no_profile','threshold','margin')}
         summary['identity']['misses']=[{k:c[k] for k in ('meeting','speaker','name','seconds','outcome','nearest')} for c in i['misses']]
+    if timeline:
+        t=result['timeline']
+        summary['timeline']={k:t[k] for k in ('meetings','clusters','auto_correct','auto_wrong','abstained_wrong','abstained_ok','unknown_named',
+                                              'auto_precision','known_recall','undated_samples','threshold','margin')}
     if text: summary['text']={k:result['text'][k] for k in ('edits','mean_wer','mean_wer_no_filler')}
     return summary,result
+
+
+# ---------------------------------------------------------------- time-ordered identity replay
+
+def _sample_rows(store):
+    """Every live voice sample with the date it came into existence. `created` is stamped at insert since
+    1.2.82 and backfilled from the meeting a sample's provenance names; a sample that is still undated (a
+    hand enrolment from an older install, a team import) has no place on a timeline and is counted apart."""
+    rows=[];undated=0
+    for r in store.db.execute('SELECT id,name,model,vector,provenance,created FROM samples WHERE deleted_by IS NULL'):
+        created=r['created']
+        if not created: undated+=1;continue
+        try: vector=json.loads(r['vector'])
+        except (TypeError,ValueError): continue
+        rows.append({'id':r['id'],'name':r['name'],'model':r['model'],'vector':vector,'provenance':r['provenance'] or '','created':created})
+    return rows,undated
+
+
+def _rejection_rows(store):
+    rows=[];undated=0
+    for r in store.db.execute('SELECT name,model,vector,created FROM rejections'):
+        if not r['created']: undated+=1;continue
+        try: vector=json.loads(r['vector'])
+        except (TypeError,ValueError): continue
+        rows.append({'name':r['name'],'model':r['model'],'vector':vector,'created':r['created']})
+    return rows,undated
+
+
+def _scores_before(store, vector, model, cutoff, samples, rejections):
+    """store._scores for one moment in time: only the samples and rejections that existed before `cutoff`.
+    Same arithmetic as the live path (centroid + best single sample, a rejection vetoes the person), so the
+    only difference between this and the regression replay is WHICH evidence is allowed to answer."""
+    from .store import cosine, unit, Store
+    v=unit(vector);groups={}
+    for s in samples:
+        if s['model']!=model or s['created']>=cutoff or len(s['vector'])!=len(v): continue
+        groups.setdefault(s['name'],[]).append(s['vector'])
+    vetoed=set()
+    for r in rejections:
+        if r['model']!=model or r['created']>=cutoff or r['name'] not in groups or len(r['vector'])!=len(v): continue
+        if cosine(v,unit(r['vector']))>=Store.REJECT_SIMILARITY: vetoed.add(r['name'])
+    out=[]
+    for name,xs in groups.items():
+        if name in vetoed: continue
+        try: centroid=unit([sum(col)/len(xs) for col in zip(*xs)])
+        except ValueError: continue
+        best=max(cosine(v,unit(x)) for x in xs)
+        out.append({'name':name,'score':(cosine(v,centroid)+best)/2,'samples':len(xs)})
+    return sorted(out,key=lambda s:-s['score'])
+
+
+def _bar_before(store, name, base, cutoff):
+    """The personal bar as it stood before `cutoff`: the same ±0.01/±0.02 arithmetic as the live path, counted
+    from the corrections that had actually happened by then instead of from today's profile_stats totals."""
+    confirmed=wrong=0
+    for r in store.db.execute('SELECT feedback,created FROM corrections WHERE feedback IS NOT NULL'):
+        if not r['created'] or r['created']>=cutoff: continue
+        try: f=json.loads(r['feedback'] or '{}')
+        except ValueError: continue
+        if f.get('confirmed')==name: confirmed+=1
+        if f.get('wrong')==name: wrong+=1
+    return store.personal_bar(base,confirmed,wrong)
+
+
+def replay_timeline(store, threshold=None, margin=None):
+    """Cold-start replay: each meeting is judged with ONLY the evidence that existed before it started.
+
+    `replay_identity` leaves one meeting out of the profiles and keeps everything else, including samples from
+    meetings that had not happened yet — a useful regression check, but it cannot say what the app would have
+    done on the day. Here the cutoff is the meeting's own `created`, so a person is “known” only if an earlier
+    meeting had already produced a sample for them. That makes the unknown-person case measurable, which is the
+    case the review asked for: a cluster whose true person has no earlier sample must be ABSTAINED, never named.
+
+    Five outcomes, per meeting and in total:
+      `auto_correct`     the right person was named by themselves,
+      `auto_wrong`       a known person was named as somebody else,
+      `abstained_wrong`  a known person was left unnamed (the evidence was there and did not carry),
+      `abstained_ok`     an unknown person was left unnamed — the correct answer, counted as such,
+      `unknown_named`    an unknown person was given a name; the worst outcome, and invisible to `replay_identity`.
+    """
+    from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, source_labels, linked_centroid
+    from .reports import settings_owner
+    threshold=IDENTITY_THRESHOLD if threshold is None else threshold;margin=IDENTITY_MARGIN if margin is None else margin
+    mic=source_labels(settings_owner(Path(store.path).parent))['mic']
+    samples,undated_samples=_sample_rows(store);rejections,undated_rejections=_rejection_rows(store)
+    OUTCOMES=('auto_correct','auto_wrong','abstained_wrong','abstained_ok','unknown_named')
+    meetings=[m for m in store.meetings() if m['status']=='complete' and m['created']]
+    meetings.sort(key=lambda m:m['created'])   # store.meetings() is newest first; a timeline is not
+    per_meeting=[];items=[];people={}
+    for m in meetings:
+        cutoff=m['created'];groups={}
+        for r in store.segments(m['id']):
+            if r['source']=='mic' or not r.get('speaker_name') or r['speaker_name']==mic: continue
+            groups.setdefault((r['source'],r['speaker'],r['speaker_name']),[]).append(r)
+        counts={k:0 for k in OUTCOMES};clusters=0
+        for (source,speaker,name),members in groups.items():
+            models={r.get('embedding_model') for r in members if r.get('embedding') and r.get('embedding_model')}
+            if not models: continue
+            model=max(models,key=lambda k:sum(1 for r in members if r.get('embedding_model')==k))
+            centroid=linked_centroid(members,model)
+            scores=_scores_before(store,centroid,model,cutoff,samples,rejections)
+            known=any(s['name']==name for s in scores)   # this person had a sample BEFORE this meeting
+            top=[{'name':s['name'],'score':round(s['score'],3)} for s in scores[:2]]
+            score=top[0]['score'] if top else None
+            gap=(scores[0]['score']-scores[1]['score']) if len(scores)>1 else (scores[0]['score']+1 if scores else None)
+            bar=_bar_before(store,top[0]['name'],threshold,cutoff) if top else threshold
+            named=top[0]['name'] if top and score>=bar and gap>=margin else None
+            if named==name: outcome='auto_correct'
+            elif named and known: outcome='auto_wrong'
+            elif named: outcome='unknown_named'
+            elif known: outcome='abstained_wrong'
+            else: outcome='abstained_ok'
+            counts[outcome]+=1;clusters+=1
+            items.append({'meeting':m['id'],'created':m['created'],'speaker':speaker,'name':name,'known_before':known,'outcome':outcome,'named':named,
+                          'seconds':round(sum(r['end']-r['start'] for r in members),1),'score':score,'margin':round(gap,3) if gap is not None else None,
+                          'threshold_used':round(bar,3),'nearest':top})
+            p=people.setdefault(name,{k:0 for k in OUTCOMES});p[outcome]+=1
+        if clusters: per_meeting.append({'meeting':m['id'],'title':m['title'],'created':m['created'],'clusters':clusters,**counts})
+    totals={k:sum(r[k] for r in per_meeting) for k in OUTCOMES}
+    clusters=sum(r['clusters'] for r in per_meeting)
+    named_total=totals['auto_correct']+totals['auto_wrong']+totals['unknown_named']
+    return {'threshold':threshold,'margin':margin,'meetings':len(per_meeting),'clusters':clusters,**totals,
+            'auto_precision':round(totals['auto_correct']/named_total,3) if named_total else None,
+            'known_recall':round(totals['auto_correct']/(totals['auto_correct']+totals['auto_wrong']+totals['abstained_wrong']),3) if (totals['auto_correct']+totals['auto_wrong']+totals['abstained_wrong']) else None,
+            'undated_samples':undated_samples,'undated_rejections':undated_rejections,
+            'per_meeting':per_meeting,'people':people,'items':items}
+
+
+# ---------------------------------------------------------------- daily numeric quality summary (Codex #10)
+
+DAILY_DIR='quality'
+DAILY_FILE='daily.json'
+DAILY_KEEP=45            # days kept locally; the heartbeat carries the newest DAILY_SHARE of them
+DAILY_SHARE=14
+# What the trend alert calls an error: every metric here is a number of times the user had to put
+# something right. Each is a rate over its own denominator; the trend pools numerators and denominators.
+ERROR_METRICS=('names_falsified','word_repeat_errors','summary_edits','task_edits')
+TREND_MIN_OBSERVATIONS=20   # below this the rate is noise; the review asks for no alert at all
+TREND_RISE=0.30             # a rise of 30 % or more in the pooled error rate
+
+
+def ratio(n, d):
+    """A measured number with the scope it was measured in. An empty denominator is `null`, never 0 % and
+    never 100 %: nothing was observed, so nothing is claimed."""
+    n=int(n or 0);d=int(d or 0)
+    return {'n':n,'d':d,'rate':round(n/d,4) if d else None}
+
+
+def _table(store, name):
+    return bool(store.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone())
+
+
+def _columns(store, name):
+    return {r[1] for r in store.db.execute(f'PRAGMA table_info({name})')} if _table(store,name) else set()
+
+
+def _day_of(created):
+    from .insights import local_day
+    return local_day(created)
+
+
+def _bounds(day):
+    """A UTC window that certainly contains the local day, for the SQL prefilter. The exact answer is still
+    `local_day`; this only keeps an hourly heartbeat from reading every analysis this Mac has ever saved."""
+    return (day-timedelta(days=2)).isoformat(),(day+timedelta(days=2)).isoformat()
+
+
+def _raw_text(payload):
+    """What the transcript said before the app rewrote anything: the pre-pass copies an automatic word fix
+    leaves behind, then the user's own `original_text`, then today's text."""
+    return payload.get('pre_auto_text') or payload.get('pre_word_text') or payload.get('original_text') or payload.get('text') or ''
+
+
+def _names_metrics(store, meeting_ids):
+    """Automatic speaker names of the day's meetings, and what a human did about them. An untouched automatic
+    name is NOT a confirmation (Codex #1): it is counted as unreviewed and nothing else."""
+    if not meeting_ids: return {k:ratio(0,0) for k in ('names_reviewed','names_falsified','names_unreviewed')}
+    corrected={(r['meeting'],r['speaker']):r['name'] for r in store.db.execute('SELECT meeting,speaker,name FROM corrections WHERE speaker NOT LIKE ? ORDER BY created',('segment:%',))}
+    pinned=_pinned(store);seen=set();auto=reviewed=falsified=0
+    # By meeting, never over the whole segments table: this runs on every heartbeat and a year of transcripts
+    # is a lot of rows to read for one day's numbers.
+    rows=[r for mid in sorted(meeting_ids) for r in store.db.execute("SELECT id,meeting,speaker,payload FROM segments WHERE source='system' AND meeting=?",(mid,))]
+    for row in rows:
+        p=json.loads(row['payload']);m=p.get('metrics') or {};cl=m.get('cluster')
+        if cl is None or (row['meeting'],cl) in seen or (row['meeting'],row['id']) in pinned: continue
+        seen.add((row['meeting'],cl))
+        name=(m.get('identity') or {}).get('name')
+        if not name: continue
+        auto+=1
+        verdict=corrected.get((row['meeting'],row['speaker']))
+        if verdict is None: continue
+        reviewed+=1
+        if verdict!=name: falsified+=1
+    return {'names_reviewed':ratio(reviewed,auto),'names_falsified':ratio(falsified,reviewed),'names_unreviewed':ratio(auto-reviewed,auto)}
+
+
+def _word_repeat_metric(store, meetings):
+    """A word the user taught, wrong again in a later raw transcript. One (word, meeting) pair is one check:
+    the numerator counts the pairs where the old spelling is still there, the denominator every pair that
+    could have gone wrong. Only words this Mac was explicitly taught before the meeting started are counted,
+    and only their exact spelling — the same bar `apply_rules` uses before it rewrites anything."""
+    from .correction_memory import taught_rules, _pattern
+    try: rules=[r for r in taught_rules(store) if r.get('created')]
+    except Exception: return ratio(0,0)
+    if not rules: return ratio(0,0)
+    patterns=[(r,_pattern(r['original'])) for r in rules]
+    checks=hits=0
+    for m in meetings:
+        raw=[_raw_text(json.loads(p[0] or '{}')) for p in store.db.execute('SELECT payload FROM segments WHERE meeting=?',(m['id'],))]
+        for rule,pattern in patterns:
+            if rule['created']>=m['created']: continue   # taught after this meeting: it was never asked to help here
+            checks+=1
+            if any(pattern.search(text) for text in raw): hits+=1
+    return ratio(hits,checks)
+
+
+def _analysis_metrics(store, meeting_ids, day):
+    """Summary bullets and tasks the day produced, what the user had to change about them, how long the
+    analysis took. `elapsed_seconds` is written by assistant.analyze; analyses from before 1.2.82 have none
+    and are simply not in the sample."""
+    bullets=tasks=0;seconds=[];analysed=set();window=_bounds(day)
+    if _table(store,'analyses'):
+        # json_extract rather than json.loads: the payload is the whole analysis and this runs on every heartbeat.
+        for r in store.db.execute("SELECT meeting,created,json_array_length(payload,'$.summary') AS bullets,"
+                                  "json_extract(payload,'$.elapsed_seconds') AS seconds FROM analyses WHERE created BETWEEN ? AND ?",window):
+            if _day_of(r['created'])!=day: continue
+            analysed.add(r['meeting']);bullets+=int(r['bullets'] or 0)
+            if isinstance(r['seconds'],(int,float)) and not isinstance(r['seconds'],bool): seconds.append(float(r['seconds']))
+    if _table(store,'tasks'):
+        tasks=sum(1 for r in store.db.execute('SELECT created FROM tasks WHERE created BETWEEN ? AND ?',window) if _day_of(r['created'])==day)
+    summary_edits=_summary_edit_count(store,day)
+    task_edits=sum(1 for r in store.db.execute('SELECT created FROM task_edits WHERE created BETWEEN ? AND ?',window) if _day_of(r['created'])==day) if _table(store,'task_edits') else 0
+    return ({'summary_edits':ratio(summary_edits,bullets) if summary_edits is not None else ratio(0,0),
+             'task_edits':ratio(task_edits,tasks),
+             'meetings_analysed':ratio(len(analysed&meeting_ids),len(meeting_ids))},
+            {'p50':_percentile(seconds,50),'p95':_percentile(seconds,95),'n':len(seconds)})
+
+
+def _summary_edit_count(store, day):
+    """Summary-item corrections, once the release that records them (Codex #2) is on this Mac. Until then
+    there is no denominator and no claim: `None` here becomes an empty n/d, not a measured zero."""
+    for name in ('summary_edits','insight_edits'):
+        if _table(store,name) and 'created' in _columns(store,name):
+            return sum(1 for r in store.db.execute(f'SELECT created FROM {name} WHERE created BETWEEN ? AND ?',_bounds(day)) if _day_of(r['created'])==day)
+    return None
+
+
+def _percentile(values, pct):
+    if not values: return None
+    ordered=sorted(values);k=(len(ordered)-1)*pct/100.0
+    low=int(k);high=min(low+1,len(ordered)-1)
+    return round(ordered[low]+(ordered[high]-ordered[low])*(k-low),2)
+
+
+def _review_metrics(store, day):
+    """Kontrol items the user closed, by result. `review_results` (Codex #4) is the table that records this
+    properly; until it exists the two decisions that ARE recorded stand in — teaching a word (fixed) and
+    saying a word is already right (correct) — and “geçildi” has no source, so it stays at zero."""
+    correct=fixed=skipped=0;window=_bounds(day)
+    if _table(store,'review_results') and {'created','result'}<=_columns(store,'review_results'):
+        for r in store.db.execute('SELECT created,result FROM review_results WHERE created BETWEEN ? AND ?',window):
+            if _day_of(r['created'])!=day: continue
+            result=(r['result'] or '').lower()
+            if result in ('correct','dogru','doğru'): correct+=1
+            elif result in ('fixed','corrected','duzeltildi','düzeltildi'): fixed+=1
+            else: skipped+=1
+    else:
+        if _table(store,'taught_words'):
+            fixed+=sum(1 for r in store.db.execute('SELECT created FROM taught_words WHERE created BETWEEN ? AND ?',window) if _day_of(r['created'])==day)
+        if _table(store,'word_dismissals'):
+            correct+=sum(1 for r in store.db.execute('SELECT created FROM word_dismissals WHERE created BETWEEN ? AND ?',window) if _day_of(r['created'])==day)
+        if _table(store,'rule_feedback'):
+            correct+=sum(1 for r in store.db.execute("SELECT created FROM rule_feedback WHERE verdict='accepted' AND created BETWEEN ? AND ?",window) if _day_of(r['created'])==day)
+    total=correct+fixed+skipped
+    return {'review_correct':ratio(correct,total),'review_fixed':ratio(fixed,total),'review_skipped':ratio(skipped,total)}
+
+
+def _export_metric(store, day):
+    """Successful exports over attempted ones, from the local learning log when this Mac has one. The log is
+    another release's table (Codex #1); read defensively by column name so the two merge without a rewrite."""
+    name='learning_events'
+    columns=_columns(store,name)
+    if not columns or 'created' not in columns: return ratio(0,0)
+    action=next((c for c in ('action','kind','event') if c in columns),None)
+    result=next((c for c in ('result','outcome','state') if c in columns),None)
+    if not action or not result: return ratio(0,0)
+    attempts=ok=0
+    for r in store.db.execute(f'SELECT {action} AS action,{result} AS result,created FROM {name} WHERE created BETWEEN ? AND ?',_bounds(day)):
+        if _day_of(r['created'])!=day or not str(r['action'] or '').startswith('export'): continue
+        attempts+=1
+        if str(r['result'] or '').lower() in ('ok','success','done'): ok+=1
+    return ratio(ok,attempts)
+
+
+def daily_summary(store, data_dir, day=None, *, version=None, device=None, save=True):
+    """One day of this Mac, in numbers only (Codex #10). No text, no person, no meeting name ever enters it.
+
+    Every rate carries its own numerator and denominator so a good day with two observations cannot look like
+    a trend, and an empty denominator is `null`. The record is keyed by (device, day, app_version) and stored
+    under <data_dir>/quality/daily.json; the heartbeat carries the newest of them and a re-uploaded heartbeat
+    REPLACES the record with the same key instead of adding to it."""
+    from .insights import local_day
+    if day is None: day=datetime.now().astimezone().date()
+    elif isinstance(day,str): day=date.fromisoformat(day[:10])
+    meetings=[m for m in store.meetings() if m['status']=='complete' and local_day(m['created'])==day]
+    ids={m['id'] for m in meetings}
+    metrics={}
+    metrics.update(_names_metrics(store,ids))
+    metrics['word_repeat_errors']=_word_repeat_metric(store,meetings)
+    analysis,seconds=_analysis_metrics(store,ids,day)
+    metrics.update(analysis)
+    metrics.update(_review_metrics(store,day))
+    metrics['exports_ok']=_export_metric(store,day)
+    if device is None: device=_device(data_dir)
+    record={'day':day.isoformat(),'device':device or '','app_version':version or '','written':datetime.now(timezone.utc).isoformat(),
+            'meetings':len(meetings),'metrics':metrics,'analysis_seconds':seconds}
+    if save and data_dir: _save_daily(data_dir,record)
+    return record
+
+
+def _device(data_dir):
+    try:
+        from . import team_cloud
+        return (team_cloud.status(data_dir) or {}).get('device') or ''
+    except Exception: return ''
+
+
+def daily_key(record):
+    """(device, day, app_version) — the identity of one measurement. Two heartbeats carrying the same key are
+    the same day measured twice, not two days."""
+    return f"{record.get('device') or ''}|{record.get('day') or ''}|{record.get('app_version') or ''}"
+
+
+def _daily_path(data_dir):
+    return Path(data_dir)/DAILY_DIR/DAILY_FILE
+
+
+def load_daily(data_dir):
+    try: raw=json.loads(_daily_path(data_dir).read_text(encoding='utf-8'))
+    except (OSError, ValueError): return {}
+    records=raw.get('records') if isinstance(raw,dict) else None
+    return {k:v for k,v in (records or {}).items() if isinstance(v,dict)}
+
+
+def _save_daily(data_dir, record):
+    """Replace this key's record, keep the newest DAILY_KEEP days, write through the same atomic publish the
+    reports use so a half-written file can never be read back."""
+    from .reports import publish
+    records=load_daily(data_dir);records[daily_key(record)]=record
+    keep=sorted(records.values(),key=lambda r:(r.get('day') or '',r.get('written') or ''),reverse=True)[:DAILY_KEEP]
+    records={daily_key(r):r for r in keep}
+    path=_daily_path(data_dir);path.parent.mkdir(parents=True,exist_ok=True)
+    try: publish(path,json.dumps({'records':records},ensure_ascii=False,indent=1))
+    except OSError: pass   # a measurement is never worth failing a job for
+    return records
+
+
+def daily_for_heartbeat(store, data_dir, *, version=None, days=DAILY_SHARE):
+    """Today's numbers plus the recent days already measured, newest first — what the heartbeat carries under
+    `quality_daily`. Each entry is a REPLACE-by-key record, so re-uploading a heartbeat cannot double a count."""
+    try: daily_summary(store,data_dir,version=version)
+    except Exception: pass   # observability never breaks a job
+    records=sorted(load_daily(data_dir).values(),key=lambda r:(r.get('day') or '',r.get('written') or ''),reverse=True)
+    return records[:days]
+
+
+# ---------------------------------------------------------------- fleet trend (one alert, never a ranking)
+
+def daily_records(hosts):
+    """Every daily record the fleet has, de-duplicated by (device, day, version): the newest upload of a key
+    wins. Merging by key is what keeps a host that re-uploaded its heartbeat from counting twice."""
+    merged={}
+    for host in (hosts or {}).values():
+        if not isinstance(host,dict): continue
+        beat=host.get('heartbeat') if isinstance(host.get('heartbeat'),dict) else {}
+        for record in (beat.get('quality_daily') or host.get('quality_daily') or []):
+            if not isinstance(record,dict) or not record.get('day'): continue
+            key=daily_key(record);current=merged.get(key)
+            if current is None or (record.get('written') or '')>=(current.get('written') or ''): merged[key]=record
+    return merged
+
+
+def _pool(records, metrics=ERROR_METRICS):
+    n=d=0;by_metric={}
+    for record in records:
+        for key in metrics:
+            value=(record.get('metrics') or {}).get(key)
+            if not isinstance(value,dict): continue
+            slot=by_metric.setdefault(key,{'n':0,'d':0})
+            slot['n']+=int(value.get('n') or 0);slot['d']+=int(value.get('d') or 0)
+            n+=int(value.get('n') or 0);d+=int(value.get('d') or 0)
+    return {'n':n,'d':d,'rate':round(n/d,4) if d else None,'days':len(records),
+            'by_metric':{k:{**v,'rate':round(v['n']/v['d'],4) if v['d'] else None} for k,v in by_metric.items()}}
+
+
+def quality_trend(hosts, *, period_days=7, today=None):
+    """Two consecutive periods of the fleet's own numbers, and at most ONE alert.
+
+    The alert fires only when the pooled error rate rose by at least 30 % AND both periods carry at least 20
+    eligible observations. Fewer than 20 means the rate is noise and the review says explicitly not to raise
+    anything; a period with no errors at all gives a rise no percentage can describe, so it is reported as a
+    number and not as an alert. Nothing here is per person: the breakdown is by error TYPE."""
+    records=daily_records(hosts)
+    if not records: return {'current':None,'previous':None,'alerts':[],'period_days':period_days}
+    days=sorted({r['day'] for r in records.values()})
+    last=days[-1] if today is None else (today.isoformat() if hasattr(today,'isoformat') else str(today)[:10])
+    end=date.fromisoformat(last)
+    cur_start=end-timedelta(days=period_days-1);prev_start=cur_start-timedelta(days=period_days)
+    def window(first,final):
+        return [r for r in records.values() if first.isoformat()<=r['day']<=final.isoformat()]
+    current=_pool(window(cur_start,end));previous=_pool(window(prev_start,cur_start-timedelta(days=1)))
+    out={'period_days':period_days,'from':prev_start.isoformat(),'to':end.isoformat(),
+         'current':{**current,'from':cur_start.isoformat(),'to':end.isoformat()},
+         'previous':{**previous,'from':prev_start.isoformat(),'to':(cur_start-timedelta(days=1)).isoformat()},
+         'eligible':current['d']>=TREND_MIN_OBSERVATIONS and previous['d']>=TREND_MIN_OBSERVATIONS,'alerts':[]}
+    out['change']=round(current['rate']/previous['rate']-1,4) if current['rate'] is not None and previous['rate'] else None
+    worst=sorted(((k,v) for k,v in current['by_metric'].items() if v['d']),key=lambda kv:-(kv[1]['n']))
+    out['top_errors']=[{'metric':k,**v} for k,v in worst[:3]]
+    if out['eligible'] and out['change'] is not None and out['change']>=TREND_RISE:
+        worst_line=f" · en çok düzeltilen: {LABELS.get(out['top_errors'][0]['metric'],out['top_errors'][0]['metric'])}" if out['top_errors'] else ''
+        out['alerts'].append({'host':'', 'level':'warning','key':'quality_trend',
+                              'line':f"Ekip kalitesi: hata oranı %{previous['rate']*100:.1f} → %{current['rate']*100:.1f} "
+                                     f"(+%{out['change']*100:.0f}, {current['n']}/{current['d']} · önceki {previous['n']}/{previous['d']}){worst_line}"})
+    return out
+
+
+LABELS={'names_falsified':'yanlış otomatik isim','word_repeat_errors':'öğretilen kelime yine yanlış',
+        'summary_edits':'özet düzeltmesi','task_edits':'görev düzeltmesi'}
+
+
+def trend_line(trend):
+    """One Turkish line for the setup card: what the two periods measured, or why there is no answer yet."""
+    if not trend or not trend.get('current'): return ''
+    current,previous=trend['current'],trend['previous']
+    if current['rate'] is None: return 'Kalite ölçümü: bu dönemde sayılacak gözlem yok'
+    now=f"%{current['rate']*100:.1f} ({current['n']}/{current['d']})"
+    if not trend.get('eligible') or previous['rate'] is None:
+        return f'Kalite ölçümü: son {trend["period_days"]} günde düzeltme oranı {now} · karşılaştırma için en az {TREND_MIN_OBSERVATIONS} gözlem gerek'
+    direction='↑' if (trend.get('change') or 0)>0 else ('↓' if (trend.get('change') or 0)<0 else '→')
+    return f'Kalite ölçümü: düzeltme oranı %{previous["rate"]*100:.1f} {direction} {now}'

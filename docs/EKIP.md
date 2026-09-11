@@ -86,6 +86,34 @@ Ayar **açıkken** rapor olduğu gibi, kendi adıyla gider — o anahtarın anla
 yüklenmez. `heartbeat.json` bunların hiçbirinden etkilenmez: kimseyi ve hiçbir toplantıyı adlandırmadığı için
 baytı baytına gider. Mac’teki özgün rapor dosyası her durumda olduğu gibi kalır; değişen yalnız giden kopyadır.
 
+**Günlük kalite sayıları (1.2.82+).** Nabız `quality_daily` altında bu Mac'in son 14 gününü **yalnız sayı**
+olarak taşır. Her gün bir kayıttır ve kaydın kimliği **(cihaz, gün, uygulama sürümü)** üçlüsüdür: nabız
+yeniden yüklendiğinde ekip tarafı aynı anahtarlı kaydı **değiştirir, eklemez** — bu yüzden aynı gün iki kez
+sayılamaz. Bir kayıtta bulunanlar:
+
+| Alan | İçindeki tek şey |
+| --- | --- |
+| `day`, `device`, `app_version`, `written` | gün (yerel takvim), cihazın rastgele kimliği, uygulama sürümü, yazılma zamanı |
+| `meetings` | o gün tamamlanan toplantı **sayısı** |
+| `metrics` | aşağıdaki ölçümlerin her biri `{"n": pay, "d": payda, "rate": oran veya null}` |
+| `analysis_seconds` | analiz süresinin `p50` / `p95` değeri ve kaç ölçümden geldiği |
+
+`metrics` alanları: `names_reviewed`, `names_falsified`, `names_unreviewed` (otomatik isimler ve insanın
+kararı; dokunulmamış isim onay sayılmaz), `word_repeat_errors` (öğretilen bir kelimenin ham transkriptte yine
+yanlış çıkması — **yalnız zaten ekiple paylaşılmış kelime nesneleriyle**, kelimenin kendisi değil sayısı),
+`summary_edits`, `task_edits`, `review_correct` / `review_fixed` / `review_skipped`, `exports_ok`,
+`meetings_analysed`. Ayrıntılı okuma: `docs/BENCHMARK.md` → “Günlük sayılar nasıl okunur”.
+
+**Bu kayıtta ne yoktur:** metin, toplantı adı, toplantı numarası, kişi adı, kelimenin kendisi, dosya yolu ve
+kişi başına hiçbir döküm. Ekip görünümü bu sayılardan **tek** bir kalite alarmı üretir (ardışık iki dönemde
+hata oranı ≥%30 yükselirse ve iki dönemde de en az 20 uygun gözlem varsa); kırılım **hata türüne** göredir,
+kimse konuşma süresi, görev sayısı veya düzeltme sayısıyla sıralanmaz.
+
+**Toplantı raporundaki kimlik karnesi artık o toplantınındır (1.2.82+).** 1.2.81'e kadar her rapor bütün
+veritabanının karnesini taşıyordu; aynı Mac'in iki raporunu toplamak aynı kümeleri iki kez sayıyordu. Rapor
+artık `scope: "meeting"` ile yalnız kendi toplantısının sayılarını taşır, eski raporlar ise `snapshot`
+sayılır ve toplamaya **hiç girmez**.
+
 #### Ekibe katılmak: bir bağlantı, bir tıklama (1.2.68+)
 
 **Terminal gerekmez.** Ekipteki herhangi bir Mac davet üretir, davet gönderilir, alan kişi tıklar. Hepsi bu.
