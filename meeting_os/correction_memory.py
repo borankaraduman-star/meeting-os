@@ -12,6 +12,7 @@ Everything a taught rule touches keeps the sentence it replaced (`pre_word_text`
 without overwriting an edit the user made afterwards.
 """
 import difflib
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -271,6 +272,42 @@ def _pattern(original):
     return re.compile(r'(?<![^\W\d_])' + re.escape(original) + r'(?![^\W\d_])', re.IGNORECASE)
 
 
+def compile_rules(rules, data_dir=None):
+    """One rule set, ready to run over any text: the taught token targets, the whole-word patterns for
+    everything else, and the words no rule may rewrite. Built once and reused — `apply_rules` runs it over
+    every segment of a meeting, `quality.replay_rules` over saved (raw text, final text) pairs."""
+    taught = _targets(rules)
+    compiled = [(_pattern(r['original']), r) for r in rules if not any(t['rule'] is r for t in taught)]
+    protected = _protected(rules, data_dir, allow=[r['original'] for r in rules]) if taught else set()
+    return {'taught': taught, 'patterns': compiled, 'protected': protected, 'rules': list(rules)}
+
+
+def apply_to_text(text, plan):
+    """Run a compiled rule set over one string and return (text, applied). Touches no database and keeps no
+    state: the same substitution `apply_rules` writes into a segment, available to a replay that must not."""
+    applied = []
+    for pattern, rule in plan['patterns']:
+        def swap(m, rule=rule):
+            s = m.group(0); rep = rule['replacement']
+            return _upper_first(rep) if s[:1].isupper() and not rep[:1].isupper() else rep
+        new, n = pattern.subn(swap, text)
+        if n: applied.append({'original': rule['original'], 'replacement': rule['replacement'], 'count': n}); text = new
+    if plan['taught']:
+        text, hits = apply_taught(text, plan['taught'], plan['protected'])
+        by_original = {t['rule']['original']: t['rule'] for t in plan['taught']}
+        for original, n in hits.items():
+            applied.append({'original': original, 'replacement': by_original[original]['replacement'], 'count': n})
+    return text, applied
+
+
+def rules_version(rules):
+    """A short fingerprint of a rule set — what "today's rules" means in a replay report, and what tells an
+    old result from a new one without storing the rules themselves."""
+    if not rules: return 'empty'
+    body = '\n'.join(sorted(f"{_fold(r['original'])}\u2192{r['replacement']}" for r in rules))
+    return hashlib.sha256(body.encode('utf-8')).hexdigest()[:12]
+
+
 def apply_rules(store, mid, rules=None, data_dir=None):
     """Apply learned and taught rules to every segment of a meeting. What the segment said before this pass is
     kept in `pre_auto_text` — its own key, never the user's `original_text`, so reverting an automatic fix
@@ -280,25 +317,12 @@ def apply_rules(store, mid, rules=None, data_dir=None):
     taught by hand, which is allowed to be corrected even when the vocabulary also holds it."""
     rules = all_rules(store) if rules is None else rules
     if not rules: return {'segments': 0, 'fixes': 0, 'rules': 0}
-    taught = _targets(rules)
-    compiled = [(_pattern(r['original']), r) for r in rules if not any(t['rule'] is r for t in taught)]
-    protected = _protected(rules, data_dir, allow=[r['original'] for r in rules]) if taught else set()
+    plan = compile_rules(rules, data_dir)
     segments = fixes = 0
     for row in store.db.execute('SELECT id,payload FROM segments WHERE meeting=?', (mid,)).fetchall():
         payload = json.loads(row['payload']); text = payload.get('text') or ''
         if 'auto_corrected' in (payload.get('flags') or []): continue   # never stack rules on a previous pass
-        applied = []
-        for pattern, rule in compiled:
-            def swap(m):
-                s = m.group(0); rep = rule['replacement']
-                return _upper_first(rep) if s[:1].isupper() and not rep[:1].isupper() else rep
-            new, n = pattern.subn(swap, text)
-            if n: applied.append({'original': rule['original'], 'replacement': rule['replacement'], 'count': n}); text = new
-        if taught:
-            text, hits = apply_taught(text, taught, protected)
-            by_original = {t['rule']['original']: t['rule'] for t in taught}
-            for original, n in hits.items():
-                applied.append({'original': original, 'replacement': by_original[original]['replacement'], 'count': n})
+        text, applied = apply_to_text(text, plan)
         if not applied: continue
         payload['pre_auto_text'] = payload.get('text'); payload['text'] = text
         payload['flags'] = sorted(set(payload.get('flags') or []) | {'auto_corrected'})
@@ -551,6 +575,15 @@ def global_dismissals(store):
     single meeting, because a dismissal only lived in the meeting it was made in."""
     _ensure_dismissals(store)
     return {r[0] for r in store.db.execute('SELECT word FROM word_dismissals')}
+
+
+def dismissed_terms(store):
+    """Every spelling the user has answered "bu doğru" to, newest first, written the way they wrote it. A
+    dismissal is a locally verified term — the user looked at that word and said it is right — so it belongs
+    in the spelling hint next to the words they taught. It is NEVER a team-wide ban: this reads only the
+    dismissals made on this Mac and nothing here is published (Codex, YAPMA)."""
+    _ensure_dismissals(store)
+    return [r['display'] or r['word'] for r in store.db.execute('SELECT word,display,created FROM word_dismissals ORDER BY created DESC,word')]
 
 
 def dismissed_words(store, mid):

@@ -99,6 +99,52 @@ class CorrectionMemoryTests(unittest.TestCase):
         entries=[{'term':'Splendo','aliases':[],'mishearings':['Splendou']}]
         self.assertEqual(cm.glossary_proposals(rules,entries),[{'term':'Splendo','mishearing':'Spilendo','meetings':2}])
 
+class RuleTextTests(unittest.TestCase):
+    """The rule set as a pure function of text: what `apply_rules` writes into a segment, without a database.
+    This is what lets a replay ask "would today's rules produce what the user kept?" without touching one."""
+
+    RULES=[{'original':'Spilendo','replacement':'Splendo','source':'taught'},
+           {'original':'kanal ekibi','replacement':'Kanal Ekibi','source':'learned','replacements':{}}]
+
+    def test_a_compiled_rule_set_rewrites_text_the_same_way_a_segment_is_rewritten(self):
+        plan=cm.compile_rules(self.RULES)
+        text,applied=cm.apply_to_text('Spilendo ve spilendo, kanal ekibi geldi; Spilendoya değil.',plan)
+        self.assertEqual(text,'Splendo ve Splendo, Kanal Ekibi geldi; Spilendoya değil.')   # exact spelling only
+        self.assertEqual({a['original']:a['count'] for a in applied},{'Spilendo':2,'kanal ekibi':1})
+        self.assertEqual(cm.apply_to_text('Alakasız cümle',plan),('Alakasız cümle',[]))
+
+    def test_the_compiled_plan_is_reusable_and_changes_nothing_it_is_given(self):
+        plan=cm.compile_rules(self.RULES)
+        first=cm.apply_to_text('Spilendo demosu.',plan)
+        self.assertEqual(cm.apply_to_text('Spilendo demosu.',plan),first)
+        self.assertEqual(self.RULES[0]['replacement'],'Splendo')
+
+    def test_a_rule_set_has_a_fingerprint_that_ignores_order_and_moves_with_content(self):
+        self.assertEqual(cm.rules_version(self.RULES),cm.rules_version(list(reversed(self.RULES))))
+        self.assertNotEqual(cm.rules_version(self.RULES),cm.rules_version(self.RULES[:1]))
+        self.assertEqual(cm.rules_version([]),'empty')
+
+    def test_applying_a_meeting_and_applying_the_text_agree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db');mid=db.create_meeting('a')
+            sid=db.add_segment(mid,Segment(0,5,'Spilendo ve kanal ekibi.','system','system:S1'))
+            cm.apply_rules(db,mid,rules=self.RULES)
+            row=next(r for r in db.segments(mid) if r['id']==sid)
+            self.assertEqual(row['text'],cm.apply_to_text('Spilendo ve kanal ekibi.',cm.compile_rules(self.RULES))[0])
+            db.close()
+
+
+class DismissedTermTests(unittest.TestCase):
+    def test_bu_dogru_is_a_locally_verified_spelling_and_is_listed_as_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Store(Path(tmp)/'db');mid=db.create_meeting('a')
+            db.add_segment(mid,Segment(0,5,'Sevde geldi.','system','system:S1'))
+            cm.dismiss_word(db,mid,'Sevde')
+            self.assertEqual(cm.dismissed_terms(db),['Sevde'])
+            self.assertEqual(cm.global_dismissals(db),{'sevde'})
+            db.close()
+
+
 if __name__=='__main__': unittest.main()
 
 

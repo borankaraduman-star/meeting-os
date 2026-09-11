@@ -90,17 +90,85 @@ class WordTests(TeamFixture):
         self.assertEqual({(e['host'], e['replacement']) for e in self.words_file()},
                          {('mac-a', 'Ayşe Nur'), ('mac-b', 'Ayşe')})
 
-    def test_between_two_teammates_the_newest_word_wins(self):
-        data_b, b, settings_b = self.mac('b')
+    def _conflicting_file(self):
+        """Two teammates, the same word, two different spellings, and no rule on this Mac."""
         path = self.root / tk.WORDS_FILE
         path.write_text('\n'.join(json.dumps(e, ensure_ascii=False) for e in [
             {'original': 'Trendyoll', 'replacement': 'Trendyol', 'host': 'mac-a', 'created': '2026-01-01', 'updated': '2026-01-01'},
             {'original': 'Trendyoll', 'replacement': 'Trendyol A.Ş.', 'host': 'mac-c', 'created': '2026-02-01', 'updated': '2026-02-01'}]) + '\n', encoding='utf-8')
+
+    def test_two_teammates_who_disagree_settle_nothing_by_themselves(self):
+        """The newest line used to win, which let one Mac's clock decide how this Mac writes a word. Neither
+        spelling is applied now; the question goes to Kontrol and both rows stay visible in Ayarlar."""
+        data_b, b, settings_b = self.mac('b')
+        self._conflicting_file()
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            tk.pull_words(b, settings_b, data_b)
+            self.assertEqual([r for r in tk.team_rules(b) if r['active']], [])
+            self.assertTrue(all(r['conflict'] for r in tk.team_rules(b)))
+            self.assertEqual(tk.applied_team_rules(b), [])
+            self.assertEqual(tk.hint_terms(b), [])      # a word the team disagrees about has no team spelling yet
+            self.assertEqual(len(cm.word_rules(b)), 2)  # both are listed, with the Mac each came from
+            conflicts = tk.team_conflicts(b)
+            self.assertEqual(len(conflicts), 1)
+            self.assertEqual(conflicts[0]['original'], 'Trendyoll')
+            self.assertEqual([(o['host'], o['replacement']) for o in conflicts[0]['options']],
+                             [('mac-a', 'Trendyol'), ('mac-c', 'Trendyol A.Ş.')])
+            other = b.create_meeting('b'); self.segment(b, other, 'Trendyoll güzel.')
+            self.assertEqual(cm.apply_rules(b, other, data_dir=data_b)['fixes'], 0)
+            self.assertEqual(b.segments(other)[0]['text'], 'Trendyoll güzel.')   # nothing was rewritten behind the user
+
+    def test_two_teammates_who_agree_still_apply_and_the_newest_line_is_the_rule(self):
+        data_b, b, settings_b = self.mac('b')
+        path = self.root / tk.WORDS_FILE
+        path.write_text('\n'.join(json.dumps(e, ensure_ascii=False) for e in [
+            {'original': 'Trendyoll', 'replacement': 'Trendyol', 'host': 'mac-a', 'created': '2026-01-01', 'updated': '2026-01-01'},
+            {'original': 'Trendyoll', 'replacement': 'Trendyol', 'host': 'mac-c', 'created': '2026-02-01', 'updated': '2026-02-01'}]) + '\n', encoding='utf-8')
         with patch.object(tk, 'host_name', return_value='mac-b'):
             tk.pull_words(b, settings_b, data_b)
             active = [r for r in tk.team_rules(b) if r['active']]
-            self.assertEqual([(r['host'], r['replacement']) for r in active], [('mac-c', 'Trendyol A.Ş.')])
-            self.assertEqual(len(cm.word_rules(b)), 2)   # the loser is listed too, with the Mac it came from
+            self.assertEqual([(r['host'], r['replacement']) for r in active], [('mac-c', 'Trendyol')])
+            self.assertEqual(tk.team_conflicts(b), [])
+
+    def test_a_local_rule_settles_a_team_conflict_silently(self):
+        """A word taught on this Mac always wins, and it is not a vote: the question stops being asked."""
+        data_b, b, settings_b = self.mac('b')
+        self._conflicting_file()
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            tk.pull_words(b, settings_b, data_b)
+            mid = b.create_meeting('b'); self.segment(b, mid, 'Trendyoll güzel.')
+            cm.teach(b, mid, 'Trendyoll', 'Trendyol A.Ş.', data_b)
+            self.assertEqual(tk.team_conflicts(b), [])
+            self.assertEqual([r for r in tk.team_rules(b) if r['conflict']], [])
+            self.assertEqual(b.segments(mid)[0]['text'], 'Trendyol A.Ş. güzel.')
+
+    def test_the_conflict_is_one_kontrol_question_and_teaching_answers_it(self):
+        from meeting_os.desktop import dispatch
+        from meeting_os.review import review_queue
+        data_b, b, settings_b = self.mac('b')
+        self._conflicting_file()
+        with patch.object(tk, 'host_name', return_value='mac-b'):
+            tk.pull_words(b, settings_b, data_b)
+            mid = b.create_meeting('b'); self.segment(b, mid, 'Trendyoll ile görüştük.')
+            b.status(mid, 'complete')
+            items = [i for i in review_queue(b, mid, data_b)['items'] if i['kind'] == 'word_conflict']
+            self.assertEqual(len(items), 1)
+            self.assertIn('Ekipte iki yazım: Trendyol / Trendyol A.Ş. — hangisi?', items[0]['reason'])
+            self.assertEqual(items[0]['source_version'], 'w:trendyol|trendyol a.ş.')
+            self.assertEqual(items[0]['key'], 'word_conflict:trendyoll')
+            item = items[0]
+            path = b.path; b.close(); self.stores.remove(b)
+            result = dispatch({'action': 'learn_word', 'meeting': mid, 'original': item['original'], 'replacement': 'Trendyol',
+                               'reason': 'team_conflict', 'key': item['key'], 'kind': 'word_conflict',
+                               'source_version': item['source_version']}, path)
+            self.assertEqual(result['rule']['replacement'], 'Trendyol')
+            self.assertTrue(result['resolved']['resolved'])
+            store = Store(path); self.stores.append(store)
+            from meeting_os.learning import events
+            teach_event = [e for e in events(store) if e['action'] == 'word_teach'][-1]
+            self.assertEqual(teach_event['reason'], 'team_conflict')
+            self.assertEqual([i for i in review_queue(store, mid, data_b)['items'] if i['kind'] == 'word_conflict'], [])
+            self.assertEqual(store.segments(mid)[0]['text'], 'Trendyol ile görüştük.')
 
     def test_a_team_word_switched_off_here_is_not_applied_and_the_shared_file_is_untouched(self):
         data_a, a, _ = self.mac('a'); data_b, b, settings_b = self.mac('b')

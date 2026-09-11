@@ -19,7 +19,7 @@ def capture_dir(root,seconds=4):
 class FakeClient:
     def __init__(self,fail_at=None):self.calls=[];self.fail_at=fail_at
     def transcribe(self,audio,fmt,*,model,consent,diarize=False,timeout=90,**kw):
-        self.calls.append({'bytes':len(audio),'format':fmt,'model':model,'diarize':diarize,'timeout':timeout})
+        self.calls.append({'bytes':len(audio),'format':fmt,'model':model,'diarize':diarize,'timeout':timeout,'hint':kw.get('hint')})
         if self.fail_at==len(self.calls):raise OpenRouterError('network')
         if diarize:return {'text':'Merhaba. Selam.','usage':{'seconds':4,'cost':.0003},'segments':[{'start':0.0,'end':1.5,'text':'Merhaba.','speaker':'0'},{'start':1.6,'end':3.0,'text':'Selam.','speaker':'1'}]}
         return {'text':'Tek parça metin.','usage':{'seconds':4,'cost':.0003}}
@@ -694,6 +694,33 @@ class GlossaryTests(unittest.TestCase):
             r=dispatch({'action':'glossary_dismiss','meeting':mid,'segment':a,'original':'trend yol'},db);self.assertEqual(r,{'dismissed':1,'remaining':0})
             self.assertEqual([i for i in dispatch({'action':'review_queue','meeting':mid},db)['items'] if i['kind']=='glossary'],[])
             self.assertEqual(dispatch({'action':'glossary_apply_all','meeting':mid,'verified_only':False},db)['applied'],0)
+    def test_the_finalize_hint_is_ranked_and_says_what_did_not_fit(self):
+        """The hint a real job sends: a word taught on this Mac comes before the glossary and the vocabulary,
+        and the meeting records how the 900 characters were spent."""
+        from meeting_os import correction_memory as cm
+        from meeting_os import glossary as G
+        from meeting_os.types import Segment
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);d=capture_dir(tmp);store=Store(data/'db.sqlite')
+            (data/G.FILENAME).write_text(json.dumps({'term':'PMD'},ensure_ascii=False)+'\n',encoding='utf-8')
+            (data/'vocabulary.txt').write_text('Boran\n',encoding='utf-8')
+            taught=store.create_meeting('Önceki',{})
+            store.add_segment(taught,Segment(0,4,'Spilendo demosu.','system','K1'))
+            with patch.object(G,'shared_path',return_value=None):
+                cm.teach(store,taught,'Spilendo','Splendo',data)
+                mid=store.create_meeting('Kayıt',{'capture_dir':str(d)});store.status(mid,'incomplete')
+                client=FakeClient()
+                result=finalize_capture(store,mid,tmp,consent=True,model='deepgram/nova-3',client=client)
+            hint=client.calls[0]['hint']
+            self.assertTrue(hint.startswith('Splendo'),hint)                 # taught here beats the glossary file
+            self.assertIn('PMD',hint);self.assertIn('Boran',hint)
+            self.assertEqual(result['hint_included'][0],'Splendo')
+            self.assertEqual(result['hint_excluded'],0)
+            meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
+            self.assertEqual(meta['hint_included'],result['hint_included'])
+            store.close()
+
     def test_stt_hint_only_for_prompt_models(self):
         from meeting_os.openrouter import OpenRouterClient
         bodies=[]

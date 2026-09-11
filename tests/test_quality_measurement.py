@@ -138,6 +138,126 @@ class DailySummaryTests(unittest.TestCase):
             store.close()
 
 
+class WordRepeatTests(unittest.TestCase):
+    """Per word: how often a later RAW transcript wrote the old spelling again, and whether the rule caught it.
+
+    The daily summary pools this into one rate; the per-word numbers are what Ayarlar → Sesler ve sözlük shows
+    and they never leave this Mac."""
+
+    def taught(self,store,original,replacement,days=2):
+        from meeting_os.correction_memory import _ensure_taught,_fold
+        _ensure_taught(store)
+        created=(datetime.now(timezone.utc)-timedelta(days=days)).isoformat()
+        with store.db:
+            store.db.execute('INSERT INTO taught_words(original,display,replacement,count,meetings,created,vocabulary_added) VALUES(?,?,?,?,?,?,0)',
+                             (_fold(original),original,replacement,1,'[]',created))
+
+    def meeting(self,store,title,text,apply=False):
+        mid=store.create_meeting(title,{'model':'m'})
+        store.add_segment(mid,Segment(0,5,text,'system','Konuşmacı 1',flags=FLAGS))
+        if apply:
+            from meeting_os import correction_memory as cm
+            cm.apply_rules(store,mid)
+        store.status(mid,'complete')
+        return mid
+
+    def test_a_repeat_is_counted_once_per_meeting_and_split_by_what_the_user_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'meeting-os.sqlite')
+            self.taught(store,'Spilendo','Splendo')
+            self.taught(store,'Trendyoll','Trendyol')
+            self.meeting(store,'düzeltildi','Spilendo demosu ve yine Spilendo.',apply=True)   # raw wrong, final fixed
+            self.meeting(store,'düzeltilmedi','Spilendo toplantısı.')                         # raw wrong, final still wrong
+            self.meeting(store,'temiz','Başka bir konu.')
+            result=quality.word_repeat_errors(store)
+            words={w['original']:w for w in result['words']}
+            self.assertEqual((words['Spilendo']['repeats'],words['Spilendo']['fixed'],words['Spilendo']['unfixed']),(2,1,1))
+            self.assertEqual(words['Spilendo']['checks'],3)      # three later meetings could have gone wrong
+            self.assertEqual((words['Trendyoll']['repeats'],words['Trendyoll']['checks']),(0,3))
+            self.assertEqual((result['hits'],result['checks']),(2,6))
+            self.assertEqual(result['rate']['n'],2)
+            self.assertEqual(quality.daily_summary(store,Path(tmp),save=False)['metrics']['word_repeat_errors']['n'],2)
+            store.close()
+
+    def test_a_meeting_older_than_the_rule_is_not_evidence_about_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'meeting-os.sqlite')
+            self.meeting(store,'önce','Spilendo demosu.')
+            self.taught(store,'Spilendo','Splendo',days=0)   # taught now: the meeting above predates it
+            result=quality.word_repeat_errors(store)
+            self.assertEqual((result['words'][0]['checks'],result['words'][0]['repeats']),(0,0))
+            self.assertIsNone(result['rate']['rate'])
+            store.close()
+
+    def test_with_nothing_taught_there_is_no_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'meeting-os.sqlite')
+            self.meeting(store,'a','Bir cümle.')
+            self.assertEqual(quality.word_repeat_errors(store)['words'],[])
+            self.assertIsNone(quality.word_repeat_errors(store)['rate']['rate'])
+            store.close()
+
+    def test_the_settings_list_carries_the_counts_and_no_other_mac_does(self):
+        from meeting_os.desktop import dispatch
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'meeting-os.sqlite';store=Store(path)
+            self.taught(store,'Spilendo','Splendo')
+            self.meeting(store,'düzeltildi','Spilendo demosu.',apply=True)
+            store.close()
+            row=next(r for r in dispatch({'action':'word_rules'},path)['rules'] if r['original']=='Spilendo')
+            self.assertEqual((row['repeats'],row['repeats_fixed'],row['repeats_unfixed']),(1,1,0))
+            report=quality.daily_summary(Store(path),Path(tmp),save=False)
+            self.assertNotIn('Spilendo',json.dumps(report,ensure_ascii=False))   # the aggregate carries no word
+
+
+class ReplayRulesTests(unittest.TestCase):
+    """Would TODAY's rules produce the text the user kept? Synthetic pairs, no database needed."""
+
+    RULES=[{'original':'Spilendo','replacement':'Splendo','source':'taught'}]
+
+    def test_matches_mismatches_and_pairs_todays_rules_do_not_touch(self):
+        pairs=[{'meeting':'m1','segment':1,'raw':'Spilendo demosu.','final':'Splendo demosu.','was':['Spilendo']},
+               {'meeting':'m1','segment':2,'raw':'Spilendo geldi.','final':'Splendo A.Ş. geldi.','was':['Spilendo']},
+               {'meeting':'m2','segment':3,'raw':'Trendyoll ile.','final':'Trendyol ile.','was':['Trendyoll']}]
+        result=quality.replay_rules(None,pairs=pairs,rules=self.RULES)
+        self.assertEqual((result['pairs'],result['matched'],result['mismatched'],result['unchanged']),(3,1,2,1))
+        rules={r['original']:r for r in result['by_rule']}
+        self.assertEqual((rules['Spilendo']['applied'],rules['Spilendo']['matched'],rules['Spilendo']['mismatched']),(2,1,1))
+        self.assertEqual(rules['Spilendo']['state'],'current')
+        # A rule that only exists in the history is listed as retired with what it used to do, never as a match.
+        self.assertEqual((rules['Trendyoll']['state'],rules['Trendyoll']['was_applied'],rules['Trendyoll']['applied']),('retired',1,0))
+        self.assertEqual([m['segment'] for m in result['mismatches']],[2,3])
+
+    def test_the_rule_set_has_a_version_that_moves_when_the_rules_do(self):
+        from meeting_os import correction_memory as cm
+        other=[{'original':'Spilendo','replacement':'Splendo A.Ş.','source':'taught'}]
+        self.assertNotEqual(cm.rules_version(self.RULES),cm.rules_version(other))
+        self.assertEqual(cm.rules_version(self.RULES),cm.rules_version(list(self.RULES)))
+        self.assertEqual(cm.rules_version([]),'empty')
+        self.assertEqual(quality.replay_rules(None,pairs=[],rules=self.RULES)['version'],cm.rules_version(self.RULES))
+
+    def test_the_real_pairs_come_from_this_macs_own_segments_and_the_replay_writes_nothing(self):
+        from meeting_os import correction_memory as cm
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'meeting-os.sqlite')
+            mid=store.create_meeting('a',{'model':'m'})
+            sid=store.add_segment(mid,Segment(0,5,'Spilendo demosu.','system','Konuşmacı 1',flags=FLAGS))
+            store.correct_text(mid,sid,'Splendo demosu.')   # the user fixed it by hand: raw and final both kept
+            store.status(mid,'complete')
+            pairs=quality.rule_pairs(store)
+            self.assertEqual([(p['raw'],p['final']) for p in pairs],[('Spilendo demosu.','Splendo demosu.')])
+            before=store.segments(mid)[0]['text']
+            result=quality.replay_rules(store,rules=self.RULES)
+            self.assertEqual((result['pairs'],result['matched'],result['mismatched']),(1,1,0))
+            self.assertEqual(store.segments(mid)[0]['text'],before)
+            # `replay` uses the rule set this Mac really has. One hand edit is not a rule (two meetings are),
+            # so today's rules leave the pair alone — an honest mismatch, not a match to celebrate.
+            summary,full=quality.replay(store,Path(tmp),identity=False,text=True)
+            self.assertEqual((summary['text']['rules']['pairs'],summary['text']['rules']['mismatched'],summary['text']['rules']['unchanged']),(1,1,1))
+            self.assertEqual(full['text']['rules']['version'],cm.rules_version(cm.all_rules(store)))
+            store.close()
+
+
 class TrendTests(unittest.TestCase):
     """One alert, and only when the numbers can carry one."""
 

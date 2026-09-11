@@ -420,6 +420,9 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         'cost_usd': round(sum(float(u.get('cost') or 0) for u in paid), 5), 'uploaded_seconds': round(sum(float(u.get('seconds') or 0) for u in paid), 1),
         'echo_windows_skipped': meta.get('echo_windows_skipped'), 'mic_gated_windows': meta.get('mic_gated_windows'), 'echo_segments': meta.get('echo_segments'), 'identity': meta.get('identity'), 'identity_error': meta.get('identity_error'),
         'markers': len(meta.get('markers') or []), 'glossary_suggestions': len(meta.get('glossary_suggestions') or []),
+        # How the spelling hint's 900 characters were spent: how many terms fitted and how many did not. The
+        # TERMS stay on this Mac — a word is content, and this file lands in a team folder (Codex #7).
+        'hint_included': len(meta.get('hint_included') or []), 'hint_excluded': meta.get('hint_excluded'),
         'job_usage': meta.get('job_usage'),
         # THIS meeting's identity scorecard, not the database's. Until 1.2.82 every report carried the DB-wide
         # one, so two reports from the same Mac added up to twice the same clusters; `scope` says which it is and

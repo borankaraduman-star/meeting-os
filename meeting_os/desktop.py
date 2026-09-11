@@ -710,8 +710,18 @@ def dispatch(request, db=None):
             from . import correction_memory as CM
             base=DATA_DIR if db is None else Path(db).parent
             if action=='word_rules':
-                from .team_knowledge import team_summary
-                return {'rules':CM.word_rules(store),'team':team_summary(store)}
+                from .team_knowledge import team_summary, team_conflicts
+                rules=CM.word_rules(store)
+                # Per-word repeat evidence, on the row it belongs to: "3 kez tekrar etti, hepsi düzeltildi".
+                # It stays here — Ayarlar, this Mac. The daily summary carries the pooled rate and no word.
+                try:
+                    from .quality import word_repeat_errors
+                    stats={w['folded']:w for w in word_repeat_errors(store)['words']}
+                    for row in rules:
+                        w=stats.get(CM._fold(row['original']))
+                        if w: row.update({'repeats':w['repeats'],'repeats_fixed':w['fixed'],'repeats_unfixed':w['unfixed'],'repeat_checks':w['checks']})
+                except Exception: pass
+                return {'rules':rules,'team':team_summary(store),'conflicts':team_conflicts(store)}
             if action=='word_dismiss':
                 result=CM.dismiss_word(store,request['meeting'],request['original'])
                 learn(store,'word_dismiss',object=CM._fold(request['original']),scope='global')
@@ -724,7 +734,16 @@ def dispatch(request, db=None):
             # ONE event for the teaching. The segments this rule rewrites now, and every segment it rewrites in
             # every later meeting, are its EFFECTS — counting them as human evidence is the over-count this
             # table exists to prevent (Codex, 11 Sep 2026, P0 #1, the risk paragraph).
-            learn(store,'word_teach',object=CM._fold(request['original']),scope='global')
+            # `reason` says WHY, when the app honestly knows: answering "Ekipte iki yazım: X / Y" is a decision
+            # about a team disagreement, not the same signal as noticing a wrong word in a transcript.
+            learn(store,'word_teach',object=CM._fold(request['original']),scope='global',reason=request.get('reason'))
+            if request.get('key'):
+                # Taught FROM a Kontrol item: close that item in the same turn, against the version it came
+                # from, so the answer is recorded once and the queue does not ask again.
+                try:
+                    from .review import resolve_review
+                    result={**result,'resolved':resolve_review(store,request['meeting'],request['key'],request.get('kind'),request.get('source_version'),'corrected')}
+                except Exception: pass
             return result
         if action in ('correction_rules','accept_rule','reject_rule'):
             from . import correction_memory as CM

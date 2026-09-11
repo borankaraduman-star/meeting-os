@@ -353,6 +353,13 @@ struct LearnedWordsSection:View {
                     ForEach(model.wordRules) { rule in
                         HStack(spacing:8) {
                             Text(rule.line).font(.caption).lineLimit(1).truncationMode(.middle).foregroundStyle(rule.isTeam && !rule.active ? .secondary : .primary)
+                            // Did teaching it actually help? Measured on this Mac's own later meetings, from
+                            // the RAW transcript — and shown nowhere else (docs/LEARNING.md, "Kelime döngüsü").
+                            if !rule.repeatLine.isEmpty {
+                                Text(rule.repeatLine).font(.caption2).foregroundStyle(rule.repeatsFixed>=rule.repeats ? Color.secondary : Color.orange)
+                                    .help("Kelime öğretildikten sonra ham transkriptte yine yanlış yazıldı; kaçının kuralla düzeltildiğini gösterir")
+                                    .accessibilityIdentifier("wordRepeats-\(rule.original)")
+                            }
                             if rule.isTeam {
                                 // Whose word this is, said on the row: a spelling that arrived from another Mac is
                                 // not something the user typed here, and "Unut" would be the wrong verb for it.
@@ -373,7 +380,7 @@ struct LearnedWordsSection:View {
                     }
                 }.padding(12).meetingCard().accessibilityElement(children:.contain).accessibilityIdentifier("wordRulesList")
             }
-            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda aynı yazım kendiliğinden düzeltilir, yakın yazımlar Kontrol'e öneri olarak gelir. “Unut” kuralı kaldırır. Ekip klasörü açıksa ekip arkadaşlarınızın öğrettiği kelimeler de burada, öğreten Mac’in adıyla listelenir; “Kapat” onu yalnız bu Mac’te susturur, ekip klasöründeki hâline dokunmaz.").font(.caption2).foregroundStyle(.secondary)
+            Text("Bir kelimeyi Düzelt penceresinde bir kez düzeltince buraya girer: sonraki toplantılarda aynı yazım kendiliğinden düzeltilir, yakın yazımlar Kontrol'e öneri olarak gelir. “Unut” kuralı kaldırır. Ekip klasörü açıksa ekip arkadaşlarınızın öğrettiği kelimeler de burada, öğreten Mac’in adıyla listelenir; “Kapat” onu yalnız bu Mac’te susturur, ekip klasöründeki hâline dokunmaz. İki ekip arkadaşı aynı kelimeyi farklı yazdıysa hiçbiri kendiliğinden uygulanmaz: Kontrol’de “Ekipte iki yazım: X / Y — hangisi?” diye sorulur, seçtiğiniz yazım bu Mac’te öğrenilir ve bundan sonra o kazanır. Satırdaki “3 kez tekrar etti” notu, kelimeyi öğrettikten sonra ham transkriptte yine yanlış çıkıp çıkmadığını söyler; bu sayı yalnız bu Mac’te durur.").font(.caption2).foregroundStyle(.secondary)
         }.task { if model.wordRules.isEmpty { await model.loadWordRules() } }
     }
 }
