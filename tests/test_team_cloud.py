@@ -397,7 +397,9 @@ class RoundTripTests(CloudFixture):
         self.assertEqual(pushed['error'] if 'error' in pushed else None, None)
         self.assertEqual(sorted(p.relative_to(self.server.root).as_posix().split('/', 1)[1]
                                 for p in self.server.root.rglob('*') if p.is_file()),
-                         ['glossary/a.jsonl', 'profiles/a.jsonl', 'reports/a/2026-09-10_x.json', 'words/a.jsonl'])
+                         ['glossary/a.jsonl', 'profiles/a.jsonl',
+                          # `share_text` is off, so the meeting id is gone from the payload AND from the name.
+                          f'reports/a/2026-09-10_{E.meeting_key("x")}.json', 'words/a.jsonl'])
         self.assertEqual(self.async_calls, [str(a.data)])   # the teach hook asked for a background pass, not a wait
         with b.host():
             got = b.sync()
@@ -411,7 +413,8 @@ class RoundTripTests(CloudFixture):
             self.assertEqual(cm.apply_rules(b.store, other, data_dir=b.data)['fixes'], 1)
             self.assertEqual([(p['name'], p['samples']) for p in b.store.profiles()], [('Ayşe', 1)])
             self.assertIn('Splendo', [e['term'] for e in glossary.load(b.data)])
-            self.assertEqual(json.loads((b.mirror / 'reports' / 'a' / '2026-09-10_x.json').read_text(encoding='utf-8'))['meeting'], 'x')
+            pulled = b.mirror / 'reports' / 'a' / f'2026-09-10_{E.meeting_key("x")}.json'
+            self.assertEqual(json.loads(pulled.read_text(encoding='utf-8'))['meeting'], E.meeting_key('x'))
             self.assertEqual(reports.summarize(reports.report_root(b.settings()))['hosts']['a']['reports'], 1)
             # Nothing changed since: a second pass uploads nothing and downloads nothing.
             self.assertEqual({k: v for k, v in b.sync().items() if k in ('pushed', 'pulled')}, {'pushed': 0, 'pulled': 0})
@@ -465,15 +468,16 @@ class RoundTripTests(CloudFixture):
         with b.host():
             b.sync()
             self.assertEqual(sorted(p.name for p in (b.mirror / 'reports' / 'a').glob('*.json')),
-                             ['2026-09-10_m1.json', '2026-09-10_m2.json'])
+                             sorted(f'2026-09-10_{E.meeting_key(m)}.json' for m in ('m1', 'm2')))
         with a.host():
             path.unlink()   # the meeting was deleted; `remove_meeting_report` does exactly this
             self.assertEqual(a.sync()['deleted'], 1)
         self.assertFalse((self.server.root / hashlib.sha256(TC.token(a.data).encode()).hexdigest()[:32]
-                          / 'reports/a/2026-09-10_m1.json').exists())
+                          / f'reports/a/2026-09-10_{E.meeting_key("m1")}.json').exists())
         with b.host():
             self.assertEqual(b.sync()['removed'], 1)
-            self.assertEqual([p.name for p in (b.mirror / 'reports' / 'a').glob('*.json')], ['2026-09-10_m2.json'])
+            self.assertEqual([p.name for p in (b.mirror / 'reports' / 'a').glob('*.json')],
+                             [f'2026-09-10_{E.meeting_key("m2")}.json'])
 
     def test_a_term_a_teammate_removed_is_dropped_from_the_mirror(self):
         a = self.mac('a'); b = self.mac('b')
@@ -586,13 +590,13 @@ class ResilienceTests(CloudFixture):
         remote = sorted(p.relative_to(self.server.root).as_posix().split('/', 1)[1]
                         for p in self.server.root.rglob('*') if p.is_file())
         self.assertIn('errors/a.jsonl', remote)
-        self.assertIn('reports/a/2026-09-10_x.json', remote)
+        self.assertIn(f'reports/a/2026-09-10_{E.meeting_key("x")}.json', remote)
         self.assertNotIn('errors/q.jsonl', remote)          # share_reports off: no report and no journal
-        self.assertNotIn('reports/q/2026-09-10_q.json', remote)
+        self.assertNotIn(f'reports/q/2026-09-10_{E.meeting_key("q")}.json', remote)
         with b.host():
             b.sync()
             self.assertFalse(list(b.mirror.rglob('errors*')))   # a teammate's error journal is never downloaded
-            self.assertTrue((b.mirror / 'reports' / 'a' / '2026-09-10_x.json').is_file())
+            self.assertTrue((b.mirror / 'reports' / 'a' / f'2026-09-10_{E.meeting_key("x")}.json').is_file())
 
     def test_hooks_never_wait_for_the_network(self):
         """Naming a voice and teaching a word run on the fast bridge, behind a ten-second watchdog."""
@@ -824,6 +828,203 @@ class InviteTests(CloudFixture):
         self.assertTrue(status['configured'])
         self.assertEqual(status['team_id_short'], invite['team_id_short'])
         self.assertIn('error', dispatch({'action': 'team_join', 'invite': 'saçma'}, blank / 'meeting-os.sqlite'))
+
+
+class OutboxTests(CloudFixture):
+    """Durable delivery (Codex, 10 Sep 2026, P1 #8). A teach used to reach the team through a daemon thread in
+    a bridge process that exits right after answering: a hope, not a promise. Now every publish-worthy change
+    leaves `team-outbox.json` behind BEFORE it asks for a pass, and only a pass that finished takes it back."""
+
+    VECTOR = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.4, 0.2]
+
+    def test_every_publish_worthy_change_leaves_the_promise_on_disk(self):
+        mac = self.mac('a')
+        self.assertFalse(TC.outbox(mac.data)['pending'])          # nothing owed on a quiet Mac
+        with mac.host():
+            mid = mac.store.create_meeting('a'); self.segment(mac.store, mid, 'Trendyoll ile görüştük.')
+            with patch.object(TC, 'sync', side_effect=AssertionError('the fast bridge must not sync inline')):
+                cm.teach(mac.store, mid, 'Trendyoll', 'Trendyol', mac.data)
+            first = TC.outbox(mac.data)
+            self.assertEqual((first['pending'], first['reasons']), (True, ['words']))
+            self.assertTrue((mac.data / 'team-outbox.json').is_file())
+            self.assertEqual((mac.data / 'team-outbox.json').stat().st_mode & 0o777, 0o600)
+            # A naming, a glossary import and a written report each add their own reason; `since` never moves,
+            # because the card has to say how long the USER has been waiting.
+            from meeting_os import desktop
+            mac.store.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+            with patch.object(TC, 'sync', side_effect=AssertionError('the fast bridge must not sync inline')):
+                desktop.share_profiles(mac.store, mac.data / 'meeting-os.sqlite')
+            source = self.tmp / 'sozluk.jsonl'
+            source.write_text(json.dumps({'term': 'Splendo', 'category': 'ürün'}) + '\n', encoding='utf-8')
+            glossary.import_file(source, mac.data)
+            mac.store.status(mid, 'complete')
+            reports.write_meeting_report(mac.store, mid, mac.data, version='1.2.78')
+            box = TC.outbox(mac.data)
+        self.assertEqual(box['since'], first['since'])
+        self.assertEqual(sorted(box['reasons']), ['glossary', 'profiles', 'report', 'words'])
+        # …and a Mac with no team at all never grows the file: there is nobody to owe anything to.
+        blank = self.tmp / 'takımsız'; blank.mkdir()
+        self.assertIsNone(TC.mark_outbox(blank, 'words'))
+        self.assertFalse((blank / 'team-outbox.json').exists())
+
+    def test_a_finished_pass_clears_it_and_a_failed_one_does_not(self):
+        mac = self.mac('a')
+        TC.mark_outbox(mac.data, 'words')
+        dead = {**mac.settings(), 'team_url': 'http://127.0.0.1:1'}   # nothing listens there; the pass fails
+        with mac.host():
+            failed = TC.sync(mac.data, dead, budget=2.0)
+            self.assertTrue(failed.get('error'))
+            self.assertFalse(failed['outbox_cleared'])
+            self.assertTrue(TC.outbox(mac.data)['pending'])       # nothing was delivered, so nothing is forgiven
+            self.assertTrue(TC.status(mac.data)['outbox_pending_since'])
+            done = mac.sync()
+        self.assertIsNone(done.get('error'))
+        self.assertTrue(done['outbox_cleared'])
+        self.assertFalse(TC.outbox(mac.data)['pending'])
+        self.assertIsNone(TC.status(mac.data)['outbox_pending_since'])
+
+    def test_a_change_made_during_the_pass_is_never_cleared_by_it(self):
+        """The pass uploads at 12:00:00 and the user teaches a word at 12:00:03. Clearing the outbox on the way
+        out would throw that word away — it is the one the pass did not carry."""
+        mac = self.mac('a')
+        TC.mark_outbox(mac.data, 'words')
+        during = {'pending': True, 'since': TC.outbox(mac.data)['since'], 'reasons': ['words', 'profiles']}
+        (mac.data / 'team-outbox.json').write_text(json.dumps(during), encoding='utf-8')
+        self.assertFalse(TC.clear_outbox(mac.data, keep={'pending': True, 'since': during['since'], 'reasons': ['words']}))
+        self.assertTrue(TC.outbox(mac.data)['pending'])
+        self.assertTrue(TC.clear_outbox(mac.data, keep=during))
+
+    def test_team_flush_is_free_when_nothing_is_owed_and_delivers_when_something_is(self):
+        from meeting_os.desktop import dispatch
+        a = self.mac('a'); b = self.mac('b'); db = a.data / 'meeting-os.sqlite'
+        with a.host():
+            quiet = dispatch({'action': 'team_flush'}, db)
+        self.assertEqual((quiet['flushed'], quiet['pending'], quiet['pending_since'], quiet['error']), (False, False, None, None))
+        self.assertEqual(self.server.seen, [])                    # not one request: a clear outbox costs a file read
+        with a.host():
+            mid = a.store.create_meeting('a'); self.segment(a.store, mid, 'Trendyoll ile görüştük.')
+            with patch.object(TC, 'sync', side_effect=AssertionError('the fast bridge must not sync inline')):
+                cm.teach(a.store, mid, 'Trendyoll', 'Trendyol', a.data)
+            flushed = dispatch({'action': 'team_flush'}, db)
+        self.assertEqual((flushed['flushed'], flushed['pending'], flushed['pending_since'], flushed['error']), (True, False, None, None))
+        self.assertTrue(self.server.seen)
+        with b.host():
+            b.sync(); tk.pull_words(b.store, b.settings(), b.data)
+            self.assertEqual([r['replacement'] for r in tk.team_rules(b.store)], ['Trendyol'])
+        # …and a launch `team_sync` reports the same thing, so the app knows what it still owes.
+        with a.host():
+            self.assertEqual(dispatch({'action': 'team_sync'}, db)['outbox'], {'pending': False, 'since': None, 'reasons': []})
+
+    def test_the_setup_card_learns_that_a_pass_is_owed(self):
+        from meeting_os.desktop import dispatch
+        mac = self.mac('a')
+        with mac.host():
+            mac.sync()
+            TC.mark_outbox(mac.data, 'words')
+            with patch('meeting_os.updater.check', return_value={}):
+                answer = dispatch({'action': 'setup_status'}, mac.data / 'meeting-os.sqlite')
+        cloud = answer['team_cloud']
+        self.assertTrue(cloud['last_ok'])                          # a successful pass this morning…
+        self.assertTrue(cloud['outbox_pending_since'])             # …and a word taught since: the card must not be green
+        self.assertEqual(cloud['outbox_reasons'], ['words'])
+
+
+class DiagnosticsContractTests(CloudFixture):
+    """What leaves this Mac has to be a contract, not a redaction hope (Codex, 10 Sep 2026, P0 #6). The local
+    journal and the local report keep everything; what the team cloud uploads is built from an enumerated list
+    of fields, and this is the test that puts a token, a person's name, a meeting sentence and a home path into
+    every one of the places that could carry them off the Mac."""
+
+    SECRETS = ('sk-or-v1-gizli-anahtar', 'Ayşe Yılmaz', 'Bütçeyi üçüncü çeyrekte artırıyoruz', '/Users/boran/Belgeler')
+
+    def remote(self, mac, path):
+        team = hashlib.sha256(TC.token(mac.data).encode()).hexdigest()[:32]
+        found = self.server.root / team / path
+        return found.read_text(encoding='utf-8') if found.is_file() else None
+
+    def test_an_error_line_leaves_five_fields_and_none_of_them_is_the_message(self):
+        mac = self.mac('a')
+        E.record('job', f'ValueError: {self.SECRETS[0]} · {self.SECRETS[1]} · {self.SECRETS[2]}', data_dir=mac.data,
+                 context={'command': 'finalize', 'supervised': True, 'meeting': 'a1b2c3d4',
+                          'capture_dir': self.SECRETS[3], 'quote': self.SECRETS[2], 'frames': ['MeetingOS: crash']})
+        E.record('cloud', 'auth: OpenRouter anahtarı geçersiz', data_dir=mac.data, context={'http': 401, 'model': 'openai/gpt-4.1-mini'})
+        with mac.host(): mac.sync()
+        uploaded = self.remote(mac, 'errors/a.jsonl')
+        self.assertIsNotNone(uploaded)
+        for secret in self.SECRETS: self.assertNotIn(secret, uploaded)
+        self.assertNotIn('a1b2c3d4', uploaded)                    # not even the meeting HASH: it is not on the list
+        lines = [json.loads(l) for l in uploaded.splitlines() if l.strip()]
+        self.assertEqual([sorted(l) for l in lines], [sorted(E.TEAM_FIELDS)] * 2)
+        self.assertEqual([l['code'] for l in lines], ['ValueError', 'auth'])
+        self.assertEqual([l['kind'] for l in lines], ['job', 'cloud'])
+        self.assertEqual(lines[0]['context'], {'command': 'finalize', 'supervised': True})
+        self.assertEqual(lines[1]['context'], {'http': 401, 'model': 'openai/gpt-4.1-mini'})
+        # …and the LOCAL journal still has the whole story, because that is what debugging your own Mac needs.
+        local = (mac.data / 'errors.jsonl').read_text(encoding='utf-8')
+        self.assertIn(self.SECRETS[1], local); self.assertIn('capture_dir', local)
+
+    def test_a_message_we_cannot_classify_becomes_other_rather_than_travelling(self):
+        for kind, message, code in (('ui', 'Ayşe Yılmaz’ın sesi tanınamadı', 'other'),
+                                    ('job', 'MemoryPressureError: bellek', 'MemoryPressureError'),
+                                    ('cloud', 'Ekip bulutu eşitlenemedi: URLError: bağlanılamadı', 'team-sync'),
+                                    ('cloud', 'unavailable: HTTP Error 503 sunucu', 'unavailable'),
+                                    ('cloud', 'OpenRouter yanıt vermedi (HTTP 429)', 'http-429'),
+                                    ('update', 'Güncelleme başarısız: derleme durdu', 'update-failed'),
+                                    ('capture', 'Kayıt yardımcısı 9 koduyla çıktı · 3 parça alındı', 'capture-helper'),
+                                    ('crash', 'MeetingOS çöktü · EXC_BAD_ACCESS/SIGSEGV · Namespace · 2026-09-10', 'EXC_BAD_ACCESS/SIGSEGV'),
+                                    ('crash', 'MeetingCapture çöktü · Ayşe’nin toplantısında', 'crash')):
+            self.assertEqual(E.code_for(kind, message), code, message)
+
+    def test_a_context_value_that_is_a_path_or_a_sentence_is_dropped_not_trimmed(self):
+        line = E.team_entry({'kind': 'job', 'time': 't', 'version': '1.2.78', 'message': 'ValueError: x',
+                             'context': {'command': '/Users/boran/bin/finalize', 'state': 'x' * 200,
+                                         'supervised': False, 'seconds': 12.5, 'pieces': 3, 'exit': 9}})
+        self.assertEqual(line['context'], {'state': 'x' * 40, 'supervised': False, 'seconds': 12.5, 'pieces': 3})
+        self.assertNotIn('command', line['context'])               # a path is dropped whole, never shortened
+        self.assertNotIn('exit', line['context'])                  # not on the list for any kind
+
+    def test_a_report_with_transcript_text_is_sanitised_unless_share_text_is_on_right_now(self):
+        mac = self.mac('a')
+        with mac.host():
+            mid = mac.store.create_meeting(self.SECRETS[1] + ' ile görüşme')
+            self.segment(mac.store, mid, self.SECRETS[2])
+            mac.store.status(mid, 'complete')
+            reports.save_settings(mac.data, {'share_text': True})
+            written = reports.write_meeting_report(mac.store, mid, mac.data, version='1.2.78')
+            self.assertIn(self.SECRETS[2], Path(written).read_text(encoding='utf-8'))   # the user asked for it
+            # …and then turns the switch off. The file on disk does not change; what may leave the Mac does.
+            reports.save_settings(mac.data, {'share_text': False})
+            mac.sync()
+        name = f'reports/a/{Path(written).name.split("_")[0]}_{E.meeting_key(mid)}.json'
+        uploaded = self.remote(mac, name)
+        self.assertIsNotNone(uploaded)
+        self.assertIsNone(self.remote(mac, f'reports/a/{Path(written).name}'))   # the id-bearing name never appeared
+        payload = json.loads(uploaded)
+        self.assertNotIn('transcript', payload)
+        self.assertIsNone(payload['title'])
+        self.assertEqual(payload['meeting'], E.meeting_key(mid))
+        self.assertNotIn(mid, uploaded)
+        for secret in self.SECRETS: self.assertNotIn(secret, uploaded)
+        self.assertEqual(list(payload['speakers']), ['S1'])
+        self.assertIsNone(payload['speakers']['S1']['name'])
+        self.assertIn(self.SECRETS[2], Path(written).read_text(encoding='utf-8'))   # the local copy is untouched
+        # With the switch back on the full report travels under its own name: that is the user saying so.
+        with mac.host():
+            reports.save_settings(mac.data, {'share_text': True}); mac.sync()
+        full = self.remote(mac, f'reports/a/{Path(written).name}')
+        self.assertIsNotNone(full)
+        self.assertIn(self.SECRETS[2], full)
+        self.assertIsNone(self.remote(mac, name))   # …and the anonymous copy is withdrawn, not left behind
+
+    def test_the_heartbeat_travels_byte_for_byte(self):
+        """It names no meeting and no person, so nothing in the contract touches it — and a fleet view that
+        silently lost a field would be worse than one that never had it."""
+        mac = self.mac('a')
+        with mac.host():
+            beat = reports.write_heartbeat(mac.store, mac.data, app={'version': '1.2.78', 'commit': None})
+            mac.sync()
+            uploaded = self.remote(mac, 'reports/a/heartbeat.json')
+        self.assertEqual(uploaded, Path(beat).read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

@@ -179,7 +179,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             self.sleptAt=Date()
         } }
         workspace.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main) { [weak self] _ in Task { @MainActor in
-            guard let self=self, self.recordProcess != nil else { return }
+            guard let self=self else { return }
+            // A Mac that slept through the retry beat owes the team the same pass it owed before the lid shut:
+            // dropping the last attempt lets the next poll flush at once instead of five minutes from now.
+            if self.teamOutboxSince != nil { self.lastTeamFlush=nil }
+            guard self.recordProcess != nil else { return }
             self.sleptAt=nil
             await self.refresh()
         } }
@@ -353,7 +357,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         if visibleRows != visible { visibleRows=visible }
         blocks=TranscriptBlocks.build(visible)
     }
-    func request(_ req:[String:Any]) async throws -> [String:Any] { try await Bridge.call(runtime,req) }
+    /// The bridge actions that leave something the team has not seen. The Python hook behind each of them
+    /// writes `team-outbox.json` before it tries to send; this is the app learning the same fact, so its
+    /// flush loop starts counting without having to read a file every two seconds.
+    static let outboxActions:Set<String>=["label","label_speaker","label_segment","enroll","delete_profile","rename_profile",
+                                          "teach_word","forget_word","reject_rule","glossary_import","glossary_apply","glossary_apply_all","report_write"]
+    /// When this Mac last learned something the team does not have yet, nil when the outbox is empty. Not
+    /// persisted on purpose: the file on the Python side is the durable record, and every launch reads it.
+    @Published var teamOutboxSince:Date?
+    var lastTeamFlush:Date?
+    func request(_ req:[String:Any]) async throws -> [String:Any] {
+        let answer=try await Bridge.call(runtime,req)
+        if let action=req["action"] as? String, Model.outboxActions.contains(action), teamOutboxSince==nil { teamOutboxSince=Date() }
+        return answer
+    }
     /// For the few actions that are allowed to take minutes (the housekeeping sweep). Off the poll's queue and
     /// off its watchdog; never used for anything the user is standing in front of.
     func requestSlow(_ req:[String:Any],timeout:TimeInterval = 600) async throws -> [String:Any] { try await Bridge.callSlow(runtime,req,timeout:timeout) }
@@ -431,6 +448,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             applyWindowPrivacy()
             applyLivePriority(zoomOpen:zoomState.strict || recordProcess != nil)   // any live recording (Zoom, Meet, in person) gets the same protection
             heartbeatIfDue()
+            flushTeamOutboxIfDue()   // the teach the user did a minute ago, on its way to the team
             updateBlockedHint()
             idleRetryIfDue()
             switch zoomAuto.evaluate(zoomOpen:zoomState.strict,meetingLikely:zoomState.running && (recording ? AudioInUse.microphoneBusy() : false),recording:recording,busy:false,enabled:zoomAutoRecord && !requestedQuit) {

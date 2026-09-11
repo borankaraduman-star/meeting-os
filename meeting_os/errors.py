@@ -8,11 +8,17 @@ the hourly heartbeat so the development Mac learns about it without anyone havin
 
 Allowlisted content only: a kind, a short redacted message, a handful of small non-content fields and the
 version. Never transcript text, never audio, never a whole crash report.
+
+The journal is LOCAL and detailed; what the team cloud uploads is neither. `export_for_team` at the bottom of
+this file builds the copy that leaves the Mac out of five enumerated fields — time, kind, version, a short
+`code` and a per-kind whitelist of context keys — and the message text is not one of them. Redaction is a
+courtesy to the local reader; the export is the contract (Codex, 10 Sep 2026, P0 #6).
 """
 import hashlib
 import json
 import math
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -308,3 +314,120 @@ def sweep(data_dir, *, directory=None):
     """Everything the journal learns on its own rather than being told. App launch and hourly."""
     crashes = collect_crashes(data_dir, directory=directory)
     return {'crashes': len(crashes), 'update': bool(note_update_failure(data_dir))}
+
+
+# ---------------------------------------------------------------- the team export
+
+# What leaves this Mac is a CONTRACT, not a hope that a regex caught everything (Codex, 10 Sep 2026, P0 #6).
+# The journal above keeps the whole story locally — the message, every context key, the crash frames — because
+# that is what a person debugging their own Mac needs. The copy the team cloud uploads is built here instead,
+# out of five fields that are enumerated in code and in docs/EKIP.md, and NOTHING else. The free message text
+# never leaves; it is replaced by `code`, a short classification drawn from a fixed shape.
+
+TEAM_FIELDS = ('time', 'kind', 'version', 'code', 'context')
+CODE_LIMIT = 40
+TEAM_TEXT = 40                 # a context string longer than this is cut; one with a path in it is dropped
+OTHER_CODE = 'other'
+
+# `ValueError`, `auth`, `credit`, `unavailable`, `disk_full`: the token before the first ':' when the whole
+# token is a bare ASCII identifier. A message with no colon has no classification of its own and falls through.
+CODE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]{0,39}$')
+HTTP_RE = re.compile(r'\bHTTP(?:\s+Error)?\s*(\d{3})\b')
+FAULT_RE = re.compile(r'^[A-Z][A-Z0-9_]{2,30}(?:/[A-Z0-9_]{2,30})?$')   # EXC_BAD_ACCESS/SIGSEGV
+# The handful of sentences this app writes itself. Matched on a lowered PREFIX, so the variable half of the
+# line (a class name, a count, a folder) is never read.
+CODE_PREFIXES = (
+    ('ekip bulutu eşitlenemedi', 'team-sync'),
+    ('güncelleme başarısız', 'update-failed'),
+    ('kayıt yardımcısı', 'capture-helper'),
+    ('openrouter anahtarı bulunamadı', 'no-key'),
+    ('bellek baskısı', 'resource-guard'),
+)
+# Per kind, the context keys that may travel. Everything else — a meeting hash, a folder, a crash's frames, an
+# app version, a key nobody has thought about yet — stays in the local journal.
+TEAM_CONTEXT = {
+    'ui': ('state',),
+    'job': ('command', 'supervised', 'state', 'seconds', 'pieces'),
+    'cloud': ('http', 'model', 'state', 'seconds', 'pieces'),
+    'capture': ('state', 'seconds', 'pieces'),
+    'update': ('state',),
+    'crash': ('state',),
+}
+
+
+def code_for(kind, message):
+    """A short, stable classification of one journal line — never the line itself.
+
+    Four shapes, in order: the fault of a crash (`EXC_BAD_ACCESS/SIGSEGV`), the identifier before the first
+    colon (`ValueError`, `auth`), an HTTP status (`http-429`), one of the sentences this app writes itself.
+    Anything else is `other`: a message we cannot classify is a message we do not send."""
+    text = ' '.join(str(message or '').split())
+    if not text: return OTHER_CODE
+    if kind == 'crash':
+        for piece in text.split(' · ')[1:]:
+            if FAULT_RE.match(piece): return piece[:CODE_LIMIT]
+        return 'crash'
+    if ':' in text:
+        head = text.split(':', 1)[0].strip()
+        if CODE_RE.match(head): return head[:CODE_LIMIT]
+    found = HTTP_RE.search(text)
+    if found: return 'http-' + found.group(1)
+    low = text.casefold()
+    for prefix, code in CODE_PREFIXES:
+        if low.startswith(prefix): return code
+    return OTHER_CODE
+
+
+def _looks_like_path(text):
+    """A folder or a file name is never a diagnostic field; it is somebody's disk. Dropped whole rather than
+    shortened, because the interesting half of a path is the end. `openai/gpt-4.1-mini` is not a path: one
+    inner slash, no leading one — a model id, which the team does need to see."""
+    return (text.startswith(('/', '~', '.')) or '\\' in text or ' /' in text or text.count('/') > 1)
+
+
+def _team_value(value):
+    """One context value on its way off this Mac: a number, a flag, or a short string with no path in it.
+    A list, a dict, a long sentence and anything that looks like a file name are dropped, not trimmed."""
+    if isinstance(value, bool): return value
+    if isinstance(value, int): return value
+    if isinstance(value, float): return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        text = ' '.join(value.split())
+        if not text or _looks_like_path(text): return None
+        return text[:TEAM_TEXT]
+    return None
+
+
+def team_context(kind, context):
+    allowed = TEAM_CONTEXT.get(kind, ())
+    if not isinstance(context, dict) or not allowed: return {}
+    out = {}
+    for key in allowed:
+        if key not in context: continue
+        value = _team_value(context[key])
+        if value is None: continue
+        out[key] = value
+    return out
+
+
+def team_entry(entry):
+    """One journal line as the team sees it, or None when it is not a line at all."""
+    if not isinstance(entry, dict) or entry.get('kind') not in KINDS: return None
+    kind = entry['kind']
+    return {'time': str(entry.get('time') or '')[:40], 'kind': kind,
+            'version': str(entry['version'])[:20] if entry.get('version') else None,
+            'code': code_for(kind, entry.get('message')),
+            'context': team_context(kind, entry.get('context'))}
+
+
+def export_for_team(data_dir, limit=READ_LIMIT):
+    """The journal as JSON lines the team cloud may upload: `time`, `kind`, `version`, `code`, `context`.
+
+    This is the ONLY thing `team_cloud` ever puts in `errors/<host>.jsonl`. The raw `errors.jsonl` stays on
+    this Mac with its full detail — the diagnostics export (⋯ → Tanılama raporu kaydet) is how a person hands
+    that over deliberately, to one person, when they decide to."""
+    rows = []
+    for entry in entries(data_dir, limit=limit):
+        line = team_entry(entry)
+        if line is not None: rows.append(json.dumps(line, ensure_ascii=False, allow_nan=False))
+    return ('\n'.join(rows) + '\n') if rows else ''

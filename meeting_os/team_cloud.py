@@ -29,8 +29,12 @@ Rules this module lives by:
     call `sync_async` (one background pass at a time), never `sync`.
   * Merging happens here, not on the server: every Mac uploads only its own files and downloads the others'.
     Two Macs can never write the same file, so there is no race and no conflict resolution to get wrong.
-  * What goes up is exactly what went into the shared folder before: names and voice vectors, taught words,
-    the glossary, diagnostic reports, the redacted error journal. Never audio, transcript or meeting titles.
+  * What goes up is a contract, not a hope. Names and voice vectors, taught words, the glossary, diagnostic
+    reports and a WHITELISTED export of the error journal (`errors.export_for_team`) — never the journal
+    itself, never audio, and never a transcript, a meeting title or a meeting id unless `share_text` is on
+    at the moment of the upload. `_report_for_upload` enforces that on every pass; docs/EKIP.md states it.
+  * Delivery is durable. Every publish-worthy change writes `team-outbox.json` BEFORE it asks for a pass, and
+    only a pass that finished takes it back — see the outbox section below.
 """
 import hashlib
 import json
@@ -54,6 +58,8 @@ KEY_FILE = 'openrouter.key'
 DEVICE_FILE = 'device.id'
 STATE_FILE = 'team-cloud-state.json'      # 1.2.67 and earlier: one state file, whatever team the Mac was in
 STATE_PREFIX = 'team-cloud-state-'        # since: `team-cloud-state-<team id short>.json`, one per team
+OUTBOX_FILE = 'team-outbox.json'          # "this Mac owes the team a pass"; survives the bridge process
+OUTBOX_REASONS = 8                        # the newest few kinds of change, for the card and the journal
 MIRROR_NAME = 'team'
 WORDS_FILE = 'team-words.jsonl'
 GLOSSARY_FILE = 'glossary.jsonl'
@@ -61,7 +67,7 @@ WORDS_DIR = 'words'                       # the raw per-host copies the merged v
 GLOSSARY_DIR = 'glossary'
 PROFILES_DIR = 'profiles'
 REPORTS_DIR = 'reports'
-ERRORS_FILE = 'errors.jsonl'
+ERRORS_FILE = 'errors.jsonl'          # the LOCAL journal; `errors/<host>.jsonl` on the server is its whitelisted export
 ICLOUD_REPORTS = ICLOUD / 'MeetingOS-Reports'
 HEARTBEAT_FILE = 'heartbeat.json'
 
@@ -490,6 +496,69 @@ def _save_state(data_dir, state):
     except (OSError, ValueError, TypeError): pass
 
 
+# ---------------------------------------------------------------- outbox
+
+# A teach or a naming used to reach the team through `sync_async`: a daemon thread inside a bridge process
+# that exits the moment it has answered. Delivery was therefore a hope, and the only real guarantee was app
+# launch and the hourly housekeeping pass (Codex, 10 Sep 2026, P1 #8).
+#
+# So every publish-worthy change now writes this file FIRST and the network second. The file is the promise:
+# while it exists this Mac owes the team a pass, and something — the app's flush loop, the next launch, the
+# hourly tick — will make one. A successful `sync` is the only thing that takes the promise back.
+
+
+def outbox_path(data_dir): return Path(data_dir) / OUTBOX_FILE
+
+
+def outbox(data_dir):
+    """`{'pending': bool, 'since': <utc iso>|None, 'reasons': [...]}`. Never raises; an unreadable or absent
+    file is simply "nothing owed"."""
+    try: raw = json.loads(outbox_path(data_dir).read_text(encoding='utf-8'))
+    except (OSError, ValueError): return {'pending': False, 'since': None, 'reasons': []}
+    if not isinstance(raw, dict) or raw.get('pending') is not True:
+        return {'pending': False, 'since': None, 'reasons': []}
+    since = raw.get('since') if isinstance(raw.get('since'), str) else None
+    reasons = [r for r in (raw.get('reasons') or []) if isinstance(r, str)][:OUTBOX_REASONS]
+    return {'pending': True, 'since': since, 'reasons': reasons}
+
+
+def mark_outbox(data_dir, reason, now=None):
+    """One local change that the team has not seen yet. Called BEFORE `sync_async`, from the teach/naming/
+    glossary/report hooks, so a bridge process that dies on the way out still leaves the promise behind.
+
+    `since` is the moment the FIRST unsent change happened and never moves while the outbox stays pending:
+    the setup card's "eşitleme bekliyor · 12:34'ten beri" has to age, not reset on every keystroke.
+
+    Never raises and never returns anything the caller has to handle — a teach is already saved locally."""
+    try:
+        data = Path(data_dir)
+        if token(data) is None: return None    # no team at all: nothing is owed to anybody
+        current = outbox(data)
+        reasons = [r for r in current['reasons'] if r != reason] + [str(reason)[:40]]
+        payload = {'pending': True, 'since': current['since'] or (now or _now()),
+                   'reasons': reasons[-OUTBOX_REASONS:]}
+        data.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
+        fd = os.open(outbox_path(data), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, PRIVATE_MODE)
+        try: os.write(fd, json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+        finally: os.close(fd)
+        return payload
+    except Exception: return None
+
+
+def clear_outbox(data_dir, keep=None):
+    """The promise is kept. `keep` is the outbox as it looked when the pass STARTED: a change made while the
+    upload was in flight has a newer `since` (or one more reason) and must survive, or the very edit the user
+    made during the pass would be the one that never travels."""
+    try:
+        current = outbox(data_dir)
+        if not current['pending']: return False
+        if keep is not None and (current['since'] != keep.get('since') or current['reasons'] != keep.get('reasons')):
+            return False
+        outbox_path(data_dir).unlink(missing_ok=True)
+        return True
+    except OSError: return False
+
+
 def status(data_dir, settings=None):
     """What the setup card and the heartbeat show. Reads one small file; never touches the network."""
     data = Path(data_dir); state = _load_state(data); tok = token(data)
@@ -497,8 +566,11 @@ def status(data_dir, settings=None):
         from .reports import host_name
         host = host_name()
     except Exception: host = ''
+    box = outbox(data)
     return {'configured': tok is not None, 'url': url(settings or {}) if settings else (state.get('url') or DEFAULT_URL),
             'host': host, 'device': device_id(data), 'team_id_short': state.get('team_id_short') or team_id_short(tok),
+            # Honest, not green: "son eşitleme 14:20" is a lie while a word the user taught at 14:35 is still here.
+            'outbox_pending_since': box['since'] if box['pending'] else None, 'outbox_reasons': box['reasons'],
             'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'last_attempt': state.get('last_attempt'),
             'hosts': state.get('hosts') or [], 'pushed': len(state.get('pushed') or {}), 'pulled': len(state.get('pulled') or {})}
 
@@ -680,6 +752,51 @@ def _own_glossary(data_dir):
     return _dump(entries) if found else None
 
 
+TEXT_KEYS = ('transcript',)     # what `reports.write_meeting_report` puts in a report ONLY with `share_text`
+TITLE_KEYS = ('title',)
+MEETING_KEY = 'meeting'
+
+
+def _anonymous(report):
+    """One diagnostic report with everything that names a meeting or a person taken out: the transcript gone,
+    the title emptied, the meeting id replaced by its eight-character hash, the speakers back to S1, S2…
+
+    This runs at UPLOAD time, not at write time, because the setting can change after the file was written:
+    a report written while "Raporlara transkript metnini de ekle" was on must stop travelling the moment the
+    user turns it off, and the file it was written from stays on this Mac untouched (Codex P0 #6)."""
+    clean = {k: v for k, v in report.items() if k not in TEXT_KEYS}
+    for key in TITLE_KEYS:
+        if key in clean: clean[key] = None
+    mid = str(report.get(MEETING_KEY) or '')
+    if mid:
+        from .errors import meeting_key
+        clean[MEETING_KEY] = meeting_key(mid)
+    speakers = report.get('speakers')
+    if isinstance(speakers, dict) and speakers:
+        clean['speakers'] = {f'S{i}': ({**s, 'name': None, 'suggested': None} if isinstance(s, dict) else s)
+                             for i, s in enumerate(speakers.values(), 1)}
+    return clean, mid
+
+
+def _report_for_upload(path, share_text):
+    """(name on the server, bytes) for one file in this host's report folder, or (None, None) when it must not
+    leave at all. With `share_text` on the file goes as it is — that switch is the user saying so. With it off
+    the payload is the anonymous one above and the file NAME loses the meeting id too: `2026-09-10_<mid>.json`
+    is itself a meeting id, and the docs promise that one never travels."""
+    try: raw = path.read_bytes()
+    except OSError: return None, None
+    if share_text: return path.name, raw
+    try: report = json.loads(raw.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError): return None, None   # unreadable: we cannot promise what is in it
+    if not isinstance(report, dict): return None, None
+    clean, mid = _anonymous(report)
+    if any(k in clean for k in TEXT_KEYS): return None, None      # belt and braces: never upload what we meant to drop
+    if clean == report: return path.name, raw                     # a heartbeat names nothing; it travels unchanged
+    name = path.name.replace(mid, clean[MEETING_KEY]) if mid and mid in path.name else path.name
+    if not REPORT_RE.match(name): return None, None
+    return name, json.dumps(clean, ensure_ascii=False, indent=1).encode('utf-8')
+
+
 def _own_files(data_dir, mirror, host, settings, pushed):
     """Every path this Mac owns on the server, with its content. Only ever `<kind>/<this host>…`: a Mac can
     physically not write a teammate's file, so nothing here can lose somebody else's work.
@@ -704,12 +821,16 @@ def _own_files(data_dir, mirror, host, settings, pushed):
         glossary_blob = _own_glossary(data)
         if glossary_blob is not None: add(f'glossary/{host}.jsonl', glossary_blob)
     if share_reports:
+        share_text = settings.get('share_text') is True
         folder = mirror / REPORTS_DIR / host
         if folder.is_dir():
             for path in sorted(folder.glob('*.json')):
-                if REPORT_RE.match(path.name): out[f'reports/{host}/{path.name}'] = path.read_bytes()
-        journal = data / ERRORS_FILE
-        if journal.is_file(): out[f'errors/{host}.jsonl'] = journal.read_bytes()
+                if not REPORT_RE.match(path.name): continue
+                name, blob = _report_for_upload(path, share_text)
+                if blob is not None: out[f'reports/{host}/{name}'] = blob
+        # NOT the journal: the whitelisted export of it. The full `errors.jsonl` never leaves this Mac.
+        from .errors import export_for_team
+        add(f'errors/{host}.jsonl', export_for_team(data).encode('utf-8'))
     # A file the server would refuse (4 MB) is dropped here rather than spending the budget on a 413.
     return {path: blob for path, blob in out.items() if len(blob) <= MAX_FILE_BYTES}
 
@@ -908,6 +1029,7 @@ def sync(data_dir, settings=None, budget=BUDGET):
     try:
         state = _load_state(data)
         moment = _now(); error = None
+        owed = outbox(data)   # what this Mac owed BEFORE the pass; a change made during it must not be cleared
         try:
             mirror = ensure_mirror(data)
             _seed(data, mirror, host)
@@ -919,6 +1041,9 @@ def sync(data_dir, settings=None, budget=BUDGET):
         if error: state['last_error'] = error
         else: state['last_ok'] = moment; state['last_error'] = None
         _save_state(data, state)
+        # The promise is kept only by a pass that finished. A budget-shortened one leaves the outbox alone, so
+        # the next flush completes it instead of believing the team already has what it never got.
+        result['outbox_cleared'] = bool(owed['pending'] and not error and clear_outbox(data, keep=owed))
         result['hosts'] = state.get('hosts') or []
         return {**result, **({'error': error} if error else {})}
     finally: _PASS.release()

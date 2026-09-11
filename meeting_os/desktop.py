@@ -72,6 +72,7 @@ def share_profiles(store,db):
         result=sync(store,base,words=False,cloud=False)   # this hook is on the FAST bridge: never wait for a network call
         try:
             from . import team_cloud
+            team_cloud.mark_outbox(base,'profiles')   # the promise survives this bridge process; the pass below may not
             team_cloud.sync_async(base)   # the teammates learn the new name in the background, one pass at a time
         except Exception: pass
         return result
@@ -423,11 +424,26 @@ def dispatch(request, db=None):
         if action=='rename_profile':
             result=store.rename_profile(request['name'],request['new_name']); share_profiles(store,db)
             return result
-        if action in ('team_sync','team_word_toggle'):
+        if action in ('team_sync','team_word_toggle','team_flush'):
             from . import team_knowledge as TK
+            from . import team_cloud as TC
             base=DATA_DIR if db is None else Path(db).parent
             if action=='team_word_toggle': return TK.team_word_toggle(store,request['original'],request['host'],request.get('enabled') is not False)
-            return TK.sync(store,base)   # app launch: what the team learned since this Mac was last open
+            if action=='team_flush':
+                # The durable half of "the team learns it within a minute" (Codex P1 #8). The app owns the
+                # timer; this action owns the question "is anything actually owed?" — a flush with an empty
+                # outbox costs one file read and no network at all, so the loop may be as eager as it likes.
+                owed=TC.outbox(base)
+                if not owed['pending'] and request.get('force') is not True:
+                    return {'flushed':False,'pending':False,'pending_since':None,'reasons':[],'error':None}
+                result=TK.sync(store,base)
+                cloud=result.get('cloud') if isinstance(result.get('cloud'),dict) else None
+                if cloud is None: TC.clear_outbox(base,keep=owed)   # no cloud to deliver to: publishing to the folder WAS the delivery
+                after=TC.outbox(base)
+                error=(cloud or {}).get('error') or result.get('cloud_error')
+                return {'flushed':not after['pending'],'pending':after['pending'],'pending_since':after['since'],
+                        'reasons':after['reasons'],'error':error,'team':result}
+            return {**TK.sync(store,base),'outbox':TC.outbox(base)}   # app launch: what the team learned since this Mac was last open
         if action=='explain_identity':
             from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid
             bars={'threshold':IDENTITY_THRESHOLD,'margin':IDENTITY_MARGIN,'suggest':SUGGEST_THRESHOLD}   # the app writes its sentence against these, so both branches carry them
@@ -610,8 +626,9 @@ def dispatch(request, db=None):
             team=team_sync(store,data,settings=settings)
             cleaned=storage_cleanup(store,data,days=days,dry_run=False) if days>0 else {'meetings':[],'bytes':0}
             # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
+            from . import team_cloud as TC
             return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
-                    'retention_warning':audio_retention_warning(store,days),'team':team}
+                    'retention_warning':audio_retention_warning(store,days),'team':team,'outbox':TC.outbox(data)}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='probe':
