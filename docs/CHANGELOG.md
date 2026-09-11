@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 83 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 84 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.79](#v1279) | 2026-09-11 18:10 | v1.2.79 — Açık listenin ilk altısı: saklama süresi, kalıcı gönderim, tanılama sözleşmesi, sade düzeltme, disk bütçesi, gizlilik kanıtı |
 | [v1.2.78](#v1278) | 2026-09-11 16:30 | v1.2.78 — Ayarlar anında açılır; özet daha hızlı çıkar |
 | [v1.2.77](#v1277) | 2026-09-11 15:40 | v1.2.77 — Ekran görüntüsü toplantı dışında çalışır; Özet sekmesinde dışa aktarma |
 | [v1.2.76](#v1276) | 2026-09-11 15:00 | v1.2.76 — Mikrofon kapısı: yalnız Zoom'da sesiniz açıkken ya da "sesimi de al" deyince |
@@ -103,6 +104,22 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1279"></a>
+### v1.2.79 — Açık listenin ilk altısı: saklama süresi, kalıcı gönderim, tanılama sözleşmesi, sade düzeltme, disk bütçesi, gizlilik kanıtı
+
+2026-09-11 18:10 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "6'ya kadar yap, hepsini; diğerlerine bakacağız."
+
+1. **Metin saklama süresi** (Ayarlar → Sistem, varsayılan kapalı): süre dolunca toplantının transkripti, özeti ve görevleri bu Mac'ten silinir (ses zaten kendi süresinde). "Sesi koru" işaretli, işlenmekte olan ya da hatalı toplantılar silinmez; depolama kartı bir sonraki geçişte silinecek sayıyı gösterir. Kriz senaryosu için önceden belirlenmiş süre, sonradan toplu silmeden daha güvenlidir.
+2. **Kalıcı gönderim kuyruğu:** öğretilen kelime, adlandırma, sözlük ve rapor `team-outbox.json`'a "borç" yazar; uygulama 20 sn sonra, sonra 5 dakikada bir, uyanınca ve açılışta borcu kapatır (kayıt sırasında değil). Kurulum kartı dürüst: "eşitleme bekliyor · 12:34'ten beri" / "son eşitleme HH:MM" / hata.
+3. **Göze batmama kanıt betiği** `scripts/verify-privacy.sh`: uygulamanın penceresi gizlilik açıkken ekran yakalamasında görünmüyor mu, ölçer (PASS/FAIL, piksel istatistikleri). Ekran kilitli olduğu için henüz koşulmadı; gerçek kabul bir Zoom paylaşımında alıcı ekranıdır (açık).
+4. **Buluta ne çıkar, tam sözleşme** (`docs/EKIP.md`): hata günlüğünden yalnız zaman, tür, sürüm, kısa kod ve beyaz listedeki sayısal alanlar; serbest metin asla. Raporlar "transkript paylaş" kapalıyken metinsiz, toplantı kimliği ve başlığı özetlenmiş, konuşmacılar S1…Sn olarak yüklenir. Testte sahte anahtar, kişi adı, cümle ve ev yolu enjekte edildi; hiçbiri sunucuya ulaşmadı.
+5. **Düzeltme penceresi tek eylem:** ad + sese göre sıralı çipler, kapsam seçici (Bu konuşmacının tamamı — öğrenir / Yalnız bu bölüm / Yalnız bu toplantıda) ve tek "Adlandır" (⌘↩); kelime düzeltme bloğu kalktı (kelimeye tıklayın). Gelişmiş: metin, temiz örnek, "Neden bu isim?".
+6. **Disk bütçesi:** depolama kartı "Toplam · Ses · Veritabanı · Ekip önbelleği · Günlükler"; ekip arkadaşlarının raporları en fazla 300 dosya / 50 MB (en eskiler silinir).
+
+Testler: Python 995, Swift 268+. Canlı doğrulanmadı: gizlilik betiği (ekran kilitli), gönderim kuyruğunun iki Mac'te 60 sn içinde buluşması.
 
 <a id="v1278"></a>
 ### v1.2.78 — Ayarlar anında açılır; özet daha hızlı çıkar

@@ -794,7 +794,9 @@ def _report_for_upload(path, share_text):
     clean, mid = _anonymous(report)
     if any(k in clean for k in TEXT_KEYS): return None, None      # belt and braces: never upload what we meant to drop
     if clean == report: return path.name, raw                     # a heartbeat names nothing; it travels unchanged
-    name = path.name.replace(mid, clean[MEETING_KEY]) if mid and mid in path.name else path.name
+    # Only the `_<mid>.json` tail is the meeting id; a bare `replace` also ate matching digits inside the date
+    # (a meeting called "4" turned 2026-09-04 into 2026-09-0ef2d127d).
+    name = path.name[:-len(f'_{mid}.json')] + f'_{clean[MEETING_KEY]}.json' if mid and path.name.endswith(f'_{mid}.json') else path.name
     if not REPORT_RE.match(name): return None, None
     return name, json.dumps(clean, ensure_ascii=False, indent=1).encode('utf-8')
 
