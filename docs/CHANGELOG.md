@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 85 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 86 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.81](#v1281) | 2026-09-11 21:30 | v1.2.81 — Güvenilir sinyal: her karar bir kez kaydedilir, dokunulmamış tahmin başarı sayılmaz |
 | [v1.2.80](#v1280) | 2026-09-11 20:40 | v1.2.80 — Özetteki kararınız korunur; Kontrol kararları bir daha sorulmaz |
 | [v1.2.79](#v1279) | 2026-09-11 18:10 | v1.2.79 — Açık listenin ilk altısı: saklama süresi, kalıcı gönderim, tanılama sözleşmesi, sade düzeltme, disk bütçesi, gizlilik kanıtı |
 | [v1.2.78](#v1278) | 2026-09-11 16:30 | v1.2.78 — Ayarlar anında açılır; özet daha hızlı çıkar |
@@ -105,6 +106,45 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1281"></a>
+### v1.2.81 — Güvenilir sinyal: her karar bir kez kaydedilir, dokunulmamış tahmin başarı sayılmaz
+
+2026-09-11 21:30 · yerel not · GitHub sürüm sayfası yok
+
+Codex öğrenme incelemesinin ilk sürümü (`docs/reviews/2026-09-11-codex-learning-loop.md`, P0 #1 + #3).
+
+1. **Ortak karar kaydı (`learning_events`).** Kayıt başlatma/bitirme, isim onayı/düzeltmesi/reddi, bölüm
+   sabitleme, kelime öğretme/unutma/"bu doğru", sözlük uygulama/geçme, Kontrol kural cevabı, görev alanı ve
+   takvim tarihi değişikliği, başarılı dışa aktarma, ekibe katılma ve geri alma — her başarılı işlem **tam bir
+   kez** yerel bir satır bırakır: eylem, nesne **referansı**, sürüm, kapsam, insan/otomasyon, sonuç, geri
+   alınan olay. İçerik yok. Yeniden deneme çoğaltmaz (aynı dakika + aynı sonuç tek satırdır). Bütçe: işlem
+   başına ≤10 ms, ağ yok. Önizleme dışa aktarma sayılmaz. Saklama 90 gün / 20 MB, saatlik bakımda budanır.
+2. **İnsan kararı ile otomasyonun etkisi ayrıldı.** Bir kelime öğretmek **tek** olay yazar; o kuralın
+   düzelttiği yirmi bölüm onun etkisidir ve olay yazmaz. Kimlik karnesi artık
+   `doğrulandı / yanlışlandı / incelenmedi` sayar: **dokunulmamış otomatik ad başarı değildir** ve
+   `auto_precision` yalnız incelenmiş kümeler üzerinden hesaplanır. "Düzelt ve öğret" yoluyla düzeltilen
+   kelimeler de kalite setine girer — kelime öğretme yollarının ölçüm kapsamı artık %100.
+3. **Görev geçmişindeki tarih ve neden boşluğu kapandı.** Takvim tarihini onaylamak/değiştirmek/temizlemek
+   artık diğer alanlarla aynı `task_edits` satırını yazıyor. Düzenleme sayfasında isteğe bağlı iki radyo
+   düğmesi: **Çıkarım hatası / Sonradan değişti** (varsayılan hiçbiri; nedeni bilinmeyen değişiklik eğitim
+   etiketi yapılmaz). Yeniden analiz aynı sözü başka kelimelerle yazıp yeni bir görev kimliği ürettiğinde
+   kullanıcının geçmişi `carried_from` ile yeni kimliğe taşınıyor.
+4. **Yayın kapısı: tanılama için tek beyaz liste** (`meeting_os/telemetry_schema.py`). Nabzın `errors`
+   satırları, hata günlüğünün son iletileri, güncelleyicinin cümlesi, öz-testin özeti, ekip bulutunun hata
+   cümlesi ve rapordaki `_errors` satırları artık sunucuya **çıkmıyor**; yerine sınıflandırma ve sayı gidiyor
+   (`error_journal.codes`, `team_cloud.last_error_code`). Nabız da artık bu kapıdan geçiyor (eskiden baytı
+   baytına giderdi) ve "transkript paylaş" açıkken bile tanılama yarısı listeden geçiyor. Testte sahte
+   anahtar, kişi adı, cümle ve ev yolu üç yere birden enjekte edildi (hata günlüğü, rapor `_errors`, nabız
+   hata özeti); hiçbiri sahte sunucuya ulaşmadı.
+5. Nabız `learning` bloğu kazandı: eylem başına sayı ve doğrulanmış/yanlışlanmış/incelenmemiş isim sayıları.
+   Yalnız sayı; `learning_events` tablosunun kendisi hiçbir zaman yüklenmiyor.
+
+Belgeler: yeni `docs/LEARNING.md` (döngü, olay tablosu, insan/otomasyon ayrımı, saklama);
+`docs/EKIP.md` sözleşme bölümü tek kapıyı ve `learning` sayılarını anlatıyor.
+
+Testler: Python 1043, Swift 285. Canlı doğrulanmadı: gerçek bir toplantıda kayıt başlatma gecikmesinin
+değişmediği (ölçüm birim testinde, gerçek Mac'te değil).
 
 <a id="v1280"></a>
 ### v1.2.80 — Özetteki kararınız korunur; Kontrol kararları bir daha sorulmaz
