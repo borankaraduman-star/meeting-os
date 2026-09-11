@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 77 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 78 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.73](#v1273) | 2026-09-11 11:30 | v1.2.73 — Kişi başı OpenRouter anahtarı: paket anahtarsız, anahtar kişisel bağlantıyla |
 | [v1.2.72](#v1272) | 2026-09-11 10:15 | v1.2.72 — Tek parça uygulama paketi: indir, Uygulamalar'a sürükle, aç |
 | [v1.2.71](#v1271) | 2026-09-11 03:15 | v1.2.71 — Analiz modeli kararı gerçek toplantıyla düzeltildi: gpt-4.1-mini + otomatik yedek model |
 | [v1.2.70](#v1270) | 2026-09-11 02:45 | v1.2.70 — Daha geniş özet: konu başına madde, toplantı uzunluğuna göre |
@@ -97,6 +98,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1273"></a>
+### v1.2.73 — Kişi başı OpenRouter anahtarı: paket anahtarsız, anahtar kişisel bağlantıyla
+
+2026-09-11 11:30 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "herkese ayrı OpenRouter API key vereceğim." 1.2.72 paketi gönderenin anahtarını taşıyordu.
+
+- **Paket artık yalnız ekip davetini taşır** (`build-bundle.sh --invite`); anahtar dahil etmek için `--invite-with-key`. Yayınlanan 1.2.73 zip'i anahtarsız.
+- **Kişiye özel davet bağlantısı:** Ayarlar → Ekip kartında "Kişiye özel OpenRouter anahtarı" alanı; doluysa "Davet bağlantısını kopyala" o anahtarı taşıyan bir `meetingos://join?…&key=…` üretir (gönderenin anahtarı asla girmez). CLI: `team invite --key sk-or-…`. Bağlantıya tıklayan Mac zaten ekipteyse yalnız anahtarı yazar (varsa ezmez).
+- **Karşılama ekranı:** ekibe katılmış ama anahtarı olmayan Mac'te "Kişisel bağlantınızı yapıştırın" alanı görünür (paketten kurulan ekip arkadaşının ikinci ve son adımı).
+- Rehber görsellerle güncellendi: https://claude.ai/code/artifact/c82309a9-1730-4b60-b1f4-d9f4ceadfdb1
+- Testler: Python 968, Swift 252. Canlı: paket 1.2.73 anahtarsız derlendi; kişisel bağlantı üretimi CLI ile denendi.
 
 <a id="v1272"></a>
 ### v1.2.72 — Tek parça uygulama paketi: indir, Uygulamalar'a sürükle, aç

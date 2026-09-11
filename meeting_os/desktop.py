@@ -302,10 +302,10 @@ def dispatch(request, db=None):
         from .reports import load_settings
         action=request['action'];base=data_folder(db)
         if action=='team_invite':
-            include=request.get('include_key') is True
-            payload=TC.invite_payload(base,include_key=include)
+            include=request.get('include_key') is True; personal=str(request.get('key') or '')
+            payload=TC.invite_payload(base,include_key=include,key=personal)
             if payload.get('error'): return payload
-            return {'url':TC.invite_url(base,include_key=include),'text':TC.invite_file_text(base,include_key=include),
+            return {'url':TC.invite_url(base,include_key=include,key=personal),'text':TC.invite_file_text(base,include_key=include,key=personal),
                     'team_id_short':TC.team_id_short(payload['team']),'with_key':'key' in payload}
         if action=='team_join': return TC.accept_invite(base,request.get('invite'))
         return TC.status(base,load_settings(base))

@@ -155,7 +155,7 @@ def parser():
     gl=sub.add_parser('glossary',help='Project glossary (glossary.jsonl): import, show, suggest corrections'); gl.add_argument('action',choices=['import','show','suggest','hint']); gl.add_argument('path',type=Path,nargs='?'); gl.add_argument('--meeting'); gl.add_argument('--openrouter-model'); gl.add_argument('--apply',action='store_true',help='Apply LLM-accepted suggestions immediately (text edits are recorded and reversible)')
     wd=sub.add_parser('words',help='Öğretilen kelimeler: bir kez düzelt, benzer yazımlar da düzelsin'); wd.add_argument('action',choices=['teach','forget','list']); wd.add_argument('original',nargs='?'); wd.add_argument('replacement',nargs='?'); wd.add_argument('--meeting')
     rp=sub.add_parser('reports',help='Shared diagnostic reports between Macs'); rp.add_argument('action',choices=['summarize','write','settings','heartbeat']); rp.add_argument('--meeting'); rp.add_argument('--set',action='append',default=[],help='key=value: share_reports, share_text, auto_update, report_dir, user_name, team_dir, team_url, share_glossary, share_words, share_profiles, audio_retention_days')
-    tm=sub.add_parser('team',help='Ekip bulutu: ortak bilgi tabanının durumu, elle eşitleme, davet bağlantısı, başka bir ekibe katılma'); tm.add_argument('action',choices=['status','sync','invite','join']); tm.add_argument('token',nargs='?',help='join: davet bağlantısı, davet dosyasının yolu ya da 32–128 onaltılık karakterlik ekip belirteci'); tm.add_argument('--with-key',action='store_true',help='invite: OpenRouter anahtarını da davete koyar (ekip arkadaşı anahtar girmez)')
+    tm=sub.add_parser('team',help='Ekip bulutu: ortak bilgi tabanının durumu, elle eşitleme, davet bağlantısı, başka bir ekibe katılma'); tm.add_argument('action',choices=['status','sync','invite','join']); tm.add_argument('token',nargs='?',help='join: davet bağlantısı, davet dosyasının yolu ya da 32–128 onaltılık karakterlik ekip belirteci'); tm.add_argument('--with-key',action='store_true',help='invite: OpenRouter anahtarını da davete koyar (ekip arkadaşı anahtar girmez)'); tm.add_argument('--key',help='invite: kişiye özel OpenRouter anahtarı; davet o anahtarı taşır (kişi başı anahtar dağıtımı)')
     up=sub.add_parser('update',help='Check or start the one-click updater'); up.add_argument('action',choices=['check','start','status'])
     er=sub.add_parser('errors',help='Bu Mac’in yerel hata günlüğü: hatalar ve çökmeler'); er.add_argument('action',choices=['list','clear']); er.add_argument('--limit',type=int,default=20)
     dc=sub.add_parser('document',help='Meeting → PRD / bug report / customer request / Claude Code prompt'); dc.add_argument('--meeting',required=True); dc.add_argument('--kind',choices=['prd','bug','customer','claude'],default='prd'); dc.add_argument('--output',type=Path); dc.add_argument('--openrouter-model',default='openai/gpt-4.1-mini')
@@ -225,10 +225,10 @@ def main(supervised=False):
             if args.action=='status': output(TC.status(base,load_settings(base)))
             elif args.action=='sync': output(TC.sync(base))
             elif args.action=='invite':
-                payload=TC.invite_payload(base,include_key=args.with_key)
+                payload=TC.invite_payload(base,include_key=args.with_key,key=args.key)
                 if payload.get('error'): output(payload)
-                else: output({**TC.invite_line(base),'url':TC.invite_url(base,include_key=args.with_key),
-                              'file':TC.invite_file_text(base,include_key=args.with_key),'with_key':'key' in payload})
+                else: output({**TC.invite_line(base),'url':TC.invite_url(base,include_key=args.with_key,key=args.key),
+                              'file':TC.invite_file_text(base,include_key=args.with_key,key=args.key),'with_key':'key' in payload})
             else:
                 # A link, a saved invite file, or a bare token: whatever the person was sent. The app never needs
                 # this — it is the "Gelişmiş" way in — so it has to accept all three without asking which is which.

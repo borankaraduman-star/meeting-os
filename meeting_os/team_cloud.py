@@ -349,7 +349,7 @@ def _write_key(data_dir, key):
     return path
 
 
-def invite_payload(data_dir, include_key=False):
+def invite_payload(data_dir, include_key=False, key=None):
     """What an invite carries: `{v, team, url?, key?}`. The address is only ever written down when it is NOT the
     default, so an invite stays short and a team that never moved server has nothing to get wrong. The key is
     included only when the sender asked for it AND this Mac actually has one."""
@@ -362,23 +362,29 @@ def invite_payload(data_dir, include_key=False):
         base = url(load_settings(data_dir))
     except Exception: base = DEFAULT_URL
     if base and base != DEFAULT_URL: payload['url'] = base
-    if include_key:
-        key = read_key(data_dir)
-        if key: payload['key'] = key
+    # A per-person key (Boran, 11 Sep 2026: "herkese ayrı OpenRouter api key vereceğim") beats this Mac's own:
+    # the invite then carries the teammate's key, never the sender's. Refused when malformed (spaces, too short).
+    personal = (key or '').strip()
+    if personal:
+        if KEY_RE.match(personal): payload['key'] = personal
+        else: return {'error': 'Kişiye özel anahtar geçersiz görünüyor (boşluksuz, en az 8 karakter)'}
+    elif include_key:
+        own = read_key(data_dir)
+        if own: payload['key'] = own
     return payload
 
 
-def invite_url(data_dir, include_key=False):
+def invite_url(data_dir, include_key=False, key=None):
     """`meetingos://join?team=…[&url=…][&key=…]`, percent-encoded. '' when this Mac has no team to give away."""
-    payload = invite_payload(data_dir, include_key=include_key)
+    payload = invite_payload(data_dir, include_key=include_key, key=key)
     if payload.get('error'): return ''
     query = [(name, payload[name]) for name in ('team', 'url', 'key') if payload.get(name)]
     return f'{INVITE_SCHEME}://{INVITE_HOST}?' + urllib.parse.urlencode(query, quote_via=urllib.parse.quote)
 
 
-def invite_file_text(data_dir, include_key=False):
+def invite_file_text(data_dir, include_key=False, key=None):
     """The body of a `.meetingos-invite` file: the same payload as JSON, for mail and chat apps that eat links."""
-    payload = invite_payload(data_dir, include_key=include_key)
+    payload = invite_payload(data_dir, include_key=include_key, key=key)
     if payload.get('error'): return ''
     return json.dumps(payload, ensure_ascii=False, indent=2) + '\n'
 

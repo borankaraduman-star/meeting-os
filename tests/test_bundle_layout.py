@@ -226,7 +226,9 @@ class ShippedInvite(unittest.TestCase):
         script = (ROOT / 'scripts/build-bundle.sh').read_text(encoding='utf-8')
         self.assertIn('rm -f "$resources/invite.json"', script)
         self.assertIn('invite_file_text', script)
-        self.assertIn('include_key=True', script)
+        # --invite ships the team only; --invite-with-key adds this Mac's key (11 Sep 2026: one key per teammate).
+        self.assertIn("include_key=os.environ.get('INVITE_KEY') == '1'", script)
+        self.assertIn('--invite-with-key', script)
 
     def test_swift_reads_the_file_the_script_writes(self):
         swift = (ROOT / 'desktop/Sources/MeetingOS/BundleInvite.swift').read_text(encoding='utf-8')

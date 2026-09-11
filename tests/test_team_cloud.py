@@ -682,6 +682,19 @@ class InviteTests(CloudFixture):
     hex or it is refused, the address is https or it is refused, and an OpenRouter key already on the Mac is
     never, under any circumstance, replaced by one that arrived in a link."""
 
+    def test_personal_key_rides_in_the_invite_instead_of_the_senders(self):
+        """Boran, 11 Sep 2026: one OpenRouter key per teammate. A key given explicitly goes into the link even when
+        include_key is off, the sender's own key never does then, and a malformed key is refused up front."""
+        import tempfile
+        from meeting_os import team_cloud as TC
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp); (data/'openrouter.key').write_text('sk-or-v1-senderkey000000\n'); TC.join(data,'a'*64)
+            url=TC.invite_url(data,key='sk-or-v1-personal12345')
+            self.assertIn('key=sk-or-v1-personal12345',url); self.assertNotIn('senderkey',url)
+            self.assertEqual(TC.parse_invite(url)['key'],'sk-or-v1-personal12345')
+            self.assertIn('error',TC.invite_payload(data,key='bad key'))
+            self.assertNotIn('key',TC.invite_payload(data,include_key=False,key=''))
+
     def blank(self, name):
         """A Mac with nothing: no key, no token, no settings — a colleague on the morning of day one."""
         data = self.tmp / name; data.mkdir()

@@ -10,7 +10,8 @@
 # aynı listeyi denetler.
 #
 # Kullanım:  sh scripts/build-bundle.sh [--invite] [--output DIZIN]
-#   --invite   Bu Mac’in veri klasöründen ekip davetini (token + OpenRouter anahtarı) Resources/invite.json
+#   --invite   Bu Mac’in veri klasöründen ekip davetini (yalnız ekip token’ı) Resources/invite.json
+#   --invite-with-key   Aynı davet, bu Mac’in OpenRouter anahtarı da içinde (tek ortak anahtar dağıtımı)
 #              olarak yazar. Bayrak yoksa dosya hiç oluşmaz.
 #   --output   Paketin yazılacağı dizin (varsayılan build/bundle).
 # Ortam değişkenleri: REPO, CAPTURE_APP, MODELS_DIR, DOWNLOADS, HOST_PY, VENV_PY, DATA_DIR.
@@ -24,11 +25,13 @@ if [ -z "$REPO" ]; then REPO=$(cd "$self/.." && pwd); fi
 manifest="$self/bundle_manifest.py"
 
 invite=0
+invite_key=0
 output=
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --invite) invite=1 ;;
+        --invite-with-key) invite=1; invite_key=1 ;;
         --output) shift; output=${1:-} ;;
         --output=*) output=${1#--output=} ;;
         -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
@@ -224,13 +227,13 @@ ask runtime-json "$VERSION" > "$resources/runtime.json"
 # --------------------------------------------------------------- 8. --invite
 if [ "$invite" -eq 1 ]; then
     [ -x "$VENV_PY" ] || die "davet icin depo venv gerekli: $VENV_PY"
-    say "Ekip daveti yaziliyor (token + OpenRouter anahtari)"
-    REPO_DIR="$REPO" "$VENV_PY" - "$resources/invite.json" "$DATA_DIR" <<'PY'
+    if [ "$invite_key" -eq 1 ]; then say "Ekip daveti yaziliyor (token + OpenRouter anahtari)"; else say "Ekip daveti yaziliyor (yalniz token; anahtar kisiye ozel baglantiyla gelir)"; fi
+    REPO_DIR="$REPO" INVITE_KEY="$invite_key" "$VENV_PY" - "$resources/invite.json" "$DATA_DIR" <<'PY'
 import os, sys
 from pathlib import Path
 sys.path.insert(0, os.environ['REPO_DIR'])
 from meeting_os.team_cloud import invite_file_text
-text = invite_file_text(Path(sys.argv[2]), include_key=True)
+text = invite_file_text(Path(sys.argv[2]), include_key=os.environ.get('INVITE_KEY') == '1')
 if not text.strip():
     sys.exit('Bu Mac’te ekip belirteci yok; davet yazılamadı')
 Path(sys.argv[1]).write_text(text, encoding='utf-8')

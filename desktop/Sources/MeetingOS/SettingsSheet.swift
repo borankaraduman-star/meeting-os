@@ -211,6 +211,9 @@ struct TeamSection:View {
     /// Off by default and never remembered: the key pays Boran's OpenRouter bill, so putting it in a link has
     /// to be a decision taken each time, not a box that stayed ticked from last week.
     @State private var includeKey=false
+    /// Boran, 11 Sep 2026: "herkese ayrı OpenRouter api key vereceğim" — a key typed here rides in the copied
+    /// link instead of this Mac's own, so each teammate gets a personal one. Never stored.
+    @State private var personalKey=""
     @State private var pasting=false
     @State private var advanced=false
     var body:some View {
@@ -225,11 +228,16 @@ struct TeamSection:View {
                     .controlSize(.small).disabled(!model.teamTarget.sharing).accessibilityIdentifier("syncTeamNowButton")
             }
             HStack(spacing:8) {
-                Button("Davet bağlantısını kopyala") { Task { await model.copyInviteLink(includeKey:includeKey) } }.accessibilityIdentifier("copyInviteLinkButton")
-                Button("Davet dosyasını kaydet…") { Task { await model.saveInviteFile(includeKey:includeKey) } }.accessibilityIdentifier("saveInviteFileButton")
+                Button("Davet bağlantısını kopyala") { Task { await model.copyInviteLink(includeKey:includeKey,personalKey:personalKey) } }.accessibilityIdentifier("copyInviteLinkButton")
+                Button("Davet dosyasını kaydet…") { Task { await model.saveInviteFile(includeKey:includeKey,personalKey:personalKey) } }.accessibilityIdentifier("saveInviteFileButton")
                 Button("Davet yapıştır…") { pasting=true }.accessibilityIdentifier("pasteInviteButton")
             }
-            Toggle("OpenRouter anahtarımı da ekle (ekip arkadaşı anahtar girmez)",isOn:$includeKey)
+            HStack(spacing:8) {
+                TextField("Kişiye özel OpenRouter anahtarı (isteğe bağlı)",text:$personalKey).textFieldStyle(.roundedBorder).frame(width:340).controlSize(.small)
+                    .accessibilityIdentifier("personalKeyField")
+                Text("Doluysa kopyalanan davet bu anahtarı taşır: her arkadaşa kendi anahtarıyla bir bağlantı.").font(.caption2).foregroundStyle(.secondary)
+            }
+            Toggle("OpenRouter anahtarımı da ekle (ekip arkadaşı anahtar girmez)",isOn:$includeKey).disabled(!personalKey.isEmpty)
                 .font(.caption).accessibilityIdentifier("inviteIncludeKeyToggle")
             Text("Davet bağlantısını Slack ya da WhatsApp’tan gönderin: ekip arkadaşınız tıklayınca Meeting OS açılır ve ekibe katılır — terminal gerekmez. Bağlantıyı almayan bir uygulama için “Davet dosyasını kaydet…” aynı daveti dosya olarak verir. **Davet bir paroladır:** kanala, bilete ya da depoya yazılmaz. Anahtarı da eklerseniz o kişinin bulut kullanımı sizin OpenRouter hesabınızdan ödenir.")
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)

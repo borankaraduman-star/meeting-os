@@ -327,9 +327,9 @@ extension Model {
     }
     /// The invite, on the pasteboard. With `includeKey` the teammate never meets the OpenRouter key step —
     /// which also means the link now carries a password that pays Boran's bill, so the confirmation says so.
-    func copyInviteLink(includeKey:Bool) async {
+    func copyInviteLink(includeKey:Bool,personalKey:String="") async {
         do {
-            let r=try await request(["action":"team_invite","include_key":includeKey])
+            let r=try await request(["action":"team_invite","include_key":includeKey,"key":personalKey.trimmingCharacters(in:.whitespacesAndNewlines)])
             if let message=r["error"] as? String { self.error=message; return }
             let link=r["url"] as? String ?? ""
             guard !link.isEmpty else { self.error="Davet bağlantısı oluşturulamadı"; return }
@@ -340,9 +340,9 @@ extension Model {
         } catch { self.error=error.localizedDescription }
     }
     /// The same invite as a file, for the chat apps that swallow a custom scheme. Written where the user says.
-    func saveInviteFile(includeKey:Bool) async {
+    func saveInviteFile(includeKey:Bool,personalKey:String="") async {
         do {
-            let r=try await request(["action":"team_invite","include_key":includeKey])
+            let r=try await request(["action":"team_invite","include_key":includeKey,"key":personalKey.trimmingCharacters(in:.whitespacesAndNewlines)])
             if let message=r["error"] as? String { self.error=message; return }
             let text=r["text"] as? String ?? ""
             guard !text.isEmpty else { self.error="Davet dosyası oluşturulamadı"; return }
