@@ -193,6 +193,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     var meeting:Meeting? { meetings.first { $0.id==selected } }
     @Published var showEchoRows=false { didSet { rebuildBlocks() } }
     @Published var review:[ReviewItem]=[]
+    /// Which summary item has its inline correction field open, by `item_id`. One at a time on purpose: two
+    /// open fields would mean two views claiming ⌘↩, and the user would not know which one it saved.
+    @Published var editingInsight:String=""
     /// Words the user has taught (Düzelt → "Kelime düzelt") plus the ones the app learned from repeated
     /// edits. Loaded on demand from Ayarlar → Sesler ve sözlük; never part of the two-second poll.
     @Published var wordRules:[WordRule]=[]

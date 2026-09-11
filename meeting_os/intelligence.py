@@ -345,6 +345,101 @@ def alike(text,second):
     return min(len(mine),len(theirs))>=3 and (mine<=theirs or theirs<=mine)
 
 
+# ---------------------------------------------------------------------------
+# Stable item identity
+#
+# A summary bullet used to be identified by its own sentence (`Insight.id` was the text), so the moment a
+# re-analysis reworded it the user's correction, removal or approval had nothing left to hang on. Every
+# summary/decision/risk/question item now carries an `item_id` that survives re-analysis: the same
+# (section, normalized text) always yields the same id, and a reworded restatement inherits the earlier id
+# when it shares a source segment and reads close enough (the same dedupe helpers this module already uses).
+# ---------------------------------------------------------------------------
+
+# The lists a user decision can sit on, each with the section it belongs to. `section_summaries` holds the
+# per-chunk bullets the condensed summary was built from; the app shows one list or the other under the same
+# "Özet" heading, so an identical bullet in both is one item and carries one id.
+SECTION_LISTS=(('summary','summary'),('summary','section_summaries'),('decisions','decisions'),('risks','risks'),('questions','questions'))
+MATCH_SIMILARITY=0.8   # below this two wordings are two items, and an edit is never carried across
+
+def item_text(item):
+    """What an analysis item says, whichever key it keeps it under (summary/decisions use `text`, actions `title`)."""
+    return (item.get('text') if isinstance(item,dict) else None) or (item.get('title') if isinstance(item,dict) else None) or ''
+
+def evidence_ids(item):
+    """The source segments an item cites."""
+    return {e.get('segment_id') for e in ((item or {}).get('evidence') or []) if isinstance(e,dict) and e.get('segment_id') is not None}
+
+def item_id(section,item):
+    """The identity of one analysis item: section, its normalized wording and the first segment it cites.
+
+    Deterministic on purpose — an analysis saved before this existed gets the same ids the moment it is read
+    back, so nothing has to be migrated and two Macs reading the same payload agree."""
+    first=None
+    for e in (item.get('evidence') or []):
+        if isinstance(e,dict):first=e.get('segment_id');break
+    raw=json.dumps([section,normalize(item_text(item)),first],ensure_ascii=False,sort_keys=True)
+    return hashlib.sha256(raw.encode()).hexdigest()[:20]
+
+def similarity(first,second):
+    """How close two item wordings are, 0..1, using the helpers de-duplication already trusts: one wording
+    containing the other (`alike`) is a full match, otherwise the shared share of their content stems."""
+    a,b=normalize(first or ''),normalize(second or '')
+    if not a or not b:return 0.0
+    if a==b or alike(a,b):return 1.0
+    mine,theirs=stems(a),stems(b)
+    if not mine or not theirs:return 0.0
+    return len(mine&theirs)/len(mine|theirs)
+
+def _indexed(payload):
+    """(section, normalized text, cited segments, item_id) for every already-identified item of a payload."""
+    out=[]
+    for section,key in SECTION_LISTS:
+        for it in ((payload or {}).get(key) or []):
+            if isinstance(it,dict) and it.get('item_id'):out.append((section,normalize(item_text(it)),evidence_ids(it),it['item_id']))
+    return out
+
+def match_previous(section,item,indexed,used=()):
+    """The id an earlier analysis gave this same item, or None.
+
+    Same (section, normalized text) is the same item however its evidence moved. Otherwise a rewording has
+    to prove itself twice: at least one shared source segment AND wording similarity of at least 0.8. When
+    the match is unclear nothing is carried over — a user's "wrong" must never land on a different claim."""
+    text=normalize(item_text(item))
+    if not text:return None
+    for sec,ptext,_,pid in indexed:
+        if sec==section and ptext==text and pid not in used:return pid
+    mine=evidence_ids(item)
+    best=None;best_score=0.0
+    for sec,ptext,pids,pid in indexed:
+        if sec!=section or pid in used or not (mine&pids):continue
+        score=similarity(text,ptext)
+        if score>=MATCH_SIMILARITY and score>best_score:best,best_score=pid,score
+    return best
+
+def ensure_item_ids(payload,previous=None):
+    """Give every summary/decision/risk/question item a persistent `item_id`, in place.
+
+    Items that already carry one keep it. `previous` is the payload of the analysis this one replaces: when
+    it is given, an item that reappears — same wording, or a rewording backed by a shared source segment —
+    inherits the earlier id, which is what keeps a user's edit, removal or approval attached across a
+    re-analysis. Ids stay unique within one list; the same bullet in `summary` and `section_summaries` is
+    deliberately one id."""
+    indexed=_indexed(previous) if previous else []
+    for section,key in SECTION_LISTS:
+        items=(payload or {}).get(key)
+        if not isinstance(items,list):continue
+        used=set()
+        for it in items:
+            if not isinstance(it,dict):continue
+            candidate=it.get('item_id') or (match_previous(section,it,indexed,used) if indexed else None) or item_id(section,it)
+            if candidate in used:
+                n=2
+                while f'{candidate}-{n}' in used:n+=1
+                candidate=f'{candidate}-{n}'
+            it['item_id']=candidate;used.add(candidate)
+    return payload
+
+
 def conflicting_indices(key,item,kept):
     """Where `kept` holds a task this one would have merged into but for an explicit deadline or
     quantity conflict. Nothing is dropped; the caller carries the doubt onto both of them."""
@@ -444,6 +539,7 @@ def merge_records(records):
     # report and the app can say "3 alıntı doğrulanamadı" instead of quietly showing a shorter list.
     out['dropped_quotes']=sum(int(r.get('dropped_quotes') or 0) for r in records)
     out['dropped_items']=sum(int(r.get('dropped_items') or 0) for r in records)
+    ensure_item_ids(out)   # every item leaves the merge with an identity; save time re-attaches the previous analysis's
     return out
 
 def chunks(rows,llm,budget=2800,owner=None):

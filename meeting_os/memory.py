@@ -130,6 +130,10 @@ class Memory:
         CREATE TABLE IF NOT EXISTS task_edits(id INTEGER PRIMARY KEY,task TEXT,previous TEXT,replacement TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS draft_edits(id INTEGER PRIMARY KEY,draft TEXT,previous TEXT,replacement TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS drafts(id TEXT PRIMARY KEY,task TEXT,input_hash TEXT,task_hash TEXT,kind TEXT,text TEXT,created TEXT);
+        -- The user's layer over the model's summary: one row per (item, action). Local only; the wording a
+        -- person typed about their own meeting never leaves this Mac.
+        CREATE TABLE IF NOT EXISTS insight_edits(id INTEGER PRIMARY KEY,meeting TEXT,item_id TEXT,section TEXT,action TEXT,text TEXT,reason TEXT,created TEXT,analysis_version INTEGER);
+        CREATE UNIQUE INDEX IF NOT EXISTS insight_edits_item ON insight_edits(meeting,item_id,action);
         CREATE INDEX IF NOT EXISTS analyses_meeting ON analyses(meeting,id);
         CREATE INDEX IF NOT EXISTS tasks_meeting ON tasks(meeting,updated);
         CREATE INDEX IF NOT EXISTS drafts_task ON drafts(task);
@@ -153,10 +157,27 @@ class Memory:
     def _read_latest(self,mid):
         row=self.db.execute('SELECT * FROM analyses WHERE meeting=? ORDER BY id DESC LIMIT 1',(mid,)).fetchone()
         if not row:return None
-        d=dict(row);d['payload']=json.loads(d['payload']);d['stale']=d['input_hash']!=self.current_hash(mid);return d
+        d=dict(row);d['payload']=json.loads(d['payload']);d['stale']=d['input_hash']!=self.current_hash(mid)
+        # Everything that reads an analysis — the app, the export, the decision log — reads it through here,
+        # so this is the one place the user's corrections and removals have to be laid over the model's
+        # output. An analysis saved before item ids existed gets them here, deterministically.
+        from .insight_layer import layered
+        d['payload'],d['insight_unmatched']=layered(self.store,mid,d['payload'])
+        return d
+    def raw_payload(self,mid):
+        """The model's own output for this meeting, without the user layer — what a re-analysis matches against."""
+        row=self.db.execute('SELECT payload FROM analyses WHERE meeting=? ORDER BY id DESC LIMIT 1',(mid,)).fetchone()
+        if not row:return None
+        from .intelligence import ensure_item_ids
+        return ensure_item_ids(json.loads(row['payload'] or '{}'))
     def save_analysis(self,mid,input_hash,model,record):
         import hashlib   # only a save needs it; every report imports this module and none of them do
+        from .intelligence import ensure_item_ids
         record={**record,'actions':dedupe_actions(record['actions'])}   # the same promise, worded twice in one analysis, is stored once
+        # A summary item the user corrected, removed or approved is identified by `item_id`. Carrying the ids
+        # of the analysis this one replaces is what re-attaches those decisions: a bullet that reappears —
+        # reworded or not — keeps its identity, and only a genuinely new claim gets a new one.
+        ensure_item_ids(record,self.raw_payload(mid))
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if self.current_hash(mid)!=input_hash:raise ValueError('Transkript analiz sırasında değişti; yeniden analiz edin')

@@ -7,10 +7,31 @@ struct Evidence:Identifiable {
     func destination(in rows:[Row])->Row? { rows.first { $0.id==segment } }
     init(_ d:[String:Any]) { segment=d["segment_id"] as? Int ?? d["id"] as? Int ?? 0; quote=d["quote"] as? String ?? d["text"] as? String ?? ""; start=d["start"] as? Double ?? 0; speaker=d["speaker"] as? String ?? d["speaker_name"] as? String ?? ""; meeting=d["meeting"] as? String ?? ""; meetingTitle=d["meeting_title"] as? String ?? "" }
 }
+/// One summary/decision/risk/question item, as the user sees it: the model's sentence with their own
+/// decision already laid over it. `text` is what to show (their wording where they corrected one);
+/// `modelText` is what the analysis said, which is what history and evidence are keyed by.
 struct Insight:Identifiable {
-    let text:String; let evidence:[Evidence]; let review:Bool; let superseded:Bool
-    var id:String { text }
-    init(_ d:[String:Any]) { text=d["text"] as? String ?? ""; evidence=(d["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); review=d["needs_review"] as? Bool ?? false; superseded=d["superseded"] as? Bool ?? false }
+    let text:String; let modelText:String; let evidence:[Evidence]; let review:Bool; let superseded:Bool
+    /// `itemID` survives a re-analysis; the sentence does not, which is why it used to be the id.
+    let itemID:String; let userEdited:Bool; let removed:Bool; let removeReason:String; let confirmed:Bool
+    var id:String { itemID.isEmpty ? text : itemID }
+    init(_ d:[String:Any]) {
+        text=d["text"] as? String ?? ""; modelText=d["model_text"] as? String ?? d["text"] as? String ?? ""
+        evidence=(d["evidence"] as? [[String:Any]] ?? []).map(Evidence.init); review=d["needs_review"] as? Bool ?? false; superseded=d["superseded"] as? Bool ?? false
+        itemID=d["item_id"] as? String ?? ""; userEdited=d["user_edited"] as? Bool ?? false
+        removed=d["removed"] as? Bool ?? false; removeReason=d["remove_reason"] as? String ?? ""; confirmed=d["confirmed"] as? Bool ?? false
+    }
+}
+
+/// A correction or removal whose item no longer appears in the newest analysis. Nothing is thrown away
+/// silently: the section shows these under "eşleşmedi" so the person decides what became of them.
+struct InsightUnmatched:Identifiable {
+    let itemID:String; let section:String; let action:String; let text:String; let reason:String; let label:String
+    var id:String { itemID+":"+action }
+    init(_ d:[String:Any]) {
+        itemID=d["item_id"] as? String ?? ""; section=d["section"] as? String ?? ""; action=d["action"] as? String ?? ""
+        text=d["text"] as? String ?? ""; reason=d["reason"] as? String ?? ""; label=d["label"] as? String ?? ""
+    }
 }
 struct ActionItem:Identifiable {
     let id:String; let title:String; let owner:String; let due:String; let state:String; let meeting:String; let meetingTitle:String; let stale:Bool; let route:String; let evidence:[Evidence]; let dueDate:String
@@ -31,6 +52,42 @@ extension Model {
         let suggestions=result["due_suggestions"] as? [[String:Any]] ?? []
         dueSuggestions=Dictionary(uniqueKeysWithValues:suggestions.compactMap { d in (d["task"] as? String).flatMap { t in (d["suggested"] as? String).map { (t,$0) } } })
         pastDueSuggestions=Set(suggestions.filter { $0["past"] as? Bool == true }.compactMap { $0["task"] as? String })
+    }
+    // MARK: - Kullanıcı kararı: Düzelt · Kaldır · Doğru
+    //
+    // None of these rewrites the analysis. They write one local row keyed by the item's persistent id, and
+    // the bridge lays that row over the model's payload on the next read — which is what makes a re-analysis
+    // unable to overrule the person quietly. Nothing here is ever uploaded.
+
+    /// The user's own wording for one item. The model's sentence stays underneath as `model_text`.
+    func editInsight(_ item:Insight,section:String,text:String) async {
+        await insightAction("insight_edit",item:item,section:section,extra:["text":text],note:"Madde düzeltildi · yalnız bu Mac’te")
+    }
+    /// "Kaldır", with an optional reason. No reason is a real answer: not every removal is a factual error.
+    func removeInsight(_ item:Insight,section:String,reason:String?) async {
+        await insightAction("insight_remove",item:item,section:section,extra:reason.map { ["reason":$0] } ?? [:],
+                            note:"Madde kaldırıldı"+(reason.map { " · "+SummaryUX.reasonLabel($0) } ?? ""))
+    }
+    /// "Doğru" is a switch, so the bridge decides which way it goes and reports back.
+    func confirmInsight(_ item:Insight,section:String) async {
+        await insightAction("insight_confirm",item:item,section:section,extra:[:],note:item.confirmed ? "Doğru işareti kaldırıldı":"Doğru olarak işaretlendi")
+    }
+    /// Take one decision back: the removed item returns, or the model's own sentence does.
+    func restoreInsight(_ item:Insight,what:String) async {
+        await insightAction("insight_restore",item:item,section:"",extra:["what":what],note:what=="edit" ? "Model cümlesine dönüldü":"Madde geri getirildi")
+    }
+    /// A correction whose item this analysis no longer has: dropping it is the only thing left to decide.
+    func forgetUnmatched(_ o:InsightUnmatched) async {
+        guard let mid=selected else { return }
+        do { _=try await request(["action":"insight_restore","meeting":mid,"item_id":o.itemID,"what":o.action]); activity="Eşleşmeyen değişiklik unutuldu"; try await refreshIntelligence(mid) }
+        catch { self.error=error.localizedDescription }
+    }
+    private func insightAction(_ action:String,item:Insight,section:String,extra:[String:Any],note:String) async {
+        guard let mid=selected, !item.itemID.isEmpty else { return }
+        var req:[String:Any]=["action":action,"meeting":mid,"item_id":item.itemID,"section":section]
+        for (k,v) in extra { req[k]=v }
+        do { _=try await request(req); activity=note; try await refreshIntelligence(mid) }
+        catch { self.error=error.localizedDescription }
     }
     /// Approve (or clear) a calendar date for a task; the transcript's own wording stays as due_text.
     func setDue(_ item:ActionItem,_ iso:String?) async {
@@ -156,8 +213,10 @@ struct AnalysisView:View {
                 Toggle(isOn:$detailed) { Text(detailed ? "Ayrıntılı özet (\(long) madde) · kısa özet için kapatın":"Ayrıntılı özet (\(long) madde)").font(.callout) }
                     .toggleStyle(.switch).controlSize(.small).accessibilityIdentifier("summaryDetailedToggle")
             }
+            let unmatched=(m.analysis?["insight_unmatched"] as? [[String:Any]] ?? []).map(InsightUnmatched.init)
             ForEach(categories,id:\.0) { key,label in
-                SummarySection(m:m,section:key,label:label,items:(key=="summary" ? summaryItems(payload):(payload[key] as? [[String:Any]] ?? [])).map(Insight.init),expanded:$expanded).padding(.top,6)
+                SummarySection(m:m,section:key,label:label,items:(key=="summary" ? summaryItems(payload):(payload[key] as? [[String:Any]] ?? [])).map(Insight.init),
+                               unmatched:unmatched,expanded:$expanded).padding(.top,6)
             }
             Text("Görevleri Görevlerim ekranında düzenleyebilir, durumu değiştirebilir ve taslak hazırlatabilirsiniz.").font(.callout).foregroundStyle(.secondary).padding(.top,6)
         } else {

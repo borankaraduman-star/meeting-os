@@ -41,8 +41,10 @@ def build_brief(store, title, attendees, limit=5, owner=None):
         for mid in mids[:limit]:
             latest = memory.latest(mid)
             payload = (latest or {}).get('payload') or {}
-            for d in payload.get('decisions', [])[:5]: decisions.append({'meeting': mid, 'title': meetings[mid]['title'], 'text': d.get('text'), 'superseded': bool(d.get('superseded')), 'note': d.get('note') or (REVERSED_NOTE if d.get('superseded') else None)})
-            for q in payload.get('questions', [])[:5]: questions.append({'meeting': mid, 'title': meetings[mid]['title'], 'text': q.get('text')})
+            # The user's own summary, not the model's: what they removed is not briefed back at them.
+            from .insight_layer import visible
+            for d in visible(payload.get('decisions', []))[:5]: decisions.append({'meeting': mid, 'title': meetings[mid]['title'], 'text': d.get('text'), 'superseded': bool(d.get('superseded')), 'note': d.get('note') or (REVERSED_NOTE if d.get('superseded') else None)})
+            for q in visible(payload.get('questions', []))[:5]: questions.append({'meeting': mid, 'title': meetings[mid]['title'], 'text': q.get('text')})
         last = meetings[mids[0]] if mids else None
         people.append({'name': name.strip(), 'owed': [{'title': t['title'], 'due_text': t.get('due_text'), 'meeting_title': t.get('meeting_title'), 'created': t.get('created'), 'due_date': (t.get('payload') or {}).get('due_date')} for t in owed],
                        'meetings': len(mids), 'last_meeting': {'title': last['title'], 'created': last['created']} if last else None, 'decisions': decisions[:8], 'questions': questions[:8]})
