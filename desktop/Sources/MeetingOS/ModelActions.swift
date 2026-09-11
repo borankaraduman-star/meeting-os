@@ -280,6 +280,20 @@ extension Model {
             await refresh(); await loadReview() }
         catch { self.error=error.localizedDescription }
     }
+    /// Doğru · Düzelt… · Geç on any Kontrol item. The answer belongs to the version of the source the item
+    /// came from: "Doğru" closes it for good, "Geç" only hides it until the source changes, and "Düzelt…"
+    /// records that the user is fixing it and takes them to the place they fix it.
+    func resolveReview(_ item:ReviewItem,result:String) async {
+        guard let mid=selected, ReviewUX.resolvable(item) else { return }
+        do { _=try await request(["action":"review_resolve","meeting":mid,"key":item.key,"kind":item.kind,"source_version":item.sourceVersion,"result":result])
+            activity="Kontrol · "+ReviewUX.label(result).replacingOccurrences(of:"…",with:"")
+            if result=="corrected" {
+                if item.kind=="task_owner" || item.kind=="task_review" { navigate { self.tab="actions" } }
+                else if let seg=item.segment, let row=rows.first(where:{ $0.id==seg }) { editRow=row;editName=row.name;editText=row.text;clean=false }
+            }
+            await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
     /// "Bu doğru": the suspicious word was spelled right all along; drop the item without touching the text.
     func dismissWord(_ item:ReviewItem) async {
         guard let mid=selected, !item.original.isEmpty else { return }

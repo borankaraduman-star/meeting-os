@@ -14,8 +14,11 @@ def build_agenda(store, limit=5):
         latest=memory.latest(m['id'])
         if not latest: continue
         payload=latest.get('payload') or {}
-        for q in payload.get('questions',[]): questions.append({'meeting':m['id'],'title':m['title'],'text':q.get('text'),'evidence':q.get('evidence',[])})
-        for d in payload.get('decisions',[]): decisions.append({'meeting':m['id'],'title':m['title'],'text':d.get('text'),'evidence':d.get('evidence',[])})
+        # `visible` and the text itself are the user's layer: a question they removed is not on their agenda,
+        # and a decision they reworded goes out in their words. `Memory.latest` already applied the layer.
+        from .insight_layer import visible
+        for q in visible(payload.get('questions',[])): questions.append({'meeting':m['id'],'title':m['title'],'text':q.get('text'),'evidence':q.get('evidence',[])})
+        for d in visible(payload.get('decisions',[])): decisions.append({'meeting':m['id'],'title':m['title'],'text':d.get('text'),'evidence':d.get('evidence',[])})
     return {'meetings':[{'id':m['id'],'title':m['title'],'created':m['created']} for m in meetings],'open_tasks':open_tasks,'questions':questions,'decisions':decisions}
 
 

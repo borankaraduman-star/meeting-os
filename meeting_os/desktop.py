@@ -435,6 +435,9 @@ def dispatch(request, db=None):
             if selected and 'analyses' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(id),0) FROM analyses WHERE meeting=?",(selected,)).fetchone()[0]))
             if selected and 'tasks' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(updated),'') FROM tasks WHERE meeting=?",(selected,)).fetchone()[0]))
             if selected and 'drafts' in tables and 'tasks' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(id),'') FROM drafts WHERE task IN (SELECT id FROM tasks WHERE meeting=?)",(selected,)).fetchone()[0]))
+            # A correction or removal changes what the Özet tab shows without touching the analysis, so it has
+            # to move this fingerprint too — otherwise a poll would decide nothing had changed.
+            if selected and 'insight_edits' in tables: parts.append(str(store.db.execute("SELECT count(*)||':'||coalesce(max(created),'') FROM insight_edits WHERE meeting=?",(selected,)).fetchone()[0]))
             intel_hash='|'.join(parts)
             segments=None if request.get('segments_hash')==seg_hash else store.display_segments(selected)
             return {'meetings':meetings,'profiles':store.profiles(),'segments':segments,'segments_hash':seg_hash,'intel_hash':intel_hash}
@@ -644,6 +647,19 @@ def dispatch(request, db=None):
         if action=='review_queue':
             from .review import review_queue
             return review_queue(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
+        if action=='review_resolve':
+            # Doğru · Düzelt… · Geç. The answer is stored against the version of the source the item came from,
+            # so a corrected transcript asks again and an answered item never returns on its own.
+            from .review import resolve_review
+            return resolve_review(store,request['meeting'],request.get('key'),request.get('kind'),request.get('source_version'),request.get('result'))
+        if action=='review_reopen':
+            from .review import reopen_review
+            return reopen_review(store,request['meeting'],request.get('key'),request.get('source_version'))
+        if action in ('insight_edit','insight_remove','insight_confirm','insight_restore'):
+            # The ⋯ menu on a summary item: Düzelt · Kaldır · Doğru, and taking any of them back. None of this
+            # touches the model's payload and none of it is ever uploaded.
+            from . import insight_layer as IL
+            return IL.dispatch_action(store,action,request)
         if action=='delete_meeting':
             return delete_meeting(store,request['meeting'],DATA_DIR if db is None else Path(db).parent)
         if action=='retry_candidates':
@@ -804,10 +820,13 @@ def dispatch(request, db=None):
         if action=='export_analysis':
             current=memory.latest(request['meeting'])
             if not current:raise ValueError('Önce toplantıyı analiz edin')
+            from .insight_layer import visible
             lines=['# Toplantı özeti', 'Güncel değil; kaynak değişti.' if current['stale'] else 'Model çıkarımı; kaynaklarla kontrol edin.', 'Analiz sürümü: '+str(current['id'])]
             for key,label in [('summary','Özet'),('decisions','Kararlar'),('risks','Riskler'),('questions','Açık sorular')]:
                 lines+=['\n## '+label]
-                for item in current['payload'].get(key,[]):
+                # The user's own view is what gets exported: their wording where they corrected one, and
+                # nothing they removed. An export that reprints a removed bullet is the model overruling them.
+                for item in visible(current['payload'].get(key,[])):
                     lines+=['- '+item['text']+(' ('+(item.get('note') or 'geri alındı')+')' if item.get('superseded') else '')]
                     lines+=['  - Kaynak #'+str(e['segment_id'])+' ('+timestamp(e['start'],'.')+'): '+e['quote'] for e in item['evidence']]
             lines+=['\n## Görevler']

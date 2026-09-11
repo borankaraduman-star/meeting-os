@@ -25,8 +25,10 @@ def payload_items(store, memory, key):
     presents a stale sentence as today's truth."""
     return [{'meeting': m['id'], 'title': m['title'], 'created': m['created'], 'text': i.get('text') or '', 'evidence': first_evidence(i),
              'superseded': bool(i.get('superseded')), 'note': i.get('note') or (REVERSED_NOTE if i.get('superseded') else None),
-             'stale': bool(latest.get('stale'))}
-            for m, latest in latest_analyses(store, memory) for i in (latest.get('payload') or {}).get(key, [])]
+             'stale': bool(latest.get('stale')), 'item_id': i.get('item_id'), 'user_edited': bool(i.get('user_edited')), 'confirmed': bool(i.get('confirmed'))}
+            # An item the user removed is not in their summary any more, so no report may keep quoting it back
+            # at them; their corrected wording is already on `text`, because `Memory.latest` laid the layer on.
+            for m, latest in latest_analyses(store, memory) for i in (latest.get('payload') or {}).get(key, []) if not i.get('removed')]
 
 
 def stale_meetings(items):

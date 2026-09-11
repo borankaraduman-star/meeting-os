@@ -482,7 +482,9 @@ class Store:
                 for t in ('retry_segments','retry_workspaces'):
                     if t in tables: self.db.execute(f'DELETE FROM {t} WHERE attempt IN (SELECT id FROM retry_attempts WHERE meeting=?)',(mid,))
                 self.db.execute('DELETE FROM retry_attempts WHERE meeting=?',(mid,))
-            for t in ('analyses','analysis_usage','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','segments'):
+            # `insight_edits` carries the user's own wording about this meeting and `review_results` their
+            # answers about its text: both die with the meeting they describe, like every other derived row.
+            for t in ('analyses','analysis_usage','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','insight_edits','review_results','segments'):
                 if t in tables: self.db.execute(f'DELETE FROM {t} WHERE meeting=?',(mid,))
             self.db.execute('DELETE FROM meetings WHERE id=?',(mid,))
         removed, kept = self._remove_retry_workspaces(workspaces)

@@ -2,6 +2,7 @@
 Read-only — stored segments, names and analyses are never changed; masking happens in the rendered text only."""
 import re
 from datetime import datetime, timezone
+from .insight_layer import visible
 from .intelligence import REVERSED_NOTE
 from .memory import Memory, RETIRED, STATE_LABELS
 
@@ -138,19 +139,21 @@ def prepare_share(store, mid, *, include_segments=None, exclude_segments=None, m
     if latest and latest.get('stale'): lines += ['> Analiz güncel değil; kaynak metin değişti.', '']
     if only_decisions or with_summary:
         lines += ['## Kararlar']
-        decisions = payload.get('decisions', [])
+        # The layered view, not the raw model output: the user's wording where they corrected a bullet, and
+        # nothing they removed. `Memory.latest` applied the layer; this drops what is marked removed.
+        decisions = visible(payload.get('decisions', []))
         if not decisions: lines.append('- Kayıtlı karar yok.')
         for d in decisions: lines += [f"- {m(d.get('text', ''))}" + (f" ({d.get('note') or REVERSED_NOTE})" if d.get('superseded') else '')] + cite(d)
         lines.append('')
     if with_summary:
         lines += ['## Özet']
-        summary = payload.get('summary', [])
+        summary = visible(payload.get('summary', []))
         if not summary: lines.append('- Özet yok.')
         for s in summary: lines += [f"- {m(s.get('text', ''))}"] + cite(s)
         # Risks and open questions were on screen but never in the export (Boran, 11 Sep 2026: "özet ve kararları
         # dışa aktaramıyorum"); a summary that leaves them out is not the summary the user saw.
         for key, heading, empty in (('risks', '## Riskler', '- Kayıtlı risk yok.'), ('questions', '## Açık sorular', '- Açık soru yok.')):
-            items = payload.get(key, [])
+            items = visible(payload.get(key, []))
             lines += ['', heading]
             if not items: lines.append(empty)
             for it in items: lines += [f"- {m(it.get('text', ''))}"] + cite(it)

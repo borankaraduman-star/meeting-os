@@ -8,6 +8,98 @@ from .reports import store_owner
 
 MIN_NAMEABLE_SECONDS=4.0   # below this a diarization cluster is noise, not a voice the user should be asked to name
 
+# ---------------------------------------------------------------------------
+# Resolution
+#
+# A Kontrol item used to be a suggestion the queue recomputed from scratch every time: answering it changed
+# nothing, so the same item came back at every visit and the only way to shrink the queue was to hide things.
+# Every item now carries the version of the source it was derived from, and an answer is stored against that
+# version. Answered for this version → never asked again. Source changes (the transcript was corrected, a new
+# analysis ran) → the item is genuinely new and is asked again.
+#
+# "Geç" is not an answer about the content: it hides the item for this version and is counted on its own.
+# Nothing here treats silence, a skip or an export as confirmation.
+# ---------------------------------------------------------------------------
+RESULTS=('correct','corrected','skipped')
+
+try:   # the metrics half of the learning loop lands on its own branch; the merge must not need this file changed
+    from .learning import record_event
+except ImportError:   # pragma: no cover - exercised only before that branch merges
+    record_event=None
+
+def _event(store,action,**fields):
+    """A metrics hook must never be able to fail a user action. The recorder lands on its own branch, so a
+    keyword it does not know costs the detail, never the event."""
+    if record_event is None:return None
+    try:return record_event(store,action,**fields)
+    except TypeError:
+        try:return record_event(store,action)
+        except Exception:return None
+    except Exception:return None
+
+def ensure_results(store):
+    store.db.executescript('''
+    CREATE TABLE IF NOT EXISTS review_results(id INTEGER PRIMARY KEY,meeting TEXT,item_key TEXT,kind TEXT,source_version TEXT,result TEXT,created TEXT);
+    CREATE UNIQUE INDEX IF NOT EXISTS review_results_item ON review_results(meeting,item_key,source_version);
+    ''')
+
+def queue_key(item):
+    """What makes a Kontrol item the same item on the next visit. Deliberately not its wording or its
+    severity: a reason line that gains a decimal must not turn one answered question into a new one."""
+    kind=item.get('kind') or ''
+    if kind in ('suggested_name','unnamed_speaker','short_match'):tail=item.get('speaker_key') or str(item.get('segment_id'))
+    elif kind in ('task_owner','task_review'):tail=item.get('task') or ''
+    elif kind in ('glossary','word'):
+        from .correction_memory import _fold
+        tail=f"{item.get('segment_id')}:{_fold(item.get('original') or '')}"
+    elif kind=='marker':tail=f"{item.get('start')}"
+    else:tail=str(item.get('segment_id'))
+    return f'{kind}:{tail}'
+
+def transcript_version(store,mid,memory=None):
+    """The transcript this queue was read from. Correcting a word or naming a speaker changes it, and every
+    answer given against the old text is re-asked — which is exactly right: the text is not what it was.
+
+    `memory` is passed in by the queue, which has already paid for this meeting's fingerprint; the weekly
+    debt walks every meeting, and computing it twice per meeting is a whole second transcript read each."""
+    return 't:'+(memory or Memory(store)).current_hash(mid)[:16]
+
+def task_version(task):
+    """A task item's source is the analysis that produced it, not the whole transcript."""
+    return 'a:'+str(task.get('analysis'))
+
+def resolutions(store,mid):
+    """(item key, source version) → result, for one meeting."""
+    import sqlite3
+    try:rows=list(store.db.execute('SELECT item_key,source_version,result FROM review_results WHERE meeting=?',(mid,)))
+    except sqlite3.OperationalError:return {}
+    return {(r['item_key'],r['source_version']):r['result'] for r in rows}
+
+def resolve_review(store,mid,key,kind,source_version,result):
+    """Answer one Kontrol item: doğru · düzeltildi · geçildi. The answer belongs to the source version it was
+    given about, so a later correction to the same spot brings the item back rather than burying it."""
+    key=(key or '').strip()
+    if not key:raise ValueError('Kontrol maddesi gerekli')
+    if result not in RESULTS:raise ValueError('Geçersiz kontrol sonucu')
+    source_version=(source_version or '').strip() or transcript_version(store,mid)
+    ensure_results(store)
+    from .memory import now
+    with store.db:
+        store.db.execute('''INSERT INTO review_results(meeting,item_key,kind,source_version,result,created) VALUES(?,?,?,?,?,?)
+                            ON CONFLICT(meeting,item_key,source_version) DO UPDATE SET result=excluded.result,kind=excluded.kind,created=excluded.created''',
+                         (mid,key,kind or key.split(':')[0],source_version,result,now()))
+    _event(store,'review_resolve',object=key,outcome=result,scope=kind or '',meeting=mid)
+    return {'resolved':True,'key':key,'result':result,'source_version':source_version}
+
+def reopen_review(store,mid,key,source_version=None):
+    """Take an answer back — the item returns to the queue for the version it was answered on."""
+    ensure_results(store)
+    with store.db:
+        if source_version:cur=store.db.execute('DELETE FROM review_results WHERE meeting=? AND item_key=? AND source_version=?',(mid,key,source_version))
+        else:cur=store.db.execute('DELETE FROM review_results WHERE meeting=? AND item_key=?',(mid,key))
+    return {'reopened':bool(cur.rowcount),'key':key}
+
+
 def review_queue(store, mid, data_dir=None):
     rows=store.segments(mid)
     owner=store_owner(store)   # the mic label is a person: read raw, every queue item about the user said "Ben"
@@ -70,11 +162,29 @@ def review_queue(store, mid, data_dir=None):
     memory=Memory(store)
     for task in memory.actions(meeting=mid):
         if task.get('state') in ('done',)+RETIRED: continue
+        seg=(first_evidence(task.get('payload') or {}) or {}).get('segment_id')
         if not task.get('owner'):
-            seg=(first_evidence(task.get('payload') or {}) or {}).get('segment_id')
-            items.append({'segment_id':seg,'start':None,'speaker':None,'text':task['title'][:120],'kind':'task_owner','severity':2,'reason':'Görev sahibi belirsiz; kaynağı dinleyip sahibini yazın','task':task['id']})
-    items.sort(key=lambda i:(i['severity'],i['start'] if i['start'] is not None else 1e9))
-    return {'items':items,'count':len(items)}
+            items.append({'segment_id':seg,'start':None,'speaker':None,'text':task['title'][:120],'kind':'task_owner','severity':2,'reason':'Görev sahibi belirsiz; kaynağı dinleyip sahibini yazın','task':task['id'],'source_version':task_version(task)})
+        elif (task.get('payload') or {}).get('needs_review'):
+            # A task the analysis itself flagged — a doubtful owner, an ambiguous source, two readings of one
+            # promise — used to be a badge on the task and nothing else. It is a question with an answer, so it
+            # belongs in the queue with the same three buttons and the same resolution as everything else.
+            items.append({'segment_id':seg,'start':None,'speaker':task.get('owner'),'text':task['title'][:120],'kind':'task_review','severity':2,
+                          'reason':f"Görev kontrol bekliyor · sahibi “{task['owner']}”; kaynağı dinleyip doğrulayın",'task':task['id'],'source_version':task_version(task)})
+    version=transcript_version(store,mid,memory)
+    answered=resolutions(store,mid)
+    kept=[];settled_items=0;skipped=0
+    for item in items:
+        item.setdefault('source_version',version)
+        item['key']=queue_key(item)
+        result=answered.get((item['key'],item['source_version']))
+        if result is None:kept.append(item);continue
+        if result=='skipped':skipped+=1
+        else:settled_items+=1
+    kept.sort(key=lambda i:(i['severity'],i['start'] if i['start'] is not None else 1e9))
+    # `resolved` is what the person actually judged; `skipped` is counted apart because passing on an item is
+    # not a statement that it was right. A queue made shorter by skipping is not a queue that got better.
+    return {'items':kept,'count':len(kept),'resolved':settled_items,'skipped':skipped,'source_version':version}
 
 
 def review_debt(store, days=7, data_dir=None):
@@ -94,12 +204,14 @@ def review_debt(store, days=7, data_dir=None):
         day=local_day(row['created'])
         if day is None or not (first<=day<=today): continue
         meetings.append(row)
-    items=[];counts={}
+    items=[];counts={};resolved=0;skipped=0
     for row in meetings:
-        for item in review_queue(store,row['id'],data_dir)['items']:
+        queue=review_queue(store,row['id'],data_dir)
+        resolved+=queue.get('resolved',0);skipped+=queue.get('skipped',0)
+        for item in queue['items']:
             items.append({**item,'meeting':row['id'],'meeting_title':row['title'],'created':row['created']})
             counts[item['kind']]=counts.get(item['kind'],0)+1
     items.sort(key=lambda i:i['start'] if i['start'] is not None else 1e9)
     items.sort(key=lambda i:i['created'] or '',reverse=True)   # stable: newest meeting first within one severity
     items.sort(key=lambda i:i['severity'])
-    return {'days':int(days),'meetings':len(meetings),'counts':counts,'items':items,'count':len(items)}
+    return {'days':int(days),'meetings':len(meetings),'counts':counts,'items':items,'count':len(items),'resolved':resolved,'skipped':skipped}
