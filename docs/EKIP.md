@@ -1,5 +1,7 @@
 # Meeting OS — ekip rehberi
 
+> Teknik olmayan ekip arkadaşı için kısa yol: [docs/BASLANGIC.md](BASLANGIC.md) (paketi indir, Uygulamalar'a sürükle, aç). Bu belge ayrıntılı sürümdür.
+
 ## Ne yapar
 
 - Zoom (ya da başka) toplantısını Mac’inizde kaydeder: mikrofonunuz ve karşı taraf ayrı iki ses akışı.
