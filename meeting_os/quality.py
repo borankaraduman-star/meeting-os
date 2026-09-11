@@ -259,6 +259,75 @@ def replay_text(store):
             'items':[{k:r[k] for k in ('meeting','segment','model','wer','wer_no_filler')} for r in refs]}
 
 
+MAX_PAIRS=400
+
+
+def rule_pairs(store, limit=MAX_PAIRS):
+    """The (raw text, final text) pairs this Mac can re-run word rules over: segments where something changed
+    the text and the copy from before it survives (`pre_auto_text`, `pre_word_text`, `original_text`). Newest
+    last, capped — a replay is a regression check, not a full-table scan on every open.
+
+    Both halves stay on this Mac. Nothing here is uploaded, shared or written into a report; it is the same
+    local evidence `reference_set` already reads for word error rates."""
+    out=[]
+    for r in store.db.execute("""SELECT id,meeting,payload FROM segments WHERE payload LIKE '%pre_auto_text%'
+                                 OR payload LIKE '%pre_word_text%' OR payload LIKE '%original_text%' ORDER BY id DESC LIMIT ?""",(int(limit),)):
+        try: payload=json.loads(r['payload'])
+        except (TypeError,ValueError): continue
+        raw=_raw_text(payload);final=payload.get('text') or ''
+        if not raw or raw==final: continue
+        metrics=payload.get('metrics') or {}
+        was=[a.get('original') or '' for a in (metrics.get('auto_corrections') or [])+(metrics.get('word_corrections') or []) if a.get('original')]
+        out.append({'meeting':r['meeting'],'segment':r['id'],'raw':raw,'final':final,'was':was})
+    return out[::-1]
+
+
+def replay_rules(store, pairs=None, rules=None, data_dir=None):
+    """Would TODAY's word rules produce the text the user ended up with? (Codex #7, "mevcut metin replay'i
+    yeni kuralın etkisini yeniden uygulayarak sınamıyor".)
+
+    `replay_text` scores what the model got wrong. It says nothing about the rules, because the pairs it reads
+    were produced by whatever rule set was in force at the time. This one takes the same saved pairs and runs
+    the CURRENT set over the raw half:
+
+    * `matched` — today's rules turn the raw text into exactly what the user kept.
+    * `mismatched` — they do not. That is not automatically a regression: the user may have edited the sentence
+      for other reasons, which is why the mismatching pairs are listed rather than counted into a score.
+    * `unchanged` — today's rules do nothing at all to that raw text.
+
+    Per rule, `applied` is how many pairs it rewrites now and `was_applied` how many it rewrote then, so an old
+    and a new rule set can be compared on one fixed set of local examples. A rule that only appears in the
+    history is listed as `retired`. `version` fingerprints the rule set the numbers belong to.
+
+    Pure with respect to the database: nothing is written, no segment is touched, no rule is changed."""
+    from . import correction_memory as cm
+    rules=cm.all_rules(store) if rules is None else list(rules)
+    pairs=rule_pairs(store) if pairs is None else list(pairs)
+    plan=cm.compile_rules(rules,data_dir)
+    def row(original,replacement,source,state):
+        return {'original':original,'replacement':replacement,'source':source,'state':state,
+                'applied':0,'matched':0,'mismatched':0,'was_applied':0}
+    by_rule={cm._fold(r['original']):row(r['original'],r['replacement'],r.get('source','learned'),'current') for r in rules}
+    matched=mismatched=unchanged=0;misses=[]
+    for pair in pairs:
+        produced,applied=cm.apply_to_text(pair['raw'],plan)
+        ok=produced==pair['final']
+        if ok: matched+=1
+        else:
+            mismatched+=1
+            if len(misses)<20: misses.append({'meeting':pair.get('meeting'),'segment':pair.get('segment'),
+                                              'rules':[a['original'] for a in applied],'changed':produced!=pair['raw']})
+        if produced==pair['raw']: unchanged+=1
+        for a in applied:
+            r=by_rule.setdefault(cm._fold(a['original']),row(a['original'],a['replacement'],'?','current'))
+            r['applied']+=1;r['matched' if ok else 'mismatched']+=1
+        for original in pair.get('was') or []:
+            by_rule.setdefault(cm._fold(original),row(original,'','?','retired'))['was_applied']+=1
+    return {'pairs':len(pairs),'matched':matched,'mismatched':mismatched,'unchanged':unchanged,'rules':len(rules),
+            'version':cm.rules_version(rules),'mismatches':misses,
+            'by_rule':sorted(by_rule.values(),key=lambda r:(-r['applied'],-r['was_applied'],r['original']))}
+
+
 def replay(store, data_dir=None, *, identity=True, text=True, timeline=False, threshold=None, margin=None):
     """Run the replays, keep the full result under <data_dir>/quality/, return (summary, path).
 
@@ -267,7 +336,10 @@ def replay(store, data_dir=None, *, identity=True, text=True, timeline=False, th
     result={'date':date.today().isoformat()}
     if identity: result['identity']=replay_identity(store,threshold,margin)
     if timeline: result['timeline']=replay_timeline(store,threshold,margin)
-    if text: result['text']=replay_text(store)
+    if text:
+        result['text']=replay_text(store)
+        # The text replay scores the MODEL; this scores the RULES, on the same local pairs.
+        result['text']['rules']=replay_rules(store,data_dir=data_dir)
     folder=Path(data_dir or Path(store.path).parent)/'quality';folder.mkdir(parents=True,exist_ok=True)
     path=folder/f"replay-{result['date']}.json";path.write_text(json.dumps(result,ensure_ascii=False,indent=1),encoding='utf-8')
     summary={'path':str(path)}
@@ -278,7 +350,9 @@ def replay(store, data_dir=None, *, identity=True, text=True, timeline=False, th
         t=result['timeline']
         summary['timeline']={k:t[k] for k in ('meetings','clusters','auto_correct','auto_wrong','abstained_wrong','abstained_ok','unknown_named',
                                               'auto_precision','known_recall','undated_samples','threshold','margin')}
-    if text: summary['text']={k:result['text'][k] for k in ('edits','mean_wer','mean_wer_no_filler')}
+    if text:
+        summary['text']={k:result['text'][k] for k in ('edits','mean_wer','mean_wer_no_filler')}
+        summary['text']['rules']={k:result['text']['rules'][k] for k in ('pairs','matched','mismatched','unchanged','rules','version')}
     return summary,result
 
 
@@ -476,24 +550,69 @@ def _names_metrics(store, meeting_ids):
     return {'names_reviewed':ratio(reviewed,auto),'names_falsified':ratio(falsified,reviewed),'names_unreviewed':ratio(auto-reviewed,auto)}
 
 
-def _word_repeat_metric(store, meetings):
-    """A word the user taught, wrong again in a later raw transcript. One (word, meeting) pair is one check:
-    the numerator counts the pairs where the old spelling is still there, the denominator every pair that
-    could have gone wrong. Only words this Mac was explicitly taught before the meeting started are counted,
-    and only their exact spelling — the same bar `apply_rules` uses before it rewrites anything."""
-    from .correction_memory import taught_rules, _pattern
+REPEAT_DAYS=90   # how far back `word_repeat_errors` reads when nobody says
+
+
+def word_repeat_errors(store, since_days=None, meetings=None, now=None):
+    """A word the user taught, and what LATER meetings did with it (Codex #7, the measurement half).
+
+    For every taught word and every meeting recorded after it was taught, one check: did the RAW transcript —
+    what the model wrote, before this app rewrote anything — contain the old spelling again? If it did, the
+    hint did not work for that word, and the second question is whether the automatic rule caught it: the same
+    exact-spelling pattern is run over the text the user actually read.
+
+    * `checks` / `repeats` per word are the (word, meeting) pairs: one meeting counts once however many times
+      the word appears in it, so a single unlucky transcript cannot look like ten errors.
+    * `fixed` / `unfixed` split the repeats by what the final text says. "3 kez tekrar etti, hepsi düzeltildi"
+      is a very different sentence from "3 kez tekrar etti, 2'si düzeltilmedi", and only this tells them apart.
+    * Per-word numbers are **local only**: Ayarlar → Sesler ve sözlük shows them, the daily summary carries the
+      pooled rate and nothing else, and no word ever leaves this Mac through either.
+
+    Only words taught BEFORE the meeting started are counted — a rule cannot be blamed for a transcript that
+    predates it — and only the exact spelling, the same bar `apply_rules` uses before it rewrites anything."""
+    from .correction_memory import taught_rules, _pattern, _fold
     try: rules=[r for r in taught_rules(store) if r.get('created')]
-    except Exception: return ratio(0,0)
-    if not rules: return ratio(0,0)
-    patterns=[(r,_pattern(r['original'])) for r in rules]
+    except Exception: rules=[]
+    if meetings is None:
+        meetings=[m for m in store.meetings() if m['status']=='complete']
+        days=REPEAT_DAYS if since_days is None else since_days
+        if days:
+            horizon=((now or datetime.now(timezone.utc))-timedelta(days=max(1,int(days)))).isoformat()
+            meetings=[m for m in meetings if (m['created'] or '')>=horizon]
+    meetings=list(meetings)
+    if not rules: return {'words':[],'checks':0,'hits':0,'rate':ratio(0,0),'meetings':len(meetings)}
+    words={}
+    for r in rules:
+        words.setdefault(_fold(r['original']),{'original':r['original'],'replacement':r['replacement'],'folded':_fold(r['original']),
+                                               'created':r['created'],'checks':0,'repeats':0,'fixed':0,'unfixed':0,'last':None,
+                                               '_pattern':_pattern(r['original'])})
     checks=hits=0
-    for m in meetings:
-        raw=[_raw_text(json.loads(p[0] or '{}')) for p in store.db.execute('SELECT payload FROM segments WHERE meeting=?',(m['id'],))]
-        for rule,pattern in patterns:
-            if rule['created']>=m['created']: continue   # taught after this meeting: it was never asked to help here
-            checks+=1
-            if any(pattern.search(text) for text in raw): hits+=1
-    return ratio(hits,checks)
+    for m in sorted(meetings,key=lambda m:m['created'] or ''):
+        # json_extract, not json.loads: this walks every segment of every meeting in the window and the
+        # payload carries the word timings too. The four keys are `_raw_text`'s, in `_raw_text`'s order.
+        rows=store.db.execute('''SELECT json_extract(payload,'$.pre_auto_text'),json_extract(payload,'$.pre_word_text'),
+                                        json_extract(payload,'$.original_text'),json_extract(payload,'$.text')
+                                 FROM segments WHERE meeting=?''',(m['id'],)).fetchall()
+        if not rows: continue
+        raw=[r[0] or r[1] or r[2] or r[3] or '' for r in rows];final=[r[3] or '' for r in rows]
+        for w in words.values():
+            if w['created']>=(m['created'] or ''): continue   # taught after this meeting: it was never asked to help here
+            w['checks']+=1;checks+=1
+            seen=[i for i,text in enumerate(raw) if w['_pattern'].search(text)]
+            if not seen: continue
+            w['repeats']+=1;hits+=1;w['last']=m['created']
+            if any(w['_pattern'].search(final[i]) for i in seen): w['unfixed']+=1
+            else: w['fixed']+=1
+    out=[{k:v for k,v in w.items() if k!='_pattern'} for w in words.values()]
+    out.sort(key=lambda w:(-w['repeats'],-w['checks'],w['original']))
+    return {'words':out,'checks':checks,'hits':hits,'rate':ratio(hits,checks),'meetings':len(meetings)}
+
+
+def _word_repeat_metric(store, meetings):
+    """The day's pooled repeat rate, from the one function that measures it (`word_repeat_errors`). One
+    (word, meeting) pair is one check; the numerator is the pairs where the old spelling was written again."""
+    try: return word_repeat_errors(store,meetings=meetings)['rate']
+    except Exception: return ratio(0,0)
 
 
 def _analysis_metrics(store, meeting_ids, day):

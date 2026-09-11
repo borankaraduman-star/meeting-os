@@ -17,9 +17,11 @@ Neither file ever carries audio, transcript text, meeting ids or meeting titles.
 it tells one voice from another, it does not play back and it cannot be turned into speech.
 
 Conflicts. Words are keyed by (host, folded original), so two Macs never overwrite each other's line and a
-publish never drops a teammate's. When two hosts teach the same word differently the local Mac's own rule wins;
-between two teammates the newest one wins. Both are still listed in Ayarlar → Sesler ve sözlük with the Mac
-that taught them, and either can be switched off row by row (`team_words.enabled`) without changing what the
+publish never drops a teammate's. When two hosts teach the same word differently the local Mac's own rule wins
+silently. When there is no local rule, neither teammate wins: the newest line used to, which let one Mac's clock
+decide how a colleague's name is written here, so the disagreement is now a Kontrol question ("Ekipte iki yazım:
+X / Y — hangisi?") and the answer is taught locally. Both are still listed in Ayarlar → Sesler ve sözlük with the
+Mac that taught them, and either can be switched off row by row (`team_words.enabled`) without changing what the
 other Mac shares. A voice sample is keyed by its own content hash, so importing the same file twice adds
 nothing, and a local sample is never overwritten — the per-person cap is filled by this Mac's own samples first.
 """
@@ -182,8 +184,20 @@ def pull_words(store, settings, data_dir=None):
 
 def team_rules(store):
     """Every team word this Mac knows about, including the ones it is not applying. `active` says which rule is
-    the one that actually rewrites text: a word this Mac taught itself always wins, and between two teammates the
-    newest one does. The loser is still listed — otherwise "why is it writing Ayşen?" has no answer on screen."""
+    the one that actually rewrites text; the loser is still listed — otherwise "why is it writing Ayşen?" has no
+    answer on screen.
+
+    Who wins:
+
+    * **This Mac's own rule always wins, silently.** A word the user taught here is not a vote; nothing a
+      teammate publishes overrules what the person sitting in front of this screen typed.
+    * **Two teammates, two different spellings, nothing local → nobody wins.** Picking the newest line was one
+      Mac's clock deciding how this Mac writes a colleague's name, and the loser was invisible unless the user
+      went looking in Ayarlar. Both rows are marked `conflict` and neither rewrites anything; the question goes
+      to Kontrol as "Ekipte iki yazım: X / Y — hangisi?" and the answer teaches a local rule, which then wins
+      by the first bullet (Codex, 11 Sep 2026, #7).
+    * **Two teammates who agree** are not a conflict: the same spelling from two Macs still applies, newest line
+      first, exactly as before."""
     _ensure_words(store)
     local = {_fold(r['original']) for r in taught_rules(store)}
     rows = []
@@ -191,14 +205,34 @@ def team_rules(store):
         rows.append({'original': r['original'], 'replacement': r['replacement'], 'source': 'team', 'host': r['host'],
                      'folded': r['folded'], 'created': r['created'], 'updated': r['updated'],
                      'enabled': bool(r['enabled'] if r['enabled'] is not None else 1), 'count': 1, 'meetings': 0,
-                     'vocabulary_added': False, 'active': False})
-    best = {}
+                     'vocabulary_added': False, 'active': False, 'conflict': False})
+    groups = {}
     for r in rows:
         if not r['enabled'] or r['folded'] in local: continue
-        current = best.get(r['folded'])
-        if current is None or (r['updated'] or '') > (current['updated'] or ''): best[r['folded']] = r
-    for r in best.values(): r['active'] = True
+        groups.setdefault(r['folded'], []).append(r)
+    for group in groups.values():
+        if len({r['replacement'] for r in group}) > 1:
+            for r in group: r['conflict'] = True
+            continue
+        max(group, key=lambda r: (r['updated'] or '', r['host']))['active'] = True
     return rows
+
+
+def team_conflicts(store):
+    """The words two teammates spell differently and this Mac has no rule of its own for. One entry per word,
+    with every spelling on offer and the Mac behind it, and a `version` that changes when the offers do — so an
+    answered question stays answered until the team actually changes its mind (`review.resolve_review` keys on
+    it). Nothing here is a ban and nothing here is published: the answer becomes a LOCAL taught rule."""
+    groups = {}
+    for r in team_rules(store):
+        if r.get('conflict'): groups.setdefault(r['folded'], []).append(r)
+    out = []
+    for folded, group in sorted(groups.items()):
+        options = sorted(({'replacement': r['replacement'], 'host': r['host'], 'updated': r['updated'] or ''} for r in group),
+                         key=lambda o: (o['replacement'], o['host']))
+        out.append({'original': group[0]['original'], 'folded': folded, 'options': options,
+                    'version': 'w:' + '|'.join(_fold(o['replacement']) for o in options)})
+    return out
 
 
 def applied_team_rules(store):
@@ -219,7 +253,8 @@ def team_word_toggle(store, original, host, enabled=True):
 
 
 def hint_terms(store):
-    """The right spellings the team taught, for the ASR hint list. Appended to the hint at load time and never
+    """The right spellings the team taught, for the ASR hint list. A word the team disagrees about is not in
+    it: an unresolved conflict has no team spelling yet, only a question in Kontrol. Appended to the hint at load time and never
     written into `vocabulary.txt`: the file on this disk is the user's own list, not a copy of everyone else's."""
     try: return [r['replacement'] for r in applied_team_rules(store)]
     except Exception: return []

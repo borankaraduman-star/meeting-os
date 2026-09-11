@@ -38,6 +38,10 @@ ACTIONS = (
     'export_ok', 'team_join', 'undo',
 )
 SCOPES = ('segment', 'speaker', 'meeting', 'global')
+# Why a decision was made, when the app can honestly tell. An enum, like the actions: a free-text "why" is a
+# sentence, and this table never stores sentences. `team_conflict` is a word taught to settle two teammates'
+# spellings (#7); the task reasons are the ones the edit sheet offers (#3).
+REASONS = ('team_conflict', 'inference_error', 'changed_later')
 SOURCES = ('human', 'auto')
 OUTCOMES = ('applied', 'reverted', 'noop')
 
@@ -49,7 +53,7 @@ EVENT_LIMIT = 500
 
 SCHEMA = (
     '''CREATE TABLE IF NOT EXISTS learning_events(id INTEGER PRIMARY KEY, time TEXT, action TEXT, object TEXT,
-        version TEXT, scope TEXT, source TEXT, outcome TEXT, undo_of INTEGER, app_version TEXT)''',
+        version TEXT, scope TEXT, source TEXT, outcome TEXT, undo_of INTEGER, app_version TEXT, reason TEXT)''',
     'CREATE INDEX IF NOT EXISTS learning_events_time ON learning_events(time)',
     'CREATE INDEX IF NOT EXISTS learning_events_dedupe ON learning_events(action,object,time)',
 )
@@ -61,6 +65,11 @@ def _ensure(store):
     if getattr(store, '_learning_ready', False): return
     with store.db:
         for statement in SCHEMA: store.db.execute(statement)
+        # `reason` arrived after the table did (1.2.84). A database written by 1.2.80 gets the column here;
+        # the rest of the code may then write it without asking which release made the file.
+        if 'reason' not in {r[1] for r in store.db.execute('PRAGMA table_info(learning_events)')}:
+            try: store.db.execute('ALTER TABLE learning_events ADD COLUMN reason TEXT')
+            except Exception: pass
     try: store._learning_ready = True
     except Exception: pass   # an object that will not take an attribute simply pays for the CREATEs again
 
@@ -84,7 +93,7 @@ def _text(value, limit=OBJECT_LIMIT):
 
 
 def record_event(store, action, *, object=None, version=None, scope='meeting', source='human',
-                 outcome='applied', undo_of=None, now=None):
+                 outcome='applied', undo_of=None, reason=None, now=None):
     """Append one event and return its id (or None). NEVER raises: the user's action already succeeded, and
     an observability row is not allowed to turn it into an error on screen.
 
@@ -95,6 +104,7 @@ def record_event(store, action, *, object=None, version=None, scope='meeting', s
         scope = scope if scope in SCOPES else 'meeting'
         source = source if source in SOURCES else 'human'
         outcome = outcome if outcome in OUTCOMES else 'applied'
+        reason = reason if reason in REASONS else None
         moment = now or datetime.now(timezone.utc)
         stamp = moment.isoformat()
         obj = _text(object); ver = _text(version, 40)
@@ -108,9 +118,9 @@ def record_event(store, action, *, object=None, version=None, scope='meeting', s
         if row is not None: return row[0]
         with store.db:
             cur = store.db.execute(
-                'INSERT INTO learning_events(time,action,object,version,scope,source,outcome,undo_of,app_version) VALUES(?,?,?,?,?,?,?,?,?)',
+                'INSERT INTO learning_events(time,action,object,version,scope,source,outcome,undo_of,app_version,reason) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (stamp, action, obj, ver, scope, source, outcome,
-                 int(undo_of) if isinstance(undo_of, int) and not isinstance(undo_of, bool) else None, _version()))
+                 int(undo_of) if isinstance(undo_of, int) and not isinstance(undo_of, bool) else None, _version(), reason))
         return cur.lastrowid
     except Exception:
         return None

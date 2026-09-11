@@ -362,7 +362,11 @@ def main(supervised=False):
                     if not args.path: raise ValueError('glossary.jsonl yolu gerekli')
                     output(G.import_file(args.path,data_dir,shared=True))
                 elif args.action=='show': output({'count':len(G.load(args.db.parent,ROOT)),'entries':G.load(args.db.parent,ROOT)[:50]})
-                elif args.action=='hint': output({'hint':G.stt_hint(G.load(args.db.parent,ROOT))})
+                elif args.action=='hint':
+                    # The hint a cloud job would really send: ranked, not file order, and it says what did not fit.
+                    entries,from_file=G.load(args.db.parent,ROOT,with_counts=True,store=store)
+                    ranked=G.ranked_hint(store,entries,data_dir=args.db.parent,from_file=from_file)
+                    output({'hint':ranked['hint'],'included':len(ranked['included']),'excluded':ranked['excluded'],'tiers':ranked['tiers'],'characters':ranked['characters']})
                 else:
                     if not args.meeting: raise ValueError('--meeting gerekli')
                     llm=None

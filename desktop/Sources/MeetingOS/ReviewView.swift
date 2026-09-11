@@ -1,8 +1,17 @@
 import SwiftUI
 
+/// One spelling on offer in a team disagreement, and the Mac that taught it.
+struct TeamSpelling:Identifiable, Equatable {
+    let replacement:String; let host:String
+    var id:String { host+":"+replacement }
+}
+
 /// One row of the critical review queue: why this spot deserves a listen, and the one action that fixes it.
 struct ReviewItem:Identifiable, Equatable {
     let id:String; let segment:Int?; let start:Double?; let speaker:String; let text:String; let kind:String; let severity:Int; let reason:String; let suggested:String; let speakerKey:String; let task:String; let original:String; let replacement:String; let verified:Bool; let count:Int
+    /// `word_conflict` only: the spellings two teammates taught, each with the Mac it came from. The user
+    /// picks one and it is taught HERE; nothing is changed on anybody else's Mac.
+    let options:[TeamSpelling]
     /// What the queue recognises this item by on the next visit, and the version of the source it came from.
     /// An answer is stored against the pair: answered for this version → gone for good; the transcript or the
     /// analysis changes → it is a new question and is asked again.
@@ -12,6 +21,10 @@ struct ReviewItem:Identifiable, Equatable {
         severity=d["severity"] as? Int ?? 3; reason=d["reason"] as? String ?? ""; suggested=d["suggested"] as? String ?? ""; speakerKey=d["speaker_key"] as? String ?? ""; task=d["task"] as? String ?? ""
         original=d["original"] as? String ?? ""; replacement=d["replacement"] as? String ?? ""; verified=d["verified"] as? Bool ?? false
         count=d["count"] as? Int ?? 0
+        options=(d["options"] as? [[String:Any]] ?? []).compactMap { o in
+            guard let r=o["replacement"] as? String, !r.isEmpty else { return nil }
+            return TeamSpelling(replacement:r,host:o["host"] as? String ?? "")
+        }
         sourceVersion=d["source_version"] as? String ?? ""
         let bridged=d["key"] as? String ?? ""
         key=bridged.isEmpty ? kind+":"+(segment.map(String.init) ?? task) : bridged
@@ -28,6 +41,7 @@ struct ReviewItem:Identifiable, Equatable {
         case "marker": return "İşaretlediğiniz an"
         case "glossary": return "Sözlük düzeltmesi"
         case "word": return "Kelime: “\(original)” muhtemelen “\(replacement)”"
+        case "word_conflict": return "Ekipte iki yazım: “\(original)”"
         default: return "Kontrol edin"
         }
     }
@@ -112,6 +126,16 @@ struct ReviewView:View {
                             Button("Adlandır…") { model.editRow=row;model.editName=row.name;model.editText=row.text;model.clean=false }
                         }
                         if item.kind=="task_owner" || item.kind=="task_review" { Button("Görevlerim’de aç") { model.navigate { model.tab="actions" } } }
+                        if item.kind=="word_conflict" {
+                            // One button per spelling the team offers. Choosing one teaches it on THIS Mac —
+                            // it wins here from now on and nobody else's Mac is changed by the answer.
+                            ForEach(item.options) { option in
+                                Button("“\(option.replacement)”") { Task { await model.chooseTeamSpelling(item,replacement:option.replacement) } }
+                                    .buttonStyle(.borderedProminent).disabled(model.busy)
+                                    .help(option.host.isEmpty ? "Bu yazımı bu Mac’te öğret" : "\(option.host) bu yazımı öğretti · seçince bu Mac’te bu yazım kullanılır")
+                                    .accessibilityIdentifier("wordConflict-\(item.original)-\(option.replacement)")
+                            }
+                        }
                         if item.kind=="word" {
                             // One click teaches the word: this meeting is fixed everywhere and later meetings correct near misses on their own.
                             Button("Düzelt ve öğret") { Task { await model.applyWord(item) } }.buttonStyle(.borderedProminent).disabled(model.busy).help("Bu toplantıdaki bütün geçişleri düzeltir ve kelimeyi öğrenir").accessibilityIdentifier("wordApply-\(item.segment.map(String.init) ?? item.original)")

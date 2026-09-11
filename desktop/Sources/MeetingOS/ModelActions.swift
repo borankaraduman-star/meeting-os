@@ -71,7 +71,7 @@ extension Model {
         if let r=try? await request(["action":"review_debt","days":7]) {
             debt=(r["items"] as? [[String:Any]] ?? []).map(DebtItem.init)
             let counts=r["counts"] as? [String:Int] ?? [:]
-            let names=["unnamed_speaker":"isimsiz konuşmacı","suggested_name":"isim onayı","glossary":"sözlük","task_owner":"sahipsiz görev","short_match":"kısa eşleşme","ambiguous":"çakışma","marker":"işaret","word":"kelime"]
+            let names=["unnamed_speaker":"isimsiz konuşmacı","suggested_name":"isim onayı","glossary":"sözlük","task_owner":"sahipsiz görev","short_match":"kısa eşleşme","ambiguous":"çakışma","marker":"işaret","word":"kelime","word_conflict":"ekip yazımı"]
             debtSummary=counts.sorted { $0.value>$1.value }.map { "\($0.value) \(names[$0.key] ?? $0.key)" }.joined(separator:", ")
         }
     }
@@ -278,6 +278,17 @@ extension Model {
         do { let r=try await request(["action":"word_apply","meeting":mid,"original":item.original,"replacement":item.replacement])
             activity=Model.wordLearnedLine(original:item.original,replacement:item.replacement,fixes:r["fixes"] as? Int ?? r["segments"] as? Int ?? 0)
             await refresh(); await loadReview() }
+        catch { self.error=error.localizedDescription }
+    }
+    /// "Ekipte iki yazım: X / Y — hangisi?": the answer is a rule taught HERE, which then wins over both
+    /// teammates' lines everywhere on this Mac. It is not a vote and it changes nothing in the team folder —
+    /// the other Macs keep what they taught. The Kontrol item is closed in the same call.
+    func chooseTeamSpelling(_ item:ReviewItem,replacement:String) async {
+        guard let mid=selected, !item.original.isEmpty, !replacement.isEmpty else { return }
+        do { let r=try await request(["action":"learn_word","meeting":mid,"original":item.original,"replacement":replacement,
+                                      "reason":"team_conflict","key":item.key,"kind":item.kind,"source_version":item.sourceVersion])
+            activity=Model.wordLearnedLine(original:item.original,replacement:replacement,fixes:r["fixes"] as? Int ?? r["segments"] as? Int ?? 0)
+            await refresh(); await loadReview(); await loadWordRules() }
         catch { self.error=error.localizedDescription }
     }
     /// Doğru · Düzelt… · Geç on any Kontrol item. The answer belongs to the version of the source the item
@@ -510,21 +521,42 @@ struct WordRule:Identifiable, Equatable {
     let original:String; let replacement:String; let source:String; let count:Int; let meetings:Int; let created:String; let vocabularyAdded:Bool
     /// Team rows only: the Mac that taught the word, whether this Mac applies it, and whether the user
     /// switched it off here. Two Macs can teach the same word, so the host is part of the identity.
-    let host:String; let enabled:Bool; let active:Bool
+    /// `conflict` is the third reason a team row does not apply: two teammates spell it differently and
+    /// nobody on this Mac has settled it — Kontrol asks rather than letting the newest line win.
+    let host:String; let enabled:Bool; let active:Bool; let conflict:Bool
+    /// How often a LATER meeting's raw transcript wrote the old spelling again, and how many of those the
+    /// rule then fixed. Local numbers: they are read from this Mac's own meetings and never shared.
+    let repeats:Int; let repeatsFixed:Int
     var id:String { source+":"+host+":"+original }
     init(_ d:[String:Any]) {
         original=d["original"] as? String ?? ""; replacement=d["replacement"] as? String ?? ""
         source=d["source"] as? String ?? ""; count=d["count"] as? Int ?? 0; meetings=d["meetings"] as? Int ?? 0
         created=d["created"] as? String ?? ""; vocabularyAdded=d["vocabulary_added"] as? Bool ?? false
         host=d["host"] as? String ?? ""; enabled=d["enabled"] as? Bool ?? true; active=d["active"] as? Bool ?? true
+        conflict=d["conflict"] as? Bool ?? false
+        repeats=d["repeats"] as? Int ?? 0; repeatsFixed=d["repeats_fixed"] as? Int ?? 0
     }
     var isTeam:Bool { source=="team" }
+    /// "3 kez tekrar etti, hepsi düzeltildi" — the sentence that says whether teaching the word was enough.
+    /// Empty when the word has never come back wrong: a rule with nothing to report says nothing.
+    var repeatLine:String {
+        guard repeats>0 else { return "" }
+        if repeatsFixed>=repeats { return "\(repeats) kez tekrar etti, hepsi düzeltildi" }
+        if repeatsFixed==0 { return "\(repeats) kez tekrar etti, düzeltilmedi" }
+        return "\(repeats) kez tekrar etti, \(repeats-repeatsFixed) tanesi düzeltilmedi"
+    }
     /// "taught" is a word the user corrected by hand; "learned" is one the app inferred from repeats;
     /// "team" is one a teammate taught on their Mac and shared through the team folder.
     var sourceLabel:String { source=="taught" ? "öğretildi" : (isTeam ? "ekipten" : "öğrenildi") }
     var line:String { isTeam ? "“\(original)” → “\(replacement)” · ekipten" : "“\(original)” → “\(replacement)” · \(sourceLabel) · \(meetings) toplantı" }
-    /// Why a team row is listed but not applied: switched off here, or beaten by this Mac's own word.
-    var teamNote:String { !isTeam ? "" : (!enabled ? "bu Mac’te kapalı" : (active ? "" : "bu Mac’in kendi yazımı öncelikli")) }
+    /// Why a team row is listed but not applied: switched off here, beaten by this Mac's own word, or waiting
+    /// for the user to say which of two team spellings is right.
+    var teamNote:String {
+        guard isTeam else { return "" }
+        if !enabled { return "bu Mac’te kapalı" }
+        if active { return "" }
+        return conflict ? "ekipte iki yazım var · Kontrol’de soruluyor" : "bu Mac’in kendi yazımı öncelikli"
+    }
 }
 
 /// One place in the app a jump can send the user back to: which meeting was open, which tab, what the

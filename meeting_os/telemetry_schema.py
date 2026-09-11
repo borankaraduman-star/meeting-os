@@ -156,6 +156,9 @@ ALLOWED = {
         'echo_windows_skipped': NUM, 'mic_gated_windows': NUM, 'echo_segments': NUM,
         'identity': {'embedded': NUM, 'named': NUM, 'suggested': NUM, 'fed': NUM},
         'markers': NUM, 'glossary_suggestions': NUM,
+        # How many spelling-hint terms fitted the 900-character budget and how many did not. Numbers only:
+        # the terms themselves are words people said and never leave this Mac (Codex #7).
+        'hint_included': NUM, 'hint_excluded': NUM,
         'job_usage': {'cpu_seconds': NUM, 'peak_rss_mb': NUM, 'wall_seconds': NUM, 'low_priority': BOOL, 'upload_workers': NUM},
         'speakers': Map({'segments': NUM, 'seconds': NUM, 'clusters': NUM, 'similarity': NUM,
                          'named': BOOL, 'name': NULL, 'suggested': NULL}),

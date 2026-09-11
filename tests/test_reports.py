@@ -71,6 +71,16 @@ class CaptureBlockTests(unittest.TestCase):
             self.assertIsNone(reports.build_meeting_report(s,other,data)['capture'])
             s.close()
 
+    def test_the_report_says_how_the_spelling_hint_budget_was_spent_and_never_which_words(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);s=Store(data/'meeting-os.sqlite')
+            mid=s.create_meeting('Kelime',{'hint_included':['Splendo','Trendyol'],'hint_excluded':7})
+            s.add_segment(mid,Segment(0,5,'Merhaba','system','Konuşmacı 1'));s.status(mid,'complete')
+            report=reports.build_meeting_report(s,mid,data)
+            self.assertEqual((report['hint_included'],report['hint_excluded']),(2,7))
+            self.assertNotIn('Splendo',json.dumps(report,ensure_ascii=False))   # counts travel, words do not
+            s.close()
+
 class ReportPrivacyTests(unittest.TestCase):
     """The Settings caption promises numbers only. The report is written into iCloud Drive or a team folder, so
     the meeting title and the people in it stay out of it unless the user turns transcript sharing on."""

@@ -33,6 +33,7 @@ Yerel SQLite veritabanında, diğer geç tablolar gibi ilk kullanımda oluşur (
 | `source` | `human` · `auto` |
 | `outcome` | `applied` · `reverted` · `noop` |
 | `undo_of` | geri alınan olayın `id`'si ya da boş |
+| `reason` | kararın nedeni, **yalnız uygulama dürüstçe biliyorsa**: `team_conflict` · `inference_error` · `changed_later` (enum; listede olmayan değer yazılmaz) |
 | `app_version` | kaydı yazan uygulama sürümü |
 
 **Eylemler:** `record_start`, `record_stop`, `name_confirm`, `name_correct`, `name_reject`, `segment_pin`,
@@ -109,6 +110,79 @@ sözü odur.
   satırlarını yeni kimliğe `carried_from` ile kopyalar. Eşleştirme `memory.same_task` — `dedupe_actions`'ın
   kullandığı kural (sahip aynı, normalize edilmiş başlık örtüşmesi), kimlik eşitliği değil.
 
+## Kelime döngüsü (1.2.84, #7)
+
+Kelime öğrenmesinin eksik halkası model değil **ölçümdü**: hangi kelimenin ipucuna girdiği, ham STT'nin aynı
+hatayı yine yapıp yapmadığı ve bugünün kurallarının eski örneklerde ne yapacağı görünmüyordu. Dört parça:
+
+### 1. Aynı 900 karakter, kanıta göre sıralanıyor
+
+Bulut STT'ye giden yazım ipucu bütçesi değişmedi; **harcanma sırası** değişti. Önceden dosyaların okunma
+sırasına göre kesiliyordu, yani modelin her seferinde yanlış yazdığı kelime ile hiç yanlış yazmadığı kelime
+aynı önceliğe sahipti. `glossary.rank_hint_terms` saf bir fonksiyon; sıralama şu:
+
+1. **`repeat`** — öğretilmiş, ama **ham** transkript eski yazımı yine yazmış olan kelimeler. İpucu tam olarak
+   bunlar için var: kural metni düzeltir, ipucu hatanın olmasını engellemeye çalışır.
+2. **`recent`** — bu Mac'te son 30 günde öğretilenler.
+3. **`verified`** — yerelde doğrulanmış diğer yazımlar: daha eski öğretmeler ve "bu doğru" denen kelimeler.
+4. **`team`** — ekip arkadaşlarının öğrettikleri (`team_knowledge.hint_terms`).
+5. **`entries`** — sözlük terimleri, `source_count` ve sonra dosya sırası.
+6. **`vocabulary`** — kullanıcının düz listesi.
+
+Katlanmış yazıma göre tekilleştirilir, bütçe dolunca durur. Sonuç **ne girdiğini (`hint_included`) ve kaç
+terimin giremediğini (`hint_excluded`)** söyler: `openrouter-finalize` sonucunda ve toplantı metadatasında
+terimlerle, toplantı raporunda **yalnız sayıyla** (rapor ekip klasörüne gider; kelime içeriktir). CLI:
+`meeting_os glossary hint`.
+
+### 2. Ekip çatışması kazanan seçmez, soru sorar
+
+İki Mac aynı kelimeyi farklı öğrettiyse ve **bu Mac'te kendi kuralı yoksa**, eskiden *en yeni satır*
+kazanıyordu — yani bir meslektaşın adının burada nasıl yazılacağına başka bir Mac'in saati karar veriyordu.
+Artık hiçbiri uygulanmaz (`team_knowledge.team_rules` → `conflict`), ikisi de Ayarlar'da görünür ve Kontrol'e
+tek bir madde gelir: **“Ekipte iki yazım: X / Y — hangisi?”** (`kind: word_conflict`).
+
+- Madde normal Kontrol mekaniğiyle kapanır (`review.resolve_review`); anahtarı **kelimedir**, bölüm değil, bu
+  yüzden bir kez cevaplanır. `source_version` iki yazımdan üretilir: ekip fikrini değiştirirse yeniden sorulur.
+- Cevap **yerel bir kural öğretir** (`word_teach`, `reason='team_conflict'`) ve yerel kural her zaman sessizce
+  kazanır. Kimsenin dosyasına dokunulmaz, kimseye yasak konmaz, çoğunluk oyu yoktur.
+- İki Mac **aynı** yazımı öğrettiyse bu bir çatışma değildir: eskisi gibi uygulanır.
+
+### 3. Tekrar eden hatayı ölçmek
+
+`quality.word_repeat_errors(store, since_days)` her öğretilen kelime için, **kuraldan sonra** kaydedilmiş her
+toplantıda tek bir soru sorar: ham transkript (`pre_auto_text` / `pre_word_text` / `original_text`) eski yazımı
+yine içeriyor mu? İçeriyorsa ikinci soru: kullanıcının okuduğu **son** metinde düzeltilmiş mi?
+
+- Bir (kelime, toplantı) çifti **bir** kontroldür: bir transkriptte kelime on kez geçse de bir sayılır.
+- `fixed` / `unfixed` ayrımı önemlidir; “3 kez tekrar etti, hepsi düzeltildi” ile “3 kez tekrar etti, 2 tanesi
+  düzeltilmedi” aynı cümle değildir.
+- **Kelime bazlı sayılar yalnız burada kalır:** Ayarlar → Sesler ve sözlük → Öğrenilen kelimeler satırında.
+  Günlük özet (`daily_summary.word_repeat_errors`) aynı fonksiyondan **havuzlanmış oranı** alır ve hiçbir
+  kelime taşımaz.
+- Kuraldan **önce** kaydedilmiş toplantı kanıt değildir; kural o transkripte yardım etmesi istenmemiştir.
+
+### 4. Kuralları eski örneklerde yeniden çalıştırmak
+
+`quality.replay_text` **modeli** puanlar ve kurallar hakkında bir şey söylemez, çünkü okuduğu çiftleri o günkü
+kural kümesi üretmiştir. `quality.replay_rules(store)` aynı yerel (ham metin, son metin) çiftlerini alır ve
+**bugünkü** kural kümesini ham yarısına uygular:
+
+- `matched` — bugünkü kurallar kullanıcının bıraktığı metnin aynısını üretiyor.
+- `mismatched` — üretmiyor. Bu tek başına gerileme demek değildir (kullanıcı cümleyi başka nedenle de
+  düzeltmiş olabilir), bu yüzden puan değil **liste** verilir.
+- `unchanged` — bugünkü kurallar o metne hiç dokunmuyor.
+- Kural bazında `applied` (bugün) ve `was_applied` (o gün) ayrı durur; artık var olmayan bir kural `retired`
+  diye listelenir. `version` (`correction_memory.rules_version`) hangi kural kümesinin ölçüldüğünü söyler.
+
+Veritabanına hiçbir şey yazmaz, hiçbir segmenti değiştirmez. `meeting_os quality replay --text` çalıştırır.
+
+### Sınırlar (bu maddede korunanlar)
+
+- **Exact-only otomatik uygulama** aynen duruyor; yakın yazımlar hâlâ yalnız Kontrol önerisi.
+- Bir kişinin "bu doğru" demesi **yerel** bir doğrulamadır; ekibe yasak olarak gitmez.
+- Çoğunluğun yazımı, yerelde açıkça seçilmiş yazımın üstüne konmaz.
+- Ham metin ve son metin çiftleri bu Mac'te kalır; rapora, nabza ve ekip klasörüne yalnız sayılar çıkar.
+
 ## Ne dışarı çıkar
 
 Nabız (`heartbeat.json`) **yalnız sayı** taşıyan bir `learning` bloğu kazandı:
@@ -137,6 +211,8 @@ Kelime yok, ad yok, başlık yok, kimlik yok. Ve bu blok, diğer bütün tanıla
 
 ```bash
 meeting_os quality report     # kimlik karnesi: verified / falsified / unreviewed
+meeting_os quality replay --text   # metin + kural replay'i (matched / mismatched / retired)
+meeting_os glossary hint      # bugünkü sıralı ipucu: ne girdi, kaç terim giremedi
 meeting_os reports heartbeat  # learning bloğu dahil nabız
 ```
 

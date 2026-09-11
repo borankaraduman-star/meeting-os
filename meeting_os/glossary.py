@@ -11,6 +11,7 @@ import difflib
 import json
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 MAX_TERMS = 500
@@ -170,14 +171,117 @@ def import_file(source, data_dir, shared=False):
     return result
 
 
-def stt_hint(entries, limit=900):
-    """Comma-separated spelling hint for models that accept a prompt; canonical terms only."""
+HINT_LIMIT = 900          # what the STT prompt is given; measured, not guessed (docs/OPENROUTER.md)
+HINT_SEPARATOR = ', '
+RECENT_DAYS = 30          # "taught lately": the window the ranking treats as still-hot evidence
+REPEAT_DAYS = 90          # how far back the repeat-error evidence is read
+
+
+def stt_hint(entries, limit=HINT_LIMIT):
+    """Comma-separated spelling hint for models that accept a prompt; canonical terms only.
+
+    Entry order is the priority here, which is why the ranked builder below exists: it decides the order from
+    evidence instead of from the order the files happened to be read in. This plain form is still what a
+    caller with no store (the CLI's `glossary hint`, the model comparison) uses."""
     out = []; used = 0
     for e in entries:
-        piece = e['term'] if not out else ', ' + e['term']
+        piece = e['term'] if not out else HINT_SEPARATOR + e['term']
         if used + len(piece) > limit: break
         out.append(piece); used += len(piece)
     return ''.join(out)
+
+
+HINT_TIERS = ('repeat', 'recent', 'verified', 'team', 'glossary', 'vocabulary')
+
+
+def _by_weight(entries):
+    """Glossary entries in the order the hint should spend its budget on them: how many sources mentioned the
+    term first (`source_count`, the Slack agent's evidence), then the order the files were read in — local
+    file, then shared, then team, which is newest-first in practice."""
+    rows = [e for e in entries if isinstance(e, dict) and e.get('term')]
+    return sorted(rows, key=lambda e: -(e.get('source_count') or 0))   # sorted() is stable: ties keep file order
+
+
+def rank_hint_terms(*, repeat=(), recent=(), verified=(), team=(), entries=(), vocabulary=(),
+                    limit=HINT_LIMIT, separator=HINT_SEPARATOR):
+    """Which spellings get the 900 characters, and which ones do not (Codex #7).
+
+    The budget never grew; what changed is the order it is spent in. A term the model already writes
+    correctly costs the same characters as one it gets wrong every single time, so the ranking puts the
+    evidence first:
+
+    1. `repeat`  — taught, and the RAW transcript still wrote the old spelling afterwards. The hint exists
+       for exactly these words: the rule fixes the text, this is the attempt to stop the mistake happening.
+    2. `recent`  — taught on this Mac in the last 30 days.
+    3. `verified`— every other locally verified spelling: taught earlier, or answered "bu doğru".
+    4. `team`    — the words teammates taught (`team_knowledge.hint_terms`).
+    5. `entries` — glossary terms, by `source_count` and then file order.
+    6. `vocabulary` — the user's plain list.
+
+    Deduplicated by folded form, so one term never pays twice and the tier it first appeared in keeps it.
+    Pure: it reads no file, no database and no clock — everything it ranks is handed to it. The result says
+    which terms made it (`included`) and how many did not (`excluded`), which is the measurement item #7 asks
+    for: until now nobody could tell whether a taught word ever reached the model at all."""
+    groups = (('repeat', list(repeat)), ('recent', list(recent)), ('verified', list(verified)),
+              ('team', list(team)), ('glossary', [e['term'] for e in _by_weight(entries)]), ('vocabulary', list(vocabulary)))
+    included = []; counts = {}; seen = set(); used = 0; excluded = 0
+    for name, terms in groups:
+        for raw in terms:
+            term = _clean(raw)
+            if not term: continue
+            key = _fold(term)
+            if not key or key in seen: continue
+            seen.add(key)
+            piece = len(term) + (len(separator) if included else 0)
+            if used + piece > limit:
+                excluded += 1   # the budget is the budget; what is left out is counted, never silently dropped
+                continue
+            included.append(term); used += piece; counts[name] = counts.get(name, 0) + 1
+    return {'hint': separator.join(included), 'included': included, 'excluded': excluded,
+            'tiers': counts, 'candidates': len(seen), 'characters': used, 'limit': limit}
+
+
+def hint_tiers(store=None, entries=(), data_dir=None, from_file=None, since_days=RECENT_DAYS, now=None):
+    """The evidence `rank_hint_terms` ranks, read once. Every read is defensive: a spelling hint is never
+    worth failing a transcription job for, and a Mac with no team, no dismissals and no taught word still
+    gets the plain glossary order it had before."""
+    from .correction_memory import taught_rules, dismissed_terms, vocabulary_terms
+    entries = list(entries)
+    glossary_entries = entries[:from_file] if from_file is not None else entries
+    cutoff = ((now or datetime.now(timezone.utc)) - timedelta(days=max(1, int(since_days)))).isoformat()
+    taught = []
+    if store is not None:
+        try: taught = sorted(taught_rules(store), key=lambda r: r.get('created') or '', reverse=True)
+        except Exception: taught = []
+    repeat = []
+    if store is not None:
+        try:
+            from .quality import word_repeat_errors
+            evidence = [w for w in word_repeat_errors(store, since_days=REPEAT_DAYS)['words'] if w['repeats']]
+            repeat = [w['replacement'] for w in sorted(evidence, key=lambda w: (-w['repeats'], -w['unfixed'], w['original']))]
+        except Exception: repeat = []
+    recent = [r['replacement'] for r in taught if (r.get('created') or '') >= cutoff]
+    verified = [r['replacement'] for r in taught]
+    if store is not None:
+        try: verified = verified + dismissed_terms(store)
+        except Exception: pass
+    team = []
+    if store is not None:
+        try:
+            from .team_knowledge import hint_terms
+            team = hint_terms(store)
+        except Exception: team = []
+    vocabulary = []
+    try: vocabulary = vocabulary_terms(data_dir) if data_dir else [e['term'] for e in entries[from_file:]] if from_file is not None else []
+    except Exception: vocabulary = []
+    return {'repeat': repeat, 'recent': recent, 'verified': verified, 'team': team,
+            'entries': glossary_entries, 'vocabulary': vocabulary}
+
+
+def ranked_hint(store=None, entries=(), data_dir=None, from_file=None, limit=HINT_LIMIT, since_days=RECENT_DAYS, now=None):
+    """`hint_tiers` + `rank_hint_terms`: the hint a cloud job actually sends, and the record of what fitted."""
+    tiers = hint_tiers(store, entries=entries, data_dir=data_dir, from_file=from_file, since_days=since_days, now=now)
+    return rank_hint_terms(limit=limit, **tiers)
 
 
 INSTRUCTION_MARKERS = re.compile(r'talimat|yok say|ignore|instruction|görev ekle|owner|state|done|tamamland|dışarı gönder|silin|delete|system|assistant', re.I)

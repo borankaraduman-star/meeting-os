@@ -7,6 +7,7 @@ from .reports import store_owner
 
 
 MIN_NAMEABLE_SECONDS=4.0   # below this a diarization cluster is noise, not a voice the user should be asked to name
+CONFLICT_LIMIT=5           # team spelling disagreements shown at once; the queue is not a settings screen
 
 # ---------------------------------------------------------------------------
 # Resolution
@@ -52,6 +53,11 @@ def queue_key(item):
     elif kind in ('glossary','word'):
         from .correction_memory import _fold
         tail=f"{item.get('segment_id')}:{_fold(item.get('original') or '')}"
+    elif kind=='word_conflict':
+        # A team disagreement is about a WORD, not a spot in this transcript: the same question anchored to a
+        # different segment is the same question, and answering it once has to be enough.
+        from .correction_memory import _fold
+        tail=_fold(item.get('original') or '')
     elif kind=='marker':tail=f"{item.get('start')}"
     else:tail=str(item.get('segment_id'))
     return f'{kind}:{tail}'
@@ -150,6 +156,24 @@ def review_queue(store, mid, data_dir=None):
         items.append({'segment_id':row['id'],'start':row['start'],'speaker':row_label(row,owner),'text':row['text'][:120],'kind':'glossary','severity':2,
                       'reason':f"Sözlük: “{sg['original']}” muhtemelen “{sg['replacement']}”"+(f" · {sg['reason']}" if sg.get('reason') else (' · yerel eşleme, model doğrulamadı' if sg.get('source')=='local' else '')),
                       'original':sg['original'],'replacement':sg['replacement'],'verified':sg.get('source')=='llm'})
+    # Two teammates spell the same word differently and this Mac has no rule of its own: neither spelling is
+    # applied (team_knowledge.team_rules) and the choice is asked here instead of being decided by whose Mac
+    # published last. Answering teaches a local rule, which then wins silently everywhere (Codex #7).
+    try:
+        from .team_knowledge import team_conflicts
+        from .correction_memory import _pattern as _word_pattern
+        for conflict in team_conflicts(store)[:CONFLICT_LIMIT]:
+            spellings=[conflict['original']]+[o['replacement'] for o in conflict['options']]
+            patterns=[_word_pattern(w) for w in spellings]
+            row=next((r for r in rows if any(p.search(r.get('text') or '') for p in patterns)),None)
+            hosts=', '.join(sorted({o['host'] for o in conflict['options']}))
+            items.append({'segment_id':row['id'] if row else None,'start':row['start'] if row else None,
+                          'speaker':row_label(row,owner) if row else None,'text':(row.get('text') or '')[:120] if row else '',
+                          'kind':'word_conflict','severity':2,
+                          'reason':f"Ekipte iki yazım: {' / '.join(o['replacement'] for o in conflict['options'])} — hangisi? · {hosts}",
+                          'original':conflict['original'],'options':conflict['options'],'source_version':conflict['version']})
+    except Exception: pass   # a team question must never cost the user the rest of their queue
+
     from .correction_memory import word_candidates
     # A wrong word the model wrote confidently reads like a right one. The only thing that can tell them apart
     # is the list of words this team actually uses: what the user has taught, and the vocabulary.

@@ -860,11 +860,17 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
         metadata.update(current_job_metadata())
         with store.db: store.db.execute('UPDATE meetings SET status=?,metadata=? WHERE id=?',('processing',json.dumps(metadata),mid))
         try:
-            from .glossary import load as load_glossary, stt_hint, candidates as glossary_candidates
-            glossary=load_glossary(data_dir,Path(__file__).resolve().parents[1],store=store)   # the hint carries the team's taught spellings too
+            from .glossary import load as load_glossary, ranked_hint, candidates as glossary_candidates
+            glossary,from_file=load_glossary(data_dir,Path(__file__).resolve().parents[1],with_counts=True,store=store)   # the hint carries the team's taught spellings too
+            # Same 900 characters, spent on the words that actually go wrong: repeat offenders first, then what
+            # was taught here lately, what the user has confirmed, the team's words, the glossary, the
+            # vocabulary (Codex #7). What fitted and how much did not is recorded, here and in the report.
+            ranked=ranked_hint(store,glossary,data_dir=data_dir,from_file=from_file) if glossary else None
+            metadata['hint_included']=(ranked or {}).get('included') or []
+            metadata['hint_excluded']=(ranked or {}).get('excluded') or 0
             from .reports import settings_owner
             mic_windows=mic_gate_windows(capture) if (capture and mode!='file') else None
-            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None,owner=settings_owner(data_dir),mic_windows=mic_windows)
+            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=(ranked or {}).get('hint') or None,owner=settings_owner(data_dir),mic_windows=mic_windows)
             metadata['echo_segments']=flag_echo(store,mid)
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             usages=[u or '' for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,))]
@@ -886,7 +892,8 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             from .reports import write_meeting_report
             from . import __version__
             write_meeting_report(store,mid,data_dir,version=__version__)
-            return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources)}
+            return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources),
+                    'hint_included':metadata['hint_included'],'hint_excluded':metadata['hint_excluded']}
         except BaseException as exc:
             store.status(mid,'incomplete')
             # A deliberate stop (⌘. / quit) is not a cloud failure and must not schedule an unwanted retry.
