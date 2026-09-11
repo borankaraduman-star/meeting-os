@@ -35,9 +35,11 @@ enum DiscreetMode {
     /// it out of the capture stream, but a panel that is merely invisible to Zoom is still a panel the presenter
     /// has to trust; hiding it outright also keeps it out of a phone camera pointed at the screen and out of any
     /// capture path that does not honour the flag.
-    static func panelVisible(recording:Bool,panelEnabled:Bool,discreet:Bool,sharing:Bool)->Bool {
-        recording && panelEnabled && !(discreet && sharing)
-    }
+    /// Boran, 11 Sep 2026 (photo of the panel floating over a live Zoom call, seen by the room): "Kaldır bunu
+    /// direkt." The panel is gone for good: whatever the inputs, it never comes back. Stop, markers and the
+    /// elapsed time live in the menu bar menu and the shortcuts (⌃⌥R, ⌃⌥M). The signature stays so nothing
+    /// that reads it has to change.
+    static func panelVisible(recording:Bool,panelEnabled:Bool,discreet:Bool,sharing:Bool)->Bool { false }
 
     /// Main-window privacy. With `.none` the app's windows are excluded from screen capture entirely, so a
     /// shared full screen never shows the transcript — which is exactly what is wanted. `.readOnly` is the

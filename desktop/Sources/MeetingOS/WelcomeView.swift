@@ -49,7 +49,7 @@ struct WelcomeView:View {
                 Label("Kayıt başlamadan önce bu alan dolu olmalı.",systemImage:"info.circle").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("welcomeNameRequired")
             }
             VStack(alignment:.leading,spacing:12) {
-                step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya yüzen paneldeki “Bitir”.")
+                step("1","Kaydı başlat","Zoom açıkken her yerden ⌃⌥R, ya da soldaki “Yeni kayıt”. Bitirmek için yine ⌃⌥R veya menü çubuğundaki simgeden “Kaydı bitir”. Kayıt sırasında ekranda hiçbir panel görünmez.")
                 step("2","Transkript ve özet kendiliğinden gelir","Kayıt bitince ses buluta gider; birkaç dakika içinde transkript, özet, görevler ve Kontrol sekmesi hazır olur.")
                 step("3","Bir kez adlandırın, sonra tanınır","Transkriptin üstündeki İsimler kartında her sese bir kez ad verin; ses profili kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır.")
             }.padding(18).meetingCard().frame(maxWidth:640)

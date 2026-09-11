@@ -49,13 +49,11 @@ final class DiscreetModeTests:XCTestCase {
 
     // MARK: floating panel
 
-    func testPanelHidesWhileSharingAndComesBackAfterwards() {
-        XCTAssertFalse(DiscreetMode.panelVisible(recording:true,panelEnabled:true,discreet:true,sharing:true))
-        XCTAssertTrue(DiscreetMode.panelVisible(recording:true,panelEnabled:true,discreet:true,sharing:false))
-    }
-
-    func testPanelStaysUpWhileSharingWhenDiscreetIsOff() {
-        XCTAssertTrue(DiscreetMode.panelVisible(recording:true,panelEnabled:true,discreet:false,sharing:true))
+    /// 11 Sep 2026: the panel was photographed floating over a live Zoom call. It is gone for good.
+    func testPanelNeverAppearsAtAll() {
+        for recording in [true,false] { for enabled in [true,false] { for discreet in [true,false] { for sharing in [true,false] {
+            XCTAssertFalse(DiscreetMode.panelVisible(recording:recording,panelEnabled:enabled,discreet:discreet,sharing:sharing))
+        }}}}
     }
 
     func testPanelNeverAppearsWithoutARecordingOrAgainstTheUsersSetting() {
@@ -118,9 +116,8 @@ final class DiscreetModeTests:XCTestCase {
     func testShareStartsAndEndsAroundALiveRecording() {
         let before=ZoomWatch.flags(windows:[zoom("Zoom Meeting")],runningBundles:running)
         let during=ZoomWatch.flags(windows:[zoom("Zoom Meeting"),zoom("You are screen sharing")],runningBundles:running)
-        XCTAssertTrue(DiscreetMode.panelVisible(recording:true,panelEnabled:true,discreet:true,sharing:before.sharing))
+        XCTAssertFalse(before.sharing); XCTAssertTrue(during.sharing); XCTAssertFalse(after().sharing)   // the share window is still detected (notifications, window privacy)
         XCTAssertFalse(DiscreetMode.panelVisible(recording:true,panelEnabled:true,discreet:true,sharing:during.sharing))
-        XCTAssertTrue(DiscreetMode.panelVisible(recording:true,panelEnabled:true,discreet:true,sharing:after().sharing))
         XCTAssertEqual(DiscreetMode.menuBar(recording:true,discreet:true,zoomOpen:true,elapsed:"01:00"),
                        DiscreetMode.menuBar(recording:true,discreet:true,zoomOpen:true,elapsed:"02:00"))
     }
