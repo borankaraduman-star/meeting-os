@@ -133,11 +133,17 @@ RUNTIME_JSON = 'runtime.json'
 INVITE_JSON = 'invite.json'
 
 
+DOWNLOAD_BASE = 'https://github.com/borankaraduman-star/meeting-os/releases/latest/download'
+
+
 def runtime_json(version):
     """Contents/Resources/runtime.json. Both paths are RELATIVE, which is the whole signal: App.swift
     resolves a path that does not start with `/` against Bundle.main.resourceURL, so the app works wherever
     the user dragged it."""
-    return {'python': 'runtime/bin/python3', 'repo': 'repo', 'bundled': True, 'version': str(version)}
+    return {'python': 'runtime/bin/python3', 'repo': 'repo', 'bundled': True, 'version': str(version),
+            # 11 Sep 2026: GitHub Releases is the download channel (21 MB/s vs 4.5 MB/s through the Funnel); the zip
+            # carries no secret, so a public URL is fine. `updater.bundle_base` reads this key.
+            'download_base': DOWNLOAD_BASE}
 
 
 def version(repo):

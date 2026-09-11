@@ -174,7 +174,8 @@ class PruneRules(unittest.TestCase):
 class RuntimeJson(unittest.TestCase):
     def test_shape_is_relative_and_carries_the_version(self):
         d = M.runtime_json('1.2.72')
-        self.assertEqual(d, {'python': 'runtime/bin/python3', 'repo': 'repo', 'bundled': True, 'version': '1.2.72'})
+        self.assertEqual(d, {'python': 'runtime/bin/python3', 'repo': 'repo', 'bundled': True, 'version': '1.2.72',
+                             'download_base': 'https://github.com/borankaraduman-star/meeting-os/releases/latest/download'})
         self.assertFalse(d['python'].startswith('/'), 'mutlak yol paketi tasinamaz yapar')
         self.assertFalse(d['repo'].startswith('/'))
         json.dumps(d)   # must survive the round trip the script writes it through

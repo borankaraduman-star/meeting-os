@@ -61,16 +61,20 @@ struct Runtime:Decodable {
     /// CFBundleShortVersionString's twin, written by build-bundle.sh so the Python side and the setup card
     /// agree about which package this is.
     let version:String?
-    init(python:String,repo:String,bundled:Bool=false,version:String?=nil) {
-        self.python=python; self.repo=repo; self.bundled=bundled; self.version=version
+    /// Where the packaged app fetches `latest.json` and the next zip (GitHub Releases since 1.2.73); read by the
+    /// Python updater, carried here only so the one CodingKeys list stays the complete description of the file.
+    let downloadBase:String?
+    init(python:String,repo:String,bundled:Bool=false,version:String?=nil,downloadBase:String?=nil) {
+        self.python=python; self.repo=repo; self.bundled=bundled; self.version=version; self.downloadBase=downloadBase
     }
-    enum Keys:String,CodingKey { case python, repo, bundled, version }
+    enum Keys:String,CodingKey { case python, repo, bundled, version, download_base }
     init(from decoder:Decoder) throws {
         let c=try decoder.container(keyedBy:Keys.self)
         python=try c.decode(String.self,forKey:.python)
         repo=try c.decode(String.self,forKey:.repo)
         bundled=try c.decodeIfPresent(Bool.self,forKey:.bundled) ?? false
         version=try c.decodeIfPresent(String.self,forKey:.version)
+        downloadBase=try c.decodeIfPresent(String.self,forKey:.download_base)
     }
     /// A path that does not begin with "/" is inside the app. Anything absolute is left exactly as it is.
     static func absolute(_ path:String,resources:URL?)->String {
@@ -78,7 +82,7 @@ struct Runtime:Decodable {
         return resources.appendingPathComponent(path).path
     }
     func resolved(resources:URL?)->Runtime {
-        Runtime(python:Runtime.absolute(python,resources:resources),repo:Runtime.absolute(repo,resources:resources),bundled:bundled,version:version)
+        Runtime(python:Runtime.absolute(python,resources:resources),repo:Runtime.absolute(repo,resources:resources),bundled:bundled,version:version,downloadBase:downloadBase)
     }
     /// `runtime/bin`, the directory the bundled python3 and the bundled ffmpeg share.
     var binDirectory:String { (python as NSString).deletingLastPathComponent }

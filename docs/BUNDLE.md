@@ -162,3 +162,16 @@ paket notarize edilir ve bu adım tamamen kalkar; Boran'ın kararı.
 - Testler: `tests/test_bundle_layout.py` (runtime.json göreli çözüm, rsync dışlama listesi, invite içe alma),
   `tests/test_updater_bundle.py` (latest.json, sha, sürüm kıyası, takas betiği kuru koşu), `tests/test_sync_server.py`
   (+ `/dl/` route, Range, 404), Swift `RuntimeTests` (göreli yol), `UpdaterTests` (bundled dal).
+
+
+## İndirme kanalı: GitHub Releases (11 Eylül 2026, 12:30)
+
+Funnel yolu (`/dl/<gizli>/`) tailnet içinde 4,5 MB/s, tailnet dışındaki bir ekip arkadaşı için DERP aracıları
+üzerinden çok daha yavaştı; VPS'in genel adresinde şifresiz HTTP açmak reddedildi. Çözüm: **zip GitHub Releases'a
+çıkar** (`scripts/publish-github.sh`; 21 MB/s ölçüldü). Depo herkese açık olduğu için paket **hiçbir gizli taşımaz**
+(`build-bundle.sh` bayraksız: `invite.json` yok, `download.secret` yok); ekip ve anahtar kişisel
+`meetingos://join?…&key=…` bağlantısıyla gelir. `runtime.json` `download_base` =
+`https://github.com/borankaraduman-star/meeting-os/releases/latest/download` (varsayılan; `bundle_manifest.runtime_json`),
+güncelleyici oradan `latest.json` ve zip'i alır (302 yönlendirmeleri `urlopen` izler, Range destekli). Sürüm
+adımı: `gh release create v<sürüm>` (etiket + zip + sha256 + latest.json; latest.json en son). VPS `/dl/` yolu yedek
+olarak duruyor.
