@@ -835,9 +835,17 @@ def dispatch(request, db=None):
             # call, and by default nothing is applied — only measured and written to quality/experiments.jsonl.
             from .experiments import run_due as run_experiments
             experiments=run_experiments(store,data)
+            # Two more cheap local derivations (Codex #8, #9): the three summary preferences and the task
+            # error class distribution. Both are one indexed read and no model call, both are recomputed at
+            # most once a day, and the analysis only ever READS the files they write.
+            from .preferences import refresh as refresh_preferences
+            from .task_errors import refresh as refresh_task_errors
+            preferences=refresh_preferences(store,data);task_errors=refresh_task_errors(store,data)
             return {'learning':learning,'calibration':{k:calibration.get(k) for k in ('date','n','enough','line','fresh')},
                     'experiments':{'ran':experiments.get('ran'),'reason':experiments.get('reason'),'promoted':experiments.get('promoted') or [],
                                    'verdicts':{r.get('candidate'):r.get('verdict') for r in experiments.get('results') or []}},
+                    'preferences':{**{k:(preferences.get(k) or {}).get('value') for k in ('detail','bullet_length','merge_duplicates')},'fresh':preferences.get('fresh')},
+                    'task_errors':{'classes':(task_errors.get('distribution') or {}).get('classes') or {},'review':task_errors.get('review') or [],'fresh':task_errors.get('fresh')},
                     'team_effect':{k:team_effect.get(k) for k in ('right','wrong','clusters','team_samples','fresh')},
                     'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],

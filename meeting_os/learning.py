@@ -246,6 +246,13 @@ def summary(store, days=7, data_dir=None):
         out['names'] = {'verified': report['auto_verified'], 'falsified': report['auto_falsified'],
                         'unreviewed': report['auto_unreviewed']}
     except Exception: pass
+    # Which KIND of task error keeps happening (Codex #9). Counts per fixed class, nothing else: the class
+    # names are an enum in code, and a title, an owner or a meeting cannot be expressed in this shape.
+    try:
+        from .task_errors import counts as task_error_counts
+        errors = task_error_counts(store)
+        out['task_errors'] = {'days': errors['days'], 'total': errors['total'], 'classes': dict(errors['classes'])}
+    except Exception: pass
     team = team_stopwatch(store)
     try:
         from pathlib import Path as _Path

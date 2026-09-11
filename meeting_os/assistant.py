@@ -42,13 +42,29 @@ def analyze(store,mid,llm=None,force=False):
     glossary=analysis_context(load_glossary(data,ROOT))
     from .reports import settings_owner
     owner=settings_owner(data)   # a cloud mic row carries the label in `speaker`; only Settings knows who 'Ben' is
+    # What this Mac learned about ITS OWN summaries and ITS OWN task errors (Codex #8, #9). Both are small
+    # files the idle housekeeping pass writes; reading them costs no model call, and neither can put the
+    # user's own wording into the prompt — the preference is one sentence from a fixed table, the error
+    # classes only raise `needs_review` on items of the class that keeps going wrong.
+    prefs=review=None
+    try:
+        from .preferences import load as load_prefs, values as pref_values
+        prefs=pref_values(load_prefs(data))
+    except Exception: prefs=None
+    try:
+        from .task_errors import active_classes
+        review=active_classes(data)
+    except Exception: review=()
     import time
     started=time.monotonic()
     with usage_context(store,mid):
-        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner)
+        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner,prefs=prefs,review_classes=review or ())
     # How long this analysis took, in the record itself: the daily quality summary reports p50/p95 from it,
     # and a model that answers correctly in four minutes is a different product from one that takes forty.
     result['elapsed_seconds']=round(time.monotonic()-started,2)
+    # Which adaptation this analysis ran under, in the record itself: an offline comparison of "with" and
+    # "without" is only honest if the saved analysis says which one it was. Values only, never evidence.
+    if prefs or review: result['adaptation']={'preferences':dict(prefs or {}),'review_classes':list(review or ())}
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
     auto_title(store,mid,result)
     from .reports import write_meeting_report

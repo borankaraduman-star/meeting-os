@@ -861,6 +861,25 @@ def _analysis_metrics(store, meeting_ids, day):
             {'p50':_percentile(seconds,50),'p95':_percentile(seconds,95),'n':len(seconds)})
 
 
+def _task_error_metrics(store, day):
+    """The day's task corrections the user called a model error, by class (Codex #9).
+
+    One rate per class over that day's inference errors, so the distribution is visible without a single
+    title, owner or meeting travelling with it. A day with no such correction reports an empty denominator,
+    not a measured zero."""
+    from .task_errors import CLASSES, classify, evidence_of
+    columns=_columns(store,'task_edits')
+    if not {'reason','field','previous'}<=columns: return {}
+    found={name:0 for name in CLASSES};total=0
+    try:
+        for r in store.db.execute('SELECT previous,field,reason,created FROM task_edits WHERE created BETWEEN ? AND ?',_bounds(day)):
+            if _day_of(r['created'])!=day or (r['reason'] or '')!='inference_error': continue
+            evidence,flags=evidence_of(r['previous'])
+            found[classify(r['field'],evidence,flags)]+=1;total+=1
+    except Exception: return {}
+    return {'task_error_'+name:ratio(found[name],total) for name in CLASSES}
+
+
 def _summary_edit_count(store, day):
     """Summary-item corrections, once the release that records them (Codex #2) is on this Mac. Until then
     there is no denominator and no claim: `None` here becomes an empty n/d, not a measured zero."""
@@ -935,6 +954,7 @@ def daily_summary(store, data_dir, day=None, *, version=None, device=None, save=
     analysis,seconds=_analysis_metrics(store,ids,day)
     metrics.update(analysis)
     metrics.update(_review_metrics(store,day))
+    metrics.update(_task_error_metrics(store,day))
     metrics['exports_ok']=_export_metric(store,day)
     if device is None: device=_device(data_dir)
     record={'day':day.isoformat(),'device':device or '','app_version':version or '','written':datetime.now(timezone.utc).isoformat(),
