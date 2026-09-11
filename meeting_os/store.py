@@ -26,6 +26,11 @@ def cosine(a, b):
     if len(a) != len(b): return -1.0
     return sum(x*y for x, y in zip(a, b))
 
+# What `quality calibrate --apply` is allowed to write into settings.json. Outside these the stored value is
+# ignored and the shipped constant stands: a calibration is a suggestion, never a way to turn recognition off.
+IDENTITY_THRESHOLD_RANGE = (0.80, 0.95)
+IDENTITY_MARGIN_RANGE = (0.02, 0.15)
+
 class Store:
     def __init__(self, path):
         path = Path(path)
@@ -70,6 +75,22 @@ class Store:
             # Q5 needs, and the segments still carry the automatic verdict those corrections overruled.
             try: self.db.execute('ALTER TABLE corrections ADD COLUMN feedback TEXT'); self._backfill_feedback()
             except sqlite3.OperationalError: pass   # the poll and a job opened the file together; the other one migrated
+    # --- Codex #6: where a voice sample came from decides how much it may claim. Three classes, read off the
+    # provenance string and nothing else, so an old database answers the same question as a new one.
+    SAMPLE_CLASSES = ('human_local', 'auto_local', 'team')
+    TEAM_EXTRA_MARGIN = 0.03   # a candidate carried by team samples alone has to clear the bar by this much before it is NAMED
+    @staticmethod
+    def sample_class(provenance):
+        """Which evidence class a sample belongs to.
+
+        `team:<host>:<hash>` is a teammate's Mac saying who this is — useful on the first day, and never
+        checked by the person sitting here. `auto:<mid>:<cluster>` is this Mac's own confident guess fed back
+        into the profile; it is local, but still a guess. Everything else (`manual`, `<mid>:<sid>`,
+        `<mid>:speaker:<s>`) exists because THIS user typed a name, which is the only human evidence there is."""
+        text = provenance or ''
+        if text.startswith('team:'): return 'team'
+        if text.startswith('auto:'): return 'auto_local'
+        return 'human_local'
     @staticmethod
     def provenance_meeting(provenance):
         """The meeting a sample's provenance names, or None for `manual` and team imports. Three shapes ever
@@ -119,6 +140,7 @@ class Store:
         if not name: raise ValueError('Name cannot be empty')
         rows=self._cluster_rows(mid, speaker)
         created=datetime.now(timezone.utc).isoformat()
+        team_named=self._team_named(rows, name)   # before the naming settles the verdict it is judging
         with self.db:
             previous=self._previous_label(rows)
             self._reject_previous(mid, speaker, rows, name, created)
@@ -127,6 +149,7 @@ class Store:
             self._set_cluster_name(mid, speaker, name)
             self._move_task_owners(previous, name, mid)   # the tasks of this meeting follow the label they were written from
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)', (mid, speaker, name, created, previous, feedback))
+        self._note_team_value(team_named)
     @staticmethod
     def naming_mark(mid, speaker, created=''):
         return f'{mid}:speaker:{speaker}'+(f'@{created}' if created else '')
@@ -220,6 +243,26 @@ class Store:
         """Move one evidence counter (must run inside the caller's transaction). Counters never go negative."""
         self.db.execute('INSERT OR IGNORE INTO profile_stats(name,confirmed,wrong) VALUES(?,0,0)',(name,))
         self.db.execute(f'UPDATE profile_stats SET {column}=max(0,{column}+?) WHERE name=?',(delta,name))
+    def _team_named(self, rows, name):
+        """True when the automatic name this user just verified was carried by the TEAM's voice sample.
+
+        Read BEFORE the naming is applied (applying it settles the verdict) and reported afterwards, so the
+        "first verified benefit of team knowledge" moment can be timed. `best_class` is written into the
+        identity block by `identify`; an older meeting has none and simply never triggers this."""
+        key=fold_name(name)
+        for r in rows:
+            identity=(r.get('metrics') or {}).get('identity') or {}
+            if identity.get('settled') or identity.get('best_class')!='team': continue
+            if identity.get('name') and fold_name(identity['name'])==key: return True
+        return False
+    def _note_team_value(self, named):
+        """Record the team's first verified benefit, once ever. MUST run outside the caller's transaction:
+        `record_event` commits, and a commit in the middle of a naming would split it in two."""
+        if not named: return
+        try:
+            from .learning import record_once
+            record_once(self,'team_first_value',scope='global',source='human')
+        except Exception: pass   # observability never breaks a naming
     def _record_feedback(self, rows, name):
         """Apply this naming's evidence and return the JSON the correction row keeps, so undo can take it back."""
         confirmed,wrong=self._feedback([(r.get('metrics') or {}).get('identity') for r in rows], name)
@@ -241,6 +284,7 @@ class Store:
     def person_threshold(self, name, base, exclude=None):
         """The bar this one person has to clear. Each confirmed suggestion lowers it 0.01 (floor 0.84), each
         overruled automatic name raises it 0.02 (cap 0.93); people the user never judged keep the global bar.
+        ONE wrong automatic name ends the discounting for good — see `personal_bar`.
         `exclude` drops one meeting's own evidence, so a replay cannot let a meeting vouch for itself."""
         row=self.db.execute('SELECT confirmed,wrong FROM profile_stats WHERE name=?',(name,)).fetchone()
         confirmed,wrong=(row['confirmed'] or 0,row['wrong'] or 0) if row else (0,0)
@@ -254,13 +298,20 @@ class Store:
     @classmethod
     def personal_bar(cls, base, confirmed, wrong):
         """The bar `confirmed` approvals and `wrong` overrulings put in front of one person. Split out of
-        `person_threshold` so a replay that counts the same evidence by date uses the same arithmetic."""
+        `person_threshold` so a replay that counts the same evidence by date uses the same arithmetic.
+
+        A wrong automatic name STOPS the discount (Codex #5, "bir yanlış otomatik isim, eşiği düşürmeyi
+        durdursun"). Before this, three confirmations could pay off one overruled name and put the bar back
+        under the global one for a voice the app had already got wrong — the confirmations say the profile
+        matches easy speech, the mistake says it also matches somebody else's, and only the second of those
+        is an argument about the bar. So once `wrong` is non-zero the bar starts at the global one and only
+        goes up; confirmations keep their meaning for people the app has never got wrong."""
         confirmed=max(0,min(confirmed,3));wrong=max(0,min(wrong,3))
         if not confirmed and not wrong: return base
+        if wrong: return min(cls.PERSON_THRESHOLD_CAP, base+0.02*wrong)
         # The floor may never push the bar up: on the local paths base is 0.80, and clamping to 0.84 made a
-        # person the user had *confirmed* harder to match than one he had never judged. Only `wrong` raises.
-        floor=min(base,cls.PERSON_THRESHOLD_FLOOR)
-        return min(cls.PERSON_THRESHOLD_CAP, max(base-0.01*confirmed, floor)+0.02*wrong)
+        # person the user had *confirmed* harder to match than one he had never judged.
+        return max(base-0.01*confirmed, min(base,cls.PERSON_THRESHOLD_FLOOR))
     SEGMENT_SAMPLE_SECONDS=6   # the app's own bar for a clean single-speaker voice sample
     def _pinned_segments(self, mid):
         """Segments the user corrected one by one: a later naming of their cluster must not write over them."""
@@ -293,7 +344,15 @@ class Store:
 
     def correct_segment_only(self, mid, sid, name):
         """One piece of a cluster belongs to someone else (Boran, 10 Sep 2026: "sadece o parça yanlış"). The rest of
-        the cluster keeps its name, nobody is convicted and no rejection is filed — the cluster as a whole was right.
+        the cluster keeps its name and the cluster's own verdict is left alone — no person's evidence counters move,
+        because the app was right about the cluster and wrong only about this piece.
+
+        What the piece itself said IS taken back. When it already carried another person's label, the piece is
+        filed as a rejection of that person (this voice can never be them again) and the pooled cluster sample
+        it helped build is recomputed without it, so the wrong person's profile stops carrying a bit of the
+        right person's voice. An earlier docstring claimed no rejection was ever filed; that stopped being true
+        when this method learned to undo the match, and the code below is the description that counts.
+
         The piece becomes a voice sample of the named person when it is clean, single-speaker speech of at least
         SEGMENT_SAMPLE_SECONDS, so the profile learns from it; a short or unclean piece only gets the label. A sample
         this very piece had earlier fed into the wrong person is hidden. The piece is pinned: later cluster namings skip it."""
@@ -415,6 +474,7 @@ class Store:
         duration=sum(r['end']-r['start'] for r in rows if 'speaker_ambiguous' not in r['flags'])  # cluster-level samples pool every short turn
         provenance=f'{mid}:speaker:{speaker}'
         created=datetime.now(timezone.utc).isoformat()
+        team_named=self._team_named(rows, name)
         with self.db:
             previous=self._previous_label(rows)
             self._reject_previous(mid, speaker, rows, name, created)
@@ -427,6 +487,7 @@ class Store:
                 centroid=unit([sum(col)/len(vectors) for col in zip(*vectors)])
                 sample=self.db.execute('INSERT INTO samples(name,model,vector,duration,provenance,created) VALUES(?,?,?,?,?,?)',(name,model,json.dumps(centroid),duration,provenance,created)).lastrowid
             self.db.execute('INSERT INTO corrections(meeting,speaker,name,created,previous_name,feedback) VALUES(?,?,?,?,?,?)',(mid,speaker,name,created,previous,self._with_sample(feedback,sample)))
+        self._note_team_value(team_named)
         return {'labeled':len(rows),'profile_saved':sample is not None,'seconds':duration}
     def undo_correction(self, mid):
         """Take back the newest cluster naming of a meeting: labels return to what they were, the sample and the
@@ -670,15 +731,24 @@ class Store:
                 self.db.execute('UPDATE profile_stats SET confirmed=confirmed+?,wrong=wrong+? WHERE name=?', (old['confirmed'] or 0, old['wrong'] or 0, new_name))
                 self.db.execute('DELETE FROM profile_stats WHERE name=?', (name,))
         return {'renamed': n, 'merged': merged}
-    def _scores(self, vector, model, exclude=None):
+    def _scores(self, vector, model, exclude=None, drop_classes=()):
         """Every person's blended score for one voice: mean of centroid similarity and best single-sample similarity.
-        `exclude` drops the samples that came from one meeting (replay: a meeting must not vouch for itself)."""
+        `exclude` drops the samples that came from one meeting (replay: a meeting must not vouch for itself).
+        `drop_classes` drops whole evidence classes, which is how the team counterfactual is measured.
+
+        Each candidate also says WHAT kind of evidence carried it (Codex #6): `by_class` counts the samples
+        behind the score, `best_class` is the class of the nearest single sample, and `team_only` marks a
+        person this Mac knows only because a teammate published them. Mixing the classes into one pool was
+        the gap the review named — "8 profil indi" could not be told apart from "iki kişiyi doğru tanıdı"."""
         v = unit(vector); groups = {}
-        sql = 'SELECT name,vector FROM samples WHERE model=? AND deleted_by IS NULL'; args = [model]   # a naming's rejected samples are hidden, not gone; they must not identify anyone
+        drop = set(drop_classes or ())
+        sql = 'SELECT name,vector,provenance FROM samples WHERE model=? AND deleted_by IS NULL'; args = [model]   # a naming's rejected samples are hidden, not gone; they must not identify anyone
         if exclude: sql += ' AND provenance NOT LIKE ? AND provenance NOT LIKE ?'; args += [f'{exclude}:%', f'auto:{exclude}:%']
         for row in self.db.execute(sql, args):
+            kind = self.sample_class(row['provenance'])
+            if kind in drop: continue
             x = json.loads(row['vector'])
-            if len(x) == len(v): groups.setdefault(row['name'], []).append(x)
+            if len(x) == len(v): groups.setdefault(row['name'], []).append((x, kind))
         vetoed = set()
         rsql = 'SELECT name,vector FROM rejections WHERE model=?'; rargs = [model]
         if exclude: rsql += ' AND provenance NOT LIKE ?'; rargs.append(f'{exclude}:%')
@@ -688,10 +758,13 @@ class Store:
         scores = []
         for name, xs in groups.items():
             if name in vetoed: continue
-            try: centroid = unit([sum(col)/len(xs) for col in zip(*xs)])
+            try: centroid = unit([sum(col)/len(xs) for col in zip(*[x for x, _ in xs])])
             except ValueError: continue  # contradictory samples cannot identify anyone
-            best = max(cosine(v, unit(x)) for x in xs)
-            scores.append({'name': name, 'centroid': round(cosine(v, centroid), 3), 'best_sample': round(best, 3), 'score': (cosine(v, centroid) + best) / 2, 'samples': len(xs)})
+            best, best_class = max(((cosine(v, unit(x)), kind) for x, kind in xs), key=lambda p: p[0])
+            by_class = {c: sum(1 for _, kind in xs if kind == c) for c in self.SAMPLE_CLASSES}
+            scores.append({'name': name, 'centroid': round(cosine(v, centroid), 3), 'best_sample': round(best, 3),
+                           'score': (cosine(v, centroid) + best) / 2, 'samples': len(xs), 'by_class': by_class,
+                           'best_class': best_class, 'team_only': by_class['human_local'] == 0 and by_class['team'] > 0})
         return sorted(scores, key=lambda s: -s['score'])
     def explain_identity(self, vector, model, limit=5, base=None):
         """Why a voice matched: similarity to every person's centroid and to their nearest sample, plus one plain
@@ -712,16 +785,26 @@ class Store:
                 notes.append(' ve '.join(why)+' → eşik '+f'{bar:.2f}'.replace('.', ','))
             out.append({**s, 'score': round(s['score'], 3), 'threshold_used': round(bar, 3) if bar is not None else None, 'person_note': ' · '.join(notes)})
         return out
-    def identify(self, vector, model, threshold=0.80, margin=0.08, exclude=None):
+    def identify(self, vector, model, threshold=0.80, margin=0.08, exclude=None, drop_classes=()):
         """Score = mean of centroid similarity and best single-sample similarity: the centroid is stable,
         the nearest sample tolerates a person recorded under different conditions. The bar is the top candidate's
-        own (Q5): the global one until the user has confirmed or overruled that person."""
-        scores = self._scores(vector, model, exclude)
-        if not scores: return {'name': None, 'candidate': None, 'similarity': None, 'margin': None, 'threshold_used': threshold}
-        score, name = scores[0]['score'], scores[0]['name']
+        own (Q5): the global one until the user has confirmed or overruled that person.
+
+        A candidate this Mac knows ONLY from the team (`team_only`) has to clear that bar by a further
+        TEAM_EXTRA_MARGIN before it is written as a name (Codex #6). Below that it is still returned as a
+        candidate, so the app offers it as a suggestion — team knowledge names people when it is very sure and
+        asks otherwise. One Mac's mistake must not become everybody's label without a human ever looking."""
+        scores = self._scores(vector, model, exclude, drop_classes)
+        if not scores: return {'name': None, 'candidate': None, 'similarity': None, 'margin': None, 'threshold_used': threshold,
+                               'best_class': None, 'team_only': False}
+        top = scores[0]
+        score, name = top['score'], top['name']
         gap = score - scores[1]['score'] if len(scores) > 1 else score + 1
         bar = self.person_threshold(name, threshold, exclude)
-        return {'name': name if score >= bar and gap >= margin else None, 'candidate': name, 'similarity': score, 'margin': gap, 'threshold_used': bar}
+        team_only = bool(top.get('team_only'))
+        if team_only: bar += self.TEAM_EXTRA_MARGIN   # deliberately not capped: the point is a higher bar, not a capped one
+        return {'name': name if score >= bar and gap >= margin else None, 'candidate': name, 'similarity': score,
+                'margin': gap, 'threshold_used': bar, 'best_class': top.get('best_class'), 'team_only': team_only}
     def add_sample_if_new(self, name, vector, model, duration, provenance, cap=8):
         """Self-feeding profiles: one more sample per meeting for a confident match, bounded per person."""
         if self.db.execute('SELECT 1 FROM samples WHERE name=? AND model=? AND provenance=? AND deleted_by IS NULL',(name,model,provenance)).fetchone(): return False
@@ -734,7 +817,8 @@ class Store:
         one; a cluster the user has already named is never re-scored and never overwritten. Cheap — the voice
         vectors are already in SQLite, no embedder runs — and only ever triggered by a user action.
         Counts are people (linked clusters), not segments."""
-        from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, SUGGEST_THRESHOLD, linked_centroid, assign_identities
+        from .cloud_finalize import SUGGEST_THRESHOLD, identity_bars, linked_centroid, assign_identities
+        IDENTITY_THRESHOLD,IDENTITY_MARGIN=identity_bars(Path(self.path).parent)   # the same bars finalize used, calibration included
         speakers={}
         for r in self.segments(mid):
             if (r.get('metrics') or {}).get('cluster') is not None: speakers.setdefault((r['source'],r['speaker']),[]).append(r)
@@ -758,3 +842,38 @@ class Store:
             if name: renamed+=1
             elif suggestion: suggested+=1
         return {'renamed':renamed,'suggested':suggested}
+
+
+# ---------------------------------------------------------------- Codex #6: what did the team actually buy us?
+
+TEAM_EFFECT_OUTCOMES_WRONG = ('auto_wrong', 'unknown_named')
+
+
+def team_profile_effect(store, threshold=None, margin=None):
+    """How many people the team's samples named right, and how many they named wrong — numbers, nothing else.
+
+    The counterfactual is the whole point. "8 profil indi" is a download, not a benefit; the review asked for
+    the benefit, so the same time-ordered replay (`quality.replay_timeline`, the only judge in this release) is
+    run twice over the same meetings: once with every sample, once with the `team:` samples taken out. A cluster
+    that comes out right only WITH them is +1 doğru; a cluster that comes out wrong only with them is −1 yanlış.
+
+    Cheap when there is nothing to say: a database with no team samples answers from one COUNT and runs no
+    replay at all, which is the common case on a Mac that never joined a team."""
+    empty = {'right': 0, 'wrong': 0, 'clusters': 0, 'meetings': 0, 'team_samples': 0, 'line': ''}
+    try:
+        team = store.db.execute("SELECT count(*) FROM samples WHERE deleted_by IS NULL AND provenance LIKE 'team:%'").fetchone()[0]
+    except Exception: return empty
+    if not team: return empty
+    from .quality import replay_timeline
+    with_team = replay_timeline(store, threshold, margin)
+    without = replay_timeline(store, threshold, margin, drop_classes=('team',))
+    alone = {(i['meeting'], i['speaker']): i for i in without['items']}
+    right = wrong = 0
+    for item in with_team['items']:
+        was = alone.get((item['meeting'], item['speaker']))
+        if was is None: continue
+        if item['outcome'] == 'auto_correct' and was['outcome'] != 'auto_correct': right += 1
+        if item['outcome'] in TEAM_EFFECT_OUTCOMES_WRONG and was['outcome'] not in TEAM_EFFECT_OUTCOMES_WRONG: wrong += 1
+    return {'right': right, 'wrong': wrong, 'clusters': len(with_team['items']), 'meetings': with_team['meetings'],
+            'team_samples': int(team),
+            'line': f'ekipten gelen profiller: +{right} doğru / \u2212{wrong} yanlış' if (right or wrong) else ''}

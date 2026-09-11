@@ -143,7 +143,7 @@ def parser():
     # The app passes the question in the environment: a question typed into the sidebar can start with '-' or
     # carry a newline, and argv is visible to every process on the Mac.
     a=sub.add_parser('ask'); a.add_argument('question',nargs='?',default=os.environ.get('MEETING_OS_QUESTION')); a.add_argument('--output',type=Path); a.add_argument('--openrouter-model')
-    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay','daily']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--timeline',action='store_true',help='replay: time-ordered cold start (only evidence older than the meeting)'); q.add_argument('--day',help='daily: the day to measure (YYYY-MM-DD), default today'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary')
+    q=sub.add_parser('quality',help='Personal quality set from your corrections'); q.add_argument('action',choices=['report','compare','replay','daily','calibrate']); q.add_argument('--model',action='append',default=[]); q.add_argument('--limit',type=int,default=20); q.add_argument('--allow-upload',action='store_true'); q.add_argument('--identity',action='store_true',help='replay: voice matching only'); q.add_argument('--text',action='store_true',help='replay: text corrections only'); q.add_argument('--timeline',action='store_true',help='replay: time-ordered cold start (only evidence older than the meeting)'); q.add_argument('--day',help='daily: the day to measure (YYYY-MM-DD), default today'); q.add_argument('--json',action='store_true',help='replay: print the full result, not the summary'); q.add_argument('--apply',action='store_true',help='calibrate: write the recommended identity threshold/margin into settings.json')
     g=sub.add_parser('agenda',help='Draft the next meeting agenda from recent meetings'); g.add_argument('--limit',type=int,default=5); g.add_argument('--output',type=Path)
     dg=sub.add_parser('digest',help='End-of-day digest, or a stakeholder report over a date range with --from/--to'); dg.add_argument('--day',help='YYYY-MM-DD (local day; default today)'); dg.add_argument('--from',dest='date_from',help='YYYY-MM-DD (period start)'); dg.add_argument('--to',dest='date_to',help='YYYY-MM-DD (period end)'); dg.add_argument('--mask-names',action='store_true'); dg.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); dg.add_argument('--output',type=Path)
     wt=sub.add_parser('waiting',help='Beklediklerim: open tasks owned by other people, per person, with a reminder draft'); wt.add_argument('--owner',help='Öntanımlı: ayarlardaki adınız'); wt.add_argument('--output',type=Path)
@@ -442,6 +442,10 @@ def main(supervised=False):
                 elif args.action=='daily':
                     from . import __version__
                     output(quality.daily_summary(store,args.db.parent,args.day,version=__version__))
+                elif args.action=='calibrate':
+                    # Measure only; `--apply` is the one deliberate act that changes what recognition does.
+                    report=quality.calibrate(store,args.db.parent)
+                    output(quality.apply_calibration(store,args.db.parent,report) if args.apply else report)
                 elif args.action=='replay':
                     # --timeline alone means the timeline alone; the regression replays stay the default pair.
                     picked=args.identity or args.text or args.timeline

@@ -59,7 +59,11 @@ def load_settings(data_dir):
                 # The team folder is one knowledge base, so both halves of it are on by default: a taught word and
                 # a named voice are worth the same to everybody, and the way out is per row (a team word can be
                 # switched off, a person's team samples deleted) rather than a switch nobody finds.
-                'share_words': True, 'share_profiles': True}
+                'share_words': True, 'share_profiles': True,
+                # Voice-matching bars. `None` means "the shipped constant" — which is what every install has
+                # until the user runs `quality calibrate --apply` on their own measured evidence. Nothing here
+                # is written by the app itself: a calibration only ever produces a recommendation.
+                'identity_threshold': None, 'identity_margin': None}
     merged = {**defaults, **{k: v for k, v in data.items() if k in defaults}}
     # 1.2.42 and earlier wrote the old default 'Boran' into settings.json on any settings save, so a teammate's file
     # can carry a stranger's name nobody typed. Only a name saved through save_settings (confirmed) counts.
@@ -90,6 +94,14 @@ def save_settings(data_dir, changes):
         # An unreachable team folder is refused rather than stored: the app would silently stop sharing.
         elif key == 'team_dir' and isinstance(value, str) and (not value.strip() or Path(value.strip()).expanduser().is_dir()): current[key] = value.strip()
         elif key == 'team_url' and isinstance(value, str): current[key] = value.strip()
+        # The calibrated identity bars, validated against the shipped ranges. `None` clears the override and
+        # puts the constant back; a number outside the range is refused rather than stored, so a hand-edited
+        # settings file cannot turn recognition into "name everybody" or "name nobody".
+        elif key in ('identity_threshold', 'identity_margin'):
+            from .store import IDENTITY_MARGIN_RANGE, IDENTITY_THRESHOLD_RANGE
+            low, high = IDENTITY_THRESHOLD_RANGE if key == 'identity_threshold' else IDENTITY_MARGIN_RANGE
+            if value is None: current[key] = None
+            elif isinstance(value, (int, float)) and not isinstance(value, bool) and low <= float(value) <= high: current[key] = round(float(value), 4)
     current.pop('_mirror', None)   # derived at load time; persisting it would turn the mirror into a picked folder
     Path(data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
     publish(settings_path(data_dir), json.dumps(current, ensure_ascii=False, indent=2))   # the report folder and the team folder live in here

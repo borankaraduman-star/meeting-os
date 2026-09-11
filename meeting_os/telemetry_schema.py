@@ -114,8 +114,13 @@ _SCORECARD = {'clusters': NUM, 'auto_verified': NUM, 'auto_falsified': NUM, 'aut
 
 # What `learning.summary` contributes to the heartbeat: counts, and nothing that could name a word, a person,
 # a task or a meeting. The key set of `actions` is `learning.ACTIONS`, which is an enum in code.
+# `team` is the time-to-value stopwatch (Codex #6): three stamps and the two durations between them, plus
+# the counterfactual the team's samples earned. Stamps and counts — no host, no person, no meeting.
 _LEARNING = {'days': NUM, 'events': NUM, 'undo': NUM, 'actions': Map(NUM),
-             'names': {'verified': NUM, 'falsified': NUM, 'unreviewed': NUM}}
+             'names': {'verified': NUM, 'falsified': NUM, 'unreviewed': NUM},
+             'team': {'team_join': STAMP, 'team_knowledge_ready': STAMP, 'team_first_value': STAMP,
+                      'join_to_ready_seconds': NUM, 'join_to_first_value_seconds': NUM,
+                      'profile_effect': {'right': NUM, 'wrong': NUM, 'clusters': NUM, 'meetings': NUM, 'team_samples': NUM}}}
 
 ALLOWED = {
     'heartbeat': {

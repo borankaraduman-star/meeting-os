@@ -36,7 +36,13 @@ ACTIONS = (
     'task_edit', 'task_due',
     'summary_edit',          # reserved for 1.2.81 (#2); nothing writes it yet
     'export_ok', 'team_join', 'undo',
+    # Codex #6, time to value. `team_join` is a setup step and says nothing about benefit; these two say when
+    # the team's knowledge actually ARRIVED and when it first produced a name a human then verified. Each is
+    # written once, ever — they are the start and the end of a stopwatch, not a running count.
+    'team_knowledge_ready', 'team_first_value',
 )
+# The stopwatch, in order. `summary` reports the two durations between them when both ends exist.
+TEAM_STAGES = ('team_join', 'team_knowledge_ready', 'team_first_value')
 SCOPES = ('segment', 'speaker', 'meeting', 'global')
 SOURCES = ('human', 'auto')
 OUTCOMES = ('applied', 'reverted', 'noop')
@@ -171,11 +177,45 @@ def prune(store, *, days=RETENTION_DAYS, max_bytes=RETENTION_BYTES, now=None):
         return {'removed': 0, 'rows': 0, 'bytes': 0}
 
 
-def summary(store, days=7):
-    """Numbers only: how many of each action in the window, and how the automatic names actually ended up.
+def record_once(store, action, **fields):
+    """Write an event only if this Mac has never written one of this kind. The two team milestones are
+    stopwatch marks: a second `team_first_value` would not be a second benefit, it would be a wrong answer to
+    "how long did it take". Returns the existing id when there already is one."""
+    try:
+        existing = last_event(store, action)
+        if existing: return existing.get('id')
+    except Exception: pass
+    return record_event(store, action, **fields)
+
+
+def team_stopwatch(store):
+    """When the team was joined, when its knowledge first arrived, and when it first paid off — plus the two
+    durations the review asked to be measured separately (Codex #6: "katılım → bilgi kullanılabilir → ilk
+    doğrulanmış yarar"). Missing stages are `None`; a duration is reported only when both of its ends exist,
+    and a negative one (a clock that moved, a restored database) is dropped rather than shown."""
+    out = {stage: None for stage in TEAM_STAGES}
+    out.update({'join_to_ready_seconds': None, 'join_to_first_value_seconds': None})
+    try:
+        _ensure(store)
+        for stage in TEAM_STAGES:
+            row = store.db.execute('SELECT time FROM learning_events WHERE action=? ORDER BY id LIMIT 1', (stage,)).fetchone()
+            if row and row[0]: out[stage] = row[0]
+        for key, later in (('join_to_ready_seconds', 'team_knowledge_ready'), ('join_to_first_value_seconds', 'team_first_value')):
+            if not out['team_join'] or not out[later]: continue
+            try: seconds = (datetime.fromisoformat(out[later]) - datetime.fromisoformat(out['team_join'])).total_seconds()
+            except ValueError: continue
+            if seconds >= 0: out[key] = round(seconds, 1)
+    except Exception: pass
+    return out
+
+
+def summary(store, days=7, data_dir=None):
+    """Numbers only: how many of each action in the window, how the automatic names actually ended up, and
+    what the team cost or bought (Codex #6).
 
     This is what the heartbeat carries. There is no word in it, no name, no title and no id — the `learning`
-    block of the team contract is counts and nothing else (docs/EKIP.md)."""
+    block of the team contract is counts and nothing else (docs/EKIP.md). The team effect is READ from the
+    file the idle housekeeping measures into; an hourly heartbeat is not allowed to run two replays."""
     out = {'days': int(days), 'events': 0, 'actions': {}, 'undo': 0,
            'names': {'verified': 0, 'falsified': 0, 'unreviewed': 0}}
     try:
@@ -192,6 +232,14 @@ def summary(store, days=7):
         out['names'] = {'verified': report['auto_verified'], 'falsified': report['auto_falsified'],
                         'unreviewed': report['auto_unreviewed']}
     except Exception: pass
+    team = team_stopwatch(store)
+    try:
+        from pathlib import Path as _Path
+        from .quality import load_team_effect
+        effect = load_team_effect(data_dir or _Path(store.path).parent)
+        team['profile_effect'] = {k: int(effect.get(k) or 0) for k in ('right', 'wrong', 'clusters', 'meetings', 'team_samples')}
+    except Exception: pass
+    out['team'] = team
     return out
 
 

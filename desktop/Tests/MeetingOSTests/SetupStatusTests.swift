@@ -36,6 +36,30 @@ final class SetupStatusTests: XCTestCase {
         XCTAssertEqual(thin?.state,.optional)
         XCTAssertEqual(SetupStatus.serviceChecks(["quality_trend":["line":"Kalite ölçümü: bu dönemde sayılacak gözlem yok"]]).map(\.id).last,"quality")
     }
+    /// 1.2.83: the identity calibration shares the quality row and the team counterfactual the team row.
+    /// Both are read from files the idle housekeeping writes, so an install that has never measured either
+    /// gets neither line — and a calibration with too little evidence says so instead of recommending.
+    func testIdentityCalibrationAndTeamEffectRideTheRowsTheyBelongTo() {
+        // Nothing measured at all: still no quality row.
+        XCTAssertNil(SetupStatus.qualityCheck(["calibration":["line":""]]))
+        // A calibration alone is enough to draw the row, even with no fleet trend behind it.
+        let alone=SetupStatus.qualityCheck(["calibration":["line":"kalibrasyon: veri yetersiz (n=7)"]])
+        XCTAssertEqual(alone?.state,.optional)
+        XCTAssertEqual(alone?.hint,"kalibrasyon: veri yetersiz (n=7)")
+        // Both: one row, both sentences, trend first.
+        let both=SetupStatus.qualityCheck(["quality_trend":["line":"Kalite ölçümü: düzeltme oranı %4,0 → %4,2","eligible":true,"change":0.05],
+                                           "calibration":["line":"kalibrasyon önerisi: eşik 0.85 (+2 doğru, 0 yanlış, n=24)"]])
+        XCTAssertEqual(both?.hint,"Kalite ölçümü: düzeltme oranı %4,0 → %4,2 · kalibrasyon önerisi: eşik 0.85 (+2 doğru, 0 yanlış, n=24)")
+        // The team row gains the counterfactual only when there is one; a zero effect is not drawn.
+        XCTAssertEqual(SetupStatus.teamEffectTail(["team_profile_effect":["line":""]]),"")
+        let team=SetupStatus.serviceChecks(["team_root_kind":"team","team_root":"/Volumes/Ekip",
+                                            "team_profile_effect":["line":"ekipten gelen profiller: +2 doğru / \u{2212}1 yanlış"]])
+        let row=team.first { $0.id=="team" }
+        XCTAssertEqual(row?.state,.ok)
+        XCTAssertEqual(row?.hint,"ortak bilgi tabanı: /Volumes/Ekip · ekipten gelen profiller: +2 doğru / \u{2212}1 yanlış")
+        XCTAssertEqual(SetupStatus.serviceChecks(["team_root_kind":"team","team_root":"/Volumes/Ekip"]).first { $0.id=="team" }?.hint,
+                       "ortak bilgi tabanı: /Volumes/Ekip")
+    }
     /// P1-4: the signing partition is the step that silently stops every update on a second Mac.
     func testSigningRowCarriesTheOneLineFix() {
         let missing=SetupStatus.serviceChecks(["signing_partition":false],repo:"/Users/x/repo")[2]
