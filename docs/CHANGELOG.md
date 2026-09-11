@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 84 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 85 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.80](#v1280) | 2026-09-11 20:40 | v1.2.80 — Özetteki kararınız korunur; Kontrol kararları bir daha sorulmaz |
 | [v1.2.79](#v1279) | 2026-09-11 18:10 | v1.2.79 — Açık listenin ilk altısı: saklama süresi, kalıcı gönderim, tanılama sözleşmesi, sade düzeltme, disk bütçesi, gizlilik kanıtı |
 | [v1.2.78](#v1278) | 2026-09-11 16:30 | v1.2.78 — Ayarlar anında açılır; özet daha hızlı çıkar |
 | [v1.2.77](#v1277) | 2026-09-11 15:40 | v1.2.77 — Ekran görüntüsü toplantı dışında çalışır; Özet sekmesinde dışa aktarma |
@@ -104,6 +105,18 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1280"></a>
+### v1.2.80 — Özetteki kararınız korunur; Kontrol kararları bir daha sorulmaz
+
+2026-09-11 20:40 · yerel not · GitHub sürüm sayfası yok
+
+Öğrenme döngüsü serisi (Boran: "kullanıcılar kullandıkça, düzelttikçe, katıldıkça uygulama kendini optimize etmeli"; plan `docs/reviews/2026-09-11-codex-learning-loop.md`), 1. sürüm.
+
+- **Özet/karar/risk/soru maddelerine kalıcı kimlik** ve her satırda ⋯ menüsü: **Düzelt** (satır içi, ⌘↩), **Kaldır** (isteğe bağlı neden: Yanlış · Tekrar · Gereksiz ayrıntı), **Doğru**. Kararınız model çıktısının üstünde ayrı bir katmanda tutulur; yeniden analiz sessizce ezmez: aynı madde yeniden gelirse düzeltmeniz/kaldırmanız üstüne oturur, eşleşmeyenler bölümün altında "eşleşmedi" olarak durur. Dışa aktarma, gündem, brifing ve karar günlüğü de bu katmanı kullanır; kalite ölçümleri modelin ham çıktısını sayar (kullanıcı gizleyerek puanı yükseltemez). Kaldırılanlar "N madde kaldırıldı · göster" ile geri görülebilir.
+- **Kontrol kuyruğu kapanır:** her madde kaynağının sürümünü taşır; **Doğru · Düzelt… · Geç**. Aynı sürümde çözülen madde bir daha gelmez; kaynak (transkript/analiz) değişirse yeniden değerlendirilir. "Geç" onay değildir: yalnız bu sürümde gizler, ayrı sayılır. Sahibi olan ama "incele" işaretli görevler de kuyruğa girer.
+- Toplantı silinince düzeltme ve karar kayıtları da silinir. Bu kararlar hiçbir zaman buluta çıkmaz.
+- Testler: Python 1034 (+30), Swift 297 (+16). Canlı doğrulanmadı: ⋯ menüsü ve satır içi düzenleme.
 
 <a id="v1279"></a>
 ### v1.2.79 — Açık listenin ilk altısı: saklama süresi, kalıcı gönderim, tanılama sözleşmesi, sade düzeltme, disk bütçesi, gizlilik kanıtı
