@@ -121,6 +121,10 @@ struct ReportSettings:Equatable {
     /// purpose: a pre-filled name is a name the second person to open this app never notices is wrong, and
     /// their voice would be filed under somebody else. Empty means "ask"; the bridge writes the real value.
     var shareReports:Bool; var shareText:Bool; var autoUpdate:Bool; var reportDir:String; var audioRetentionDays:Int=30; var autoRetry:Bool=true; var userName:String=""
+    /// How long the TEXT of a meeting lives here: transcript, summary and tasks. 0 = never delete, and that is
+    /// the default — audio can be given up, a transcript is the meeting. A horizon chosen up front is what
+    /// makes it safe; deciding to wipe everything on the day something happens is not.
+    var textRetentionDays:Int=0
     /// Shared team folder (empty = off): the glossary is merged into it and reports are written there instead
     /// of the personal folder. A path the backend cannot see is refused, so the field reverts after saving.
     var teamDir:String=""; var shareGlossary:Bool=true
@@ -129,7 +133,7 @@ struct ReportSettings:Equatable {
     /// two switch the whole exchange off for this Mac, in both directions.
     var shareWords:Bool=true; var shareProfiles:Bool=true
     static func parse(_ d:[String:Any])->ReportSettings {
-        ReportSettings(shareReports:d["share_reports"] as? Bool ?? true,shareText:d["share_text"] as? Bool ?? false,autoUpdate:d["auto_update"] as? Bool ?? false,reportDir:d["report_dir"] as? String ?? "",audioRetentionDays:d["audio_retention_days"] as? Int ?? 30,autoRetry:d["auto_retry"] as? Bool ?? true,userName:d["user_name"] as? String ?? "",teamDir:d["team_dir"] as? String ?? "",shareGlossary:d["share_glossary"] as? Bool ?? true,shareWords:d["share_words"] as? Bool ?? true,shareProfiles:d["share_profiles"] as? Bool ?? true)
+        ReportSettings(shareReports:d["share_reports"] as? Bool ?? true,shareText:d["share_text"] as? Bool ?? false,autoUpdate:d["auto_update"] as? Bool ?? false,reportDir:d["report_dir"] as? String ?? "",audioRetentionDays:d["audio_retention_days"] as? Int ?? 30,autoRetry:d["auto_retry"] as? Bool ?? true,userName:d["user_name"] as? String ?? "",textRetentionDays:d["text_retention_days"] as? Int ?? 0,teamDir:d["team_dir"] as? String ?? "",shareGlossary:d["share_glossary"] as? Bool ?? true,shareWords:d["share_words"] as? Bool ?? true,shareProfiles:d["share_profiles"] as? Bool ?? true)
     }
-    var changes:[String:Any] { ["share_reports":shareReports,"share_text":shareText,"auto_update":autoUpdate,"report_dir":reportDir,"audio_retention_days":audioRetentionDays,"auto_retry":autoRetry,"user_name":userName,"team_dir":teamDir,"share_glossary":shareGlossary,"share_words":shareWords,"share_profiles":shareProfiles] }
+    var changes:[String:Any] { ["share_reports":shareReports,"share_text":shareText,"auto_update":autoUpdate,"report_dir":reportDir,"audio_retention_days":audioRetentionDays,"auto_retry":autoRetry,"user_name":userName,"text_retention_days":textRetentionDays,"team_dir":teamDir,"share_glossary":shareGlossary,"share_words":shareWords,"share_profiles":shareProfiles] }
 }

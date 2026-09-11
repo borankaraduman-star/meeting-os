@@ -191,12 +191,40 @@ def folder_bytes(path):
     return total
 
 
+def logs_bytes(data_dir):
+    """The journals and job logs this app keeps beside the database: the error journal and its rotation, the
+    updater's log, the last job's stdout and the per-job progress files. Nothing here is a recording and
+    nothing here is read back by a meeting — it is the part of the disk total the user cannot see otherwise."""
+    data_dir=Path(data_dir); total=folder_bytes(data_dir/'progress')
+    for name in ('update.log','last-job.log'):
+        try:
+            p=data_dir/name
+            if p.is_file() and not p.is_symlink(): total+=p.stat().st_size
+        except OSError: continue
+    try: journals=sorted(data_dir.glob('errors.jsonl*'))
+    except OSError: journals=[]
+    for p in journals:
+        try:
+            if p.is_file() and not p.is_symlink(): total+=p.stat().st_size
+        except OSError: continue
+    return total
+
+
+def team_cache_bytes(data_dir):
+    """The team mirror: everything this Mac downloaded from the team, plus its own files staged for upload.
+    A folder, not a guess — `team/` covers both the per-team layout and the pre-1.2.68 flat one."""
+    return folder_bytes(Path(data_dir)/'team')
+
+
 def storage_report(store, data_dir, db_path):
-    """Disk usage of recordings/, imports/ and the database, plus audio owned by each meeting (largest first)."""
+    """Disk usage of recordings/, imports/, the database, the team mirror and the logs, plus audio owned by
+    each meeting (largest first). Codex P2 #11: the total the Settings card shows has to be the whole folder,
+    or a Mac whose team cache has quietly grown reads as smaller than it is."""
     from .recovery import classify, metadata as read_metadata
     data_dir=Path(data_dir); db_path=Path(db_path)
     database=sum(p.stat().st_size for p in (db_path,Path(str(db_path)+'-wal'),Path(str(db_path)+'-shm')) if p.is_file())
-    totals={'recordings':folder_bytes(data_dir/'recordings'),'imports':folder_bytes(data_dir/'imports'),'database':database}
+    totals={'recordings':folder_bytes(data_dir/'recordings'),'imports':folder_bytes(data_dir/'imports'),'database':database,
+            'team_cache_bytes':team_cache_bytes(data_dir),'logs_bytes':logs_bytes(data_dir)}
     meetings=[]
     for row in store.meetings():
         meta=read_metadata(row)
@@ -206,7 +234,12 @@ def storage_report(store, data_dir, db_path):
         active=row['status'] in ('processing','provisional') and classify(meta.get('worker_identity'))=='active'
         meetings.append({'meeting':row['id'],'title':row['title'],'bytes':size,'active':active})
     meetings.sort(key=lambda m:m['bytes'],reverse=True)
-    return {'totals':totals,'total':sum(totals.values()),'meetings':meetings}
+    # The text retention horizon is the one storage setting that deletes something nothing can rebuild, so the
+    # card carries its countdown itself rather than waiting for the next hourly housekeeping to say it.
+    from .reports import load_settings,text_retention_warning
+    try: warning=text_retention_warning(store,int(load_settings(data_dir).get('text_retention_days') or 0))
+    except Exception: warning=None
+    return {'totals':totals,'total':sum(totals.values()),'meetings':meetings,'text_retention_warning':warning}
 
 
 def storage_cleanup(store, data_dir, days=30, dry_run=True):
@@ -238,6 +271,29 @@ def storage_cleanup(store, data_dir, days=30, dry_run=True):
             meta['audio_removed']=datetime.now(timezone.utc).isoformat(); meta.pop('paths',None)
             with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(meta),row['id']))
     return {'dry_run':dry_run,'days':int(days),'meetings':candidates,'bytes':freed}
+
+
+def text_cleanup(store, data_dir, days=0, dry_run=True):
+    """Text retention: delete whole meetings — transcript, summary, tasks, analyses, sample provenance, the
+    report on disk and the team mirror copy — once they are older than `days`. `days<=0` is off and deletes
+    nothing, which is the default: a transcript is the meeting, and nobody should lose one by not reading a
+    setting. The point of the setting is the opposite case — a horizon chosen up front is safer in a crisis
+    than a bulk delete decided on the day.
+
+    Deletion goes through the same `delete_meeting` path a manual delete uses, so a swept meeting leaves the
+    Hafıza index, the team folder and the report folder exactly the way a hand-deleted one does. Meetings that
+    are recording, processing, incomplete, marked “Sesi koru” or waiting on a cloud retry are never touched."""
+    from .recovery import metadata as read_metadata
+    from .reports import text_retention_candidates
+    data_dir=Path(data_dir); meetings=[]; freed=0
+    for row,created in text_retention_candidates(store,days):
+        entry={'meeting':row['id'],'title':row['title'],'created':row['created'],
+               'bytes':sum(folder_bytes(f) for f in meeting_files(read_metadata(row),data_dir))}
+        if not dry_run:
+            try: delete_meeting(store,row['id'],data_dir)
+            except Exception: continue   # a meeting that started a job between the scan and the delete stays
+        meetings.append(entry); freed+=entry['bytes']
+    return {'dry_run':dry_run,'days':int(days or 0),'meetings':meetings,'bytes':freed}
 
 
 def register_import_digest(store, mid, digest, size=None):
@@ -601,7 +657,7 @@ def dispatch(request, db=None):
         if action=='storage_housekeeping':
             # Hourly, only when nothing records: archive finished audio, then drop audio older than the retention setting.
             from .audio_archive import archive_all
-            from .reports import audio_retention_warning,load_settings
+            from .reports import audio_retention_warning,load_settings,text_retention_warning
             data=DATA_DIR if db is None else Path(db).parent
             arch=archive_all(store); settings=load_settings(data); days=int(settings.get('audio_retention_days') or 0)
             # Hourly, idle, on the slow bridge: the one place a team sync can take a second on a network folder
@@ -609,9 +665,14 @@ def dispatch(request, db=None):
             from .team_knowledge import sync as team_sync
             team=team_sync(store,data,settings=settings)
             cleaned=storage_cleanup(store,data,days=days,dry_run=False) if days>0 else {'meetings':[],'bytes':0}
+            # Then the text: off unless the user picked a horizon, and when they did, the whole meeting goes the
+            # way a manual delete takes it (reports, team mirror, Hafıza) rather than leaving orphans behind.
+            text_days=int(settings.get('text_retention_days') or 0)
+            text=text_cleanup(store,data,days=text_days,dry_run=False) if text_days>0 else {'meetings':[],'bytes':0}
             # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
             return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
-                    'retention_warning':audio_retention_warning(store,days),'team':team}
+                    'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],
+                    'retention_warning':audio_retention_warning(store,days),'text_retention_warning':text_retention_warning(store,text_days),'team':team}
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='probe':

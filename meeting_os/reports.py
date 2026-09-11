@@ -51,7 +51,10 @@ def load_settings(data_dir):
     if not isinstance(data, dict): data = {}
     # auto_retry: when OpenRouter was down, pick the meeting up again while the Mac is idle. On by default —
     # a meeting the cloud refused is otherwise a meeting the user has to remember.
-    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30, 'auto_retry': True,
+    # text_retention_days is OFF by default (0): audio can be re-derived from nothing, but a transcript is the
+    # meeting. A user who wants a crisis-proof horizon sets one deliberately, up front — which is safer than
+    # deciding to wipe everything on the day something happens.
+    defaults = {'share_reports': True, 'share_text': False, 'report_dir': default_report_dir(data_dir), 'auto_update': False, 'audio_retention_days': 30, 'text_retention_days': 0, 'auto_retry': True,
                 'user_name': DEFAULT_USER_NAME, 'user_name_confirmed': False, 'team_dir': '', 'team_url': '', 'share_glossary': True,
                 # The team folder is one knowledge base, so both halves of it are on by default: a taught word and
                 # a named voice are worth the same to everybody, and the way out is per row (a team word can be
@@ -76,7 +79,7 @@ def save_settings(data_dir, changes):
     current = load_settings(data_dir)
     for key, value in (changes or {}).items():
         if key in ('share_reports', 'share_text', 'auto_update', 'auto_retry', 'share_glossary', 'share_words', 'share_profiles') and isinstance(value, bool): current[key] = value
-        elif key == 'audio_retention_days' and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
+        elif key in ('audio_retention_days', 'text_retention_days') and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
         # An empty name is stored, not dropped: "" means nobody, and the mic rows keep the neutral 'Ben' label.
         elif key == 'user_name' and isinstance(value, str) and len(value.strip()) <= NAME_LIMIT:
@@ -679,6 +682,54 @@ def audio_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DA
     return {'meetings': count, 'retention_days': days, 'days_left': left, 'within_days': int(ahead),
             'line': f'{count} kaydın sesi {when} silinecek ({days} gün); saklamak için toplantının “Sesi koru” anahtarını açın '
                     'ya da Ayarlar → Sistem → Gelişmiş → Eski toplantıların sesi'}
+
+
+def text_retention_candidates(store, days, *, now=None, ahead=0):
+    """The meetings a text-retention pass would delete WHOLE — transcript, summary, tasks, the lot.
+
+    Eligible: status `complete`, created more than `days` ago (`ahead` days of lookahead for the warning),
+    not marked “Sesi koru” (metadata.keep), not waiting on a cloud retry (`cloud_error`), and with no job
+    running on them. `processing`, `provisional`, `incomplete` and `failed` are all excluded by the status
+    test, so a meeting that is being recorded or transcribed right now is never a candidate.
+
+    Read-only and never raises: a row whose metadata or timestamp is unreadable is skipped, not deleted.
+    Returns [(row, created)] oldest first."""
+    if not days or int(days) <= 0: return []
+    from .recovery import classify
+    days = int(days); now = now or datetime.now(timezone.utc)
+    cutoff = now + timedelta(days=int(ahead)) - timedelta(days=days)
+    out = []
+    for row in store.meetings():
+        try: meta = json.loads(row['metadata'] or '{}')
+        except (TypeError, ValueError): continue
+        if not isinstance(meta, dict): continue
+        if row['status'] != 'complete' or meta.get('keep') is True or meta.get('cloud_error'): continue
+        if classify(meta.get('worker_identity')) == 'active': continue   # the open job's meeting is never swept
+        try: created = datetime.fromisoformat(row['created'])
+        except (TypeError, ValueError): continue
+        if created.tzinfo is None: created = created.replace(tzinfo=timezone.utc)
+        if created > cutoff: continue
+        out.append((row, created))
+    out.sort(key=lambda item: item[1])
+    return out
+
+
+def text_retention_warning(store, days, *, now=None, ahead=RETENTION_WARNING_DAYS):
+    """One line, `ahead` days before the OLDEST meeting is deleted outright — or None when nothing is close.
+
+    The audio warning's twin, for a setting that takes far more: the transcript, the summary and the tasks go
+    with the meeting, and nothing on this Mac can bring them back. Marking a meeting “Sesi koru” saves it here
+    too, and so does widening the setting — but only before the pass runs."""
+    if not days or int(days) <= 0: return None
+    days = int(days); now = now or datetime.now(timezone.utc)
+    due = text_retention_candidates(store, days, now=now, ahead=ahead)
+    if not due: return None
+    oldest = due[0][1]
+    left = max(0, int((oldest + timedelta(days=days) - now).total_seconds() // 86400))
+    when = 'bugün' if left == 0 else ('yarın' if left == 1 else f'{left} gün içinde')
+    return {'meetings': len(due), 'retention_days': days, 'days_left': left, 'within_days': int(ahead),
+            'line': f'{len(due)} toplantının yazısı {when} tümüyle silinecek ({days} gün): transkript, özet ve görevler. '
+                    'Saklamak için toplantının “Sesi koru” anahtarını açın ya da Ayarlar → Sistem → Gelişmiş → Eski toplantıların yazısı'}
 
 
 def alerts(hosts, *, now=None):

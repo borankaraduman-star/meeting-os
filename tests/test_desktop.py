@@ -213,6 +213,61 @@ class DesktopTests(unittest.TestCase):
    self.assertEqual(report['meetings'][0]['bytes'],500);self.assertEqual(report['meetings'][2]['bytes'],50)
    self.assertFalse(report['meetings'][0]['active']);self.assertTrue(report['meetings'][1]['active'])
    self.assertTrue((rec/'mic.wav').exists());self.assertTrue((data/'imports'/'orphan'/'a.wav').exists())
+ def test_storage_report_counts_the_team_cache_and_the_logs_it_used_to_hide(self):
+  """Codex P2 #11: the card said “Toplam” but counted only recordings, imports and the database, so a Mac whose
+  team mirror had grown over months read as smaller than the folder actually was."""
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';Store(db).close()
+   mirror=data/'team'/'abc123'/'reports'/'b';mirror.mkdir(parents=True);(mirror/'2026-09-10_x.json').write_bytes(b'j'*4000)
+   (data/'team'/'abc123'/'profiles').mkdir();(data/'team'/'abc123'/'profiles'/'b.jsonl').write_bytes(b'p'*1000)
+   (data/'errors.jsonl').write_bytes(b'e'*200);(data/'errors.jsonl.1').write_bytes(b'e'*100)
+   (data/'update.log').write_bytes(b'u'*50);(data/'last-job.log').write_bytes(b'l'*25)
+   prog=data/'progress';prog.mkdir();(prog/'job.json').write_bytes(b'g'*10)
+   (data/'settings.json').write_bytes(b'{}')   # neither a log nor a cache: settings are not disk the user can free
+   report=dispatch({'action':'storage_report'},db)
+   self.assertEqual(report['totals']['team_cache_bytes'],5000)
+   self.assertEqual(report['totals']['logs_bytes'],385)
+   self.assertEqual(report['total'],sum(report['totals'].values()))
+   self.assertGreater(report['total'],5385)   # the database is in there too
+ def test_text_retention_is_off_by_default_and_deletes_whole_meetings_when_it_is_not(self):
+  """The transcript, the summary and the tasks are the meeting: losing them by not reading a setting would be
+  the worst bug this app could have, so 0 is the default and nothing at all happens at 0."""
+  from datetime import datetime,timedelta,timezone
+  from meeting_os import reports
+  from meeting_os.memory import Memory
+  from meeting_os.recovery import current_job_metadata
+  with tempfile.TemporaryDirectory() as tmp:
+   data=Path(tmp);db=data/'meeting-os.sqlite';s=Store(db)
+   def meeting(title,days,status='complete',**meta):
+    mid=s.create_meeting(title,meta);s.add_segment(mid,Segment(0,5,'Yarın raporu ben çıkaracağım.','system','S0'))
+    with s.db:s.db.execute('UPDATE meetings SET created=?,status=? WHERE id=?',((datetime.now(timezone.utc)-timedelta(days=days)).isoformat(),status,mid))
+    return mid
+   old=meeting('Eski',45);kept=meeting('Korunan',45,keep=True);fresh=meeting('Yeni',3)
+   half=meeting('Yarım',60,status='incomplete');busy=meeting('İş sürüyor',60,status='processing',**current_job_metadata())
+   failed=meeting('Bulut bekliyor',60,cloud_error={'kind':'credit'})
+   memory=Memory(s);memory.save_analysis(old,memory.current_hash(old),'test',{'summary':'','actions':[{'title':'Raporu çıkar','owner':'Ben','evidence':[]}],'questions':[],'decisions':[]})
+   self.assertEqual(len(memory.actions(meeting=old)),1)
+   s.close()
+   # The reports the deletion has to take with it live where the app writes them, not in iCloud.
+   reports.save_settings(data,{'report_dir':str(data/'raporlar'),'audio_retention_days':0})
+   folder=reports.host_dir(reports.load_settings(data));folder.mkdir(parents=True,exist_ok=True)
+   receipt=folder/f'2026-09-10_{old}.json';receipt.write_text('{}',encoding='utf-8')
+   self.assertEqual(reports.load_settings(data)['text_retention_days'],0)   # off unless the user picked a horizon
+   r=dispatch({'action':'storage_housekeeping'},db)
+   self.assertEqual((r['text_retention_days'],r['removed_text_meetings']),(0,0));self.assertIsNone(r['text_retention_warning'])
+   self.assertEqual(len(dispatch({'action':'snapshot'},db)['meetings']),6)
+   reports.save_settings(data,{'text_retention_days':30})
+   r=dispatch({'action':'storage_housekeeping'},db)
+   self.assertEqual((r['text_retention_days'],r['removed_text_meetings']),(30,1))
+   left={m['id'] for m in dispatch({'action':'snapshot'},db)['meetings']}
+   self.assertEqual(left,{kept,fresh,half,busy,failed})   # only the old, complete, unprotected one went
+   self.assertFalse(receipt.exists())                     # …and its report left the shared folder with it
+   s=Store(db)
+   self.assertEqual(s.db.execute('SELECT count(*) FROM segments WHERE meeting=?',(old,)).fetchone()[0],0)
+   self.assertEqual(s.db.execute('SELECT count(*) FROM meetings WHERE id=?',(old,)).fetchone()[0],0)
+   self.assertEqual(Memory(s).actions(meeting=old),[])   # the tasks the meeting wrote went with it
+   self.assertEqual(s.db.execute('SELECT count(*) FROM analyses WHERE meeting=?',(old,)).fetchone()[0],0);s.close()
+   self.assertEqual(dispatch({'action':'storage_housekeeping'},db)['removed_text_meetings'],0)   # nothing left to take
  def test_agenda_collects_open_tasks_questions_and_decisions_with_sources(self):
   from meeting_os.memory import Memory
   with tempfile.TemporaryDirectory() as tmp:

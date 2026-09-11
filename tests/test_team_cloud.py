@@ -491,6 +491,75 @@ class RoundTripTests(CloudFixture):
             self.assertEqual([e['term'] for e in glossary.load(b.data) if e['term'] in ('Splendo', 'Qatya')], ['Splendo'])
 
 
+class PulledReportBudgetTests(CloudFixture):
+    """Codex P2 #11: `PULL_REPORTS` only limits what ONE pass selects. Without a disk cap the mirror grows pass
+    after pass on every Mac, and the Storage card cannot explain where the space went."""
+
+    VECTOR = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.4, 0.2]
+
+    def test_the_pulled_reports_of_other_macs_stop_at_a_count_and_a_size(self):
+        a = self.mac('a'); b = self.mac('b')
+        names = [f'2026-09-{day:02d}_m{day}.json' for day in range(1, 9)]
+        with b.host():
+            self.report(b, '2026-01-01_kendi.json', {'meeting': 'kendi'})   # b's own report: not a cache, never pruned
+            (b.mirror / TC.REPORTS_DIR / 'b' / reports.HEARTBEAT_FILE).write_text('{"host":"b"}', encoding='utf-8')
+        # The leak is what happens ACROSS passes: each pass takes the newest four, and four more arrive before
+        # the next one. Nothing ever selected more than PULL_REPORTS, and eight files still sat on disk.
+        with a.host():
+            for name in names[:4]: self.report(a, name, {'meeting': name, 'pad': 'x' * 400})
+            a.sync()
+        with b.host(), patch.object(TC, 'PULL_REPORTS', 4), patch.object(TC, 'PULL_REPORT_BYTES', 10 * 1024 * 1024):
+            self.assertEqual(b.sync()['pruned'], 0)   # exactly at the ceiling: nothing to drop yet
+        with a.host():
+            for name in names[4:]: self.report(a, name, {'meeting': name, 'pad': 'x' * 400})
+            a.sync()
+        with b.host():
+            with patch.object(TC, 'PULL_REPORTS', 4), patch.object(TC, 'PULL_REPORT_BYTES', 10 * 1024 * 1024):
+                result = b.sync()
+            self.assertEqual((result['pulled'], result['pruned']), (4, 4))   # four more arrived, the four oldest went
+            self.assertEqual(sorted(p.name for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json')), names[4:])
+            self.assertEqual(sorted(p.name for p in (b.mirror / TC.REPORTS_DIR / 'b').glob('*.json')),
+                             ['2026-01-01_kendi.json', reports.HEARTBEAT_FILE])
+            # …and the next pass does not fetch back what this one pruned: the state remembers it was applied.
+            with patch.object(TC, 'PULL_REPORTS', 4), patch.object(TC, 'PULL_REPORT_BYTES', 10 * 1024 * 1024):
+                again = b.sync()
+            self.assertEqual((again['pulled'], again['pruned']), (0, 0))
+            self.assertEqual(sorted(p.name for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json')), names[4:])
+
+    def test_the_size_ceiling_bites_before_the_count_does(self):
+        a = self.mac('a'); b = self.mac('b')
+        with a.host():
+            for day in range(1, 6): self.report(a, f'2026-09-{day:02d}_m{day}.json', {'meeting': day, 'pad': 'x' * 2000})
+            a.sync()
+        with b.host():
+            with patch.object(TC, 'PULL_REPORTS', 300), patch.object(TC, 'PULL_REPORT_BYTES', 4500):
+                result = b.sync()
+            kept = sorted(p.name for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json'))
+            self.assertEqual(kept, ['2026-09-04_m4.json', '2026-09-05_m5.json'])   # ~2 KB each: two fit under 4500
+            self.assertEqual(result['pruned'], 3)
+            self.assertLessEqual(sum(p.stat().st_size for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json')), 4500)
+
+    def test_words_glossary_and_profiles_are_never_pruned(self):
+        a = self.mac('a'); b = self.mac('b')
+        with a.host():
+            mid = a.store.create_meeting('a'); self.segment(a.store, mid, 'Trendyoll ile görüştük.')
+            cm.teach(a.store, mid, 'Trendyoll', 'Trendyol', a.data)
+            a.store.enroll('Ayşe', self.VECTOR, 'emb-1', 12.0, 'toplanti-1:5')
+            tk.publish_profiles(a.store, a.settings(), a.data)
+            (a.data / 'glossary.jsonl').write_text(json.dumps({'term': 'Splendo', 'category': 'ürün'}) + '\n', encoding='utf-8')
+            for day in range(1, 4): self.report(a, f'2026-09-{day:02d}_m{day}.json', {'meeting': day})
+            a.sync()
+        with b.host():
+            with patch.object(TC, 'PULL_REPORTS', 1), patch.object(TC, 'PULL_REPORT_BYTES', 1):
+                b.sync()
+            self.assertEqual([p.name for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json')], [])   # a budget of one byte fits nothing
+            self.assertTrue((b.mirror / TC.PROFILES_DIR / 'a.jsonl').is_file())
+            self.assertTrue((b.mirror / TC.WORDS_DIR / 'a.jsonl').is_file())
+            self.assertTrue((b.mirror / TC.GLOSSARY_FILE).is_file())
+            tk.pull_profiles(b.store, b.settings(), b.data)
+            self.assertEqual([p['name'] for p in b.store.profiles()], ['Ayşe'])
+
+
 class ResilienceTests(CloudFixture):
     def test_a_server_that_is_down_is_silent_and_costs_nothing(self):
         mac = self.mac('a', url='http://127.0.0.1:9')   # discard port: refused at once, no DNS, no waiting
