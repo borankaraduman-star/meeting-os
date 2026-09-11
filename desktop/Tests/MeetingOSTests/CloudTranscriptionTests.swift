@@ -66,7 +66,7 @@ final class UpdaterTests:XCTestCase {
         XCTAssertEqual(UpdateInfo.parse(["available":false,"dirty":true]).headline,"Yerel değişiklikler var; otomatik güncelleme kapalı")
         XCTAssertEqual(UpdateInfo.parse(["error":"GitHub’a ulaşılamadı"]).headline,"GitHub’a ulaşılamadı")
         var s=ReportSettings.parse(["share_reports":false,"share_text":true,"auto_update":true,"report_dir":"/x","user_name":"Ayşe"]); s.shareText=false
-        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x","audio_retention_days":30,"text_retention_days":0,"auto_retry":true,"user_name":"Ayşe","team_dir":"","share_glossary":true,"share_words":true,"share_profiles":true] as NSDictionary)
+        XCTAssertEqual(s.changes as NSDictionary,["share_reports":false,"share_text":false,"auto_update":true,"report_dir":"/x","audio_retention_days":30,"text_retention_days":0,"auto_retry":true,"user_name":"Ayşe","team_dir":"","share_glossary":true,"share_words":true,"share_profiles":true,"auto_promote_policies":false] as NSDictionary)
         XCTAssertEqual(ReportSettings.parse(["audio_retention_days":60]).audioRetentionDays,60)
         // Text retention is off unless the user picked a horizon: a transcript is the meeting, and nobody
         // should lose one by not reading a setting. What they do pick has to survive the round trip.

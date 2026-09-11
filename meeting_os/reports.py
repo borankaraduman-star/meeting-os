@@ -63,7 +63,12 @@ def load_settings(data_dir):
                 # Voice-matching bars. `None` means "the shipped constant" — which is what every install has
                 # until the user runs `quality calibrate --apply` on their own measured evidence. Nothing here
                 # is written by the app itself: a calibration only ever produces a recommendation.
-                'identity_threshold': None, 'identity_margin': None}
+                'identity_threshold': None, 'identity_margin': None,
+                # 1.2.85: may a measured experiment APPLY itself? Off. The idle pass measures either way and
+                # writes down what it found; with this off the setup card says "otomatik uygulama kapalı" and
+                # the user applies it deliberately. Nothing about a local-only, reversible change makes it
+                # safe to make on a Mac whose owner never asked for it.
+                'auto_promote_policies': False}
     merged = {**defaults, **{k: v for k, v in data.items() if k in defaults}}
     # 1.2.42 and earlier wrote the old default 'Boran' into settings.json on any settings save, so a teammate's file
     # can carry a stranger's name nobody typed. Only a name saved through save_settings (confirmed) counts.
@@ -82,7 +87,7 @@ def load_settings(data_dir):
 def save_settings(data_dir, changes):
     current = load_settings(data_dir)
     for key, value in (changes or {}).items():
-        if key in ('share_reports', 'share_text', 'auto_update', 'auto_retry', 'share_glossary', 'share_words', 'share_profiles') and isinstance(value, bool): current[key] = value
+        if key in ('share_reports', 'share_text', 'auto_update', 'auto_retry', 'share_glossary', 'share_words', 'share_profiles', 'auto_promote_policies') and isinstance(value, bool): current[key] = value
         elif key in ('audio_retention_days', 'text_retention_days') and isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3650: current[key] = value
         elif key == 'report_dir' and isinstance(value, str) and value.strip(): current[key] = value.strip()
         # An empty name is stored, not dropped: "" means nobody, and the mic rows keep the neutral 'Ben' label.

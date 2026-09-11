@@ -682,15 +682,28 @@ def team_effect_refresh(store, data_dir, *, max_age_hours=TEAM_EFFECT_MAX_AGE_HO
 
 
 def apply_calibration(store, data_dir, report=None):
-    """Write the recommended bars into settings.json (`quality calibrate --apply`). The only path that ever
-    changes what recognition does, and it refuses on evidence the review says is too thin."""
+    """Write the recommended bars into settings.json (`quality calibrate --apply`) AND promote a policy
+    version carrying the same two numbers. The only path a person uses to change what recognition does, and it
+    refuses on evidence the review says is too thin.
+
+    Both are written because `identity_bars` reads the policy FIRST (1.2.85). A deliberate `--apply` that
+    touched only settings.json would be shadowed by whatever policy version happened to be live — a user
+    typing a command and nothing happening is the worst possible way to learn about a precedence rule."""
     from .reports import save_settings
     report=report or calibrate(store,data_dir)
     rec=report.get('recommendation') or {}
     if not report.get('enough'): return {'applied':False,'reason':f"veri yetersiz (n={report.get('n')}, en az {CALIBRATION_MIN_VERIFIED})",'report':report}
     if not rec.get('change'): return {'applied':False,'reason':'mevcut ayar zaten en iyisi','report':report}
     settings=save_settings(data_dir,{'identity_threshold':rec['threshold'],'identity_margin':rec['margin']})
-    return {'applied':True,'identity_threshold':settings.get('identity_threshold'),'identity_margin':settings.get('identity_margin'),'report':report}
+    version=None
+    try:
+        from . import policy as P
+        version=P.promote(data_dir,{'identity_threshold':rec['threshold'],'identity_margin':rec['margin']},
+                          {'source':'calibrate --apply','n':report.get('n'),
+                           'correct_gain':rec.get('correct_gain'),'wrong_delta':rec.get('wrong_delta')},store=store)['version']
+    except Exception: pass   # the settings write already happened; a policy file is not worth failing on
+    return {'applied':True,'identity_threshold':settings.get('identity_threshold'),'identity_margin':settings.get('identity_margin'),
+            'policy_version':version,'report':report}
 
 
 # ---------------------------------------------------------------- daily numeric quality summary (Codex #10)
