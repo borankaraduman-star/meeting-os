@@ -167,6 +167,12 @@ struct SettingsSheet:View {
                 }
                 Text("Tema uygulama penceresi ve yüzen paneli etkiler; menü çubuğu simgesi sistemi izler.").font(.caption2).foregroundStyle(.secondary)
                 Text("Kayıt sırasında").font(.headline)
+                HStack(spacing:10) {
+                    Text("Mikrofonum").font(.callout)
+                    Picker("Mikrofonum",selection:$model.micMode) { ForEach(MicGate.modes,id:\.self) { Text(MicGate.label($0)).tag($0) } }
+                        .pickerStyle(.segmented).labelsHidden().frame(width:280).accessibilityIdentifier("micModePicker")
+                }
+                Text("**Zoom’u izle** (varsayılan): sesiniz yalnız Zoom’da mikrofonunuz açıkken kayda girer; odadaki başka konuşmalar toplantı notuna dönüşmez. **Elle**: ⌃⌥V ile açana kadar kapalı. **Her zaman**: mikrofon bütün kayıt boyunca alınır. Her kayıtta ⌃⌥V (ya da menü çubuğu → “Sesimi de kaydet”) sesinizi o toplantı için açar. Zoom’un sessizde olup olmadığını okumak için **Erişilebilirlik** izni gerekir (Ayarlar → Sistem → Kurulum durumu); izin yokken Zoom’u izle modunda mikrofon yalnız ⌃⌥V ile kaydedilir.").font(.caption2).foregroundStyle(.secondary)
                 Toggle("Zoom toplantısı açılınca bildirim gönder (kayıt yokken, 20 dakikada en fazla bir)",isOn:$model.zoomNotify)
                 Toggle("Zoom toplantı penceresi açılınca kaydı kendiliğinden başlat, pencere kapandıktan 5 dk sonra ve mikrofon serbestse bitir (elle başlatılan kayıtlara dokunmaz)",isOn:$model.zoomAutoRecord)
                 Toggle("Göze batma: kayıt sırasında menü çubuğunda sade simge, pencereler paylaşılan görüntüde görünmez",isOn:$model.discreetMode).accessibilityIdentifier("discreetModeToggle")

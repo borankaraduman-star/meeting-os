@@ -13,7 +13,7 @@ struct SetupCheck: Identifiable, Equatable {
 
 enum SetupStatus {
     /// What the "Düzelt" button on a check does: ask macOS, or open the exact System Settings pane when only the user can change it.
-    static let panes=["mic":"Privacy_Microphone","screen":"Privacy_ScreenCapture","calendar":"Privacy_Calendars","reminders":"Privacy_Reminders"]
+    static let panes=["mic":"Privacy_Microphone","screen":"Privacy_ScreenCapture","calendar":"Privacy_Calendars","reminders":"Privacy_Reminders","accessibility":"Privacy_Accessibility"]
     /// macOS asks only once. Undetermined → ask now; already refused → open the exact System Settings pane, the only place it can change.
     static func fix(_ id:String,calendarWanted:Bool,done:@escaping ()->Void) {
         let finish={ DispatchQueue.main.async(execute:done) }
@@ -30,6 +30,11 @@ enum SetupStatus {
         case "reminders":
             if EKEventStore.authorizationStatus(for:.reminder) == .notDetermined { RemindersBridge.requestAccess { _ in done() } }
             else { openPane("Privacy_Reminders"); finish() }
+        case "accessibility":
+            // The prompt is the only thing that puts Meeting OS into the Accessibility list; the pane is opened
+            // straight after, because the switch still has to be flicked there by hand.
+            if !ZoomMute.requestTrust() { openPane("Privacy_Accessibility") }
+            DispatchQueue.main.asyncAfter(deadline:.now()+1,execute:done)
         case "notify":
             UNUserNotificationCenter.current().getNotificationSettings { s in
                 if s.authorizationStatus == .notDetermined { UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound]) { _,_ in finish() } }
@@ -42,7 +47,17 @@ enum SetupStatus {
     /// Button label: a prompt is still possible only while macOS has never been asked.
     static func fixLabel(_ c:SetupCheck)->String { c.state == .unknown ? "İzin iste" : "Ayarları aç" }
     static func open(_ url:String) { DispatchQueue.main.async { if let u=URL(string:url) { NSWorkspace.shared.open(u) } } }   // callbacks arrive off the main thread
-    static func fixable(_ c:SetupCheck)->Bool { ["mic","screen","calendar","reminders","notify"].contains(c.id) && c.state != .ok }
+    static func fixable(_ c:SetupCheck)->Bool { ["mic","screen","calendar","reminders","notify","accessibility"].contains(c.id) && c.state != .ok }
+    /// Why the Accessibility grant exists at all: it is the only way to read Zoom's own mute state, and without
+    /// it `MicGate` keeps the microphone shut in `zoom` mode. Optional, never missing — a Mac that never grants
+    /// it still records perfectly, it just needs ⌃⌥V for the owner's own voice.
+    static func accessibilityCheck(trusted:Bool=ZoomMute.trusted(),mode:String=MicGate.mode)->SetupCheck {
+        let title="Erişilebilirlik (Zoom’da sesiniz açıkken mikrofonu kaydetmek için)"
+        if trusted { return SetupCheck(id:"accessibility",title:title,state:.ok,hint:"izin verildi · Zoom’un mikrofon durumu okunabiliyor") }
+        let cost = mode=="zoom" ? "Şu an “Zoom’u izle” modundasınız: izin olmadan kendi sesiniz yalnız ⌃⌥V ile kaydedilir." : "“Zoom’u izle” moduna geçerseniz gerekir."
+        return SetupCheck(id:"accessibility",title:title,state:.optional,
+                          hint:"Meeting OS, Zoom’un Toplantı menüsünden yalnız “Sesi Aç/Sesi Kapat” satırını okur; tuş vuruşu ya da ekran içeriği okunmaz. "+cost+" · Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik")
+    }
     static func permissionChecks(calendarWanted:Bool)->[SetupCheck] {
         var out:[SetupCheck]=[]
         let mic=AVCaptureDevice.authorizationStatus(for:.audio)
@@ -54,6 +69,7 @@ enum SetupStatus {
         out.append(SetupCheck(id:"calendar",title:"Takvim (isteğe bağlı)",state:calOK ? .ok : (calendarWanted ? .missing : .optional),hint:calOK ? "izin verildi" : (calendarWanted ? "Ayar açık ama izin yok: Sistem Ayarları → Takvimler" : "Ayarlarda açılırsa istenir")))
         let rem=EKEventStore.authorizationStatus(for:.reminder)
         let remOK:Bool = { if #available(macOS 14,*) { return rem == .fullAccess }; return rem == .authorized }()
+        out.append(accessibilityCheck())
         out.append(SetupCheck(id:"reminders",title:"Hatırlatıcılar (isteğe bağlı)",state:remOK ? .ok : .optional,hint:remOK ? "izin verildi" : "İlk “Hatırlatıcılar’a ekle” tıklamasında istenir"))
         return out
     }

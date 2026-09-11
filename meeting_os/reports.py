@@ -403,7 +403,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         'capture': capture_block(meta.get('capture_dir'), duration),
         'pieces': len(chunks), 'pieces_paid': len(paid), 'pieces_skipped': sum(1 for u in chunks if isinstance(u, dict) and 'skipped' in u),
         'cost_usd': round(sum(float(u.get('cost') or 0) for u in paid), 5), 'uploaded_seconds': round(sum(float(u.get('seconds') or 0) for u in paid), 1),
-        'echo_windows_skipped': meta.get('echo_windows_skipped'), 'echo_segments': meta.get('echo_segments'), 'identity': meta.get('identity'), 'identity_error': meta.get('identity_error'),
+        'echo_windows_skipped': meta.get('echo_windows_skipped'), 'mic_gated_windows': meta.get('mic_gated_windows'), 'echo_segments': meta.get('echo_segments'), 'identity': meta.get('identity'), 'identity_error': meta.get('identity_error'),
         'markers': len(meta.get('markers') or []), 'glossary_suggestions': len(meta.get('glossary_suggestions') or []),
         'job_usage': meta.get('job_usage'),
         'speakers': speakers, 'review_queue': kinds, 'analysis': analysis_summary, 'scorecard': identity_report(store), 'errors': _errors(Path(data_dir) / 'last-job.log'),

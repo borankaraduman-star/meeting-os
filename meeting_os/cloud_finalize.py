@@ -271,8 +271,11 @@ def _reorder_checkpoints(store, mid, old, plan, plan_json):
     return store.db.execute('SELECT * FROM cloud_sources WHERE meeting=?',(mid,)).fetchone()
 
 
-def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None, hint=None, owner=None):
-    """sources: {'mic': path, 'system': path} of 16 kHz mono files. Returns the plan."""
+def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_MODEL, ffmpeg=None, hint=None, owner=None, mic_windows=None):
+    """sources: {'mic': path, 'system': path} of 16 kHz mono files. Returns the plan.
+
+    `mic_windows` is `mic_gate_windows`' answer: the spans where the microphone was part of the meeting.
+    None (no gate journal) keeps the old behaviour and transcribes the whole mic track."""
     _consent(consent);validate_stt_model(model)
     labels=source_labels(owner)
     diarize=diarization_options(model) is not None
@@ -330,6 +333,9 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         """Skip (echo/silent) or encode this piece. Runs on the encode pool one batch ahead of the uploads;
         the Opus bytes land in a scratch file so a prefetched batch never sits in memory."""
         source,a,b,index=plan[position];path=sources[source]
+        # The gate first: a piece recorded while the microphone was not part of the meeting is never read,
+        # never encoded, never uploaded and never transcribed — the room conversation simply does not exist.
+        if source=='mic' and mic_windows is not None and gate_overlap(mic_windows,a,b)<MIC_GATE_MIN_OVERLAP: return ('skip',{'skipped':'mic_gated'})
         silent=is_silent(path,a,b)   # one pass over the window: the echo branch and the silence branch ask the same question
         if source=='mic' and 'system' in sources and not silent and is_echo(path,sources['system'],a,b): return ('skip',{'skipped':'echo'})
         if silent: return ('skip',{'skipped':'silent'})
@@ -704,6 +710,60 @@ def read_markers(capture_dir, limit=200):
     return out
 
 
+MIC_GATE_MIN_OVERLAP = 1.0   # a piece that touches an open gate for less than a second is room noise, not the meeting
+
+
+def mic_gate_windows(capture_dir):
+    """The spans of the recording during which the owner's microphone counted as meeting audio.
+
+    Boran, 11 Eyl 2026: "Mikrofondan gelen her sesi almak yerine sadece toplantıda unmute edince … alsın."
+    The app journals one `mic_gate` line per state change — the first at second zero — and this turns them
+    into [start,end) windows on the audio timeline. `None` means the recording carries no gate at all (it was
+    made before the gate existed, or the journal is unreadable): then nothing is skipped and the whole
+    microphone track is transcribed exactly as before.
+
+    The app stamps `t` on its own record start and the transcript runs on the capture helper's audio clock,
+    which sleep freezes and a relaunch splices — the same two clocks `read_markers` reconciles, with the same
+    measured correction, so a gate opened after a five-minute lid-close does not open five minutes late."""
+    try: from .audio import gate_events
+    except Exception: return None
+    try: events=gate_events(capture_dir)
+    except OSError: return None
+    if not events: return None
+    origin,samples=wall_audio_drift(capture_dir)
+    stamped=[]
+    for e in events:
+        state=e.get('state')
+        if state not in ('on','off'): continue
+        t=e.get('t')
+        if type(t) not in (int,float) or isinstance(t,bool) or not math.isfinite(t) or t<0: continue
+        wall=round(float(t),1)
+        mark=e.get('wall')
+        if origin is not None and type(mark) in (int,float) and math.isfinite(mark) and mark>=origin: wall=round(float(mark)-origin,1)
+        stamped.append((max(0.0,round(wall-drift_before(samples,wall),1)),state))
+    if not stamped: return None
+    stamped.sort(key=lambda pair:pair[0])   # ties keep the order they were written in
+    windows=[];open_at=None
+    for seconds,state in stamped:
+        if state=='on':
+            if open_at is None: open_at=seconds
+        elif open_at is not None:
+            if seconds>open_at: windows.append((open_at,seconds))
+            open_at=None
+    if open_at is not None: windows.append((open_at,math.inf))   # the gate was still open when the recording ended
+    return windows
+
+
+def gate_overlap(windows, start, end):
+    """Seconds of [start,end) that fall inside an open gate."""
+    if windows is None: return max(0.0,float(end)-float(start))
+    total=0.0
+    for a,b in windows:
+        low=max(float(start),a);high=min(float(end),b)
+        if high>low: total+=high-low
+    return total
+
+
 def compact_capture(store, mid):
     """After a cloud transcript is complete the assembled *-full.wav files carry everything playback and
     identity need; the 12-second capture chunks (48 kHz float, several times larger) are removed. The
@@ -803,10 +863,13 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             from .glossary import load as load_glossary, stt_hint, candidates as glossary_candidates
             glossary=load_glossary(data_dir,Path(__file__).resolve().parents[1],store=store)   # the hint carries the team's taught spellings too
             from .reports import settings_owner
-            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None,owner=settings_owner(data_dir))
+            mic_windows=mic_gate_windows(capture) if (capture and mode!='file') else None
+            transcribe_sources(store,mid,sources,client,consent=True,model=model,ffmpeg=ffmpeg,hint=stt_hint(glossary) if glossary else None,owner=settings_owner(data_dir),mic_windows=mic_windows)
             metadata['echo_segments']=flag_echo(store,mid)
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
-            metadata['echo_windows_skipped']=sum(1 for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,)) if 'skipped' in (u or ''))
+            usages=[u or '' for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,))]
+            metadata['echo_windows_skipped']=sum(1 for u in usages if 'skipped' in u and 'mic_gated' not in u)
+            metadata['mic_gated_windows']=sum(1 for u in usages if 'mic_gated' in u)   # what the mic gate saved: never uploaded, never paid for
             metadata['job_usage']=job_usage(job_started)
             metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_retry_attempt',None);metadata.pop('cloud_attempt_open',None)   # it worked: nothing left to retry
             try:

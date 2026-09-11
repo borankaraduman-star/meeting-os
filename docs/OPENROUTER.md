@@ -52,6 +52,7 @@ Varsayılan model `microsoft/mai-transcribe-2` (≈ $0,10/saat, konuşmacı ayr�
 
 ## Özerk oturum eklemeleri (9 Eylül 2026, 05:00–)
 
+- **Mikrofon kapısı:** mikrofon parçası, kaydın `mic-gate.jsonl` günlüğündeki açık pencerelerle 1,0 sn’den az kesişiyorsa hiç yüklenmez; `cloud_chunks.usage = {"skipped":"mic_gated"}` olarak checkpoint’lenir, `metadata.mic_gated_windows` sayar. Günlüğü olmayan (eski) kayıtlarda davranış değişmez. Parça kırpılmaz: bir saniyelik gerçek kesişme parçayı bütün olarak tutar.
 - **Yankı atlama:** mikrofon 30 s pencereleri, 50 ms ses-zarfı korelasyonu ile sistem sesine karşı ölçülür; ≥0.5 (yankı 0.72–0.88, ilgisiz konuşma 0.07 ölçüldü) ise yüklenmez, `cloud_chunks.usage = {"skipped":"echo"}` olarak checkpoint’lenir; `metadata.echo_windows_skipped`.
 - **Bulut analiz:** `analyze/prepare/ask --openrouter-model` (`openai/gpt-4.1-mini` varsayılan; `gpt-4o-mini`, `gemini-2.5-flash`). Yerel bellek kapısından geçmez. Model alıntıları `locate_quote` ile kaynak metnin birebir parçasına eşlenir (büyük/küçük harf, noktalama, tek kelime farkı), eşlenemeyen alıntı analizi reddettirir. Uygulama OpenRouter modundayken analiz otomatik başlar ve bu modeli kullanır. İlk gerçek koşu: 69 s toplantı, 6 s, doğru Türkçe özet ve risk maddeleri.
 - **Kontrol sekmesi:** `review_queue` — onay bekleyen isim, isimsiz konuşmacı (toplam süre ve en yakın profil), çakışan konuşma, kısa sesle tanıma, emin olunmayan ASR, sahibi belirsiz görev; her madde neden şüpheli olduğunu ve tek eylemi gösterir.
