@@ -117,7 +117,7 @@ struct QuickMenu:View {
             Button("Görev") { model.markMoment("task") }
             Button("Sonra") { model.markMoment("later") }
         }
-        if let u=model.update, u.canUpdate { Divider(); Button((model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")+" · \(u.behind) değişiklik") { model.startUpdate() }.disabled(model.busy || model.recording || model.updating || model.zoomMeetingOpen) }
+        if let u=model.update, u.canUpdate { Divider(); Button((model.zoomInMeeting ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")+" · \(u.behind) değişiklik") { model.startUpdate() }.disabled(model.busy || model.recording || model.updating || model.zoomMeetingOpen) }
         Divider()
         Button("Uygulamayı göster") { model.showMainWindow() }
         if !model.recording, let last=model.meetings.first { Button("Son toplantıyı aç · \(String(last.title.prefix(28)))") { model.selected=last.id; model.tab="analysis"; model.showMainWindow() } }

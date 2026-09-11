@@ -75,7 +75,7 @@ struct SidebarView:View {
                 if let u=model.update, u.canUpdate {
                     VStack(alignment:.leading,spacing:6) {
                         Label(u.headline,systemImage:"arrow.down.circle").font(.caption).lineLimit(2)
-                        Button(model.updating ? "Güncelleniyor…" : (model.zoomMeetingOpen ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")) { model.startUpdate() }.controlSize(.small).disabled(model.zoomMeetingOpen || model.busy || model.recording || model.updating).accessibilityIdentifier("updateButton")
+                        Button(model.updating ? "Güncelleniyor…" : (model.zoomInMeeting ? "Güncelleme toplantı bitince" : "Güncelle ve yeniden başlat")) { model.startUpdate() }.controlSize(.small).disabled(model.zoomMeetingOpen || model.busy || model.recording || model.updating).accessibilityIdentifier("updateButton")
                     }.padding(10).meetingCard()
                 }
                 if model.recording {

@@ -289,7 +289,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     var pendingSummaryRefresh=false; var pendingSummaryMeeting=""
     /// Names done → the summary is the next thing people read; refresh it once, quietly, instead of asking them to notice "güncel değil".
     func refreshSummaryIfNamesDone() {
-        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !recording, recordProcess==nil, !zoomMeetingOpen else { return }   // recordProcess: the helper still drains after `recording` goes false
+        guard let mid=selected, meeting?.status=="complete", analysis?["stale"] as? Bool == true, !recording, recordProcess==nil, !zoomInMeeting else { return }   // recordProcess: the helper still drains after `recording` goes false
         guard !review.contains(where:{ ($0.kind=="unnamed_speaker" || $0.kind=="suggested_name") && !$0.speakerKey.isEmpty }) else { return }
         scheduleSummaryRefresh(mid)
     }
@@ -310,7 +310,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     func runScheduledSummaryRefresh(_ mid:String) {
         guard selected==mid, meeting?.status=="complete" else { return }   // another meeting is open now: never badge it for this one
         guard analysis?["stale"] as? Bool == true else { summaryStale=false; return }
-        guard !recording, recordProcess==nil, !zoomMeetingOpen else { summaryStale=true; return }
+        guard !recording, recordProcess==nil, !zoomInMeeting else { summaryStale=true; return }
         if job != nil || busy { pendingSummaryRefresh=true; pendingSummaryMeeting=mid; summaryStale=true; activity="Özet, süren işlem bitince isimlerle yenilenecek"; return }
         summaryStale=false; activity="İsimler tamam · özet isimlerle yenileniyor"; analyzeMeeting(mid)
     }
@@ -424,6 +424,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             if zoomNow && !zoomMeetingOpen && !recording && zoomNotify && !zoomAutoRecord && !zoomState.sharing { ZoomNotifier.notifyIfNeeded() }   // never a banner onto a screen that is being shared
             if !zoomNow { ZoomNotifier.reset(); nameRefusalNotified=false }
             if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
+            if zoomInMeeting != zoomState.strict { zoomInMeeting=zoomState.strict }
             if screenSharing != zoomState.sharing { screenSharing=zoomState.sharing }
             updateRecorderPanel()
             applyWindowPrivacy()
@@ -691,6 +692,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     var bundleInvitePending:Bool { bundled && !bundleInviteFailed && BundleInvite.exists(resources:Bundle.main.resourceURL) }
     @Published var glossaryCount=0; @Published var glossaryFromFile=0; @Published var glossarySample:[String]=[]
     @Published var zoomMeetingOpen=false
+    /// A REAL meeting window (ZoomWatch `strict`), not Zoom's home window. Boran, 11 Sep 2026: "Güncelle butonu
+    /// 'toplantı bitince' diye pasif kaldı ama aktif kayıt ya da toplantı yok" — Zoom Workplace was merely open.
+    /// Anything that must wait for a meeting to END (updates, re-analysis) reads this; banners and the idle glyph
+    /// keep reading `zoomMeetingOpen`, where "Zoom is up" is the right question.
+    @Published var zoomInMeeting=false
     /// Per-second recording state lives on its own object: the panel and the menu bar observe it, the main
     /// window does not, so a ticking clock never re-lays out a 300-paragraph transcript during a meeting.
     let recorder=RecorderState()
@@ -1038,14 +1044,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         }
         if let r=try? await request(["action":"update_check"]) { update=UpdateInfo.parse(r) }
         await loadReportSettings()
-        if reportSettings.autoUpdate, update?.canUpdate==true, job==nil, !recording, recordProcess==nil, !zoomMeetingOpen { startUpdate() }
+        if reportSettings.autoUpdate, update?.canUpdate==true, job==nil, !recording, recordProcess==nil, !zoomInMeeting { startUpdate() }
     }
     /// Hands over to the detached updater and quits; the updater rebuilds, re-signs and relaunches.
     func startUpdate() {
         guard job==nil, !recording, !updating else { return }
         if let u=update, u.diverged { activity=u.divergedNotice; return }   // scripts/update.sh would refuse the fast-forward anyway
         if recordProcess != nil { activity="Önceki kayıt kapanıyor · birkaç saniye sonra güncelleyin"; return }   // the updater would wait 60 s on the draining helper and abort
-        if zoomMeetingOpen { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
+        if zoomInMeeting { activity="Zoom toplantısı açıkken güncelleme yapılmaz · toplantı bitince tekrar deneyin"; return }   // a rebuild would steal the meeting's CPU
         updating=true; activity="Güncelleniyor · uygulama kapanıp yeniden açılacak"
         Task {
             do {

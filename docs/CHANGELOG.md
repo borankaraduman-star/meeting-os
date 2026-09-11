@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 79 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 80 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.75](#v1275) | 2026-09-11 14:20 | v1.2.75 — Güncelleme düğmesi yalnız gerçek toplantıda bekler |
 | [v1.2.74](#v1274) | 2026-09-11 13:40 | v1.2.74 — Yüzen kayıt paneli kaldırıldı |
 | [v1.2.73](#v1273) | 2026-09-11 11:30 | v1.2.73 — Kişi başı OpenRouter anahtarı: paket anahtarsız, anahtar kişisel bağlantıyla |
 | [v1.2.72](#v1272) | 2026-09-11 10:15 | v1.2.72 — Tek parça uygulama paketi: indir, Uygulamalar'a sürükle, aç |
@@ -99,6 +100,17 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1275"></a>
+### v1.2.75 — Güncelleme düğmesi yalnız gerçek toplantıda bekler
+
+2026-09-11 14:20 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "Güncelle butonu 'güncelleme toplantı bitince' diye pasif kaldı ama aktif ses kaydı ya da toplantı yok."
+
+- Neden: `zoomMeetingOpen` Zoom'un **ana penceresi** (Zoom Workplace) açıkken de doğruydu; güncelleme ve özet yenileme buna bakıyordu. Yeni `zoomInMeeting` yalnız gerçek toplantı penceresini (ZoomWatch `strict`) izler; güncelleme düğmesi, otomatik güncelleme ve bayat özetin yenilenmesi artık ona bakar. Bildirimler ve menü çubuğu simgesi eskisi gibi "Zoom açık" bilgisini kullanır.
+- GitHub sürüm sayfaları 1.2.40–1.2.72 için geriye dönük açıldı (`gh` girişi çalışınca); `docs/CHANGELOG.md` yeniden üretildi.
+- Testler: Swift 251, Python 968.
 
 <a id="v1274"></a>
 ### v1.2.74 — Yüzen kayıt paneli kaldırıldı
