@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 80 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 81 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.76](#v1276) | 2026-09-11 15:00 | v1.2.76 — Mikrofon kapısı: yalnız Zoom'da sesiniz açıkken ya da "sesimi de al" deyince |
 | [v1.2.75](#v1275) | 2026-09-11 14:20 | v1.2.75 — Güncelleme düğmesi yalnız gerçek toplantıda bekler |
 | [v1.2.74](#v1274) | 2026-09-11 13:40 | v1.2.74 — Yüzen kayıt paneli kaldırıldı |
 | [v1.2.73](#v1273) | 2026-09-11 11:30 | v1.2.73 — Kişi başı OpenRouter anahtarı: paket anahtarsız, anahtar kişisel bağlantıyla |
@@ -100,6 +101,18 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1276"></a>
+### v1.2.76 — Mikrofon kapısı: yalnız Zoom'da sesiniz açıkken ya da "sesimi de al" deyince
+
+2026-09-11 15:00 · yerel not · GitHub sürüm sayfası yok
+
+Boran: "Mikrofondan gelen her sesi almak yerine sadece toplantıda unmute edince ya da 'benim sesimi de al' dediğimde alsın; dışarıdan normal konuşmalar da toplantı notu gibi oluyor."
+
+- **Mikrofon modu** (Ayarlar → Genel ve menü çubuğu): **Zoom'u izle** (varsayılan: Zoom'da sesiniz açıkken mikrofon kayda girer, sessizdeyken girmez), **Elle** (⌃⌥V ile açana kadar kapalı), **Her zaman** (eski davranış). Kayıt sırasında menü çubuğunda **"Sesimi de kaydet" (⌃⌥V)** anahtarı: o kayıt için mikrofonu zorla açar/kapatır; menü durumu söyler ("Mikrofon: kapalı · Zoom sessizde").
+- **Zoom'un sessize alma durumu** macOS Erişilebilirlik API'siyle Zoom'un "Meeting/Toplantı" menüsünden okunur (İngilizce ve Türkçe). Bunun için uygulamaya **Erişilebilirlik** izni gerekir; kurulum kartında satırı ve tek tıkla isteme düğmesi var. İzin yoksa "Zoom'u izle" modunda mikrofon yalnız ⌃⌥V ile açılır (güvenli taraf: yabancı konuşma kayda girmez, ama kendi sesiniz için ⌃⌥V'ye basmanız ya da "Her zaman"ı seçmeniz gerekir).
+- **Kapalı süreler yazıya gönderilmez:** kapı olayları kayıt klasöründe `mic-gate.jsonl`; bulut son işlem, açık pencerelerle 1 saniyeden az kesişen mikrofon parçalarını atlar (`mic_gated`; yüklenmez, ücret oluşmaz). Ses dosyası bütün kalır; kapı olmayan eski kayıtlar eskisi gibi işlenir.
+- Testler: Python 983 (+15), Swift 262 (+11). Canlı doğrulanmadı: gerçek Zoom görüşmesinde menü okuma (Erişilebilirlik izni verilip bir toplantıda sessize al/aç ile denenmeli); Zoom'un başka dilleri desteklenmiyor.
 
 <a id="v1275"></a>
 ### v1.2.75 — Güncelleme düğmesi yalnız gerçek toplantıda bekler
