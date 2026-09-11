@@ -38,7 +38,7 @@ Yerel SQLite veritabanında, diğer geç tablolar gibi ilk kullanımda oluşur (
 **Eylemler:** `record_start`, `record_stop`, `name_confirm`, `name_correct`, `name_reject`, `segment_pin`,
 `word_teach`, `word_forget`, `word_dismiss`, `glossary_apply`, `glossary_dismiss`, `review_resolve`,
 `task_edit`, `task_due`, `summary_edit` (1.2.81 için ayrılmış, henüz hiçbir şey yazmıyor), `export_ok`,
-`team_join`, `undo`.
+`team_join`, `team_knowledge_ready`, `team_first_value`, `undo`.
 
 ### Hangi eylem nereden yazılır
 
@@ -53,6 +53,8 @@ Yerel SQLite veritabanında, diğer geç tablolar gibi ilk kullanımda oluşur (
 | `task_edit` / `task_due` | `action_update`, `task_set_due` |
 | `export_ok` | `export`, `share_export` — **dosya yazılınca**. `share_preview` dışa aktarma değildir |
 | `team_join` | `team_join` başarıyla döndüğünde |
+| `team_knowledge_ready` | `team_knowledge.pull_profiles` — en az bir profil **gördüğü ilk** çekişte, bir kez |
+| `team_first_value` | ekibin örneğinin ürettiği otomatik adın kullanıcı tarafından **ilk kez doğrulandığı** an, bir kez |
 | `undo` | `undo_correction`; `undo_of` geri aldığı adlandırma olayını gösterir |
 
 ### İki kural
@@ -116,13 +118,98 @@ Nabız (`heartbeat.json`) **yalnız sayı** taşıyan bir `learning` bloğu kaza
 ```json
 "learning": { "days": 7, "events": 12, "undo": 1,
               "actions": { "word_teach": 3, "name_confirm": 5, "task_due": 4 },
-              "names": { "verified": 4, "falsified": 1, "unreviewed": 9 } }
+              "names": { "verified": 4, "falsified": 1, "unreviewed": 9 },
+              "team": { "team_join": "2026-09-11T08:00:00+00:00",
+                        "team_knowledge_ready": "2026-09-11T08:00:42+00:00",
+                        "team_first_value": "2026-09-11T10:14:00+00:00",
+                        "join_to_ready_seconds": 42.0, "join_to_first_value_seconds": 8040.0,
+                        "profile_effect": { "right": 2, "wrong": 0, "clusters": 31, "meetings": 9, "team_samples": 6 } } }
 ```
 
 Kelime yok, ad yok, başlık yok, kimlik yok. Ve bu blok, diğer bütün tanılama yükleri gibi
 **`meeting_os/telemetry_schema.py`** beyaz listesinden geçerek çıkar (bkz. `docs/EKIP.md`, "Buluta ne çıkar").
 
 `learning_events` tablosunun **kendisi hiçbir zaman yüklenmez.** Bu Mac'te kalır.
+
+## Kişi tanıma kalibrasyonu
+
+Codex incelemesinin #5 ve #6 maddeleri (1.2.83). Üç parça: **kaynak sınıfı**, **ekibin gerçek katkısı**,
+**eşik önerisi**. Hiçbiri üretim eşiğini kendiliğinden değiştirmez.
+
+### 1. Kaynak sınıfı (#6)
+
+Her ses örneği, `provenance` alanından okunan tek bir sınıfa düşer (`Store.sample_class`):
+
+| Sınıf | Provenance | Ne demek |
+| --- | --- | --- |
+| `human_local` | `manual`, `<mid>:<sid>`, `<mid>:speaker:<s>` | **bu** kullanıcı bir ad yazdı |
+| `auto_local` | `auto:<mid>:<cluster>` | uygulamanın kendi emin tahmini, profile geri beslendi |
+| `team` | `team:<host>:<hash>` | bir takım arkadaşının Mac'i böyle adlandırdı; burada kimse dinlemedi |
+
+`store._scores` her aday için `by_class` (sınıf başına örnek sayısı), `best_class` (en yakın tek örneğin
+sınıfı) ve `team_only` (hiç `human_local` örneği yok) döndürür.
+
+**Yalnız ekipten bilinen bir kişi, normal eşiği geçse bile ad olarak yazılmaz — öneri olur.** Ad yazılması
+için skorun `eşik + TEAM_EXTRA_MARGIN` (0,03) barajını da geçmesi gerekir (`Store.identify`). Aynı kişinin
+burada tek bir yerel örneği olduğu anda bu ek baraj kalkar: baraj kişiye değil, **kimsenin denetlemediği
+kanıta** konur. Bir Mac'in hatası böylece bütün ekibin etiketi hâline gelmez.
+
+### 2. Ekibin gerçek katkısı (#6)
+
+"8 profil indi" bir indirme sayısıdır, bir fayda değil. `store.team_profile_effect` **karşı olgusal** ölçer:
+aynı zaman sıralı replay iki kez koşar — bir kez bütün örneklerle, bir kez `team:` örnekleri çıkarılarak.
+
+- **+N doğru:** yalnız ekibin örnekleriyle doğru adlandırılan küme sayısı,
+- **−M yanlış:** yalnız ekibin örnekleri yüzünden yanlış adlandırılan küme sayısı.
+
+Kurulum kartının ekip satırında ve `learning.summary`'nin `team.profile_effect` alanında, sıfır değilse:
+`ekipten gelen profiller: +2 doğru / −1 yanlış`. Ekip örneği olmayan bir veritabanı tek bir `COUNT` ile
+cevap verir, replay koşmaz.
+
+### 3. Eşik önerisi (#5)
+
+`quality.calibrate` küçük ve **sabit** bir ızgarayı puanlar: eşik ∈ {0,85 · 0,87 · 0,89}, marj ∈
+{0,04 · 0,05 · 0,06}. Üç kural ölçümü kullanılabilir kılar:
+
+1. **Zaman sıralı.** Tek hakem `quality.replay_timeline`: bir toplantı yalnız kendisinden **önce** var olan
+   kanıtı kullanabilir. Leave-one-out replay gelecekteki toplantıların örneğini ödünç alabildiği için eşik
+   ayarına girmez.
+2. **Yalnız insan doğrulamalı küme.** Bir küme ancak bir kişi onu **adlandırmışsa** sayılır
+   (`quality._verified_clusters`). Dokunulmamış otomatik ad kendi kendini doğrulamaz.
+3. **Daha kötü olmasın.** Amaç doğru otomatik ad sayısını artırmak; kısıt, yanlış otomatik ad sayısının
+   bugünkü ayarın ürettiğini **aşmaması** ve **bilinmeyen kişinin adlandırılmaması**. İki ad kazanıp bir ad
+   uyduran aday kabul edilmez.
+
+Çıktı `<data_dir>/quality/calibration.json`: her aday için `correct` / `wrong` / `unknown_named` /
+`abstained_ok` / `abstained_wrong` / `n`, ve bir `recommendation`. **Üretim eşiği değişmez.**
+
+Kurulum kartının kalite satırı, `n ≥ 20` doğrulanmış küme varsa öneriyi gösterir:
+
+```
+kalibrasyon önerisi: eşik 0.85 (+2 doğru, 0 yanlış, n=24)
+```
+
+Altındaysa tek satır: `kalibrasyon: veri yetersiz (n=7)`. Ölçüm saatlik boştaki bakım geçişinde, günde en
+fazla bir kez yapılır (`quality.calibration_refresh`); kart ve nabız yalnız dosyayı **okur**.
+
+Uygulamak ayrı ve bilinçli bir adımdır:
+
+```bash
+meeting_os quality calibrate            # ölçer, yazar, hiçbir şeyi değiştirmez
+meeting_os quality calibrate --apply    # öneriyi settings.json'a yazar
+```
+
+`--apply`, `identity_threshold` ve `identity_margin` alanlarını ayarlara yazar; `cloud_finalize.identity_bars`
+bunları okur ve **doğrulanmış aralık dışındaki** bir değeri yok sayıp sabiti kullanır (eşik 0,80–0,95, marj
+0,02–0,15). Veri yetersizse `--apply` reddeder.
+
+### Bir yanlış ad, indirimi durdurur
+
+Kişisel eşik (`Store.personal_bar`) hâlâ her onaylanmış öneri için 0,01 iner ve her çürütülmüş otomatik ad
+için 0,02 çıkar. Değişen şu: **`wrong` bir kez oluştuğunda onaylar artık tabanın altına indirmez.** Üç onay
+bir hatayı ödeyip barajı yeniden küresel eşiğin altına çekebiliyordu; onaylar profilin kolay konuşmayla
+eşleştiğini söyler, hata ise **başkasının sesiyle de** eşleştiğini söyler ve baraj hakkındaki tek argüman
+ikincisidir.
 
 ## Saklama
 
@@ -136,8 +223,11 @@ Kelime yok, ad yok, başlık yok, kimlik yok. Ve bu blok, diğer bütün tanıla
 ## Bunu okumak
 
 ```bash
-meeting_os quality report     # kimlik karnesi: verified / falsified / unreviewed
-meeting_os reports heartbeat  # learning bloğu dahil nabız
+meeting_os quality report      # kimlik karnesi: verified / falsified / unreviewed
+meeting_os quality replay --timeline   # zaman sıralı kimlik değerlendirmesi
+meeting_os quality calibrate   # eşik ızgarası ve öneri (hiçbir şeyi değiştirmez)
+meeting_os reports heartbeat   # learning bloğu dahil nabız
 ```
 
-Python'dan: `learning.events(store, since=...)`, `learning.summary(store, days=7)`.
+Python'dan: `learning.events(store, since=...)`, `learning.summary(store, days=7)`,
+`learning.team_stopwatch(store)`, `store.team_profile_effect(store)`, `quality.calibrate(store, data_dir)`.

@@ -489,16 +489,17 @@ def identify_clusters(store, mid, sources, embedder=None):
     for r in store.segments(mid):
         if (r.get('metrics') or {}).get('cluster') is not None: speakers.setdefault((r['source'],r['speaker']),[]).append(r)
     scored=[]
+    threshold,margin=identity_bars(Path(store.path).parent)   # today's constants unless a calibration was applied
     for (source,speaker),members in speakers.items():
         centroid=linked_centroid(members,embedder.model_id)
         if centroid is None: continue
-        scored.append((members,store.identify(centroid,embedder.model_id,IDENTITY_THRESHOLD,IDENTITY_MARGIN),centroid))
+        scored.append((members,store.identify(centroid,embedder.model_id,threshold,margin),centroid))
     assignment=assign_identities([(members,identity) for members,identity,_ in scored])
     suggested=0;fed=0
     for members,identity,centroid in scored:
         name=assignment.get(id(members))
         sim=identity.get('similarity') or 0;gap=identity.get('margin') or 0
-        suggestion=identity.get('candidate') if (not name and sim>=SUGGEST_THRESHOLD and gap>=IDENTITY_MARGIN) else None
+        suggestion=identity.get('candidate') if (not name and sim>=SUGGEST_THRESHOLD and gap>=margin) else None
         for r in members:
             r.setdefault('metrics',{})['identity']={**identity,'name':name,'suggested':suggestion}
             with store.db: store.db.execute('UPDATE segments SET speaker_name=?,payload=? WHERE id=? AND meeting=?',(name,json.dumps(r,ensure_ascii=False),r['id'],mid))
@@ -616,6 +617,29 @@ def linked_centroid(members, model_id):
 
 IDENTITY_THRESHOLD=0.87   # real data: different people 0.65–0.853, same person ≥0.878 (a 5 s cluster the user confirmed); margin rule guards the gap
 IDENTITY_MARGIN=0.05
+
+
+def identity_bars(data_dir=None):
+    """(threshold, margin) for this Mac: the shipped constants, unless the user has applied a calibration.
+
+    `quality calibrate` measures a small grid against this Mac's own time-ordered, human-verified evidence and
+    writes a recommendation; it changes nothing. Only `quality calibrate --apply` puts the two numbers into
+    settings.json, and only a value inside the validated range is read back — anything else, an unreadable
+    settings file included, is simply the constant. Nobody's recognition silently changes because a file got
+    edited by hand (Codex #5: "veri yetersizse aday etkinleşmez")."""
+    threshold, margin = IDENTITY_THRESHOLD, IDENTITY_MARGIN
+    if data_dir is None: return threshold, margin
+    try:
+        from .reports import load_settings
+        from .store import IDENTITY_MARGIN_RANGE, IDENTITY_THRESHOLD_RANGE
+        settings = load_settings(data_dir)
+    except Exception: return threshold, margin
+    for key, low, high, index in (('identity_threshold', *IDENTITY_THRESHOLD_RANGE, 0), ('identity_margin', *IDENTITY_MARGIN_RANGE, 1)):
+        value = settings.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and low <= float(value) <= high:
+            if index == 0: threshold = float(value)
+            else: margin = float(value)
+    return threshold, margin
 OVERSPLIT_THRESHOLD=0.93  # a second cluster may share a name only when it is nearly as close as the best one
 
 def assign_identities(scored):

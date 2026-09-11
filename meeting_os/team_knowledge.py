@@ -441,6 +441,15 @@ def pull_profiles(store, settings, data_dir=None):
                                            f'team:{owner}:{digest}', cap=PROFILE_CAP): imported += 1
                 else: skipped += 1
             except ValueError: skipped += 1   # a line this Mac's `enroll` refuses is one line, not a failed import
+    # Codex #6: when did the team's knowledge become USABLE here? The first pull that actually saw a profile,
+    # once, so the time from joining to knowledge-available is a measured number rather than a guess. A pull
+    # that found nobody's file (or nothing in them) is not that moment and is not recorded.
+    available = sum(len(d) for d in published.values())
+    if available:
+        try:
+            from .learning import record_once
+            record_once(store, 'team_knowledge_ready', object=str(available), scope='global', source='auto')
+        except Exception: pass   # observability never breaks a sync
     return {'imported': imported, 'hosts': len(published), 'skipped': skipped, 'removed': removed}
 
 

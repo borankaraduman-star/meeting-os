@@ -89,16 +89,29 @@ enum SetupStatus {
     /// yet: a Mac with no shared folder, no heartbeats or no measured day must not get a row saying zero.
     /// `.optional` unless the pooled error rate rose 30 % or more with enough observations behind both
     /// periods — the same bar as the fleet alert, so the card and the alert can never disagree.
+    /// The identity calibration rides in the same row (Codex #5): what this Mac's own time-ordered,
+    /// human-verified evidence says about the voice-matching threshold. It is a RECOMMENDATION and the row
+    /// says so — nothing is applied until the user runs `quality calibrate --apply`. Below the evidence bar
+    /// it reads "veri yetersiz (n=…)", which is the honest answer and never a state worth colouring red.
     static func qualityCheck(_ r:[String:Any])->SetupCheck? {
-        guard let trend=r["quality_trend"] as? [String:Any] else { return nil }
+        let trend=r["quality_trend"] as? [String:Any] ?? [:]
         let line=(trend["line"] as? String ?? "").trimmingCharacters(in:.whitespaces)
-        if line.isEmpty { return nil }
+        let calibration=(r["calibration"] as? [String:Any])?["line"] as? String ?? ""
+        let parts=[line,calibration.trimmingCharacters(in:.whitespaces)].filter { !$0.isEmpty }
+        if parts.isEmpty { return nil }
         let change=trend["change"] as? Double ?? 0
         let eligible=trend["eligible"] as? Bool ?? false
         let worse=eligible && change >= 0.30
         let worst=(trend["top_errors"] as? [[String:Any]])?.first?["metric"] as? String ?? ""
         let tail=worse && !worst.isEmpty ? " · en çok: "+(errorLabels[worst] ?? worst) : ""
-        return SetupCheck(id:"quality",title:"Kalite eğilimi",state:worse ? .missing : .optional,hint:line+tail)
+        return SetupCheck(id:"quality",title:"Kalite eğilimi",state:worse ? .missing : .optional,hint:parts.joined(separator:" · ")+tail)
+    }
+    /// "ekipten gelen profiller: +2 doğru / −1 yanlış" — the counterfactual, appended to whatever the team row
+    /// already says. Empty (and therefore absent) until the idle housekeeping has measured a non-zero effect,
+    /// so a Mac with no team, or one whose team changed nothing, gets no line at all rather than a zero.
+    static func teamEffectTail(_ r:[String:Any])->String {
+        let line=((r["team_profile_effect"] as? [String:Any])?["line"] as? String ?? "").trimmingCharacters(in:.whitespaces)
+        return line.isEmpty ? "" : " · "+line
     }
     static let errorLabels=["names_falsified":"yanlış otomatik isim","word_repeat_errors":"öğretilen kelime yine yanlış",
                             "summary_edits":"özet düzeltmesi","task_edits":"görev düzeltmesi"]
@@ -188,7 +201,8 @@ enum SetupStatus {
             SetupCheck(id:"glossary",title:"Proje sözlüğü",state:glossary>0 ? .ok : .optional,hint:glossary>0 ? "\(glossary) terim · \(shared ? "iCloud Drive ile paylaşılıyor" : "yalnız bu Mac")" : "glossary.jsonl içe aktarın; iCloud Drive ile bütün Mac’lere yayılır"),
         ]
         if !bundled { out.append(SetupCheck(id:"signing",title:"İmzalama izni",state:signing ? .ok : .missing,hint:signing ? "verildi" : signingFix(repo:repo))) }
-        out.append(teamRootCheck(r))
+        let team=teamRootCheck(r); let effect=teamEffectTail(r)
+        out.append(effect.isEmpty ? team : SetupCheck(id:team.id,title:team.title,state:team.state,hint:team.hint+effect))
         out.append(SetupCheck(id:"update",title:bundled ? "Paket sürümü" : "Sürüm",
                               state:(diverged && !bundled) ? .missing : (!updateError.isEmpty ? .optional : (behind==0 ? .ok : .missing)),
                               hint:(diverged && !bundled) ? divergedLine : (!updateError.isEmpty ? "kontrol edilemedi · "+updateError : (behind==0 ? currentHint : "\(behind) değişiklik geride · kenar çubuğundan güncelleyin"))))

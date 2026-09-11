@@ -236,6 +236,9 @@ def replay_identity(store, threshold=None, margin=None):
             top=[{'name':s['name'],'score':round(s['score'],3)} for s in scores[:2]]
             score=top[0]['score'] if top else None;gap=(scores[0]['score']-scores[1]['score']) if len(scores)>1 else (scores[0]['score']+1 if scores else None)
             bar=store.person_threshold(top[0]['name'],threshold,exclude=m['id']) if top else threshold   # this meeting's own corrections do not lower its own bar
+            if scores and scores[0].get('team_only'):
+                from .store import Store
+                bar+=Store.TEAM_EXTRA_MARGIN   # a candidate only the team knows is held to the live path's higher bar
             named=top[0]['name'] if top and score>=bar and gap>=margin else None
             if not any(s['name']==name for s in scores): outcome='no_profile'
             elif named==name: outcome='ok'
@@ -284,17 +287,25 @@ def replay(store, data_dir=None, *, identity=True, text=True, timeline=False, th
 
 # ---------------------------------------------------------------- time-ordered identity replay
 
-def _sample_rows(store):
-    """Every live voice sample with the date it came into existence. `created` is stamped at insert since
-    1.2.82 and backfilled from the meeting a sample's provenance names; a sample that is still undated (a
-    hand enrolment from an older install, a team import) has no place on a timeline and is counted apart."""
+def _sample_rows(store, drop_classes=()):
+    """Every live voice sample with the date it came into existence and the evidence class it belongs to
+    (`Store.sample_class`). `created` is stamped at insert since 1.2.82 and backfilled from the meeting a
+    sample's provenance names; a sample that is still undated (a hand enrolment from an older install, a team
+    import) has no place on a timeline and is counted apart.
+
+    `drop_classes` leaves whole classes out, which is how the team counterfactual (`store.team_profile_effect`)
+    asks what this Mac would have recognised without the team's samples."""
+    from .store import Store
+    drop=set(drop_classes or ())
     rows=[];undated=0
     for r in store.db.execute('SELECT id,name,model,vector,provenance,created FROM samples WHERE deleted_by IS NULL'):
+        kind=Store.sample_class(r['provenance'])
+        if kind in drop: continue
         created=r['created']
         if not created: undated+=1;continue
         try: vector=json.loads(r['vector'])
         except (TypeError,ValueError): continue
-        rows.append({'id':r['id'],'name':r['name'],'model':r['model'],'vector':vector,'provenance':r['provenance'] or '','created':created})
+        rows.append({'id':r['id'],'name':r['name'],'model':r['model'],'vector':vector,'provenance':r['provenance'] or '','created':created,'class':kind})
     return rows,undated
 
 
@@ -310,13 +321,14 @@ def _rejection_rows(store):
 
 def _scores_before(store, vector, model, cutoff, samples, rejections):
     """store._scores for one moment in time: only the samples and rejections that existed before `cutoff`.
-    Same arithmetic as the live path (centroid + best single sample, a rejection vetoes the person), so the
-    only difference between this and the regression replay is WHICH evidence is allowed to answer."""
+    Same arithmetic as the live path (centroid + best single sample, a rejection vetoes the person, the class
+    breakdown of the evidence behind each candidate), so the only difference between this and the regression
+    replay is WHICH evidence is allowed to answer."""
     from .store import cosine, unit, Store
     v=unit(vector);groups={}
     for s in samples:
         if s['model']!=model or s['created']>=cutoff or len(s['vector'])!=len(v): continue
-        groups.setdefault(s['name'],[]).append(s['vector'])
+        groups.setdefault(s['name'],[]).append(s)
     vetoed=set()
     for r in rejections:
         if r['model']!=model or r['created']>=cutoff or r['name'] not in groups or len(r['vector'])!=len(v): continue
@@ -324,10 +336,12 @@ def _scores_before(store, vector, model, cutoff, samples, rejections):
     out=[]
     for name,xs in groups.items():
         if name in vetoed: continue
-        try: centroid=unit([sum(col)/len(xs) for col in zip(*xs)])
+        try: centroid=unit([sum(col)/len(xs) for col in zip(*[x['vector'] for x in xs])])
         except ValueError: continue
-        best=max(cosine(v,unit(x)) for x in xs)
-        out.append({'name':name,'score':(cosine(v,centroid)+best)/2,'samples':len(xs)})
+        best,best_class=max(((cosine(v,unit(x['vector'])),x['class']) for x in xs),key=lambda p:p[0])
+        by_class={c:sum(1 for x in xs if x['class']==c) for c in Store.SAMPLE_CLASSES}
+        out.append({'name':name,'score':(cosine(v,centroid)+best)/2,'samples':len(xs),'by_class':by_class,
+                    'best_class':best_class,'team_only':by_class['human_local']==0 and by_class['team']>0})
     return sorted(out,key=lambda s:-s['score'])
 
 
@@ -344,7 +358,15 @@ def _bar_before(store, name, base, cutoff):
     return store.personal_bar(base,confirmed,wrong)
 
 
-def replay_timeline(store, threshold=None, margin=None):
+def _verified_clusters(store):
+    """(meeting, speaker) of every cluster a human actually named. A cluster nobody judged carries the app's
+    own guess in `speaker_name`, and letting that stand in for the truth is the over-count Codex #1 named —
+    so the calibration grid is scored on these clusters only."""
+    return {(r['meeting'],r['speaker']) for r in store.db.execute(
+        "SELECT meeting,speaker FROM corrections WHERE speaker NOT LIKE 'segment:%'")}
+
+
+def replay_timeline(store, threshold=None, margin=None, *, drop_classes=(), verified_only=False):
     """Cold-start replay: each meeting is judged with ONLY the evidence that existed before it started.
 
     `replay_identity` leaves one meeting out of the profiles and keeps everything else, including samples from
@@ -359,12 +381,19 @@ def replay_timeline(store, threshold=None, margin=None):
       `abstained_wrong`  a known person was left unnamed (the evidence was there and did not carry),
       `abstained_ok`     an unknown person was left unnamed — the correct answer, counted as such,
       `unknown_named`    an unknown person was given a name; the worst outcome, and invisible to `replay_identity`.
+
+    `drop_classes` leaves an evidence class out (the team counterfactual); `verified_only` keeps just the
+    clusters a human actually named, which is the evidence `calibrate` is allowed to tune a threshold on.
     """
-    from .cloud_finalize import IDENTITY_THRESHOLD, IDENTITY_MARGIN, source_labels, linked_centroid
+    from .cloud_finalize import source_labels, linked_centroid, identity_bars
     from .reports import settings_owner
-    threshold=IDENTITY_THRESHOLD if threshold is None else threshold;margin=IDENTITY_MARGIN if margin is None else margin
-    mic=source_labels(settings_owner(Path(store.path).parent))['mic']
-    samples,undated_samples=_sample_rows(store);rejections,undated_rejections=_rejection_rows(store)
+    from .store import Store
+    data_dir=Path(store.path).parent
+    base_threshold,base_margin=identity_bars(data_dir)
+    threshold=base_threshold if threshold is None else threshold;margin=base_margin if margin is None else margin
+    mic=source_labels(settings_owner(data_dir))['mic']
+    samples,undated_samples=_sample_rows(store,drop_classes);rejections,undated_rejections=_rejection_rows(store)
+    verified=_verified_clusters(store) if verified_only else None
     OUTCOMES=('auto_correct','auto_wrong','abstained_wrong','abstained_ok','unknown_named')
     meetings=[m for m in store.meetings() if m['status']=='complete' and m['created']]
     meetings.sort(key=lambda m:m['created'])   # store.meetings() is newest first; a timeline is not
@@ -376,6 +405,7 @@ def replay_timeline(store, threshold=None, margin=None):
             groups.setdefault((r['source'],r['speaker'],r['speaker_name']),[]).append(r)
         counts={k:0 for k in OUTCOMES};clusters=0
         for (source,speaker,name),members in groups.items():
+            if verified is not None and (m['id'],speaker) not in verified: continue   # only what a human judged
             models={r.get('embedding_model') for r in members if r.get('embedding') and r.get('embedding_model')}
             if not models: continue
             model=max(models,key=lambda k:sum(1 for r in members if r.get('embedding_model')==k))
@@ -386,6 +416,9 @@ def replay_timeline(store, threshold=None, margin=None):
             score=top[0]['score'] if top else None
             gap=(scores[0]['score']-scores[1]['score']) if len(scores)>1 else (scores[0]['score']+1 if scores else None)
             bar=_bar_before(store,top[0]['name'],threshold,cutoff) if top else threshold
+            # The same higher bar the live path puts in front of a candidate only the team knows (Codex #6),
+            # or the replay would credit team knowledge with names the app would never have written.
+            if scores and scores[0].get('team_only'): bar+=Store.TEAM_EXTRA_MARGIN
             named=top[0]['name'] if top and score>=bar and gap>=margin else None
             if named==name: outcome='auto_correct'
             elif named and known: outcome='auto_wrong'
@@ -395,7 +428,8 @@ def replay_timeline(store, threshold=None, margin=None):
             counts[outcome]+=1;clusters+=1
             items.append({'meeting':m['id'],'created':m['created'],'speaker':speaker,'name':name,'known_before':known,'outcome':outcome,'named':named,
                           'seconds':round(sum(r['end']-r['start'] for r in members),1),'score':score,'margin':round(gap,3) if gap is not None else None,
-                          'threshold_used':round(bar,3),'nearest':top})
+                          'threshold_used':round(bar,3),'nearest':top,
+                          'best_class':scores[0].get('best_class') if scores else None,'team_only':bool(scores and scores[0].get('team_only'))})
             p=people.setdefault(name,{k:0 for k in OUTCOMES});p[outcome]+=1
         if clusters: per_meeting.append({'meeting':m['id'],'title':m['title'],'created':m['created'],'clusters':clusters,**counts})
     totals={k:sum(r[k] for r in per_meeting) for k in OUTCOMES}
@@ -406,6 +440,183 @@ def replay_timeline(store, threshold=None, margin=None):
             'known_recall':round(totals['auto_correct']/(totals['auto_correct']+totals['auto_wrong']+totals['abstained_wrong']),3) if (totals['auto_correct']+totals['auto_wrong']+totals['abstained_wrong']) else None,
             'undated_samples':undated_samples,'undated_rejections':undated_rejections,
             'per_meeting':per_meeting,'people':people,'items':items}
+
+
+# ---------------------------------------------------------------- threshold calibration (Codex #5)
+
+CALIBRATION_FILE='calibration.json'
+# A small fixed grid, deliberately. A search over a continuous range on a few dozen clusters finds noise and
+# calls it a threshold; three bars and three margins around today's setting is the most this evidence can carry.
+CALIBRATION_THRESHOLDS=(0.85,0.87,0.89)
+CALIBRATION_MARGINS=(0.04,0.05,0.06)
+CALIBRATION_MIN_VERIFIED=20   # below this the recommendation is not shown at all: "veri yetersiz" is the honest answer
+
+
+def _calibration_row(store, threshold, margin):
+    """One grid point, judged by `replay_timeline` on human-verified clusters only.
+
+    `wrong` is every automatic name that was not the person: a known person called somebody else
+    (`auto_wrong`) AND a person nobody could have known being given a name at all (`unknown_named`). The
+    second is the outcome the review cares most about and the one the leave-one-out replay cannot see."""
+    out=replay_timeline(store,threshold,margin,verified_only=True)
+    return {'threshold':round(threshold,4),'margin':round(margin,4),'n':out['clusters'],
+            'correct':out['auto_correct'],'wrong':out['auto_wrong']+out['unknown_named'],
+            'auto_wrong':out['auto_wrong'],'unknown_named':out['unknown_named'],
+            'abstained_ok':out['abstained_ok'],'abstained_wrong':out['abstained_wrong']}
+
+
+def calibrate(store, data_dir=None, *, save=True):
+    """Score a small threshold/margin grid against this Mac's own evidence and RECOMMEND one. Changes nothing.
+
+    Three rules make this measurement worth acting on, and all three come straight from the review:
+
+    * **Time-ordered.** `replay_timeline` is the only judge here: a meeting may use nothing but evidence that
+      existed before it started. The leave-one-out replay can borrow a sample from a meeting that had not
+      happened yet, which flatters every candidate equally and tells you nothing about the day.
+    * **Human-verified only.** A cluster counts only when a person actually named it. An untouched automatic
+      name agreeing with itself is not evidence, and tuning a threshold on it would lower the bar every time
+      the app got confident, right or wrong.
+    * **Never worse.** The objective is more correct automatic names, subject to the wrong ones not rising
+      above what today's setting already produces, and to unknown people staying unnamed. A candidate that
+      buys two names by inventing one is not an improvement.
+
+    The result is written to <data_dir>/quality/calibration.json and shown on the setup card. Production
+    thresholds are NOT touched: `quality calibrate --apply` is a separate, deliberate act by the user."""
+    data_dir=Path(data_dir or Path(store.path).parent)
+    from .cloud_finalize import identity_bars
+    current_threshold,current_margin=identity_bars(data_dir)
+    grid=[(t,m) for t in CALIBRATION_THRESHOLDS for m in CALIBRATION_MARGINS]
+    if (round(current_threshold,4),round(current_margin,4)) not in [(round(t,4),round(m,4)) for t,m in grid]:
+        grid.append((current_threshold,current_margin))   # the setting in force is always one of the candidates
+    rows=[_calibration_row(store,t,m) for t,m in grid]
+    for row in rows: row['current']=abs(row['threshold']-current_threshold)<1e-9 and abs(row['margin']-current_margin)<1e-9
+    current=next(r for r in rows if r['current'])
+    n=current['n']
+    # "Not worse" is two constraints, not one: the total of wrong names, and the unknown people named.
+    eligible=[r for r in rows if r['wrong']<=current['wrong'] and r['unknown_named']<=current['unknown_named']]
+    # Ties go to the setting already in force, then to the candidate closest to it: a grid point that buys
+    # nothing must never be recommended just because it sorts first.
+    best=max(eligible,key=lambda r:(r['correct'],-r['wrong'],-r['unknown_named'],r['current'],
+                                    -abs(r['margin']-current_margin),-abs(r['threshold']-current_threshold)))
+    change=not best['current'] and best['correct']>current['correct']
+    report={'date':date.today().isoformat(),'n':n,'min_verified':CALIBRATION_MIN_VERIFIED,
+            'enough':n>=CALIBRATION_MIN_VERIFIED,'current':{'threshold':current['threshold'],'margin':current['margin'],
+            'correct':current['correct'],'wrong':current['wrong'],'unknown_named':current['unknown_named']},
+            'candidates':rows,
+            'recommendation':{'threshold':best['threshold'],'margin':best['margin'],'correct':best['correct'],
+                              'wrong':best['wrong'],'unknown_named':best['unknown_named'],
+                              'correct_gain':best['correct']-current['correct'],'wrong_delta':best['wrong']-current['wrong'],
+                              'n':n,'change':change,
+                              # A recommendation nobody may act on yet is still recorded, and says so.
+                              'applicable':bool(change and n>=CALIBRATION_MIN_VERIFIED)}}
+    report['line']=calibration_line(report)
+    if save: _save_calibration(data_dir,report)
+    return report
+
+
+def calibration_line(report):
+    """One Turkish line for the setup card: the recommendation, or why there is not one yet."""
+    if not report: return ''
+    n=int(report.get('n') or 0)
+    if not report.get('enough'): return f'kalibrasyon: veri yetersiz (n={n})'
+    rec=report.get('recommendation') or {}
+    if not rec.get('change'): return f'kalibrasyon: mevcut eşik en iyisi (n={n})'
+    bars=f"eşik {rec['threshold']:.2f}"
+    if abs(float(rec.get('margin') or 0)-float((report.get('current') or {}).get('margin') or 0))>1e-9: bars+=f" · marj {rec['margin']:.2f}"
+    return f"kalibrasyon önerisi: {bars} (+{rec['correct_gain']} doğru, {rec['wrong']} yanlış, n={n})"
+
+
+def calibration_path(data_dir):
+    return Path(data_dir)/DAILY_DIR/CALIBRATION_FILE
+
+
+def load_calibration(data_dir):
+    """The recommendation this Mac last measured, or {}. Read-only and cheap: the setup card draws from the
+    file, never from a fresh nine-point replay nobody asked for while the Settings sheet is opening."""
+    try: data=json.loads(calibration_path(data_dir).read_text(encoding='utf-8'))
+    except (OSError,ValueError): return {}
+    return data if isinstance(data,dict) else {}
+
+
+def _save_calibration(data_dir, report):
+    from .reports import publish
+    path=calibration_path(data_dir);path.parent.mkdir(parents=True,exist_ok=True)
+    try: publish(path,json.dumps(report,ensure_ascii=False,indent=1))
+    except OSError: pass   # a measurement is never worth failing a job for
+    return report
+
+
+CALIBRATION_MAX_AGE_HOURS=24
+
+
+def calibration_refresh(store, data_dir, *, max_age_hours=CALIBRATION_MAX_AGE_HOURS, now=None):
+    """Re-measure at most once a day, from the hourly idle housekeeping. Never raises, never runs while the
+    Mac is recording (the caller's pass is the idle one), and answers from the file when it is still fresh."""
+    try:
+        existing=load_calibration(data_dir)
+        moment=now or datetime.now(timezone.utc)
+        written=existing.get('written')
+        if written:
+            try:
+                age=(moment-datetime.fromisoformat(written)).total_seconds()
+                if 0<=age<max_age_hours*3600: return {**existing,'fresh':True}
+            except ValueError: pass
+        report=calibrate(store,data_dir,save=False)
+        report['written']=moment.isoformat()
+        _save_calibration(data_dir,report)
+        return {**report,'fresh':False}
+    except Exception:
+        return {}
+
+
+TEAM_EFFECT_FILE='team-effect.json'
+TEAM_EFFECT_MAX_AGE_HOURS=24
+
+
+def team_effect_path(data_dir):
+    return Path(data_dir)/DAILY_DIR/TEAM_EFFECT_FILE
+
+
+def load_team_effect(data_dir):
+    """What the team's samples last measured as (`store.team_profile_effect`), or {}. Read from the file for
+    the same reason the calibration is: the setup card and the hourly heartbeat must not pay for two replays."""
+    try: data=json.loads(team_effect_path(data_dir).read_text(encoding='utf-8'))
+    except (OSError,ValueError): return {}
+    return data if isinstance(data,dict) else {}
+
+
+def team_effect_refresh(store, data_dir, *, max_age_hours=TEAM_EFFECT_MAX_AGE_HOURS, now=None):
+    """Re-measure the team counterfactual at most once a day, from the idle housekeeping. Never raises."""
+    try:
+        from .store import team_profile_effect
+        from .reports import publish
+        existing=load_team_effect(data_dir)
+        moment=now or datetime.now(timezone.utc)
+        written=existing.get('written')
+        if written:
+            try:
+                age=(moment-datetime.fromisoformat(written)).total_seconds()
+                if 0<=age<max_age_hours*3600: return {**existing,'fresh':True}
+            except ValueError: pass
+        effect={**team_profile_effect(store),'written':moment.isoformat()}
+        path=team_effect_path(data_dir);path.parent.mkdir(parents=True,exist_ok=True)
+        try: publish(path,json.dumps(effect,ensure_ascii=False,indent=1))
+        except OSError: pass
+        return {**effect,'fresh':False}
+    except Exception:
+        return {}
+
+
+def apply_calibration(store, data_dir, report=None):
+    """Write the recommended bars into settings.json (`quality calibrate --apply`). The only path that ever
+    changes what recognition does, and it refuses on evidence the review says is too thin."""
+    from .reports import save_settings
+    report=report or calibrate(store,data_dir)
+    rec=report.get('recommendation') or {}
+    if not report.get('enough'): return {'applied':False,'reason':f"veri yetersiz (n={report.get('n')}, en az {CALIBRATION_MIN_VERIFIED})",'report':report}
+    if not rec.get('change'): return {'applied':False,'reason':'mevcut ayar zaten en iyisi','report':report}
+    settings=save_settings(data_dir,{'identity_threshold':rec['threshold'],'identity_margin':rec['margin']})
+    return {'applied':True,'identity_threshold':settings.get('identity_threshold'),'identity_margin':settings.get('identity_margin'),'report':report}
 
 
 # ---------------------------------------------------------------- daily numeric quality summary (Codex #10)

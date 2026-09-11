@@ -180,6 +180,21 @@ def meeting_files(metadata, data_dir):
     return sorted(folders)
 
 
+def _identity_learning(data_dir):
+    """The two identity numbers the setup card shows, READ from the files the idle housekeeping writes: the
+    calibration recommendation and what the team's profiles bought. Never measured here — a Settings sheet
+    must not pay for a replay, and a Mac that has never been idle simply has nothing to show yet."""
+    try:
+        from .quality import calibration_line,load_calibration,load_team_effect
+        calibration=load_calibration(data_dir) or {}
+        effect=load_team_effect(data_dir) or {}
+        return {'calibration':{'n':calibration.get('n'),'enough':bool(calibration.get('enough')),
+                               'line':calibration.get('line') or calibration_line(calibration)},
+                'team_profile_effect':{**{k:effect.get(k) for k in ('right','wrong','clusters','team_samples')},'line':effect.get('line') or ''}}
+    except Exception:
+        return {}
+
+
 def _quality_trend(settings):
     """The fleet's quality trend for the setup card: two consecutive periods of the daily numbers every Mac
     puts in its heartbeat, plus one Turkish line. Heartbeats only and never a network call; an unreadable
@@ -782,7 +797,13 @@ def dispatch(request, db=None):
             from . import team_cloud as TC
             from .learning import prune as prune_learning
             learning=prune_learning(store)   # 90 days / 20 MB; the event log is not allowed to become a data platform
-            return {'learning':learning,
+            # Idle, at most once a day, and never while recording (this pass only runs when nothing does): the
+            # identity calibration and the team counterfactual are two replays, which is why neither is run
+            # from the setup card or the heartbeat — both of those read the file this writes.
+            from .quality import calibration_refresh,team_effect_refresh
+            calibration=calibration_refresh(store,data);team_effect=team_effect_refresh(store,data)
+            return {'learning':learning,'calibration':{k:calibration.get(k) for k in ('date','n','enough','line','fresh')},
+                    'team_effect':{k:team_effect.get(k) for k in ('right','wrong','clusters','team_samples','fresh')},
                     'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],
                     'retention_warning':audio_retention_warning(store,days),'text_retention_warning':text_retention_warning(store,text_days),'team':team,'outbox':TC.outbox(data)}
@@ -838,7 +859,7 @@ def dispatch(request, db=None):
                     'reports_on':bool(rs.get('share_reports')),'reports_writable':writable,'reports_written':written,'reports_dir':str(folder),
                     # One line about whether the fleet is correcting MORE than it was. Heartbeats only
                     # (`limit=0` skips every meeting report), so the card stays cheap to draw.
-                    'quality_trend':_quality_trend(rs)}
+                    'quality_trend':_quality_trend(rs),**_identity_learning(data)}
         if action=='cost_report':
             # Real OpenRouter charges: transcription per audio piece, analysis per chat completion.
             from datetime import datetime,timezone
