@@ -58,6 +58,16 @@ kurulan Mac'ler aynı ekiptir.**
 
 ### Buluta ne çıkar — tam sözleşme (1.2.78+)
 
+**Tek kapı (1.2.80+).** Buluta çıkan **her** tanılama yükü — hata günlüğü dışa aktarımı, teşhis raporu ve
+nabız — aynı beyaz listeden geçer: `meeting_os/telemetry_schema.py` içindeki `ALLOWED`. Listede olmayan bir
+alan çıkmaz; **serbest metnin geçebileceği bir tür yoktur.** Bu yüzden şunlar artık **hiç** gitmez ve yalnız
+bu Mac’teki dosyada durur: `last-job.log`’un son satırları (rapor ve nabızdaki `errors`), hata günlüğünün en
+son iletileri (`error_journal.last`), güncelleyicinin cümlesi (`update_status.message`), öz-testin özeti
+(`probe.summary`), ekip bulutunun hata cümlesi (`team_cloud.last_error`), kayıt sürerken nabzın taşıdığı
+toplantı numarası ve kayıt klasörü. Yerine **sınıflandırma ve sayı** gider: `error_journal.codes`,
+`team_cloud.last_error_code` ve aşağıdaki beş alanlık satır. Yeni bir alan eklendiğinde, bu listeye yazılana
+kadar ekibe görünmez — kapı bilerek bu yönde çalışır.
+
 **Hata günlüğü.** Sunucudaki `errors/<mac-adı>.jsonl`, yereldeki `errors.jsonl`’in kopyası **değildir**; ondan
 üretilen ve **yalnız şu beş alanı** taşıyan bir dışa aktarımdır (`errors.export_for_team`):
 
@@ -82,9 +92,27 @@ yükleme anında anonimleştirilir: `transcript` alanı **yoktur**, `title` **bo
 numarası değil onun **8 karakterlik karmasıdır**, **dosya adındaki toplantı numarası da aynı karmayla
 değiştirilir** ve konuşmacılar `S1`, `S2`… olur (ad ve öneri boş). Bu denetim **yükleme anında** yapılır: ayar
 açıkken yazılmış eski bir rapor, ayarı kapattığınız anda sunucudan **silinir** ve yerine anonim kopyası gider.
-Ayar **açıkken** rapor olduğu gibi, kendi adıyla gider — o anahtarın anlamı budur. Okunamayan bir JSON hiç
-yüklenmez. `heartbeat.json` bunların hiçbirinden etkilenmez: kimseyi ve hiçbir toplantıyı adlandırmadığı için
-baytı baytına gider. Mac’teki özgün rapor dosyası her durumda olduğu gibi kalır; değişen yalnız giden kopyadır.
+Ayar **açıkken** raporun **içeriği** (transkripti ve başlığı) kendi adıyla gider — o anahtarın anlamı budur —
+ama **tanılama yarısı yine beyaz listeden geçer (1.2.80+)**: `last-job.log` satırları o anahtarın kapsamında
+değildir, çünkü başka toplantıların ve bu Mac’in yollarını taşıyabilirler. Okunamayan bir JSON hiç yüklenmez.
+`heartbeat.json` de artık aynı kapıdan geçer; eskiden baytı baytına giderdi, oysa taşıdığı tanılama satırları
+hiçbir zaman sözleşmenin içinde değildi. Mac’teki özgün rapor dosyası her durumda olduğu gibi kalır; değişen
+yalnız giden kopyadır.
+
+**Nabızdaki `learning` (1.2.80+).** Nabız, kullanıcının haftalık kararlarını **yalnız sayı olarak** taşır:
+
+| Alan | İçindeki tek şey |
+| --- | --- |
+| `learning.days` | pencere (7 gün) |
+| `learning.events` | penceredeki toplam karar sayısı |
+| `learning.undo` | kaç tanesi geri alındı |
+| `learning.actions` | eylem adı → sayı (`word_teach`, `name_confirm`, `task_due`, … — `learning.ACTIONS` enum’u) |
+| `learning.names.verified` | kullanıcının **elle onayladığı** otomatik isim sayısı |
+| `learning.names.falsified` | kullanıcının elle **bozduğu** otomatik isim sayısı |
+| `learning.names.unreviewed` | **kimsenin dokunmadığı** otomatik isim sayısı — başarı sayılmaz |
+
+Kelime, kişi adı, toplantı başlığı ya da kimlik **yoktur**. Kararların kendisi (`learning_events` tablosu) bu
+Mac’te kalır ve hiçbir zaman yüklenmez. Ayrıntı: [docs/LEARNING.md](LEARNING.md).
 
 #### Ekibe katılmak: bir bağlantı, bir tıklama (1.2.68+)
 

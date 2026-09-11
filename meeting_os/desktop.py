@@ -334,6 +334,13 @@ def data_folder(db):
     return DATA_DIR if db is None else Path(db).parent
 
 
+def learn(store, action, **fields):
+    """One learning_event for a user action that has just SUCCEEDED. Called after the work, never before: an
+    action that raised is not a decision. Never raises and never waits on anything (see meeting_os/learning.py)."""
+    from .learning import record_event
+    return record_event(store, action, **fields)
+
+
 def dispatch(request, db=None):
     if request.get('action')=='diagnostics':
         from .diagnostics import collect,export_report
@@ -364,7 +371,16 @@ def dispatch(request, db=None):
             if payload.get('error'): return payload
             return {'url':TC.invite_url(base,include_key=include,key=personal),'text':TC.invite_file_text(base,include_key=include,key=personal),
                     'team_id_short':TC.team_id_short(payload['team']),'with_key':'key' in payload}
-        if action=='team_join': return TC.accept_invite(base,request.get('invite'))
+        if action=='team_join':
+            result=TC.accept_invite(base,request.get('invite'))
+            # Joining is a setup step, not evidence that team knowledge helped — it is recorded so the time
+            # from "joined" to "first verified benefit" can be measured later, and for nothing else.
+            if result.get('joined'):
+                try:
+                    with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as joined_store:
+                        learn(joined_store,'team_join',object=result.get('team_id_short'),scope='global')
+                except Exception: pass   # a join must never fail because the database is the broken thing
+            return result
         return TC.status(base,load_settings(base))
     with contextlib.closing(Store(db or DATA_DIR/'meeting-os.sqlite')) as store:
         action=request['action']
@@ -386,9 +402,15 @@ def dispatch(request, db=None):
             tasks=[{**t,'route':route(t['title'])} for t in memory.actions()]
             anchors={m['id']:local_day(m['created']) for m in store.meetings()}   # "yarın" counts from the day the meeting happened, not from the UTC day its analysis was saved
             return {'analysis':memory.latest(request.get('meeting','')),'tasks':tasks,'drafts':drafts(store),'due_suggestions':suggestions_for_tasks(tasks,anchors)}
-        if action=='task_set_due':return {'due_date':memory.set_due_date(request['task'],request.get('due_date'))}
+        if action=='task_set_due':
+            due=memory.set_due_date(request['task'],request.get('due_date'),request.get('reason'))
+            learn(store,'task_due',object=request['task'],scope='meeting',outcome='applied' if due else 'reverted')
+            return {'due_date':due}
         if action=='draft_update':return edit_draft(store,request['draft'],request['text'])
-        if action=='action_update':return memory.update_action(request['task'],request['changes'])
+        if action=='action_update':
+            updated=memory.update_action(request['task'],request['changes'],request.get('reason'))
+            learn(store,'task_edit',object=request['task'],version=str(updated.get('analysis') or ''),scope='meeting')
+            return updated
         if action=='search_memory':return {'hits':memory.search(request['query'],speaker=request.get('speaker'))}
         if action=='handoff':return handoff(store,request['task'],request['path'])
         if action=='snapshot':
@@ -442,19 +464,31 @@ def dispatch(request, db=None):
             segments=None if request.get('segments_hash')==seg_hash else store.display_segments(selected)
             return {'meetings':meetings,'profiles':store.profiles(),'segments':segments,'segments_hash':seg_hash,'intel_hash':intel_hash}
         if action=='label_speaker':
+            # WHICH decision this is has to be read before the naming is applied: applying it is what marks the
+            # automatic verdict as judged, and afterwards "confirmed" and "overruled" look the same.
+            from .learning import naming_action
+            decision=naming_action(store,request['meeting'],request['speaker'],request['name'])
             if request.get('enroll'): result=store.enroll_speaker(request['meeting'],request['speaker'],request['name'])
             else: store.correct(request['meeting'],request['speaker'],request['name']);result={'labeled':True,'profile_saved':False}
             # Q9: naming one voice changes what the others can be (a new person exists, a rejected sample is gone),
             # so the meeting's still-unnamed clusters are re-scored right away. Both paths: correcting a wrong
             # automatic name also drops samples and adds a rejection.
             share_profiles(store,db)
+            learn(store,decision,object=request['meeting'],version=str(request['speaker']),scope='speaker')
             return {**result,**store.resuggest(request['meeting'])}
-        if action=='undo_correction': return store.undo_correction(request['meeting'])
+        if action=='undo_correction':
+            result=store.undo_correction(request['meeting'])   # raises when there is nothing to undo, so getting here is a decision
+            from .learning import last_event
+            earlier=[e for e in (last_event(store,name,request['meeting']) for name in ('name_confirm','name_correct','name_reject','segment_pin')) if e]
+            learn(store,'undo',object=request['meeting'],scope='speaker',outcome='reverted',
+                  undo_of=max(earlier,key=lambda e:e['id'])['id'] if earlier else None)
+            return result
         if action=='label_segment':
             # One piece of a named cluster belongs to someone else: only that piece changes, nobody is convicted,
             # the piece feeds the named person's profile when it is clean enough; unnamed clusters are re-scored.
             result=store.correct_segment_only(request['meeting'],int(request['segment']),request['name'])
             share_profiles(store,db)
+            learn(store,'segment_pin',object=request['meeting'],version=str(request['segment']),scope='segment')
             return {**result,**store.resuggest(request['meeting'])}
         if action=='label':
             # A plain segment naming learns too (Boran, 10 Sep 2026: "ileriye yönelik kazanım için düzeltiyorum"): the
@@ -463,6 +497,7 @@ def dispatch(request, db=None):
             # short or unclean piece only gets the label. No "Dinledim" toggle needed for the everyday case.
             result=store.correct_segment_only(request['meeting'],int(request['segment']),request['name'])
             if result.get('profile_saved'): share_profiles(store,db)
+            learn(store,'segment_pin',object=request['meeting'],version=str(request['segment']),scope='segment')
             return {'saved':True,**result}
         if action=='edit_text':
             store.correct_text(request['meeting'],int(request['segment']),request['text']); return {'saved':True}
@@ -470,6 +505,7 @@ def dispatch(request, db=None):
             if request.get('confirmed_clean') is not True: raise ValueError('Listen and confirm a clean single-speaker sample first')
             store.enroll_segment(request['meeting'],int(request['segment']),request['name'])
             share_profiles(store,db)
+            learn(store,'name_confirm',object=request['meeting'],version=str(request['segment']),scope='segment')
             return {'saved':True}
         if action=='delete_profile':
             # Deleting a person takes their team samples with them (they are rows under the same name) and blocks
@@ -536,8 +572,16 @@ def dispatch(request, db=None):
             return {'path':reports.write_meeting_report(store,request['meeting'],base,version=app_version,commit=reports.repo_commit())}
         if action in ('glossary_import','glossary_summary','glossary_suggest','glossary_apply','glossary_apply_all','glossary_dismiss'):
             from . import glossary as G
-            if action=='glossary_apply_all': return G.apply_all(store,request['meeting'],verified_only=request.get('verified_only',True) is not False,data_dir=DATA_DIR if db is None else Path(db).parent)
-            if action=='glossary_dismiss': return G.dismiss_suggestion(store,request['meeting'],int(request['segment']),request['original'])
+            if action=='glossary_apply_all':
+                # One click, however many segments it fixes: one decision, one event (learning.py, the
+                # "one human decision and its twenty effects" rule).
+                result=G.apply_all(store,request['meeting'],verified_only=request.get('verified_only',True) is not False,data_dir=DATA_DIR if db is None else Path(db).parent)
+                learn(store,'glossary_apply',object=request['meeting'],scope='meeting',outcome='applied' if result.get('applied') else 'noop')
+                return result
+            if action=='glossary_dismiss':
+                result=G.dismiss_suggestion(store,request['meeting'],int(request['segment']),request['original'])
+                learn(store,'glossary_dismiss',object=request['meeting'],version=str(request['segment']),scope='segment')
+                return result
             if action=='glossary_import': return G.import_file(request['path'],DATA_DIR if db is None else Path(db).parent,shared=db is None)   # tests and private copies stay local
             base=DATA_DIR if db is None else Path(db).parent
             if action=='glossary_summary':
@@ -545,7 +589,10 @@ def dispatch(request, db=None):
                 paths=[p for p in G.sources(base) if p.is_file()]
                 return {'count':len(entries),'from_file':from_file,'from_vocabulary':max(0,len(entries)-from_file),'sample':[e['term'] for e in entries[:8]],'path':str(paths[0]) if paths else str(G.shared_path() or (DATA_DIR/G.FILENAME)),'shared':any(G.shared_path() and p==G.shared_path() for p in paths)}
             entries=G.load(base,ROOT)
-            if action=='glossary_apply': return G.apply_suggestion(store,request['meeting'],int(request['segment']),request['original'],request['replacement'],data_dir=DATA_DIR if db is None else Path(db).parent)
+            if action=='glossary_apply':
+                result=G.apply_suggestion(store,request['meeting'],int(request['segment']),request['original'],request['replacement'],data_dir=DATA_DIR if db is None else Path(db).parent)
+                learn(store,'glossary_apply',object=request['meeting'],version=str(request['segment']),scope='segment')
+                return result
             llm=None
             if request.get('openrouter_model'):
                 from .openrouter import OpenRouterClient,validate_analysis_model
@@ -621,6 +668,9 @@ def dispatch(request, db=None):
                 mask_names=request.get('mask_names') is True,only_decisions=request.get('only_decisions') is True,kinds=kinds,glossary=G.load(DATA_DIR if db is None else Path(db).parent,ROOT))
             if action=='share_export':
                 Path(request['path']).write_text(result['text'],encoding='utf-8')
+                # A written file is the export; a preview is somebody looking. Neither is an endorsement of the
+                # content — `export_ok` means "the output was used", nothing more (Codex, the signal table).
+                learn(store,'export_ok',object=request['meeting'],scope='meeting')
                 return {'path':request['path'],'masked_names':result['masked_names'],'segments':result['segments']}
             return {'text':result['text'],'masked_names':result['masked_names'],'segments':result['segments']}
         if action=='quality_report':
@@ -634,13 +684,27 @@ def dispatch(request, db=None):
             if action=='word_rules':
                 from .team_knowledge import team_summary
                 return {'rules':CM.word_rules(store),'team':team_summary(store)}
-            if action=='word_dismiss': return CM.dismiss_word(store,request['meeting'],request['original'])
-            if action=='forget_word': return CM.forget(store,request['original'],base)
-            return CM.teach(store,request['meeting'],request['original'],request['replacement'],base)
+            if action=='word_dismiss':
+                result=CM.dismiss_word(store,request['meeting'],request['original'])
+                learn(store,'word_dismiss',object=CM._fold(request['original']),scope='global')
+                return result
+            if action=='forget_word':
+                result=CM.forget(store,request['original'],base)
+                learn(store,'word_forget',object=CM._fold(request['original']),scope='global',outcome='reverted')
+                return result
+            result=CM.teach(store,request['meeting'],request['original'],request['replacement'],base)
+            # ONE event for the teaching. The segments this rule rewrites now, and every segment it rewrites in
+            # every later meeting, are its EFFECTS — counting them as human evidence is the over-count this
+            # table exists to prevent (Codex, 11 Sep 2026, P0 #1, the risk paragraph).
+            learn(store,'word_teach',object=CM._fold(request['original']),scope='global')
+            return result
         if action in ('correction_rules','accept_rule','reject_rule'):
             from . import correction_memory as CM
-            if action=='accept_rule': CM.accept_rule(store,request['original']); return {'ok':True}   # the pair of reject_rule, which the app calls
-            if action=='reject_rule': CM.reject_rule(store,request['original']); return {'ok':True}
+            # A learned rule answered in Kontrol: the one queue verdict that leaves no other trace.
+            if action=='accept_rule':
+                CM.accept_rule(store,request['original']); learn(store,'review_resolve',object=CM._fold(request['original']),scope='global'); return {'ok':True}
+            if action=='reject_rule':
+                CM.reject_rule(store,request['original']); learn(store,'review_resolve',object=CM._fold(request['original']),scope='global',outcome='reverted'); return {'ok':True}
             from .glossary import load as load_glossary
             rules=CM.learned_rules(store)
             return {'rules':rules,'glossary_proposals':CM.glossary_proposals(rules,load_glossary(DATA_DIR if db is None else Path(db).parent,ROOT))}
@@ -703,7 +767,10 @@ def dispatch(request, db=None):
             text=text_cleanup(store,data,days=text_days,dry_run=False) if text_days>0 else {'meetings':[],'bytes':0}
             # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
             from . import team_cloud as TC
-            return {'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
+            from .learning import prune as prune_learning
+            learning=prune_learning(store)   # 90 days / 20 MB; the event log is not allowed to become a data platform
+            return {'learning':learning,
+                    'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],
                     'retention_warning':audio_retention_warning(store,days),'text_retention_warning':text_retention_warning(store,text_days),'team':team,'outbox':TC.outbox(data)}
         if action=='storage_cleanup':
@@ -839,6 +906,7 @@ def dispatch(request, db=None):
             rows=store.segments(request['meeting'])
             from .reports import store_owner
             path=Path(request['path']); path.write_text(export_text(rows,request['format'],store_owner(store)))
+            learn(store,'export_ok',object=request['meeting'],version=str(request.get('format') or ''),scope='meeting')
             return {'path':str(path)}
         if action=='vocabulary':
             from . import glossary as G

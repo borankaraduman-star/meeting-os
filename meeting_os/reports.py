@@ -524,6 +524,10 @@ def build_heartbeat(store, data_dir, *, app=None):
         'error_journal': error_journal(data),   # errors.jsonl: crashes, failed jobs, cloud/capture faults nobody reported
         'cloud_blocked': store.db.execute("SELECT count(*) FROM meetings WHERE status!='complete' AND json_extract(metadata,'$.cloud_error.kind') IN ('auth','credit')").fetchone()[0],
         'probe': daily_probe(data),
+        # What the user actually decided this week, in numbers: how many of each action, and how the automatic
+        # names ended up (verified / falsified / unreviewed). No word, no name, no title, no id — and it
+        # reaches the server through the same whitelist as everything else (telemetry_schema).
+        'learning': _learning(store),
         'team_cloud': _team_cloud(data),   # is the shared knowledge base reaching the server, and how many Macs are on it
         # What this Mac takes from the shared knowledge base and what it puts back in. Counts only: no name, no word.
         **_team_counts(store),
@@ -538,8 +542,21 @@ def _team_cloud(data_dir):
     try:
         from . import team_cloud
         state = team_cloud.status(data_dir)
-        return {'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'hosts': state.get('hosts') or [],
-                'device': state.get('device') or ''}
+        from .errors import code_for
+        error = state.get('last_error')
+        # `last_error` is the sentence the local reader needs; `last_error_code` is the half that is allowed to
+        # travel (telemetry_schema drops the sentence). Same classifier the error export uses.
+        return {'last_ok': state.get('last_ok'), 'last_error': error, 'last_error_code': code_for('cloud', error) if error else None,
+                'hosts': state.get('hosts') or [], 'device': state.get('device') or ''}
+    except Exception:
+        return {}
+
+
+def _learning(store, days=7):
+    """`learning.summary` for the heartbeat. Never raises: a database with no learning_events is normal."""
+    try:
+        from .learning import summary
+        return summary(store, days=days)
     except Exception:
         return {}
 

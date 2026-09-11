@@ -181,17 +181,24 @@ def record(kind, message, *, context=None, data_dir=None, now=None):
 
 def summary(data_dir, *, limit=5, now=None):
     """What the heartbeat and the settings card show: counts by kind over the last day, the newest few
-    messages (newest first) and how many of them were crashes."""
+    messages (newest first), how many of them were crashes, and what each of the day's lines classifies as.
+
+    `last` is the free message text: it is for the person looking at their own Mac, and it is not on the
+    upload whitelist (telemetry_schema). `codes` is the half that travels — the same classification
+    `export_for_team` sends, counted — so a fleet view can still say "this Mac threw eleven http-429 today"
+    without anybody's sentence leaving the machine."""
     moment = _now(now); horizon = moment - timedelta(hours=WINDOW_HOURS)
     rows = entries(data_dir, limit=READ_LIMIT)
-    counts = {}; crashes = 0
+    counts = {}; codes = {}; crashes = 0
     for entry in rows:
         stamp = _parse(entry.get('time'))
         if stamp is None or stamp < horizon: continue
         counts[entry['kind']] = counts.get(entry['kind'], 0) + 1
+        code = code_for(entry['kind'], entry.get('message'))
+        codes[code] = codes.get(code, 0) + 1
         if entry['kind'] == 'crash': crashes += 1
     last = [{'time': e.get('time'), 'kind': e.get('kind'), 'message': e.get('message')} for e in rows[-limit:]][::-1]
-    return {'last_24h': counts, 'last': last, 'crashes_24h': crashes}
+    return {'last_24h': counts, 'last': last, 'crashes_24h': crashes, 'codes': codes}
 
 
 def clear(data_dir):
@@ -411,13 +418,21 @@ def team_context(kind, context):
 
 
 def team_entry(entry):
-    """One journal line as the team sees it, or None when it is not a line at all."""
+    """One journal line as the team sees it, or None when it is not a line at all.
+
+    Built out of the five fields, then passed through the SAME whitelist every other diagnostic payload goes
+    through (`telemetry_schema.ALLOWED['errors_export']`). Two gates, on purpose: this function decides what
+    a line MEANS, the schema decides what a field may LOOK like — and there is now exactly one place to read
+    to know what leaves this Mac (Codex, 11 Sep 2026, P0 #1 release gate)."""
     if not isinstance(entry, dict) or entry.get('kind') not in KINDS: return None
     kind = entry['kind']
-    return {'time': str(entry.get('time') or '')[:40], 'kind': kind,
+    from . import telemetry_schema
+    line = {'time': str(entry.get('time') or '')[:40], 'kind': kind,
             'version': str(entry['version'])[:20] if entry.get('version') else None,
             'code': code_for(kind, entry.get('message')),
             'context': team_context(kind, entry.get('context'))}
+    clean = telemetry_schema.filter('errors_export', line)
+    return {key: clean.get(key) for key in TEAM_FIELDS}
 
 
 def export_for_team(data_dir, limit=READ_LIMIT):

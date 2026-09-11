@@ -530,10 +530,17 @@ class PulledReportBudgetTests(CloudFixture):
             self.assertEqual((again['pulled'], again['pruned']), (0, 0))
             self.assertEqual(sorted(p.name for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json')), names[4:])
 
+    @staticmethod
+    def bulky(entries=40):
+        """~2 KB of report that SURVIVES the upload whitelist. A `pad` key would not: the diagnostics gate
+        (telemetry_schema) builds the outgoing copy from the enumerated fields, so padding through a key
+        nobody enumerated would measure the schema, not the pull budget this test is about."""
+        return {'review_queue': {f'kind_{i:02d}_' + 'x' * 36: i for i in range(entries)}}
+
     def test_the_size_ceiling_bites_before_the_count_does(self):
         a = self.mac('a'); b = self.mac('b')
         with a.host():
-            for day in range(1, 6): self.report(a, f'2026-09-{day:02d}_m{day}.json', {'meeting': day, 'pad': 'x' * 2000})
+            for day in range(1, 6): self.report(a, f'2026-09-{day:02d}_m{day}.json', {'meeting': day, **self.bulky()})
             a.sync()
         with b.host():
             with patch.object(TC, 'PULL_REPORTS', 300), patch.object(TC, 'PULL_REPORT_BYTES', 4500):
@@ -732,8 +739,8 @@ class HeartbeatTests(CloudFixture):
         with mac.host():
             mac.sync()
             beat = reports._team_cloud(mac.data)
-        self.assertEqual(sorted(beat), ['device', 'hosts', 'last_error', 'last_ok'])
-        self.assertTrue(beat['last_ok']); self.assertIsNone(beat['last_error'])
+        self.assertEqual(sorted(beat), ['device', 'hosts', 'last_error', 'last_error_code', 'last_ok'])
+        self.assertTrue(beat['last_ok']); self.assertIsNone(beat['last_error']); self.assertIsNone(beat['last_error_code'])
         self.assertEqual(beat['device'], TC.device_id(mac.data))
 
     def test_setup_status_calls_the_mirror_a_cloud_and_not_a_picked_folder(self):
@@ -1085,15 +1092,76 @@ class DiagnosticsContractTests(CloudFixture):
         self.assertIn(self.SECRETS[2], full)
         self.assertIsNone(self.remote(mac, name))   # …and the anonymous copy is withdrawn, not left behind
 
-    def test_the_heartbeat_travels_byte_for_byte(self):
-        """It names no meeting and no person, so nothing in the contract touches it — and a fleet view that
-        silently lost a field would be worse than one that never had it."""
+    def test_the_heartbeat_goes_through_the_same_whitelist_as_everything_else(self):
+        """The heartbeat used to travel byte for byte, because it names no meeting and no person. It does carry
+        DIAGNOSTICS though: the tail of `last-job.log`, the newest journal messages and the updater's own
+        sentence — three free-text paths around a contract everyone believed was closed (Codex, 11 Sep 2026,
+        P0 #1 release gate). The local file still has all of it; what leaves is built from the list."""
         mac = self.mac('a')
+        (mac.data / 'last-job.log').write_text(f'ValueError: {self.SECRETS[2]} · {self.SECRETS[3]}\n', encoding='utf-8')
+        (mac.data / 'update-status.json').write_text(json.dumps({'state': 'failed', 'time': '2026-09-11T08:00:00+00:00',
+                                                                 'message': self.SECRETS[0]}), encoding='utf-8')
+        E.record('cloud', f'auth: {self.SECRETS[0]} · {self.SECRETS[1]}', data_dir=mac.data, context={'http': 401})
         with mac.host():
-            beat = reports.write_heartbeat(mac.store, mac.data, app={'version': '1.2.78', 'commit': None})
+            beat = reports.write_heartbeat(mac.store, mac.data, app={'version': '1.2.80', 'commit': None})
             mac.sync()
             uploaded = self.remote(mac, 'reports/a/heartbeat.json')
-        self.assertEqual(uploaded, Path(beat).read_text(encoding='utf-8'))
+        local = json.loads(Path(beat).read_text(encoding='utf-8'))
+        self.assertTrue(local['errors'])                                        # the local file keeps everything…
+        self.assertTrue(local['error_journal']['last'])
+        self.assertEqual(local['update_status']['message'], self.SECRETS[0])
+        sent = json.loads(uploaded)                                             # …and the copy on the server keeps none of it
+        self.assertNotIn('errors', sent)
+        self.assertNotIn('last', sent['error_journal'])
+        self.assertEqual(sorted(sent['update_status']), ['state', 'time'])
+        for secret in self.SECRETS: self.assertNotIn(secret, uploaded)
+        # What a fleet view actually needs survives: counts, classifications and the machine's own state.
+        self.assertEqual(sent['error_journal']['last_24h'], {'cloud': 1})
+        self.assertEqual(sent['error_journal']['codes'], {'auth': 1})
+        self.assertEqual(sent['app_version'], '1.2.80')
+        self.assertEqual(sent['host'], 'a')
+        self.assertIn('learning', sent)
+
+    def test_a_report_carries_no_log_line_off_the_mac_with_the_text_switch_either(self):
+        """`share_text` is "put the transcript of MY meeting in the report". `last-job.log` is neither the
+        transcript nor this meeting: it is whatever the job printed, from any meeting, with this Mac's paths
+        in it. No switch in the app ever promised to send that, so it goes through the gate both ways."""
+        mac = self.mac('a')
+        (mac.data / 'last-job.log').write_text(f'Traceback\nValueError: {self.SECRETS[0]} · {self.SECRETS[3]}\n', encoding='utf-8')
+        with mac.host():
+            mid = mac.store.create_meeting('Bütçe toplantısı')
+            self.segment(mac.store, mid, self.SECRETS[2])
+            mac.store.status(mid, 'complete')
+            reports.save_settings(mac.data, {'share_text': True})
+            written = reports.write_meeting_report(mac.store, mid, mac.data, version='1.2.80')
+            mac.sync()
+        self.assertTrue(json.loads(Path(written).read_text(encoding='utf-8'))['errors'])   # the local report has the lines
+        uploaded = self.remote(mac, f'reports/a/{Path(written).name}')
+        self.assertIsNotNone(uploaded)
+        payload = json.loads(uploaded)
+        self.assertNotIn('errors', payload)
+        self.assertNotIn(self.SECRETS[0], uploaded); self.assertNotIn(self.SECRETS[3], uploaded)
+        self.assertIn(self.SECRETS[2], uploaded)         # the transcript DID travel: that is what the switch means
+        self.assertEqual(payload['title'], 'Bütçe toplantısı')
+
+    def test_an_injected_error_line_reaches_the_server_from_no_path_at_all(self):
+        """One test, all three doors: the journal, a meeting report and the heartbeat, each with a token, a
+        person, a sentence and a home path pushed into it."""
+        mac = self.mac('a')
+        (mac.data / 'last-job.log').write_text('  ValueError: ' + ' · '.join(self.SECRETS) + '\n', encoding='utf-8')
+        E.record('job', 'ValueError: ' + ' · '.join(self.SECRETS), data_dir=mac.data,
+                 context={'command': self.SECRETS[3], 'state': self.SECRETS[1]})
+        with mac.host():
+            mid = mac.store.create_meeting(self.SECRETS[1])
+            self.segment(mac.store, mid, self.SECRETS[2]); mac.store.status(mid, 'complete')
+            reports.write_meeting_report(mac.store, mid, mac.data, version='1.2.80')
+            reports.write_heartbeat(mac.store, mac.data, app={'version': '1.2.80', 'commit': None})
+            mac.sync()
+        team = hashlib.sha256(TC.token(mac.data).encode()).hexdigest()[:32]
+        everything = '\n'.join(p.read_text(encoding='utf-8', errors='replace')
+                               for p in (self.server.root / team).rglob('*') if p.is_file())
+        self.assertTrue(everything.strip())
+        for secret in self.SECRETS: self.assertNotIn(secret, everything)
 
 
 if __name__ == '__main__':

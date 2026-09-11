@@ -120,6 +120,28 @@ def dedupe_actions(actions,threshold=0.8):
         else:kept.append((item,tokens))
     return [item for item,_ in kept]
 
+EDIT_REASONS=('inference_error','changed_later')
+# Why the user changed a task field, when they said so. "Model yanlış çıkardı" and "iş sonradan devredildi"
+# look identical in the data and mean opposite things for learning: one is a model error, the other is the
+# meeting doing what meetings do. Unknown stays unknown — a change with no reason is never a training label.
+
+def _edit_reason(reason):
+    if reason is None or reason=='':return None
+    if reason not in EDIT_REASONS:raise ValueError('Geçersiz düzenleme nedeni')
+    return reason
+
+
+def same_task(a_title,a_owner,b_title,b_owner,threshold=0.8):
+    """Is this the same commitment, worded differently? The rule `dedupe_actions` already uses: the owners have
+    to agree (or both be missing) and the normalized title tokens have to overlap; a title short enough that a
+    Jaccard verdict would be a coin toss has to match exactly."""
+    if owner_key(a_owner or '')!=owner_key(b_owner or ''):return False
+    a,b=_title_tokens(a_title),_title_tokens(b_title)
+    union=a|b
+    if len(union)>=4:return len(a&b)/len(union)>=threshold
+    return normalize(a_title or '')==normalize(b_title or '') and bool(union)
+
+
 def now():return datetime.now(timezone.utc).isoformat()
 class Memory:
     def __init__(self,store):
@@ -138,6 +160,15 @@ class Memory:
         CREATE INDEX IF NOT EXISTS tasks_meeting ON tasks(meeting,updated);
         CREATE INDEX IF NOT EXISTS drafts_task ON drafts(task);
         ''')
+        # `reason` is the user's own answer to "why did this change?" — 'inference_error' or 'changed_later',
+        # and None when they did not say. A change with no reason is never turned into a training label
+        # (Codex, 11 Sep 2026, P0 #3). `carried_from` names the task id a history row was copied from when a
+        # re-analysis reworded the same commitment into a new id.
+        columns={r[1] for r in self.db.execute('PRAGMA table_info(task_edits)')}
+        for name in ('reason','carried_from','field'):
+            if name in columns: continue
+            try:self.db.execute(f'ALTER TABLE task_edits ADD COLUMN {name} TEXT')
+            except Exception:pass   # another process migrated first
         self._hashes={};self._analyses={};self._writes=self.db.total_changes
     def _memo(self):
         """One report asks for the same meeting again and again, and each ask used to reread the whole transcript.
@@ -170,6 +201,27 @@ class Memory:
         if not row:return None
         from .intelligence import ensure_item_ids
         return ensure_item_ids(json.loads(row['payload'] or '{}'))
+    def _carry_history(self,mid,fresh,previous):
+        """A re-analysis that rewords the same commitment writes a NEW task id (the id is the hash of the title
+        and its quotes), and the user's edit history stayed behind on the id nobody looks at any more. The
+        history follows the task: every `task_edits` row of the closest previous wording is copied onto the new
+        id with `carried_from` set, so "this owner was corrected once already" survives a re-analysis.
+
+        Must run inside the caller's transaction. Identity is `same_task` — the dedupe rule, not id equality."""
+        if not fresh or not previous:return 0
+        has_history={r[0] for r in self.db.execute('SELECT DISTINCT task FROM task_edits')}
+        candidates=[p for p in previous if p['id'] in has_history]
+        if not candidates:return 0
+        carried=0
+        for tid,item in fresh:
+            match=next((p for p in candidates if p['id']!=tid and same_task(item.get('title'),item.get('owner'),p['title'],p['owner'])),None)
+            if match is None:continue
+            if self.db.execute('SELECT 1 FROM task_edits WHERE task=? AND carried_from=? LIMIT 1',(tid,match['id'])).fetchone():continue
+            for row in self.db.execute('SELECT previous,replacement,created,reason,field FROM task_edits WHERE task=? ORDER BY id',(match['id'],)).fetchall():
+                self.db.execute('INSERT INTO task_edits(task,previous,replacement,created,reason,field,carried_from) VALUES(?,?,?,?,?,?,?)',
+                    (tid,row['previous'],row['replacement'],row['created'],row['reason'],row['field'],match['id']))
+                carried+=1
+        return carried
     def save_analysis(self,mid,input_hash,model,record):
         import hashlib   # only a save needs it; every report imports this module and none of them do
         from .intelligence import ensure_item_ids
@@ -181,10 +233,13 @@ class Memory:
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if self.current_hash(mid)!=input_hash:raise ValueError('Transkript analiz sırasında değişti; yeniden analiz edin')
+            previous=[dict(r) for r in self.db.execute('SELECT id,title,owner FROM tasks WHERE meeting=? ORDER BY created DESC',(mid,))]
+            known={p['id'] for p in previous};fresh=[]
             aid=self.db.execute('INSERT INTO analyses(meeting,input_hash,model,payload,created) VALUES(?,?,?,?,?)',(mid,input_hash,model,json.dumps(record,ensure_ascii=False),now())).lastrowid
             for item in record['actions']:
                 stable=json.dumps([mid,normalize(item['title']),[(e['segment_id'],e['quote']) for e in item['evidence']]],ensure_ascii=False,sort_keys=True)
                 tid=hashlib.sha256(stable.encode()).hexdigest()[:20]
+                if tid not in known:fresh.append((tid,item))
                 self.db.execute('''INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,created,updated) VALUES(?,?,?,?,?,?,?,'open',?,?,?)
                 ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=json_patch(excluded.payload,json_object('due_date',json_extract(tasks.payload,'$.due_date'),'superseded_by',json_extract(tasks.payload,'$.superseded_by'),'continues',json_extract(tasks.payload,'$.continues'))),title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
             # A task id is the hash of its title and its quotes, so a re-analysis that words the same commitment
@@ -195,15 +250,27 @@ class Memory:
             # no actions (a thin model answer, an over-strict quote check) must not sweep every open task out of sight.
             if record.get('actions'):
                 self.db.execute("UPDATE tasks SET state='superseded',updated=? WHERE meeting=? AND analysis IS NOT NULL AND analysis<? AND user_edited=0 AND state='open'",(now(),mid,aid))   # in_progress/done: the user touched it, it stays
+            self._carry_history(mid,fresh,previous)
         return self.latest(mid)
-    def set_due_date(self,tid,due_date):
-        """Store an approved calendar date (ISO, or None to clear) inside the task payload; due_text stays as the source said it."""
+    def set_due_date(self,tid,due_date,reason=None):
+        """Store an approved calendar date (ISO, or None to clear) inside the task payload; due_text stays as the source said it.
+
+        Approving, changing or clearing the calendar date writes the SAME `task_edits` history row every other
+        field writes. It did not before: `set_due_date` moved the date and set `user_edited=1` and left no
+        trace, so the one field the user confirms most often was the one field with no history — and "the
+        model read the date wrong" could not be told apart from "the deadline moved" (Codex P0 #3)."""
+        reason=_edit_reason(reason)
         row=self.db.execute('SELECT payload FROM tasks WHERE id=?',(tid,)).fetchone()
         if not row:raise ValueError('Görev bulunamadı')
         payload=json.loads(row['payload'] or '{}')
+        previous=payload.get('due_date')
         if due_date: payload['due_date']=str(due_date)[:10]
         else: payload.pop('due_date',None)
-        with self.db:self.db.execute('UPDATE tasks SET payload=?,user_edited=1,updated=? WHERE id=?',(json.dumps(payload,ensure_ascii=False),now(),tid))
+        old=self.task(tid)
+        with self.db:
+            self.db.execute('UPDATE tasks SET payload=?,user_edited=1,updated=? WHERE id=?',(json.dumps(payload,ensure_ascii=False),now(),tid))
+            self.db.execute('INSERT INTO task_edits(task,previous,replacement,created,reason,field) VALUES(?,?,?,?,?,?)',
+                (tid,json.dumps({**old,'due_date':previous},ensure_ascii=False),json.dumps({'due_date':payload.get('due_date')},ensure_ascii=False),now(),reason,'due_date'))
         return payload.get('due_date')
     def actions(self,owner=None,meeting=None):
         result=[];latest_ids={r['meeting']:r['id'] for r in self.db.execute('SELECT meeting,MAX(id) AS id FROM analyses GROUP BY meeting')}
@@ -218,7 +285,8 @@ class Memory:
         rows=[r for r in self.actions() if r['id']==tid]
         if not rows:raise ValueError('Görev bulunamadı')
         return rows[0]
-    def update_action(self,tid,changes):
+    def update_action(self,tid,changes,reason=None):
+        reason=_edit_reason(reason)
         if not changes or set(changes)-{'state','title','owner','due_text'}:raise ValueError('Geçersiz görev değişikliği')
         if 'state' in changes and changes['state'] not in ('open','in_progress','done','dismissed'):raise ValueError('Geçersiz görev durumu')
         for key in ('title','owner','due_text'):
@@ -231,8 +299,13 @@ class Memory:
             # (which renames and re-analyses then leave alone). A state change keeps following the transcript.
             edited=1 if set(changes)&{'title','owner','due_text'} else None
             self.db.execute('UPDATE tasks SET '+','.join(k+'=?' for k in changes)+',user_edited=COALESCE(?,user_edited),updated=? WHERE id=?',(*changes.values(),edited,now(),tid))
-            self.db.execute('INSERT INTO task_edits(task,previous,replacement,created) VALUES(?,?,?,?)',(tid,json.dumps(old,ensure_ascii=False),json.dumps(changes,ensure_ascii=False),now()))
+            self.db.execute('INSERT INTO task_edits(task,previous,replacement,created,reason,field) VALUES(?,?,?,?,?,?)',
+                (tid,json.dumps(old,ensure_ascii=False),json.dumps(changes,ensure_ascii=False),now(),reason,','.join(sorted(changes))))
         return self.task(tid)
+    def task_history(self,tid):
+        """Every recorded change to one task, oldest first — including the rows carried over from the task id a
+        re-analysis replaced (`carried_from`)."""
+        return [dict(r) for r in self.db.execute('SELECT * FROM task_edits WHERE task=? ORDER BY id',(tid,))]
     def search(self,query,limit=20,speaker=None,owner=None):
         """Segments that answer `query`, best first. `speaker` filters by person the way every other report does
         (`owner_key`, and a microphone row is its label's owner), not by exact spelling of `speaker_name`.
