@@ -75,7 +75,10 @@ if ! mv "$NEW" "$TARGET"; then
   exit 1
 fi
 # The bundle was never in a browser's hands (the app downloaded it itself), but a quarantine flag inherited
-# from anywhere would make the reopened app ask again.
+# from anywhere would make the reopened app ask again. The strip stays HERE, after the new app is in place,
+# and it is not what decides whether this code may run: updater.verify_new_app already ran
+# `codesign --verify --deep --strict` on this very bundle — and matched its TeamIdentifier against the
+# installed app's — before this script was ever spawned. Nothing unverified reaches this line.
 /usr/bin/xattr -d -r com.apple.quarantine "$TARGET" 2>/dev/null || true
 STAGING="$(dirname "$NEW")"
 rmdir "$STAGING" 2>/dev/null || true   # the staging folder in ~/Library/Caches is empty now

@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -100,7 +101,12 @@ def status(data_dir):
 
 # ---- bundle channel (docs/BUNDLE.md) --------------------------------------------------------------------
 
+# The retired Funnel route. Every bundle since 1.2.73 carries `download_base` (GitHub Releases, 21 MB/s
+# against 4.5), and this host is NOT in UPDATE_HOSTS any more: a secret-only bundle now says so instead of
+# downloading an app from an address nothing checks.
 BUNDLE_HOST = 'https://hermes-vps.tail2d8c7e.ts.net/meetingos/dl'
+# The only hosts an app may be downloaded from: the release page and the object store GitHub redirects to.
+UPDATE_HOSTS = ('github.com', 'objects.githubusercontent.com')
 USER_AGENT = 'MeetingOS-updater/1'
 CHECK_TIMEOUT = 5          # the check runs on the main thread of the app's card: it may never hang it
 DOWNLOAD_TIMEOUT = 60      # per read, not for the whole 1,3 GB
@@ -110,6 +116,9 @@ PLAIN_VERSION = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)$')
 NO_SECRET_ERROR = 'Güncelleme adresi bu pakette yok · Boran’a bildirin'
 UNREACHABLE_ERROR = 'Güncelleme sunucusuna ulaşılamadı'
 SHA_ERROR = 'İndirilen paket doğrulanamadı (sha256); yeniden deneyin'
+BASE_ERROR = 'Güncelleme adresi güvenli değil · Boran’a bildirin'
+SIGN_ERROR = 'İndirilen paketin imzası doğrulanamadı; güncelleme durduruldu'
+TEAM_ERROR = 'Paket imzası uygulamayla eşleşmiyor'
 
 
 def cache_dir():
@@ -165,13 +174,33 @@ def bundle_secret(rt):
     return raw if SECRET_RE.match(raw) else ''
 
 
+def safe_base(raw):
+    """The address an app may be downloaded from, or ValueError. `https://` on one of UPDATE_HOSTS, full stop.
+
+    The sha256 comes out of `latest.json` on the SAME origin as the zip, so it proves the download was not
+    truncated and nothing else: whoever can serve that URL serves both halves. Until the bundle is notarized,
+    the host allowlist and `verify_new_app` are the whole of this channel's authenticity — a mistyped or
+    hijacked `download_base` is arbitrary code execution on every teammate's Mac at once.
+
+    Loopback over http is the one exception, and only for a test server on this very Mac — the same exception
+    `team_cloud._safe_url` makes for the team address."""
+    text = (raw or '').strip().rstrip('/')
+    if not text: return ''
+    parsed = urllib.parse.urlsplit(text)
+    host = (parsed.hostname or '').lower()
+    if parsed.scheme == 'https' and host in UPDATE_HOSTS: return text
+    if parsed.scheme == 'http' and host in ('127.0.0.1', 'localhost', '::1'): return text
+    raise ValueError(BASE_ERROR)
+
+
 def bundle_base(rt):
-    """`https://…/meetingos/dl/<secret>`, or '' when this bundle carries no secret. `download_base` in
-    runtime.json overrides the whole thing (a moved host, and the tests' local server)."""
+    """The validated download address, or '' when this bundle carries none. `download_base` in runtime.json is
+    what every built bundle uses (GitHub Releases, and the tests' local server); the secret path below is the
+    retired Funnel route, which no longer passes `safe_base` and therefore raises rather than downloading."""
     explicit = str(rt.get('download_base') or '').strip().rstrip('/')
-    if explicit: return explicit
+    if explicit: return safe_base(explicit)
     secret = bundle_secret(rt)
-    return f'{BUNDLE_HOST}/{secret}' if secret else ''
+    return safe_base(f'{BUNDLE_HOST}/{secret}') if secret else ''
 
 
 def _get(url, timeout, extra_headers=None):
@@ -190,7 +219,9 @@ def check_bundle(rt):
     local = str(rt.get('version') or '').strip()
     out = {'available': False, 'behind': 0, 'ahead': 0, 'dirty': False, 'bundled': True,
            'local': local, 'remote': local, 'target': local, 'subjects': []}
-    base = bundle_base(rt)
+    # The card must never raise: an unusable address is a sentence on the screen, like an unreachable server.
+    try: base = bundle_base(rt)
+    except ValueError as exc: return {**out, 'error': str(exc)}
     if not base:
         return {**out, 'error': NO_SECRET_ERROR}
     try:
@@ -245,6 +276,48 @@ def write_status(data_dir, state, message='', from_version='', to_version='', pe
         try: tmp.unlink()
         except OSError: pass
     return payload
+
+
+def codesign_team(app):
+    """`TeamIdentifier=` out of `codesign -dv`, or '' when the signature carries none — which is what an
+    ad-hoc signed build (today's bundle, until the Developer ID certificate arrives) reports. Never raises:
+    an unsigned or missing app is simply "no team"."""
+    try:
+        done = subprocess.run(['/usr/bin/codesign', '-dv', '--verbose=2', str(app)],
+                              capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError): return ''
+    for line in ((done.stdout or '') + (done.stderr or '')).splitlines():   # codesign reports on stderr
+        line = line.strip()
+        if line.startswith('TeamIdentifier='):
+            value = line.split('=', 1)[1].strip()
+            return '' if value in ('', 'not set') else value
+    return ''
+
+
+def verify_new_app(new_app, target_app):
+    """Authenticity, in the one moment the payload is on disk and nothing has been swapped yet. Raises
+    ValueError with the sentence the update card will show; True when the new app may replace the old one.
+
+    The sha256 in latest.json travels from the same origin as the zip, so it is an integrity check against a
+    truncated download and NOT a check of who served it. What can be checked locally is the signature:
+
+    * the new app must pass `codesign --verify --deep --strict`; and
+    * if the RUNNING app is Developer ID signed, the new one must carry the SAME TeamIdentifier — an update
+      may change the code, never who signed it.
+
+    Deliberately NOT `spctl --assess`: this bundle is ad-hoc signed until notarization is set up, so
+    Gatekeeper would refuse every legitimate update. When the running app has no TeamIdentifier either, the
+    verify above is the whole check — it is what today's ad-hoc state can honestly prove, and it is still the
+    difference between "the zip unpacked" and "the code inside is intact"."""
+    try:
+        subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(new_app)],
+                       check=True, capture_output=True, timeout=900)
+    except (subprocess.SubprocessError, OSError):
+        raise ValueError(SIGN_ERROR) from None
+    running = codesign_team(target_app)
+    if running and codesign_team(new_app) != running:
+        raise ValueError(TEAM_ERROR)
+    return True
 
 
 def sha256_file(path):
@@ -335,6 +408,13 @@ def run_download(base, data_dir, app_path, pid, swap, from_version='', cache=Non
         if not apps:
             shutil.rmtree(staging, ignore_errors=True)
             raise ValueError('Pakette uygulama bulunamadı')
+
+        # Authenticity, BEFORE the swap script is spawned: after that line the old app is gone and whatever
+        # was in the zip is the app. A failure here leaves the installed version untouched. The state stays
+        # `extracting` — the card's four states are the ones Updater.swift knows; only the sentence changes,
+        # because `codesign --deep --strict` over a 1,3 GB bundle is long enough to need one.
+        write_status(data_dir, 'extracting', 'Paket imzası doğrulanıyor', from_version, to_version, percent=100)
+        verify_new_app(apps[0], app_path)
 
         # `swapping` goes in BEFORE the script starts: swap-update.sh writes `done` into the same file when
         # it finishes, and with a pid that has already exited that can be a second later. Writing afterwards

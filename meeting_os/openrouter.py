@@ -309,7 +309,7 @@ class OpenRouterLLM:
                  'max_tokens':max_tokens,'temperature':0,'provider':{'allow_fallbacks':False,'require_parameters':True,'data_collection':'deny'}}
         if schema is not None:payload['response_format']={'type':'json_schema','json_schema':{'name':'meeting_analysis','strict':True,'schema':schema}}
         payload['usage']={'include':True}   # OpenRouter then returns the real charge in usage.cost; without it analysis money is invisible
-        try: return self._complete(payload,max_tokens)
+        try: return self._complete(payload,max_tokens,self.model_id)
         except (OpenRouterError,CloudUnavailable) as exc:
             # The chosen model failed after its own retries (rate-limited upstream, an unusable answer): the summary
             # still has to arrive. One more try on the fallback model — the analysis does not depend on which model
@@ -317,11 +317,26 @@ class OpenRouterLLM:
             if isinstance(exc,(CloudAuthError,CloudCreditError)) or not ANALYSIS_FALLBACK_MODEL or self.model_id==ANALYSIS_FALLBACK_MODEL: raise
             print(f'Meeting OS: {self.model_id} yanıt veremedi ({type(exc).__name__}); {ANALYSIS_FALLBACK_MODEL} ile deneniyor',file=__import__('sys').stderr,flush=True)
             fresh={**payload,'model':ANALYSIS_FALLBACK_MODEL,'temperature':0,'max_tokens':max_tokens}; fresh.pop('reasoning',None)
-            self.model_id=ANALYSIS_FALLBACK_MODEL; self.fell_back=True
-            return self._complete(fresh,max_tokens)
+            # `model_id` is NOT rewritten: intelligence.analyze_rows shares ONE adapter across every chunk
+            # worker, so one chunk's 429 used to relabel every chunk still in flight — and the saved analysis
+            # then claimed 100 % fallback. Which model answered is carried per call, into the usage row.
+            self.fell_back=True
+            return self._complete(fresh,max_tokens,ANALYSIS_FALLBACK_MODEL)
     fell_back=False
-    def _complete(self,payload,max_tokens):
-        try: result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
+    def _meter(self,payload,model):
+        """One POST, and its usage recorded the moment it answers. Every `_post` here is a paid call, retries
+        included; the sink used to read only the LAST result, so a retried chunk was billed twice and recorded
+        once — the first call was invisible money."""
+        result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
+        sink=_USAGE_SINK.get()
+        if sink is not None:
+            try:
+                usage=chat_usage(model,result.get('usage'))
+                if usage is not None: sink(model,usage)
+            except Exception: pass   # bookkeeping must never lose a completed, paid-for analysis
+        return result
+    def _complete(self,payload,max_tokens,model):
+        try: result=self._meter(payload,model)
         except OpenRouterError as exc:
             # Reasoning-family endpoints (GPT-5, Claude Sonnet 5) accept no `temperature`; with require_parameters
             # OpenRouter answers 404 "no endpoints found that can handle the requested parameters". One retry as a
@@ -329,25 +344,19 @@ class OpenRouterLLM:
             # schema, not a puzzle) and room for the thinking tokens that otherwise eat the whole answer budget.
             if getattr(exc,'code',None)!=404 or 'temperature' not in payload: raise
             payload.pop('temperature'); payload['reasoning']={'effort':'low'}; payload['max_tokens']=max_tokens+6000
-            result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
+            result=self._meter(payload,model)
         if self._starved(result) and 'reasoning' not in payload:
             # A thinking model that stopped for length with nothing to show: it spent the budget reasoning. Same
             # remedy, one retry; a second empty answer is an error like any other.
             payload.pop('temperature',None); payload['reasoning']={'effort':'low'}; payload['max_tokens']=max_tokens+6000
-            result=self.client._post('chat/completions',payload,timeout=CHAT_TIMEOUT)
-        sink=_USAGE_SINK.get()
-        if sink is not None:
-            try:
-                usage=chat_usage(self.model_id,result.get('usage'))
-                if usage is not None: sink(self.model_id,usage)
-            except Exception: pass   # bookkeeping must never lose a completed, paid-for analysis
+            result=self._meter(payload,model)
         try:
             choice=result['choices'][0]
             text=choice['message']['content']
             if choice['finish_reason']!='stop' or not isinstance(text,str) or not text.strip():raise ValueError()
         except (KeyError,IndexError,TypeError,ValueError):
             # Why, in the job log only: the finish reason and the size of what came back, never the content.
-            try: choice=result['choices'][0]; why=f"finish={choice.get('finish_reason')!r} chars={len(choice.get('message',{}).get('content') or '')} model={self.model_id}"
+            try: choice=result['choices'][0]; why=f"finish={choice.get('finish_reason')!r} chars={len(choice.get('message',{}).get('content') or '')} model={model}"
             except Exception: why='no choices'
             print(f'Meeting OS: Analiz yanıtı geçersiz ({why})',file=__import__('sys').stderr,flush=True)
             raise OpenRouterError('Analiz yanıtı tamamlanmadı veya geçersiz; kısmi analiz kaydedilmedi.') from None
