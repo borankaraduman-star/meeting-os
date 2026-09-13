@@ -142,6 +142,26 @@ def same_task(a_title,a_owner,b_title,b_owner,threshold=0.8):
     return normalize(a_title or '')==normalize(b_title or '') and bool(union)
 
 
+def decision_restatement(before,after):
+    """A title match strong enough to inherit a human edit or dismissal, not just the same topic.
+    Reject changed facts, negative imperatives, and added claims. Ordinary inflection may still match."""
+    from .intelligence import stems
+    from .preferences import classify_edit
+    if normalize(before or '')==normalize(after or ''):return True
+    if classify_edit(before,after)=='factual':return False
+    old_words,new_words=set(normalize(before or '').split()),set(normalize(after or '').split())
+    # The style classifier handles finite negation, but "onayla" → "onaylama" / "gönder" →
+    # "gönderme" is an imperative. Their five-letter stems are identical and cannot establish identity.
+    for old in old_words-new_words:
+        for new in new_words-old_words:
+            if new in (old+'ma',old+'me') or old in (new+'ma',new+'me'):return False
+    old_stems,new_stems=stems(before),stems(after)
+    added,removed=new_stems-old_stems,old_stems-new_stems
+    # "hemen gönder" is the existing harmless rewording case; a new object or clause is not.
+    added-= {'hemen'};removed-= {'hemen'}
+    return bool(added)==bool(removed) and len(added)<=1 and len(removed)<=1
+
+
 def now():return datetime.now(timezone.utc).isoformat()
 class Memory:
     def __init__(self,store):
@@ -158,6 +178,7 @@ class Memory:
         CREATE UNIQUE INDEX IF NOT EXISTS insight_edits_item ON insight_edits(meeting,item_id,action);
         CREATE INDEX IF NOT EXISTS analyses_meeting ON analyses(meeting,id);
         CREATE INDEX IF NOT EXISTS tasks_meeting ON tasks(meeting,updated);
+        CREATE INDEX IF NOT EXISTS task_edits_task ON task_edits(task);
         CREATE INDEX IF NOT EXISTS drafts_task ON drafts(task);
         ''')
         # `reason` is the user's own answer to "why did this change?" — 'inference_error' or 'changed_later',
@@ -170,12 +191,15 @@ class Memory:
             try:self.db.execute(f'ALTER TABLE task_edits ADD COLUMN {name} TEXT')
             except Exception:pass   # another process migrated first
         self._hashes={};self._analyses={};self._writes=self.db.total_changes
+        self._data_version=self.db.execute('PRAGMA data_version').fetchone()[0]
     def _memo(self):
         """One report asks for the same meeting again and again, and each ask used to reread the whole transcript.
-        The answers are kept until anything is written through this connection — a correction, a new segment,
-        a saved analysis — which is what would change them."""
-        if self._writes!=self.db.total_changes:
+        The answers are kept until this connection writes or another connection commits a change. The
+        desktop bridge and analysis worker open separate connections to the same database."""
+        data_version=self.db.execute('PRAGMA data_version').fetchone()[0]
+        if self._writes!=self.db.total_changes or data_version!=self._data_version:
             self._writes=self.db.total_changes;self._hashes.clear();self._analyses.clear()
+            self._data_version=data_version
         return self._hashes,self._analyses
     def current_hash(self,mid):
         hashes,_=self._memo()
@@ -201,47 +225,124 @@ class Memory:
         if not row:return None
         from .intelligence import ensure_item_ids
         return ensure_item_ids(json.loads(row['payload'] or '{}'))
-    def _carry_history(self,mid,fresh,previous):
+    def _task_predecessors(self,fresh,previous):
+        """Match only a unique, source-backed restatement, using the model's original fields as well as
+        the user's wording. A corrected owner must not prevent us preserving that very correction."""
+        from .intelligence import evidence_ids
+        candidates={}
+        for tid,item in fresh:
+            matches=[]
+            for old in previous:
+                if old['id']==tid or old['state']=='superseded':continue
+                model=json.loads(old['payload'] or '{}')
+                model.pop('due_date',None)   # approved calendar dates are the user's layer, not source wording
+                if not (evidence_ids(item)&evidence_ids(model)):continue
+                if action_conflict(item,model):continue
+                same_source=(normalize(item.get('title') or '')==normalize(model.get('title') or '') and
+                             [(e.get('segment_id'),e.get('quote')) for e in item.get('evidence') or []]==
+                             [(e.get('segment_id'),e.get('quote')) for e in model.get('evidence') or []])
+                if same_source and owner_key(item.get('owner'))!=owner_key(model.get('owner')):
+                    continue   # colliding source commitments remain distinct even if a human later assigns both to one person
+                same=any(same_task(item.get('title'),item.get('owner'),title,owner)
+                         and decision_restatement(title,item.get('title'))
+                         for title in (model.get('title'),old['title'])
+                         for owner in (model.get('owner'),old['owner']))
+                if same:matches.append(old)
+            if len(matches)==1:candidates[tid]=matches[0]
+        # One old promise cannot donate its decisions to two new promises.
+        uses={}
+        for old in candidates.values():uses[old['id']]=uses.get(old['id'],0)+1
+        return {tid:old for tid,old in candidates.items() if uses[old['id']]==1}
+    def _carry_history(self,matched):
         """A re-analysis that rewords the same commitment writes a NEW task id (the id is the hash of the title
         and its quotes), and the user's edit history stayed behind on the id nobody looks at any more. The
         history follows the task: every `task_edits` row of the closest previous wording is copied onto the new
         id with `carried_from` set, so "this owner was corrected once already" survives a re-analysis.
 
-        Must run inside the caller's transaction. Identity is `same_task` — the dedupe rule, not id equality."""
-        if not fresh or not previous:return 0
-        has_history={r[0] for r in self.db.execute('SELECT DISTINCT task FROM task_edits')}
-        candidates=[p for p in previous if p['id'] in has_history]
-        if not candidates:return 0
+        Must run inside the caller's transaction, using the same unambiguous match as the field transfer."""
         carried=0
-        for tid,item in fresh:
-            match=next((p for p in candidates if p['id']!=tid and same_task(item.get('title'),item.get('owner'),p['title'],p['owner'])),None)
-            if match is None:continue
-            if self.db.execute('SELECT 1 FROM task_edits WHERE task=? AND carried_from=? LIMIT 1',(tid,match['id'])).fetchone():continue
+        for tid,match in matched.items():
             for row in self.db.execute('SELECT previous,replacement,created,reason,field FROM task_edits WHERE task=? ORDER BY id',(match['id'],)).fetchall():
+                # A previous wording may return later. Do not copy its own earlier events back onto it.
+                if self.db.execute('SELECT 1 FROM task_edits WHERE task=? AND previous IS ? AND replacement IS ? AND created IS ? AND reason IS ? AND field IS ? LIMIT 1',
+                                   (tid,row['previous'],row['replacement'],row['created'],row['reason'],row['field'])).fetchone():continue
                 self.db.execute('INSERT INTO task_edits(task,previous,replacement,created,reason,field,carried_from) VALUES(?,?,?,?,?,?,?)',
                     (tid,row['previous'],row['replacement'],row['created'],row['reason'],row['field'],match['id']))
                 carried+=1
         return carried
+    def _edited_fields(self,old):
+        history=self.db.execute('SELECT field FROM task_edits WHERE task=?',(old['id'],)).fetchall()
+        fields={field for row in history for field in (row['field'] or '').split(',')}
+        if old['user_edited'] and (not history or any(not row['field'] for row in history)):
+            fields.update(('title','owner','due_text','due_date')) # legacy edits did not identify fields
+        return fields
+    def _carry_decision(self,tid,old):
+        """Carry only fields the person actually edited, including an explicitly cleared date, and state.
+        Keep the old row for history, retired so the same promise is not displayed twice."""
+        fields=self._edited_fields(old)
+        changes={key:old[key] for key in ('title','owner','due_text') if key in fields}
+        changes['state']=old['state'];changes['user_edited']=old['user_edited']
+        if 'due_date' in fields:
+            payload=json.loads(self.db.execute('SELECT payload FROM tasks WHERE id=?',(tid,)).fetchone()[0])
+            date=json.loads(old['payload'] or '{}').get('due_date')
+            if date is None:payload.pop('due_date',None)
+            else:payload['due_date']=date
+            changes['payload']=json.dumps(payload,ensure_ascii=False)
+        self.db.execute('UPDATE tasks SET '+','.join(key+'=?' for key in changes)+' WHERE id=?',(*changes.values(),tid))
+        self.db.execute("UPDATE tasks SET state='superseded',updated=? WHERE id=?",(now(),old['id']))
+    def _task_ids(self,mid,items,previous):
+        """Keep the old title/quote ID unless two commitments collide. Disambiguate by source owner/date,
+        reserving a legacy ID for the model fields already stored there, never the human-edited owner.
+        Previously allocated alternatives remain stable when only one member appears in a later analysis."""
+        import hashlib
+        def base(item):
+            stable=json.dumps([mid,normalize(item.get('title') or ''),[(e['segment_id'],e['quote']) for e in item.get('evidence') or []]],ensure_ascii=False,sort_keys=True)
+            return hashlib.sha256(stable.encode()).hexdigest()[:20]
+        def identity(item):return owner_key(item.get('owner')),normalize(item.get('due_text') or '')
+        def alternate(key,signature):
+            value=json.dumps(['task-collision',key,signature],ensure_ascii=False)
+            return hashlib.sha256(value.encode()).hexdigest()[:20]
+        groups={}
+        for item in items:groups.setdefault(base(item),[]).append(item)
+        known={p['id']:p for p in previous};families=set();models={}
+        for old in previous:
+            model=json.loads(old['payload'] or '{}');models[old['id']]=model
+            key=base(model)
+            if old['id']==alternate(key,identity(model)):families.add(key)
+        out=[]
+        for key,group in groups.items():
+            signatures={identity(item) for item in group}
+            collision=len(signatures)>1 or key in families
+            reserved=identity(models[key]) if key in models else min(signatures)
+            for item in group:
+                signature=identity(item);other=alternate(key,signature)
+                tid=other if other in known or (collision and signature!=reserved) else key
+                out.append((tid,item))
+        return out
     def save_analysis(self,mid,input_hash,model,record):
-        import hashlib   # only a save needs it; every report imports this module and none of them do
         from .intelligence import ensure_item_ids
         record={**record,'actions':dedupe_actions(record['actions'])}   # the same promise, worded twice in one analysis, is stored once
         # A summary item the user corrected, removed or approved is identified by `item_id`. Carrying the ids
         # of the analysis this one replaces is what re-attaches those decisions: a bullet that reappears —
         # reworded or not — keeps its identity, and only a genuinely new claim gets a new one.
-        ensure_item_ids(record,self.raw_payload(mid))
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if self.current_hash(mid)!=input_hash:raise ValueError('Transkript analiz sırasında değişti; yeniden analiz edin')
-            previous=[dict(r) for r in self.db.execute('SELECT id,title,owner FROM tasks WHERE meeting=? ORDER BY created DESC',(mid,))]
-            known={p['id'] for p in previous};fresh=[]
+            # merge_records already assigned deterministic IDs. They must be rematched to the previous
+            # analysis here, under the same write lock as the transcript/version check.
+            ensure_item_ids(record,self.raw_payload(mid),rematch=True)
+            previous=[dict(r) for r in self.db.execute('SELECT * FROM tasks WHERE meeting=? ORDER BY created DESC',(mid,))]
+            known={p['id']:p for p in previous};fresh=[];restated=set()
             aid=self.db.execute('INSERT INTO analyses(meeting,input_hash,model,payload,created) VALUES(?,?,?,?,?)',(mid,input_hash,model,json.dumps(record,ensure_ascii=False),now())).lastrowid
-            for item in record['actions']:
-                stable=json.dumps([mid,normalize(item['title']),[(e['segment_id'],e['quote']) for e in item['evidence']]],ensure_ascii=False,sort_keys=True)
-                tid=hashlib.sha256(stable.encode()).hexdigest()[:20]
-                if tid not in known:fresh.append((tid,item))
+            for tid,item in self._task_ids(mid,record['actions'],previous):
+                restated.add(tid)
+                if tid not in known or known[tid]['state']=='superseded':fresh.append((tid,item))
+                values={key:item.get(key) for key in ('title','owner','due_text')}
+                if tid in known and known[tid]['user_edited']:
+                    fields=self._edited_fields(known[tid])
+                    values.update({key:known[tid][key] for key in values if key in fields})
                 self.db.execute('''INSERT INTO tasks(id,meeting,analysis,input_hash,title,owner,due_text,state,payload,created,updated) VALUES(?,?,?,?,?,?,?,'open',?,?,?)
-                ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=json_patch(excluded.payload,json_object('due_date',json_extract(tasks.payload,'$.due_date'),'superseded_by',json_extract(tasks.payload,'$.superseded_by'),'continues',json_extract(tasks.payload,'$.continues'))),title=CASE WHEN tasks.user_edited=1 THEN tasks.title ELSE excluded.title END,owner=CASE WHEN tasks.user_edited=1 THEN tasks.owner ELSE excluded.owner END,due_text=CASE WHEN tasks.user_edited=1 THEN tasks.due_text ELSE excluded.due_text END''',(tid,mid,aid,input_hash,item['title'],item.get('owner'),item.get('due_text'),json.dumps(item,ensure_ascii=False),now(),now()))
+                ON CONFLICT(id) DO UPDATE SET analysis=excluded.analysis,input_hash=excluded.input_hash,payload=json_patch(excluded.payload,json_object('due_date',json_extract(tasks.payload,'$.due_date'),'superseded_by',json_extract(tasks.payload,'$.superseded_by'),'continues',json_extract(tasks.payload,'$.continues'))),title=excluded.title,owner=excluded.owner,due_text=excluded.due_text,state=CASE WHEN tasks.state='superseded' THEN 'open' ELSE tasks.state END''',(tid,mid,aid,input_hash,values['title'],values['owner'],values['due_text'],json.dumps(item,ensure_ascii=False),now(),now()))
             # A task id is the hash of its title and its quotes, so a re-analysis that words the same commitment
             # differently writes a NEW row and the old one stayed open forever: the same promise counted twice in
             # the digest and the karne. What this analysis did not restate is retired, never deleted — a task the
@@ -250,7 +351,9 @@ class Memory:
             # no actions (a thin model answer, an over-strict quote check) must not sweep every open task out of sight.
             if record.get('actions'):
                 self.db.execute("UPDATE tasks SET state='superseded',updated=? WHERE meeting=? AND analysis IS NOT NULL AND analysis<? AND user_edited=0 AND state='open'",(now(),mid,aid))   # in_progress/done: the user touched it, it stays
-            self._carry_history(mid,fresh,previous)
+            matched=self._task_predecessors(fresh,[p for p in previous if p['id'] not in restated])
+            for tid,old in matched.items():self._carry_decision(tid,old)
+            self._carry_history(matched)
         return self.latest(mid)
     def set_due_date(self,tid,due_date,reason=None):
         """Store an approved calendar date (ISO, or None to clear) inside the task payload; due_text stays as the source said it.

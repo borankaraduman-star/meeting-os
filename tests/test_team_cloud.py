@@ -583,8 +583,11 @@ class PulledReportBudgetTests(CloudFixture):
                 result = b.sync()
             kept = sorted(p.name for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json'))
             self.assertEqual(kept, ['2026-09-04_m4.json', '2026-09-05_m5.json'])   # ~2 KB each: two fit under 4500
-            self.assertEqual(result['pruned'], 3)
+            self.assertEqual((result['pulled'], result['pruned']), (2, 0))   # select before downloading
             self.assertLessEqual(sum(p.stat().st_size for p in (b.mirror / TC.REPORTS_DIR / 'a').glob('*.json')), 4500)
+            with patch.object(TC, 'PULL_REPORTS', 300), patch.object(TC, 'PULL_REPORT_BYTES', 4500):
+                again = b.sync()
+            self.assertEqual((again['pulled'], again['pruned']), (0, 0))
 
     def test_words_glossary_and_profiles_are_never_pruned(self):
         a = self.mac('a'); b = self.mac('b')

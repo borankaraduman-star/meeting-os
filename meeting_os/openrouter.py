@@ -1,6 +1,7 @@
 """Explicit, bounded OpenRouter requests. Never called by local/default workflows."""
 import base64
 import contextvars
+from contextlib import contextmanager
 import json
 import math
 import os
@@ -66,9 +67,31 @@ def estimate_analysis_cost(model, prompt_tokens, completion_tokens):
 # than a plain global: the reset token restores exactly this scope's value, and a concurrent analysis in
 # another thread or task cannot end up billing its chunks to somebody else's meeting.
 _USAGE_SINK = contextvars.ContextVar('meeting_os_usage_sink', default=None)
+_RESPONSE_SINK = contextvars.ContextVar('meeting_os_response_sink', default=None)
 
 
-def analysis_usage_recorder(sink):
+@contextmanager
+def accepted_analysis_responses():
+    """Attribute a generation only when its caller accepts the parsed, grounded result.
+
+    Failed parsing, rejected evidence and abandoned summary compaction still cost money, but they
+    must not be credited as authors of the saved analysis. Usage recording remains immediate.
+    """
+    parent = _RESPONSE_SINK.get()
+    models = []
+    token = _RESPONSE_SINK.set(models.append if parent is not None else None)
+    try:
+        yield
+    finally:
+        _RESPONSE_SINK.reset(token)
+    # An exception skips this part. Nested accepted scopes feed their enclosing attempt.
+    if parent is not None:
+        for model in models:
+            try: parent(model)
+            except Exception: pass
+
+
+def analysis_usage_recorder(sink, *, responded=None):
     """Context manager that routes every chat completion's usage to `sink(model, usage)` while it is open.
 
     A chat call happens deep inside intelligence.analyze_rows, which knows nothing about a meeting or a
@@ -78,8 +101,11 @@ def analysis_usage_recorder(sink):
     @contextlib.contextmanager
     def scope():
         token = _USAGE_SINK.set(sink)
+        response_token = _RESPONSE_SINK.set(responded)
         try: yield
-        finally: _USAGE_SINK.reset(token)
+        finally:
+            _RESPONSE_SINK.reset(response_token)
+            _USAGE_SINK.reset(token)
     return scope()
 
 
@@ -360,5 +386,11 @@ class OpenRouterLLM:
             except Exception: why='no choices'
             print(f'Meeting OS: Analiz yanıtı geçersiz ({why})',file=__import__('sys').stderr,flush=True)
             raise OpenRouterError('Analiz yanıtı tamamlanmadı veya geçersiz; kısmi analiz kaydedilmedi.') from None
+        # Attribution is independent of usage: providers may omit token/cost data, and a paid
+        # truncated response is not a completed answer. The context is copied into chunk workers.
+        responded = _RESPONSE_SINK.get()
+        if responded is not None:
+            try: responded(model)
+            except Exception: pass
         return text
     # `complete` above is the public entry: it adds the fallback around `_complete`.

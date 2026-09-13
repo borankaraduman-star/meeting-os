@@ -311,14 +311,19 @@ def recording_line(beat):
 
 
 def write_recording_heartbeat(data_dir, state):
-    """Overwrite <report_dir>/<host>/recording-heartbeat.json while a recording runs, so 'reports heartbeat' and
-    the shared folder answer 'is it still recording?' without touching the meeting database. At most once a
-    minute from the recorder's own drain loop; never raises, and never writes when sharing is off."""
+    """Always keep a private recording heartbeat; publish a separate report only when sharing is enabled.
+    Idle maintenance must yield even with sharing off or the report folder unavailable. Never raises."""
+    written=datetime.now(timezone.utc).isoformat()
+    try:
+        data=Path(data_dir);data.mkdir(parents=True,exist_ok=True,mode=0o700)
+        # No settings lookup, host discovery or shared-folder I/O before the local proof of recording.
+        publish(data/RECORDING_HEARTBEAT_FILE,json.dumps({'written':written,**state},ensure_ascii=False))
+    except Exception: pass
     try:
         settings = load_settings(data_dir)
         if not settings.get('share_reports'): return None
         folder, shared = prepare_folder(settings)
-        payload = {'recording_heartbeat_version': 1, 'host': host_name(), 'written': datetime.now(timezone.utc).isoformat(), **state}
+        payload = {'recording_heartbeat_version': 1, 'host': host_name(), 'written': written, **state}
         payload['line'] = recording_line(payload)
         payload = redact_paths(payload)   # the recorder hands over capture_dir, which starts /Users/<name>/
         return str(publish(folder / RECORDING_HEARTBEAT_FILE, json.dumps(payload, ensure_ascii=False, indent=1), shared=shared))
@@ -327,6 +332,8 @@ def write_recording_heartbeat(data_dir, state):
 
 def clear_recording_heartbeat(data_dir):
     """The recording ended: remove the file rather than leave a line that says a meeting is still being taped."""
+    try: (Path(data_dir)/RECORDING_HEARTBEAT_FILE).unlink(missing_ok=True)
+    except Exception: pass
     try:
         (host_dir(load_settings(data_dir)) / RECORDING_HEARTBEAT_FILE).unlink(missing_ok=True)
     except Exception: pass
@@ -411,6 +418,7 @@ def build_meeting_report(store, mid, data_dir, *, include_text=False, version=No
         payload = json.loads(analysis['payload'])
         spend = store.analysis_cost_totals(mid)
         analysis_summary = {'model': analysis['model'], 'counts': {k: len(payload.get(k, [])) for k in ('summary', 'decisions', 'risks', 'questions', 'actions')},
+                            'model_provenance': payload.get('model_provenance'),
                             'superseded_decisions': sum(1 for d in payload.get('decisions', []) if d.get('superseded')),
                             'coverage': payload.get('coverage'), 'dropped_quotes': payload.get('dropped_quotes'), 'dropped_items': payload.get('dropped_items'),
                             'cost_usd': spend['cost'], 'calls': spend['calls'], 'cost_estimated': spend['estimated'], 'created': analysis['created']}

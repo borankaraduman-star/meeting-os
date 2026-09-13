@@ -1053,17 +1053,60 @@ def _sweep(mirror, files, host, pulled):
             try:
                 if not any(folder.iterdir()): folder.rmdir()
             except OSError: pass
+    # An evicted report no longer has a file for the loop above to visit. Forget its digest too when the
+    # server removes it, rather than growing the state forever as teammates delete their meetings.
+    for key in list(pulled):
+        if key.startswith(f'{REPORTS_DIR}/') and _owner(key) != host and key not in files:
+            pulled.pop(key, None)
     return removed
 
 
-def _prune_reports(mirror, host, *, keep=None, budget=None):
+def _report_plan(others, mirror, pulled, sizes):
+    """Choose the same newest-first prefix we retain, before paying to download it.
+
+    The server supplies byte sizes. Older/incomplete indexes can omit them: remember measured sizes with
+    their digest in the existing sync state, limited to the current count-sized candidate window. This lets
+    an evicted file stay evicted without confusing it with an accidentally missing file that still fits.
+    A changed digest, a larger budget, or a server deletion immediately changes the selection.
+    """
+    heartbeats = []; candidates = []
+    for path, meta in others.items():
+        name = path.rsplit('/', 1)[-1]
+        if not path.startswith(f'{REPORTS_DIR}/') or not REPORT_RE.match(name): continue
+        (heartbeats if name in (HEARTBEAT_FILE, RECORDING_HEARTBEAT_FILE) else candidates).append((path, meta))
+    candidates.sort(key=lambda item: (item[0].rsplit('/', 1)[-1], item[0]), reverse=True)
+    candidates = candidates[:PULL_REPORTS]
+    current = dict(candidates)
+    for path in list(sizes):
+        saved = sizes[path]
+        if (path not in current or not isinstance(saved, dict)
+                or saved.get('sha256') != (current[path] or {}).get('sha256')
+                or type(saved.get('size')) is not int or saved['size'] < 0):
+            sizes.pop(path, None)
+    selected = []; used = 0
+    for path, meta in candidates:
+        meta = meta or {}; size = meta.get('size')
+        if type(size) is not int or size < 0:
+            size = (sizes.get(path) or {}).get('size')
+            if size is None and meta.get('sha256') and pulled.get(path) == meta['sha256']:
+                try: size = (mirror / path).stat().st_size
+                except OSError: pass
+            if size is not None: sizes[path] = {'sha256': meta.get('sha256'), 'size': size}
+        else:
+            sizes.pop(path, None)   # no duplicate metadata for ordinary server indexes
+        if size is not None and used + size > PULL_REPORT_BYTES: break
+        selected.append((path, meta)); used += size or 0
+    return sorted(heartbeats), selected
+
+
+def _prune_reports(mirror, host, *, keep=None, budget=None, selected=None):
     """A real disk ceiling for the reports pulled from the other Macs: the newest `keep` of them, and at most
     `budget` bytes. `PULL_REPORTS` alone only limits what ONE pass selects — pass after pass, a busy team's
     older reports pile up on every Mac and the Storage card cannot explain the difference (Codex P2 #11).
 
     Only files this Mac downloaded and can download again are dropped: never this host's own folder, never a
-    heartbeat (that is what makes an offline teammate visible), and nothing outside `reports/`. The state's
-    `pulled` digests are deliberately KEPT, so the next pass does not fetch back what this one just pruned.
+    heartbeat (that is what makes an offline teammate visible), and nothing outside `reports/`. Selection
+    uses the same count/byte ceilings before download, so the next pass does not fetch what it would evict.
     Never raises: pruning a cache is not worth failing a sync over."""
     keep = PULL_REPORTS if keep is None else keep; budget = PULL_REPORT_BYTES if budget is None else budget
     reports = Path(mirror) / REPORTS_DIR
@@ -1083,10 +1126,12 @@ def _prune_reports(mirror, host, *, keep=None, budget=None):
     # runs backwards — the newest report is fetched first and so carries the oldest mtime.
     except OSError: return 0
     files.sort(reverse=True)
-    pruned = 0; used = 0; full = False
-    for index, (_, path, size) in enumerate(files):
-        if not full and index < keep and used + size <= budget: used += size; continue
-        full = True   # past the ceiling everything older goes, so the cache is always a newest-first prefix
+    pruned = 0; used = 0; kept = 0; full = False
+    for _, path, size in files:
+        eligible = selected is None or path.relative_to(mirror).as_posix() in selected
+        if eligible and not full and kept < keep and used + size <= budget:
+            used += size; kept += 1; continue
+        if eligible: full = True   # everything older goes, so the cache is a newest-first prefix
         try: path.unlink()
         except OSError: continue
         pruned += 1
@@ -1097,7 +1142,8 @@ def _run(data_dir, settings, http, mirror, host, state, result):
     files, hosts = http.index()
     state['hosts'] = hosts
     pushed = dict(state.get('pushed') or {}); pulled = dict(state.get('pulled') or {})
-    incomplete = False
+    sizes = dict(state.get('report_sizes') or {})
+    selected = None; incomplete = False; completed = False
     try:
         own = _own_files(data_dir, mirror, host, settings, pushed)
         _push(http, own, files, pushed, result)
@@ -1107,18 +1153,29 @@ def _run(data_dir, settings, http, mirror, host, state, result):
             _pull_file(http, path, others[path], mirror / PROFILES_DIR / f'{_owner(path)}.jsonl', pulled, result)
         _pull_words(http, mirror, others, pulled, host, result)
         _pull_glossary(http, mirror, others, pulled, host, result)
-        reports = sorted(((p, m) for p, m in others.items() if p.startswith(f'{REPORTS_DIR}/')),
-                         key=lambda item: ((item[1] or {}).get('updated') or '', item[0]), reverse=True)
-        for path, meta in reports[:PULL_REPORTS]:
-            name = path.split('/')[-1]
-            if not REPORT_RE.match(name): continue
-            _pull_file(http, path, meta, mirror / REPORTS_DIR / _owner(path) / name, pulled, result)
+        heartbeats, reports = _report_plan(others, mirror, pulled, sizes)
+        selected = {path for path, _ in reports}
+        for path, meta in heartbeats:
+            _pull_file(http, path, meta, mirror / path, pulled, result)
+        used = 0
+        for path, meta in reports:
+            target = mirror / path
+            _pull_file(http, path, meta, target, pulled, result)
+            try: size = target.stat().st_size
+            except OSError: continue
+            if type(meta.get('size')) is not int or meta['size'] < 0:
+                sizes[path] = {'sha256': pulled.get(path), 'size': size}
+            used += size
+            if used > PULL_REPORT_BYTES: break   # one unknown-sized file may cross the ceiling; prune below
         result['removed'] = _sweep(mirror, files, host, pulled)
-        result['pruned'] = _prune_reports(mirror, host)
+        completed = True
     except _OutOfTime:
         incomplete = True
     finally:
-        state['pushed'] = pushed; state['pulled'] = pulled
+        # A failed refresh still enforces the disk ceiling, but retains useful old reports until their
+        # selected replacements actually arrive. Otherwise a timeout on the first new file empties the cache.
+        result['pruned'] = _prune_reports(mirror, host, selected=selected if completed else None)
+        state['pushed'] = pushed; state['pulled'] = pulled; state['report_sizes'] = sizes
     return 'budget' if incomplete else None
 
 

@@ -147,7 +147,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     @Published var pendingEvidence:Evidence? { willSet { noteNavChange() } }
     var recordingNavigation=RecordingNavigation()
     var progressURL:URL?;var jobStarted:Date?
-    var resourceStopMessage=""
+    let jobLifecycles=JobLifecycles()
     var pressureSource:DispatchSourceMemoryPressure?
     var requestedQuit=false
     @Published var jobKind:String?; @Published var jobCanceled=false
@@ -379,10 +379,10 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     func requestSlow(_ req:[String:Any],timeout:TimeInterval = 600) async throws -> [String:Any] { try await Bridge.callSlow(runtime,req,timeout:timeout) }
     var jobStopsOnPressure=false
     func stopForResources() {
-        guard let process=job,
-              ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:jobStopsOnPressure,recording:recording,alreadyStopped:!resourceStopMessage.isEmpty) == .terminateJob else { return }
-        resourceStopMessage="Bellek baskısı nedeniyle işlem durduruldu. Kaynak ses korunuyor; ağır uygulamaları kapatıp yeniden deneyin."
-        error=resourceStopMessage
+        guard let process=job, let run=jobLifecycles.job,
+              ResourceGuard.pressureAction(hasJob:true,stopsOnPressure:jobStopsOnPressure,recording:recording,alreadyStopped:!run.resourceFailure.isEmpty) == .terminateJob else { return }
+        run.resourceFailure="Bellek baskısı nedeniyle işlem durduruldu. Kaynak ses korunuyor; ağır uygulamaları kapatıp yeniden deneyin."
+        error=run.resourceFailure
         process.terminate()   // `job` is never the recorder (separate slot): pressure never stops a live meeting
     }
     @Published var microphoneHint=""
@@ -493,7 +493,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             FileManager.default.createFile(atPath:log.path,contents:nil,attributes:[.posixPermissions:0o600])   // the log can carry job output; never world-readable
             JobLog.linkLatest(dataDir:dataDir,to:log)   // the Python side still opens `last-job.log`
             let handle=try FileHandle(forWritingTo:log)
-            resourceStopMessage="";jobCanceled=false
+            let run=jobLifecycles.begin(recording:isRecord)
+            if !isRecord { jobCanceled=false }
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
             let zoomOpen=zoomMeetingOpen || recordProcess != nil
             let throttled = !JobPriority.environment(args:args,zoomOpen:zoomOpen,idle:idle).isEmpty
@@ -506,12 +507,14 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                     guard let self=self else { return }
                     if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; self.stopEscalation?.cancel(); self.stopRequestedAt=nil; self.stopSignalSent=nil; try? FileManager.default.removeItem(at:progress) }
                     else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobLowPriority=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; JobSleepGuard.end(); try? FileManager.default.removeItem(at:progress) }
-                    if process.terminationStatus != 0 && !self.jobCanceled {
+                    let outcome=run.completion(exitStatus:process.terminationStatus,log:jobError)
+                    self.jobLifecycles.finish(run)
+                    if let failure=outcome.failure {
                         // Before the banner, so the throttle credits this to `job` rather than to the `ui` echo.
                         self.report(jobError,kind:"job",context:["command":args.first ?? "job","exit":Int(process.terminationStatus)])
-                        self.error=self.resourceStopMessage.isEmpty ? jobError : self.resourceStopMessage
+                        self.error=failure
                     }
-                    complete(process.terminationStatus==0 && self.resourceStopMessage.isEmpty && !self.jobCanceled); await self.refresh()
+                    complete(outcome.succeeded); await self.refresh()
                     // Quitting is not the moment to start an upload: the queued meetings keep their audio and the
                     // idle queue picks them up on the next launch. Popping here would begin a job we cannot finish.
                     if !isRecord, !self.requestedQuit, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
@@ -649,6 +652,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     var canCancelJob:Bool { RecoveryPresentation.canCancel(jobKind:jobKind,running:job?.isRunning == true,requested:jobCanceled) }
     func cancelJob() {
         guard canCancelJob else { return }
+        jobLifecycles.job?.canceled=true
         jobCanceled=true;activity="İşlem durduruluyor · Kaynak kayıt korunuyor";job?.interrupt()
     }
     func recover() {

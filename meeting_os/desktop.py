@@ -380,11 +380,12 @@ class _RecordingStarted(Exception):
 
 
 def recording_now(data_dir,fresh_seconds=RECORDING_FRESH_SECONDS):
-    """Is a meeting being recorded on THIS Mac right now, according to the recorder's own heartbeat file
-    (`reports.write_recording_heartbeat`)? Best effort by design: the file only exists while report sharing is
-    on, and a missing answer must never stop the housekeeping — it only ever makes the pass wait a turn."""
+    """Read private recording state first, independent of sharing and the availability of any team folder.
+    The shared fallback supports a recorder still running the previous version during an upgrade."""
     try:
         from .reports import host_dir,load_settings,read_recording_heartbeat
+        beat=read_recording_heartbeat(Path(data_dir))
+        if beat: return float(beat.get('age_seconds') or 0)<=fresh_seconds
         beat=read_recording_heartbeat(host_dir(load_settings(data_dir)))
         return bool(beat) and float(beat.get('age_seconds') or 0)<=fresh_seconds
     except Exception: return False
@@ -827,7 +828,7 @@ def dispatch(request, db=None):
             return {'meetings':count,'bytes':freed,'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes']}
         if action=='storage_housekeeping':
             # Hourly, only when nothing records: archive finished audio, then drop audio older than the retention setting.
-            from .audio_archive import archive_all
+            from .audio_archive import ArchivePaused,archive_all
             from .reports import audio_retention_warning,load_settings,text_retention_warning
             data=DATA_DIR if db is None else Path(db).parent
             failures={}
@@ -844,9 +845,10 @@ def dispatch(request, db=None):
                 promise is never to slow a meeting. If one started, stop here and come back next hour."""
                 if recording_now(data): raise _RecordingStarted()
                 try: return fn()
+                except ArchivePaused: raise _RecordingStarted() from None
                 except Exception as exc: failures[name]=type(exc).__name__;return default
             try:
-                arch=step('archive_all',lambda:archive_all(store),{'meetings':0,'bytes':0})
+                arch=step('archive_all',lambda:archive_all(store,should_stop=lambda:recording_now(data)),{'meetings':0,'bytes':0})
                 settings=load_settings(data); days=int(settings.get('audio_retention_days') or 0)
                 # Hourly, idle, on the slow bridge: the one place a team sync can take a second on a network folder
                 # without the ten-second watchdog killing it. Launch does its own; a teach publishes straight away.

@@ -173,6 +173,7 @@ ALLOWED = {
                          'named': BOOL, 'name': NULL, 'suggested': NULL}),
         'review_queue': Map(NUM),
         'analysis': {'model': TOKEN, 'counts': Map(NUM), 'superseded_decisions': NUM,
+                     'model_provenance': {'requested': TOKEN, 'responded': List(TOKEN)},
                      'coverage': {'segments': NUM, 'chunks': NUM, 'all_chunks_processed': BOOL},
                      'dropped_quotes': NUM, 'dropped_items': NUM, 'cost_usd': NUM, 'calls': NUM,
                      'cost_estimated': BOOL, 'created': STAMP},

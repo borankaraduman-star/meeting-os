@@ -148,7 +148,9 @@ def counts(store, *, days=RETENTION_DAYS, now=None):
         if not {'reason', 'field'} <= columns:
             return out
         tasks = set()
-        for row in store.db.execute('SELECT task,previous,field,reason,created FROM task_edits WHERE created>=?', (horizon,)):
+        # A history copy lets the user inspect a reworded task; it is not another human correction.
+        original_only=' AND carried_from IS NULL' if 'carried_from' in columns else ''
+        for row in store.db.execute('SELECT task,previous,field,reason,created FROM task_edits WHERE created>=?'+original_only, (horizon,)):
             if (row['reason'] or '') != 'inference_error':
                 if not (row['reason'] or ''):
                     out['unreasoned'] += 1

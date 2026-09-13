@@ -9,14 +9,14 @@ from .schemas import analysis_schema
 
 
 
-def usage_context(store,mid=None):
+def usage_context(store,mid=None,*,responded=None):
     """Record what every chat completion inside this block cost, against `mid`.
 
     The paid call happens in intelligence.analyze_rows, which is given rows and an llm and nothing else;
     the meeting id only exists here. openrouter keeps the module-level sink so nothing has to import a
     store, and a local model simply never reaches it."""
     from .openrouter import analysis_usage_recorder
-    return analysis_usage_recorder(lambda model,usage: store.record_analysis_usage(mid,model,usage))
+    return analysis_usage_recorder(lambda model,usage: store.record_analysis_usage(mid,model,usage),responded=responded)
 
 
 def is_backchannel(row):
@@ -56,9 +56,14 @@ def analyze(store,mid,llm=None,force=False):
         review=active_classes(data)
     except Exception: review=()
     import time
+    import threading
+    response_models=set()
+    response_lock=threading.Lock()
+    def record_response(model):
+        with response_lock: response_models.add(model)
     started=time.monotonic()
-    with usage_context(store,mid):
-        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner,prefs=prefs,review_classes=review or (),data_dir=data)
+    with usage_context(store,mid,responded=record_response):
+        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {min(i+1,n)}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner,prefs=prefs,review_classes=review or (),data_dir=data)
     # How long this analysis took, in the record itself: the daily quality summary reports p50/p95 from it,
     # and a model that answers correctly in four minutes is a different product from one that takes forty.
     result['elapsed_seconds']=round(time.monotonic()-started,2)
@@ -71,7 +76,9 @@ def analyze(store,mid,llm=None,force=False):
     if not result.get('summary'):
         from .intelligence import EMPTY_SUMMARY
         raise ValueError(EMPTY_SUMMARY)
-    saved=mem.save_analysis(mid,digest,llm.model_id,result)
+    models=sorted(response_models) or [llm.model_id]
+    result['model_provenance']={'requested':llm.model_id,'responded':models}
+    saved=mem.save_analysis(mid,digest,' + '.join(models),result)
     auto_title(store,mid,result)
     from .reports import write_meeting_report
     from . import __version__

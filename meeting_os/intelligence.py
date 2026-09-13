@@ -420,11 +420,11 @@ def similarity(first,second):
     return len(mine&theirs)/len(mine|theirs)
 
 def _indexed(payload):
-    """(section, normalized text, cited segments, item_id) for every already-identified item of a payload."""
+    """(section, original text, cited segments, item_id) for each previously identified item."""
     out=[]
     for section,key in SECTION_LISTS:
         for it in ((payload or {}).get(key) or []):
-            if isinstance(it,dict) and it.get('item_id'):out.append((section,normalize(item_text(it)),evidence_ids(it),it['item_id']))
+            if isinstance(it,dict) and it.get('item_id'):out.append((section,item_text(it),evidence_ids(it),it['item_id']))
     return out
 
 def match_previous(section,item,indexed,used=()):
@@ -436,19 +436,30 @@ def match_previous(section,item,indexed,used=()):
     text=normalize(item_text(item))
     if not text:return None
     for sec,ptext,_,pid in indexed:
-        if sec==section and ptext==text and pid not in used:return pid
+        if sec==section and normalize(ptext)==text and pid not in used:return pid
     mine=evidence_ids(item)
-    best=None;best_score=0.0
+    matches=set()
     for sec,ptext,pids,pid in indexed:
         if sec!=section or pid in used or not (mine&pids):continue
-        score=similarity(text,ptext)
-        if score>=MATCH_SIMILARITY and score>best_score:best,best_score=pid,score
-    return best
+        # Topic overlap is enough for deduplication, not for carrying a human removal or approval.
+        # An expanded claim, changed person/number, or negation must get its own decision. A small,
+        # balanced rewording may match; one contained in the other may have gained or lost a fact.
+        from .preferences import classify_edit
+        if classify_edit(ptext,item_text(item))=='factual':continue
+        old_words,new_words=stems(ptext),stems(text)
+        added,removed=new_words-old_words,old_words-new_words
+        if bool(added)!=bool(removed) or len(added)>1 or len(removed)>1:continue
+        union=old_words|new_words
+        score=len(old_words&new_words)/len(union) if union else 0.0
+        if score>=MATCH_SIMILARITY:matches.add(pid)
+    # Two plausible predecessors are uncertainty, even when one is listed first or scores slightly higher.
+    return next(iter(matches)) if len(matches)==1 else None
 
-def ensure_item_ids(payload,previous=None):
+def ensure_item_ids(payload,previous=None,*,rematch=False):
     """Give every summary/decision/risk/question item a persistent `item_id`, in place.
 
-    Items that already carry one keep it. `previous` is the payload of the analysis this one replaces: when
+    Items that already carry one keep it, except `rematch=True` at save time, when provisional merge IDs
+    are resolved against the stored analysis. `previous` is the payload of the analysis this one replaces: when
     it is given, an item that reappears — same wording, or a rewording backed by a shared source segment —
     inherits the earlier id, which is what keeps a user's edit, removal or approval attached across a
     re-analysis. Ids stay unique within one list; the same bullet in `summary` and `section_summaries` is
@@ -460,7 +471,7 @@ def ensure_item_ids(payload,previous=None):
         used=set()
         for it in items:
             if not isinstance(it,dict):continue
-            candidate=it.get('item_id') or (match_previous(section,it,indexed,used) if indexed else None) or item_id(section,it)
+            candidate=(None if rematch else it.get('item_id')) or (match_previous(section,it,indexed,used) if indexed else None) or item_id(section,it)
             if candidate in used:
                 n=2
                 while f'{candidate}-{n}' in used:n+=1
@@ -593,21 +604,23 @@ EMPTY_SUMMARY='Özet çıkarılamadı: model boş yanıt verdi'   # the one sent
 
 
 def _analyze_chunk(batch,rows,llm,glossary,owner,prefs=None,review_classes=()):
+    from .openrouter import accepted_analysis_responses
     prompt=json.dumps(({'glossary':glossary} if glossary else {})|{'transcript':batch},ensure_ascii=False)   # glossary: expand abbreviations in output text, still untrusted data
     system=system_prompt(prefs)
     error=None
     for attempt in range(2):
         try:
-            raw=llm.complete(system,prompt+(('\nYour previous output was rejected: '+str(error)+'. Follow the exact schema above. Summary must contain objects with text and evidence. Actions must include evidence. Never invent owners.') if attempt else ''),max_tokens=CHUNK_MAX_TOKENS,schema=analysis_schema([b['segment_id'] for b in batch]))
-            parsed=parse_json(raw)
-            if not all(key in parsed for key in CATEGORIES):raise ValueError('Analiz kategorileri eksik')
-            allowed={b['segment_id'] for b in batch}
-            checked=validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner,review_classes=review_classes)
-            # An empty summary is not an analysis of this chunk, it is a non-answer: saving it put a blank
-            # summary in the cache that "Analiz" could never get past (audit 2026-09-13 #5). Say so instead —
-            # the retry above gets one nudge, and a second empty answer is an error the user can act on.
-            if not checked['summary']: raise ValueError(EMPTY_SUMMARY)
-            return checked
+            with accepted_analysis_responses():
+                raw=llm.complete(system,prompt+(('\nYour previous output was rejected: '+str(error)+'. Follow the exact schema above. Summary must contain objects with text and evidence. Actions must include evidence. Never invent owners.') if attempt else ''),max_tokens=CHUNK_MAX_TOKENS,schema=analysis_schema([b['segment_id'] for b in batch]))
+                parsed=parse_json(raw)
+                if not all(key in parsed for key in CATEGORIES):raise ValueError('Analiz kategorileri eksik')
+                allowed={b['segment_id'] for b in batch}
+                checked=validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner,review_classes=review_classes)
+                # An empty summary is not an analysis of this chunk, it is a non-answer: saving it put a blank
+                # summary in the cache that "Analiz" could never get past (audit 2026-09-13 #5). Say so instead —
+                # the retry above gets one nudge, and a second empty answer is an error the user can act on.
+                if not checked['summary']: raise ValueError(EMPTY_SUMMARY)
+                return checked
         except (ValueError,TypeError,KeyError,json.JSONDecodeError) as exc:error=exc
     if str(error)==EMPTY_SUMMARY: raise ValueError(EMPTY_SUMMARY)   # the model answered twice, with nothing in it: say that, not "doğrulanamadı"
     raise ValueError('Analiz doğrulanamadı; kaynak transkript korunuyor: '+str(error))
@@ -702,6 +715,12 @@ def summary_target(minutes,detail=None):
 
 
 def compact_summary(items,rows,llm,target=None,prefs=None):
+    from .openrouter import accepted_analysis_responses
+    with accepted_analysis_responses():
+        return _compact_summary(items,rows,llm,target=target,prefs=prefs)
+
+
+def _compact_summary(items,rows,llm,target=None,prefs=None):
     """Hierarchical reduction over cited notes, without re-sending the transcript, down to `target` bullets (the
     per-chunk bullets stay in `section_summaries`, so nothing the chunks noticed is lost to the reader)."""
     target=target or SUMMARY_MIN
@@ -732,6 +751,12 @@ def compact_summary(items,rows,llm,target=None,prefs=None):
 
 
 def reconcile_actions(actions,rows,llm):
+    from .openrouter import accepted_analysis_responses
+    with accepted_analysis_responses():
+        return _reconcile_actions(actions,rows,llm)
+
+
+def _reconcile_actions(actions,rows,llm):
     """Check later retractions using only matching reversal excerpts; never add tasks."""
     kept=[]
     reversal=re.compile(r'iptal|geri al|vazgeç|yapmay|yazmay|hazırlamay|üstlenmedi|ertel|devret|devral|tamamlandı|bitirdik',re.I)

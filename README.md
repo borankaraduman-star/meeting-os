@@ -3,15 +3,17 @@
 Mac uygulaması ve CLI: ayrı mikrofon/sistem sesi, toplantı bitince OpenRouter’da
 Türkçe transkript ve konuşmacı ayrımı, kalıcı ses profilleri. Özet, karar, risk,
 açık soru ve görev çıkarımı; kendi görev kuyruğu; kaynaklı arşiv araması ve görev
-taslakları. Varsayılan yol buluttur (ücretli OpenRouter API’si); bu Mac’te model
-yüklemek için Ayarlar → Sistem → Yazıya çevirme → Yerel model seçilir. Otomatik
-dış servis aksiyonu yoktur.
+taslakları. Mac uygulaması transkript ve analiz için ücretli OpenRouter API’sini
+kullanır; kayıt sırasında bu Mac’te transkript veya özet modeli yüklemez. Ses
+profili eşleştirmesi yereldir. Otomatik dış servis aksiyonu yoktur.
 
 ![Meeting OS tek bakışta](docs/img/tanitim.png)
 
 Tam kullanım kılavuzu: [docs/KULLANIM.md](docs/KULLANIM.md) (bütün özellikler, sekmeler, ayarlar, kısayollar, sınırlar).
 
-Ekibe yeni katılan biri için tek sayfalık başlangıç: [docs/EKIP.md](docs/EKIP.md) — `git clone -b v0.1 … && sh scripts/install.sh` ile kurulum, gizlilik, ilk gün ve ilk hafta.
+Ekibe yeni katılan biri için terminalsiz başlangıç: [docs/BASLANGIC.md](docs/BASLANGIC.md).
+Tek parça Mac paketi ve güncelleme kanalı: [docs/BUNDLE.md](docs/BUNDLE.md).
+Kaynaktan kurulum ve ekip ayrıntıları: [docs/EKIP.md](docs/EKIP.md).
 
 ## Bu Mac’te aç
 
@@ -30,12 +32,11 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
 2. Mikrofon ve sistem sesi ayrı WAV dosyalarına kaydedilir. Bulut modunda kayıt
    sırasında canlı metin yoktur; metin, isimler ve özet kayıt bitince gelir.
 3. **Kaydı bitir** sesi kapatır ve parçaları OpenRouter’a gönderir; nihai transkript
-   oradan döner. Yerel modeldeyseniz aynı metin bu Mac’te üretilir. Ses kurtarma
-   için korunur.
+   oradan döner. Ses kurtarma için korunur.
 4. Nihai metinde bir bölümü dinleyip **Düzelt** seçin. Metni veya konuşmacı adını
    değiştirebilirsiniz. Özgün metin ve düzeltme geçmişi korunur.
 5. **Özet** ekranında her maddenin kaynak alıntısını kontrol edin.
-   Kayıt son işlemi ve dosya içe aktarımı bittiğinde özet/görev analizi OpenRouter’da (gpt-4.1-mini) otomatik başlar; yerel modda bu Mac’te çalışır.
+   Kayıt son işlemi ve dosya içe aktarımı bittiğinde özet/görev analizi OpenRouter’da (gpt-4.1-mini) otomatik başlar.
    İsim/metin düzeltince analiz eski işaretlenir; Özet sekmesinin sağ üstündeki
    **Özeti güncelle** ile yenileyin.
 6. Aynı kişinin sonraki toplantılarda tanınması için temiz, tek konuşmacılı bir
@@ -45,7 +46,7 @@ Codex çıktısındaki `meeting-os-local` bağlantısı proje klasörünü açar
    çakışan veya kısa bağlamlı örnekler reddedilir. Aynı adlı farklı kişilere
    ayırt edici adlar verin. Belirsiz eşleşmeler isimsiz kalır.
 
-Ayarlar (⌘,) → Sistem → **Yazıya çevirme** seçimi varsayılan olarak OpenRouter’dır: kayıt bitince ses seçili modele gönderilir, bu Mac’te model yüklenmez, konuşmacı ayrımı sağlayıcıdan gelir (varsayılan **Microsoft MAI-Transcribe 2**, ≈ $0,10/saat). Bu modda kayıt sırasında canlı metin yoktur. Bitmemiş kayıtlar toplantının üstündeki kurtarma şeridinde **Bulutta yazıya çevir** ile gönderilir. Kayıtlı ses dosyaları kenar çubuğundaki **⋯ → Ses dosyası aç…** ile yazıya çevrilir; yerel
+Kayıt bitince ses seçili OpenRouter modeline gönderilir, bu Mac’te transkript modeli yüklenmez, konuşmacı ayrımı sağlayıcıdan gelir (varsayılan **Microsoft MAI-Transcribe 2**). Kayıt sırasında canlı metin yoktur. Bitmemiş kayıtlar toplantının üstündeki kurtarma şeridinde **Bulutta yazıya çevir** ile gönderilir. Kayıtlı ses dosyaları kenar çubuğundaki **⋯ → Ses dosyası aç…** ile yazıya çevrilir; yerel
 `import` yolu yalnız CLI’de durur, kenar çubuğunda düğmesi yoktur.
 Bir toplantıyı silmek için listede sağ tıklayıp **Toplantıyı sil…** seçin veya
 başlıktaki çöp kutusunu kullanın; onaydan sonra transkript, düzeltmeler, özet,
