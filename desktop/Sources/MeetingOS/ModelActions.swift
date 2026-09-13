@@ -120,7 +120,7 @@ extension Model {
         await loadErrors(); activity="Hata günlüğü temizlendi"
     }
     func heartbeatIfDue() {
-        guard !recording, recordProcess==nil, job==nil, lastHeartbeat.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true else { return }
+        guard !recording, recordProcess==nil, job==nil, HousekeepingSchedule.isDue(last:lastHeartbeat) else { return }
         lastHeartbeat=Date()
         Task {
             // P0-3: the bundle's own CFBundleShortVersionString under `app.version` is what the Python side prefers;
@@ -131,6 +131,7 @@ extension Model {
             // SIGTERMing it every hour, so a library that had fallen behind could never catch up.
             if !recording, recordProcess==nil, job==nil, let r=try? await requestSlow(["action":"storage_housekeeping"]) {
                 if let box=r["outbox"] as? [String:Any] { adoptTeamOutbox(["outbox":box]) }   // the hourly pass is a flush too
+                noteHousekeeping(r)   // what the sweep could not do is the user's business, not the log's
                 let archived=r["archived_bytes"] as? Int ?? 0, removed=r["removed_bytes"] as? Int ?? 0
                 // One retention setting deletes a whole week of recordings on the same day; the warning comes first,
                 // while marking a meeting "Sesi koru" (or widening the setting) can still save it.
@@ -151,6 +152,16 @@ extension Model {
         }
     }
 
+    /// Keep the sweep's own verdict. Consecutive failures per step live in `UserDefaults` so the line can say
+    /// "3 kez üst üste" — one failed pass is weather, three in a row is a folder that is never coming back.
+    func noteHousekeeping(_ answer:[String:Any]) {
+        let (failures,skipped)=HousekeepingSchedule.outcome(answer)
+        let previous=UserDefaults.standard.dictionary(forKey:HousekeepingSchedule.streaksKey) as? [String:Int] ?? [:]
+        let streaks=HousekeepingSchedule.streaks(previous:previous,failures:failures)
+        if streaks.isEmpty { UserDefaults.standard.removeObject(forKey:HousekeepingSchedule.streaksKey) }
+        else { UserDefaults.standard.set(streaks,forKey:HousekeepingSchedule.streaksKey) }
+        housekeepingNote=HousekeepingSchedule.note(failures:failures,skipped:skipped,streaks:streaks)
+    }
     /// What the Python side says it still owes the team, adopted by the app's flush loop. `nil` means the
     /// answer carried no outbox at all (an old bridge, a failed call): the app's own state is left alone.
     func adoptTeamOutbox(_ answer:[String:Any]?) {

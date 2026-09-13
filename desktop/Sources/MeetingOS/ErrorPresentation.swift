@@ -5,7 +5,7 @@ enum ErrorPresentation {
     static func summary(_ text:String)->String {
         let prefix=String(text.prefix(401))
         if prefix.count<=400 { return prefix }
-        return String(prefix.prefix(300))+"… Ayrıntılar: last-job.log / tanılama raporu."
+        return String(prefix.prefix(300))+"… Ayrıntılar: last-job-*.log / tanılama raporu."   // one log per job since 1.2.87
     }
     static func logSummary(_ url:URL)->String {
         guard let file=try? FileHandle(forReadingFrom:url) else { return "İşlem tamamlanamadı" }

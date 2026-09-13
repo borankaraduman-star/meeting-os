@@ -42,6 +42,7 @@ struct WelcomeView:View {
                     .accessibilityIdentifier("welcomeUserNameField")
                     .onSubmit { Task { await model.saveUserName() } }
                     .onDisappear { Task { await model.saveUserName() } }   // first run: the name is asked once, saved when the view goes away
+                    .onChange(of:model.reportSettings.userName) { _,_ in model.userNameEdited() }   // …and a second after typing stops, so ⌘Q never has to write it
                     .onChange(of:model.userNameFocusToken) { _,_ in nameFocused=true }
                 Text("Mikrofon kaydınız bu adla etiketlenir; sonradan Ayarlar → Genel’den değişir.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             }
