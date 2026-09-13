@@ -297,6 +297,7 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(args[0].endswith('Meeting OS.app'))
         self.assertEqual(args[1], str(self.tmp/'Meeting OS.app'))
         self.assertEqual(args[2], '0')
+        self.assertEqual(args[3], '1.2.71', 'the old version travels to the swap script so `from` survives into `done`')
 
     def test_the_percentage_reaches_the_status_file(self):
         seen = []
@@ -410,10 +411,11 @@ class SwapScriptTests(unittest.TestCase):
         (self.new/'Contents').mkdir(parents=True)
         (self.new/'Contents'/'yeni').write_text('yeni', encoding='utf-8')
 
-    def swap(self, pid='0', target=None):
+    def swap(self, pid='0', target=None, from_version=None):
         env = {**os.environ, 'HOME': str(self.home), 'PATH': '%s:%s' % (self.bin, os.environ['PATH'])}
-        return subprocess.run(['/bin/sh', str(REPO/'scripts'/'swap-update.sh'), str(self.new),
-                               str(target or self.target), pid], env=env, capture_output=True, text=True, timeout=90)
+        args = [str(self.new), str(target or self.target), pid] + ([from_version] if from_version is not None else [])
+        return subprocess.run(['/bin/sh', str(REPO/'scripts'/'swap-update.sh'), *args],
+                              env=env, capture_output=True, text=True, timeout=90)
 
     def status(self):
         return json.loads((self.home/'Library/Application Support/MeetingOS/update-status.json').read_text())
@@ -443,6 +445,22 @@ class SwapScriptTests(unittest.TestCase):
         self.assertTrue((self.target/'Contents'/'eski').is_file())
         self.assertEqual(self.status()['state'], 'failed')
         self.assertIn('yazılabilir değil', self.status()['message'])
+        # The app quit for this swap; the refusal must not leave a teammate with nothing on screen.
+        self.assertEqual(self.opened.read_text(encoding='utf-8').strip(), str(self.target))
+
+    def test_a_finished_swap_deletes_the_zip_and_keeps_the_old_version_in_the_status(self):
+        """2026-09-13 audit: every release has a new zip name, so without this they pile up at 350 MB each;
+        and `from` was always empty because the script never learned the old version."""
+        cache = self.new.parent.parent
+        (cache/'Meeting-OS-1.2.86.zip').write_bytes(b'zip')
+        (cache/'Meeting-OS-1.2.85.zip').write_bytes(b'zip')
+        (cache/'unrelated.txt').write_text('keep', encoding='utf-8')
+        r = self.swap(from_version='1.2.85')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(list(cache.glob('Meeting-OS-*.zip')))
+        self.assertTrue((cache/'unrelated.txt').is_file())
+        self.assertEqual(self.status()['from'], '1.2.85')
+        self.assertEqual(self.status()['state'], 'done')
 
     def test_a_missing_new_app_fails_before_the_installed_one_is_moved(self):
         shutil.rmtree(self.new)

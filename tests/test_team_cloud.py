@@ -1166,3 +1166,29 @@ class DiagnosticsContractTests(CloudFixture):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CardErrorText(unittest.TestCase):
+    """The setup card shows a sentence; the error journal keeps the diagnostic form (2026-09-13 audit P3)."""
+
+    def test_network_failures_become_turkish_sentences(self):
+        import socket
+        from urllib.error import HTTPError, URLError
+        self.assertEqual(TC._plain(URLError(OSError(61, 'Connection refused'))), 'internet ya da sunucu bağlantısı yok')
+        self.assertEqual(TC._plain(ConnectionRefusedError(61, 'Connection refused')), 'internet ya da sunucu bağlantısı yok')
+        self.assertEqual(TC._plain(socket.timeout('timed out')), 'sunucu zamanında yanıt vermedi')
+        self.assertEqual(TC._plain(TimeoutError()), 'sunucu zamanında yanıt vermedi')
+        self.assertEqual(TC._plain(HTTPError('u', 503, 'x', {}, None)), 'sunucu 503 yanıtı verdi')
+
+    def test_other_failures_keep_the_diagnostic_form(self):
+        self.assertEqual(TC._plain(ValueError('token kısa')), 'ValueError: token kısa')
+
+    def test_the_journal_keeps_the_class_and_message_while_the_card_gets_the_sentence(self):
+        from urllib.error import URLError
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            state = {}
+            TC._record_once(data, state, TC._short(URLError(OSError(61, 'Connection refused'))), TC._now())
+            journal = (data / 'errors.jsonl').read_text(encoding='utf-8')
+            self.assertIn('URLError', journal)
+            self.assertIn('Connection refused', journal)

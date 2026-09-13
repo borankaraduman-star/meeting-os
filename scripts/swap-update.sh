@@ -1,7 +1,7 @@
 #!/bin/sh
 # Put a freshly downloaded Meeting OS.app in place of the running one and reopen it.
 #
-#     sh swap-update.sh <yeni.app> <hedef.app> <pid>
+#     sh swap-update.sh <yeni.app> <hedef.app> <pid> [eski sürüm]
 #
 # Launched detached by meeting_os/updater.py after the zip is verified and unpacked; the app quits while this
 # waits. Everything here is a `mv` inside one folder — no sudo, ever: if the target's folder is not writable
@@ -12,6 +12,7 @@ set -u
 NEW=${1:-}
 TARGET=${2:-}
 PID=${3:-0}
+FROM=${4:-}
 DATA="$HOME/Library/Application Support/MeetingOS"
 LOG="$DATA/update.log"
 STATUS="$DATA/update-status.json"
@@ -27,8 +28,8 @@ exec >> "$LOG" 2>&1
 status() {
   message="$(printf '%s' "$2" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\000-\037')"
   tmp="$STATUS.tmp.$$"
-  printf '{"state":"%s","from":"","to":"%s","message":"%s","time":"%s"}\n' \
-    "$1" "$VERSION" "$message" "$(date '+%Y-%m-%d %H:%M:%S')" > "$tmp" && mv -f "$tmp" "$STATUS" || rm -f "$tmp"
+  printf '{"state":"%s","from":"%s","to":"%s","message":"%s","time":"%s"}\n' \
+    "$1" "$FROM" "$VERSION" "$message" "$(date '+%Y-%m-%d %H:%M:%S')" > "$tmp" && mv -f "$tmp" "$STATUS" || rm -f "$tmp"
 }
 
 echo "== $(date '+%F %T') takas başladı ($NEW → $TARGET, pid $PID)"
@@ -44,7 +45,10 @@ PARENT="$(dirname "$TARGET")"
 if [ ! -w "$PARENT" ]; then
   echo "swap: $PARENT yazılabilir değil"
   status failed "Uygulama klasörü yazılabilir değil ($PARENT) · uygulamayı Uygulamalar'a taşıyın"
-  rm -rf "$NEW"; exit 1
+  rm -rf "$NEW"
+  # The app already quit for this swap; a teammate must not be left staring at nothing.
+  open "$TARGET" 2>/dev/null || true
+  exit 1
 fi
 
 # The app is quitting while we wait. 60 s is the same budget scripts/update.sh uses; past it the swap is
@@ -73,7 +77,10 @@ fi
 # The bundle was never in a browser's hands (the app downloaded it itself), but a quarantine flag inherited
 # from anywhere would make the reopened app ask again.
 /usr/bin/xattr -d -r com.apple.quarantine "$TARGET" 2>/dev/null || true
-rmdir "$(dirname "$NEW")" 2>/dev/null || true   # the staging folder in ~/Library/Caches is empty now
+STAGING="$(dirname "$NEW")"
+rmdir "$STAGING" 2>/dev/null || true   # the staging folder in ~/Library/Caches is empty now
+# The zip did its job. Every release has a new file name, so without this they would pile up at 350 MB each.
+rm -f "$(dirname "$STAGING")"/Meeting-OS-*.zip 2>/dev/null || true
 
 if [ -n "$VERSION" ]; then status done "Güncellendi: $VERSION"; else status done "Güncellendi"; fi
 echo "== $(date '+%F %T') takas tamam ($TARGET${VERSION:+ · $VERSION})"

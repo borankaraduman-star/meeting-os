@@ -578,10 +578,27 @@ def status(data_dir, settings=None):
 
 
 def _short(exc):
-    """`ClassName: message`, one line, home path masked, bounded — the card shows it and it reaches the team."""
+    """`ClassName: message`, one line, home path masked, bounded — the journal keeps this diagnostic form."""
     from .reports import redact_home
     message = ' '.join(str(exc).split())[:100]
     return redact_home(f'{type(exc).__name__}: {message}' if message else type(exc).__name__)[:120]
+
+
+def _plain(exc):
+    """What the setup card shows: a Turkish sentence for the network failures a teammate can do nothing about,
+    the diagnostic form for everything else. "bulut şu an erişilemiyor (URLError: <urlopen error [Errno 61]
+    Connection refused>)" is not a sentence anyone outside this repo should read."""
+    import socket
+    from urllib.error import HTTPError, URLError
+    text = str(exc).lower()
+    if isinstance(exc, HTTPError):
+        return f'sunucu {exc.code} yanıtı verdi'
+    if isinstance(exc, (TimeoutError, socket.timeout)) or 'timed out' in text or 'timeout' in text:
+        return 'sunucu zamanında yanıt vermedi'
+    if isinstance(exc, (URLError, ConnectionError, OSError)) or 'connection' in text or 'nodename' in text \
+            or 'name resolution' in text or 'network' in text:
+        return 'internet ya da sunucu bağlantısı yok'
+    return _short(exc)
 
 
 def _record_once(data_dir, state, message, moment):
@@ -1096,8 +1113,8 @@ def sync(data_dir, settings=None, budget=BUDGET):
             _seed(data, mirror, host)
             error = _run(data, settings, _Http(base, tok, host, deadline, device_id(data)), mirror, host, state, result)
         except Exception as exc:
-            error = _short(exc)
-            _record_once(data, state, error, moment)
+            _record_once(data, state, _short(exc), moment)   # the journal keeps the raw class and message
+            error = _plain(exc)                               # the card gets a sentence
         state['url'] = base; state['team_id_short'] = team_id_short(tok); state['last_attempt'] = moment
         if error: state['last_error'] = error
         else: state['last_ok'] = moment; state['last_error'] = None

@@ -69,16 +69,24 @@ class RepoContents(unittest.TestCase):
         for file in M.REPO_FILES: self.assertTrue((ROOT / file).is_file(), file)
         for script in M.REPO_SCRIPTS: self.assertTrue((ROOT / 'scripts' / script).is_file(), script)
 
-    def test_nothing_under_scripts_is_needed_at_runtime(self):
+    def test_every_script_a_module_runs_is_shipped_and_nothing_else(self):
         """probe.py and reports.py NAME install.sh / update.sh / fix-signing-prompts.sh, but only inside hint
-        strings. If a module ever starts running one, this list has to grow and this test says so."""
-        self.assertEqual(M.REPO_SCRIPTS, [])
-        runner = []
+        strings. updater.py RUNS scripts/swap-update.sh (the bundle update channel). The 2026-09-13 fresh-Mac
+        simulation found the old guard blind — it looked for `Popen(['sh'` while updater spells it
+        `Popen(['/bin/sh'` — and every shipped bundle unable to update itself. This one finds the real
+        `scripts/<name>` every module hands to a shell and demands the manifest ship exactly those."""
+        import re
+        needed = set()
         for path in (ROOT / 'meeting_os').glob('*.py'):
             text = path.read_text(encoding='utf-8')
-            for marker in ("run(['sh'", 'Popen(["sh"', "Popen(['sh'", "'scripts/build"):
-                if marker in text: runner.append(path.name)
-        self.assertEqual(runner, [])
+            if re.search(r"(?:Popen|run)\(\[\s*['\"](?:/bin/)?sh['\"]", text):
+                needed.update(re.findall(r"'scripts'\s*/\s*'([^']+\.sh)'", text))
+                needed.update(re.findall(r"scripts/([A-Za-z0-9._-]+\.sh)", text))
+        # update.sh is the GIT channel: updater.start runs it only when runtime.json says the install is not a
+        # bundle, so a bundle never needs it. Everything else a module hands to a shell must ship.
+        needed.discard('update.sh')
+        self.assertEqual(sorted(needed), sorted(M.REPO_SCRIPTS))
+        self.assertEqual(M.REPO_SCRIPTS, ['swap-update.sh'])
 
     def test_sherpa_subset_is_exactly_what_speakers_py_opens(self):
         """speakers.py names two model files and diarization_checkpoints.py checks the same two. Everything

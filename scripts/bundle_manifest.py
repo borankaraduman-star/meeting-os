@@ -79,7 +79,9 @@ REPO_EXCLUDE = ['__pycache__', '*.pyc', '*.pyo', '.DS_Store']
 #: `scripts/update.sh` and `scripts/fix-signing-prompts.sh` inside hint strings, and the bundle channel
 #: replaces the git update path altogether. Kept as an explicit empty list so a future runtime dependency
 #: has somewhere obvious to go.
-REPO_SCRIPTS: list = []
+# The one script the app runs from inside the bundle: updater.py spawns it to put a downloaded update in place.
+# Without it every installed bundle answers "swap-update.sh bulunamadı" (2026-09-13 fresh-Mac simulation).
+REPO_SCRIPTS: list = ['swap-update.sh']
 #: The recording helper, copied to repo/build/MeetingCapture.app (cli.py --capture-bin looks for it there).
 CAPTURE_APP_DEST = 'build/MeetingCapture.app'
 

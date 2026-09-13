@@ -342,7 +342,7 @@ def run_download(base, data_dir, app_path, pid, swap, from_version='', cache=Non
         write_status(data_dir, 'swapping', 'Yeni sürüm yerine konuyor · uygulama yeniden açılacak',
                      from_version, to_version, percent=100)
         with open(data_dir/'update.log', 'a') as log:   # Popen dups the fd; closing ours changes nothing for it
-            subprocess.Popen(['/bin/sh', str(swap), str(apps[0]), str(app_path), str(pid)],
+            subprocess.Popen(['/bin/sh', str(swap), str(apps[0]), str(app_path), str(pid), str(from_version or '')],
                              stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
         return 0
     except Exception as exc:      # noqa: BLE001 - the worker is detached; every failure must reach the file
