@@ -89,7 +89,10 @@ def record(store, mid, item_id, section, action, text=None, reason=None):
         store.db.execute('''INSERT INTO insight_edits(meeting,item_id,section,action,text,reason,created,analysis_version) VALUES(?,?,?,?,?,?,?,?)
                             ON CONFLICT(meeting,item_id,action) DO UPDATE SET section=excluded.section,text=excluded.text,reason=excluded.reason,created=excluded.created,analysis_version=excluded.analysis_version''',
                          (mid, item_id, section, action, text, reason, _now(), version))
-    event(store, f'summary_{action}', object=item_id, outcome=reason or action, scope=section, meeting=mid)
+    # `meeting=` is not a parameter of record_event: the TypeError landed on the bare (store, action)
+    # fallback above and the row was written with no object, no scope and no reason (audit #14). The item
+    # id is the object, the removal reason is a reason, and a decision the user just made is `applied`.
+    event(store, f'summary_{action}', object=item_id, scope='meeting', reason=reason)
     return {'item_id': item_id, 'section': section, 'action': action, 'text': text, 'reason': reason, 'analysis_version': version}
 
 
@@ -99,7 +102,7 @@ def undo(store, mid, item_id, action):
     ensure_table(store)
     with store.db:
         cur = store.db.execute('DELETE FROM insight_edits WHERE meeting=? AND item_id=? AND action=?', (mid, item_id, action))
-    if cur.rowcount: event(store, f'summary_{action}', object=item_id, outcome='undo', scope=action, meeting=mid)
+    if cur.rowcount: event(store, f'summary_{action}', object=item_id, scope='meeting', outcome='reverted')   # 'undo' is not an OUTCOME; taking a decision back is a revert
     return {'item_id': item_id, 'action': action, 'undone': bool(cur.rowcount)}
 
 

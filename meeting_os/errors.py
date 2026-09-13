@@ -32,7 +32,10 @@ MESSAGE_LIMIT = 300
 CONTEXT_KEYS = 8
 CONTEXT_TEXT = 120
 DEDUPE_SECONDS = 600                  # the same (kind, message) twice in ten minutes is one event, not two
-KINDS = ('ui', 'job', 'cloud', 'capture', 'update', 'crash')
+KINDS = ('ui', 'job', 'cloud', 'capture', 'update', 'crash',
+         # Two buckets for work that is allowed to fail without failing the thing it belongs to: the
+         # post-complete chores of a finished meeting (audit #2) and a degraded analysis merge (#9).
+         'finalize', 'analysis')
 READ_LIMIT = 4000
 WINDOW_HOURS = 24
 

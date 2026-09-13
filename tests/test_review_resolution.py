@@ -168,10 +168,15 @@ class MetricsHookTests(unittest.TestCase):
             store, mid = meeting(tmp)
             item = review_queue(store, mid)['items'][0]
             was = R.record_event
-            R.record_event = lambda store, action, **fields: seen.append((action, fields.get('object'), fields.get('outcome')))
-            try: resolve_review(store, mid, item['key'], item['kind'], item['source_version'], 'skipped')
+            R.record_event = lambda store, action, **fields: seen.append((action, fields.get('object'), fields.get('outcome'), fields.get('scope')))
+            try:
+                resolve_review(store, mid, item['key'], item['kind'], item['source_version'], 'skipped')
+                resolve_review(store, mid, item['key'], item['kind'], item['source_version'], 'corrected')
             finally: R.record_event = was
-            self.assertEqual(seen, [('review_resolve', item['key'], 'skipped')])
+            # 'geç' answers nothing, so it is a noop; a real answer is applied. The result itself is not an
+            # OUTCOME and used to be dropped along with the object and the scope (audit 2026-09-13 #14).
+            self.assertEqual(seen, [('review_resolve', item['key'], 'noop', 'meeting'),
+                                    ('review_resolve', item['key'], 'applied', 'meeting')])
             store.close()
 
 

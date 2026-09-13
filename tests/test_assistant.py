@@ -126,3 +126,29 @@ class SearchRankingTests(unittest.TestCase):
             self.assertEqual([h['id'] for h in mem.search('rapor',speaker='boran')],[mine])   # the mic label is a person
             self.assertEqual(len(mem.search('rapor',speaker='Ilker')),1)                      # İ/I is not a different person
             self.assertEqual(mem.search('rapor',speaker='Kimse'),[]);s.close()
+
+
+class EmptyAnalysisCacheTests(unittest.TestCase):
+    """Audit 2026-09-13 #5: an empty analysis was saved and then served from the cache forever, because an
+    analysis that is not stale is never recomputed — pressing Analiz again could not get past it."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.path=Path(self.tmp.name)/'db';self.s=Store(self.path)
+        self.mid=self.s.create_meeting('Plan');self.s.add_segment(self.mid,Segment(0,8,'Ben PRD taslağını yarın hazırlayacağım.','mic','S0','Boran'))
+        self.s.status(self.mid,'complete');self.mem=Memory(self.s)
+    def tearDown(self):self.s.close();self.tmp.cleanup()
+    def saved(self):return self.s.db.execute('SELECT count(*) FROM analyses').fetchone()[0]
+    def test_a_model_that_answers_with_nothing_saves_nothing(self):
+        from meeting_os.intelligence import EMPTY_SUMMARY
+        class Silent(FakeLLM):
+            def count(self,text):return len(text)   # the chunker asks the model to measure the transcript
+        llm=Silent(json.dumps({k:[] for k in ('summary','decisions','risks','questions','actions')}))
+        with self.assertRaises(ValueError) as caught: assistant.analyze(self.s,self.mid,llm)
+        self.assertEqual(str(caught.exception),EMPTY_SUMMARY)
+        self.assertEqual(self.saved(),0,'an empty analysis was cached and can now never be got past')
+    def test_the_save_itself_refuses_an_empty_summary(self):
+        """The guard is in `analyze`, not only in the chunk: a degraded merge must not reach the cache either."""
+        from unittest.mock import patch
+        blank={k:[] for k in ('summary','decisions','risks','questions','actions')}
+        with patch.object(assistant,'analyze_rows',lambda *a,**kw:dict(blank)):
+            with self.assertRaises(ValueError): assistant.analyze(self.s,self.mid,FakeLLM())
+        self.assertEqual(self.saved(),0)

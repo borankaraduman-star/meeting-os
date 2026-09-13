@@ -135,7 +135,9 @@ def resolve_review(store,mid,key,kind,source_version,result):
         store.db.execute('''INSERT INTO review_results(meeting,item_key,kind,source_version,result,created) VALUES(?,?,?,?,?,?)
                             ON CONFLICT(meeting,item_key,source_version) DO UPDATE SET result=excluded.result,kind=excluded.kind,created=excluded.created''',
                          (mid,key,kind or key.split(':')[0],source_version,result,now()))
-    _event(store,'review_resolve',object=key,outcome=result,scope=kind or '',meeting=mid)
+    # The item key is the object; 'geç' answers nothing, so it is a noop rather than an applied decision.
+    # `meeting=`/`outcome=result` used to leave the row blank through the fallback (audit 2026-09-13 #14).
+    _event(store,'review_resolve',object=key,scope='meeting',outcome='noop' if result=='skipped' else 'applied')
     return {'resolved':True,'key':key,'result':result,'source_version':source_version}
 
 def reopen_review(store,mid,key,source_version=None):

@@ -39,11 +39,15 @@ class GateWindowTests(unittest.TestCase):
             self.assertIsNone(mic_gate_windows(Path(tmp)/'yok'))
             self.assertEqual(gate_overlap(None, 10, 40), 30)   # None: every piece is kept whole
 
-    def test_a_gate_that_never_opened_is_an_empty_window_list_not_none(self):
+    def test_a_gate_that_never_opened_is_not_a_gate_at_all(self):
+        """`zoomMuted` is None — Zoom not running, no meeting on, or Accessibility never granted — for the
+        whole recording, so the app journals one `off` at t=0 and nothing more. That is an unanswered
+        question, not a closed gate: it used to return [] and drop the owner's entire track (audit #1)."""
         with tempfile.TemporaryDirectory() as tmp:
             gate_journal(tmp, [line('off', 0), line('off', 120)])
-            self.assertEqual(mic_gate_windows(tmp), [])
-            self.assertEqual(gate_overlap([], 0, 300), 0)
+            self.assertIsNone(mic_gate_windows(tmp))
+            self.assertEqual(gate_overlap([], 0, 300), 0)        # an empty list still means nothing is open…
+            self.assertEqual(gate_overlap(None, 0, 300), 300)    # …and None still means "transcribe it all"
 
     def test_junk_lines_and_out_of_order_events_survive(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -164,12 +168,14 @@ class GatedFinalizeTests(unittest.TestCase):
             self.assertEqual(len(client.calls), 4)   # three system pieces plus the one mic piece the gate kept
             self.assertEqual(rows[0]['start'], 0)    # the kept piece is whole: no audio was trimmed
 
-    def test_a_gate_that_never_opened_uploads_no_microphone_at_all(self):
+    def test_a_gate_that_never_opened_still_transcribes_the_owner(self):
+        """The whole non-Zoom case: an hour recorded on Google Meet used to come back with every other
+        participant in it and not one word of the person who pressed record (audit 2026-09-13 #1)."""
         with tempfile.TemporaryDirectory() as tmp:
             meta, usage, rows, client = self.finalize(tmp, [line('off', 0)])
-            self.assertEqual(meta['mic_gated_windows'], 3)
-            self.assertEqual([r['source'] for r in rows], ['system', 'system', 'system'])
-            self.assertEqual(len(client.calls), 3)
+            self.assertEqual(meta['mic_gated_windows'], 0)
+            self.assertEqual(sum(1 for r in rows if r['source'] == 'mic'), 3)
+            self.assertEqual(len(client.calls), 6)
 
     def test_without_a_gate_journal_every_microphone_piece_is_still_transcribed(self):
         with tempfile.TemporaryDirectory() as tmp:

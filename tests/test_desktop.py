@@ -695,3 +695,30 @@ class CommandLineFallbackTests(unittest.TestCase):
     def test_the_import_audio_path_comes_from_the_environment_and_stays_a_path(self):
         self.assertEqual(self._parse({'MEETING_OS_AUDIO_PATH':'/tmp/kayit.wav'},['openrouter-import']).audio,Path('/tmp/kayit.wav'))
         self.assertIsNone(self._parse({},['openrouter-import']).audio)
+
+
+class HousekeepingRecordingTests(unittest.TestCase):
+    """Audit 2026-09-13 #3, second half: the hourly pass re-encodes the whole library, and it is armed at
+    every launch. A meeting that starts while it runs must not wait for it — promise three."""
+    def test_a_live_recording_stops_the_pass_before_the_first_step(self):
+        from meeting_os import desktop as D, reports
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);db=data/'meeting-os.sqlite'
+            store=Store(db);store.status(store.create_meeting('Eski',{}),'complete');store.close()
+            reports.save_settings(data,{'report_dir':str(data/'shared')})
+            reports.write_recording_heartbeat(data,{'meeting':'m1','elapsed_seconds':120.0,'last_chunk_age_seconds':2.0})
+            self.assertTrue(D.recording_now(data))
+            result=D.dispatch({'action':'storage_housekeeping'},db=str(db))
+            self.assertEqual(result,{'skipped':'recording','failures':{}})
+            # …and with the recorder gone the same pass runs to the end.
+            reports.clear_recording_heartbeat(data)
+            self.assertFalse(D.recording_now(data))
+            self.assertIn('retention_days',D.dispatch({'action':'storage_housekeeping'},db=str(db)))
+    def test_a_stale_heartbeat_is_not_a_recording(self):
+        from meeting_os import desktop as D, reports
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);reports.save_settings(data,{'report_dir':str(data/'shared')})
+            host=reports.host_dir(reports.load_settings(data));host.mkdir(parents=True,exist_ok=True)
+            (host/reports.RECORDING_HEARTBEAT_FILE).write_text(json.dumps(
+                {'host':'Mac','written':'2020-01-01T00:00:00+00:00','elapsed_seconds':60}))
+            self.assertFalse(D.recording_now(data))   # a file left behind by a crashed recorder blocks nothing

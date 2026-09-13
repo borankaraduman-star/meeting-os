@@ -589,6 +589,9 @@ CHUNK_WORKERS=3          # chunks in flight at once; the per-chunk answer does n
 CHUNK_MAX_TOKENS=4000    # room for one bullet per topic plus actions on a bigger chunk
 
 
+EMPTY_SUMMARY='Özet çıkarılamadı: model boş yanıt verdi'   # the one sentence the user sees when the model returns nothing
+
+
 def _analyze_chunk(batch,rows,llm,glossary,owner,prefs=None,review_classes=()):
     prompt=json.dumps(({'glossary':glossary} if glossary else {})|{'transcript':batch},ensure_ascii=False)   # glossary: expand abbreviations in output text, still untrusted data
     system=system_prompt(prefs)
@@ -599,12 +602,27 @@ def _analyze_chunk(batch,rows,llm,glossary,owner,prefs=None,review_classes=()):
             parsed=parse_json(raw)
             if not all(key in parsed for key in CATEGORIES):raise ValueError('Analiz kategorileri eksik')
             allowed={b['segment_id'] for b in batch}
-            return validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner,review_classes=review_classes)
+            checked=validate_record(parsed,[r for r in rows if r['id'] in allowed],mic_owner=owner,review_classes=review_classes)
+            # An empty summary is not an analysis of this chunk, it is a non-answer: saving it put a blank
+            # summary in the cache that "Analiz" could never get past (audit 2026-09-13 #5). Say so instead —
+            # the retry above gets one nudge, and a second empty answer is an error the user can act on.
+            if not checked['summary']: raise ValueError(EMPTY_SUMMARY)
+            return checked
         except (ValueError,TypeError,KeyError,json.JSONDecodeError) as exc:error=exc
+    if str(error)==EMPTY_SUMMARY: raise ValueError(EMPTY_SUMMARY)   # the model answered twice, with nothing in it: say that, not "doğrulanamadı"
     raise ValueError('Analiz doğrulanamadı; kaynak transkript korunuyor: '+str(error))
 
 
-def analyze_rows(rows,llm,progress=None,glossary=None,owner=None,workers=None,prefs=None,review_classes=()):
+def _degraded(step,exc,data_dir):
+    """A merge step failed and the analysis went out degraded rather than lost. Nobody sees this on screen —
+    the journal is where a Mac that keeps degrading admits it (audit 2026-09-13 #9)."""
+    try:
+        from .errors import record
+        record('analysis',f'{step}: {exc}',data_dir=data_dir,context={'step':step})
+    except Exception: pass
+
+
+def analyze_rows(rows,llm,progress=None,glossary=None,owner=None,workers=None,prefs=None,review_classes=(),data_dir=None):
     """`prefs` is the three derived summary preferences (`preferences.values`), `review_classes` the task
     error classes this Mac keeps correcting. Both are read from small local files by the caller; neither
     costs a model call and neither can carry the user's own words into a prompt."""
@@ -626,15 +644,35 @@ def analyze_rows(rows,llm,progress=None,glossary=None,owner=None,workers=None,pr
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures={pool.submit(contextvars.copy_context().run,_analyze_chunk,batch,rows,llm,glossary,owner,prefs,review_classes):i for i,batch in enumerate(batches)}
             from concurrent.futures import as_completed
-            for fut in as_completed(futures):
-                outputs[futures[fut]]=fut.result()   # the first failure raises here; the pool's exit waits for the rest
-                done+=1
-                if progress:progress(done,len(batches))
+            try:
+                for fut in as_completed(futures):
+                    outputs[futures[fut]]=fut.result()   # the first failure raises here
+                    done+=1
+                    if progress:progress(done,len(batches))
+            except BaseException:
+                # The analysis is already lost at this point; the chunks still queued would be uploaded, paid
+                # for and thrown away (the `with` exit waits for every one of them). Drop what has not started
+                # — five of five chunks used to be billed for an analysis nobody got (audit 2026-09-13 #9).
+                pool.shutdown(wait=False,cancel_futures=True)
+                raise
     result=merge_records(outputs)
     if len(batches)>1:
         result['section_summaries']=result['summary']
-        result['summary']=compact_summary(result['summary'],rows,llm,target=summary_target(meeting_minutes(rows),(prefs or {}).get('detail')),prefs=prefs)
-        result['actions']=reconcile_actions(result['actions'],rows,llm)
+        target=summary_target(meeting_minutes(rows),(prefs or {}).get('detail'))
+        # Both merge steps are cheap follow-up calls over notes that are ALREADY validated and already paid
+        # for. They used to raise, so one malformed 160-token answer discarded every chunk of the meeting.
+        # Degraded beats lost: keep the per-chunk bullets (trimmed to the target) and the merged tasks, and
+        # write the degradation to the journal (audit 2026-09-13 #9).
+        try:
+            result['summary']=compact_summary(result['summary'],rows,llm,target=target,prefs=prefs)
+        except Exception as exc:
+            _degraded('compact_summary',exc,data_dir);result['summary']=result['section_summaries'][:target]
+            result['degraded']=sorted(set((result.get('degraded') or [])+['compact_summary']))
+        try:
+            result['actions']=reconcile_actions(result['actions'],rows,llm)
+        except Exception as exc:   # the retraction check is a filter; without it the merged tasks stand as they were
+            _degraded('reconcile_actions',exc,data_dir)
+            result['degraded']=sorted(set((result.get('degraded') or [])+['reconcile_actions']))
     # A bounded canonical record reduces repeated full-transcript context.
     result['coverage']={'segments':len(rows),'chunks':len(batches),'all_chunks_processed':True}
     return result

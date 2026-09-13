@@ -372,6 +372,24 @@ def data_folder(db):
     return DATA_DIR if db is None else Path(db).parent
 
 
+RECORDING_FRESH_SECONDS=120   # the recorder rewrites its heartbeat once a minute; older than two is a leftover, not a meeting
+
+
+class _RecordingStarted(Exception):
+    """This Mac started taping between two housekeeping steps. Never leaves `storage_housekeeping`."""
+
+
+def recording_now(data_dir,fresh_seconds=RECORDING_FRESH_SECONDS):
+    """Is a meeting being recorded on THIS Mac right now, according to the recorder's own heartbeat file
+    (`reports.write_recording_heartbeat`)? Best effort by design: the file only exists while report sharing is
+    on, and a missing answer must never stop the housekeeping — it only ever makes the pass wait a turn."""
+    try:
+        from .reports import host_dir,load_settings,read_recording_heartbeat
+        beat=read_recording_heartbeat(host_dir(load_settings(data_dir)))
+        return bool(beat) and float(beat.get('age_seconds') or 0)<=fresh_seconds
+    except Exception: return False
+
+
 def learn(store, action, **fields):
     """One learning_event for a user action that has just SUCCEEDED. Called after the work, never before: an
     action that raised is not a decision. Never raises and never waits on anything (see meeting_os/learning.py)."""
@@ -812,35 +830,60 @@ def dispatch(request, db=None):
             from .audio_archive import archive_all
             from .reports import audio_retention_warning,load_settings,text_retention_warning
             data=DATA_DIR if db is None else Path(db).parent
-            arch=archive_all(store); settings=load_settings(data); days=int(settings.get('audio_retention_days') or 0)
-            # Hourly, idle, on the slow bridge: the one place a team sync can take a second on a network folder
-            # without the ten-second watchdog killing it. Launch does its own; a teach publishes straight away.
-            from .team_knowledge import sync as team_sync
-            team=team_sync(store,data,settings=settings)
-            cleaned=storage_cleanup(store,data,days=days,dry_run=False) if days>0 else {'meetings':[],'bytes':0}
-            # Then the text: off unless the user picked a horizon, and when they did, the whole meeting goes the
-            # way a manual delete takes it (reports, team mirror, Hafıza) rather than leaving orphans behind.
-            text_days=int(settings.get('text_retention_days') or 0)
-            text=text_cleanup(store,data,days=text_days,dry_run=False) if text_days>0 else {'meetings':[],'bytes':0}
-            # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
-            from . import team_cloud as TC
-            from .learning import prune as prune_learning
-            learning=prune_learning(store)   # 90 days / 20 MB; the event log is not allowed to become a data platform
-            # Idle, at most once a day, and never while recording (this pass only runs when nothing does): the
-            # identity calibration and the team counterfactual are two replays, which is why neither is run
-            # from the setup card or the heartbeat — both of those read the file this writes.
-            from .quality import calibration_refresh,team_effect_refresh
-            calibration=calibration_refresh(store,data);team_effect=team_effect_refresh(store,data)
-            # …and the silent experiments (1.2.85, Codex #11): the same idle pass, at most one a day, no cloud
-            # call, and by default nothing is applied — only measured and written to quality/experiments.jsonl.
-            from .experiments import run_due as run_experiments
-            experiments=run_experiments(store,data)
-            # Two more cheap local derivations (Codex #8, #9): the three summary preferences and the task
-            # error class distribution. Both are one indexed read and no model call, both are recomputed at
-            # most once a day, and the analysis only ever READS the files they write.
-            from .preferences import refresh as refresh_preferences
-            from .task_errors import refresh as refresh_task_errors
-            preferences=refresh_preferences(store,data);task_errors=refresh_task_errors(store,data)
+            failures={}
+            def step(name,fn,default=None):
+                """One chore, isolated, and never in front of a meeting.
+
+                This pass used to be a single straight line: `team_knowledge.sync` touches a shared folder that
+                may be an unmounted NAS or a signed-out iCloud Drive, and when it raised, NOTHING after it ran —
+                no audio retention, no text retention, no event-log prune, no calibration — for months, in
+                silence, because the Swift caller discards the error (audit 2026-09-13 #3). Each step now costs
+                only itself and names itself in `failures`.
+
+                The recording check is the other half: the pass re-encodes the whole library, and the third
+                promise is never to slow a meeting. If one started, stop here and come back next hour."""
+                if recording_now(data): raise _RecordingStarted()
+                try: return fn()
+                except Exception as exc: failures[name]=type(exc).__name__;return default
+            try:
+                arch=step('archive_all',lambda:archive_all(store),{'meetings':0,'bytes':0})
+                settings=load_settings(data); days=int(settings.get('audio_retention_days') or 0)
+                # Hourly, idle, on the slow bridge: the one place a team sync can take a second on a network folder
+                # without the ten-second watchdog killing it. Launch does its own; a teach publishes straight away.
+                from .team_knowledge import sync as team_sync
+                team=step('team_sync',lambda:team_sync(store,data,settings=settings))
+                cleaned=step('audio_retention',lambda:storage_cleanup(store,data,days=days,dry_run=False),{'meetings':[],'bytes':0}) if days>0 else {'meetings':[],'bytes':0}
+                # Then the text: off unless the user picked a horizon, and when they did, the whole meeting goes the
+                # way a manual delete takes it (reports, team mirror, Hafıza) rather than leaving orphans behind.
+                text_days=int(settings.get('text_retention_days') or 0)
+                text=step('text_retention',lambda:text_cleanup(store,data,days=text_days,dry_run=False),{'meetings':[],'bytes':0}) if text_days>0 else {'meetings':[],'bytes':0}
+                # …and what the NEXT pass will take: one setting deletes a whole week of recordings on the same day.
+                from . import team_cloud as TC
+                from .learning import prune as prune_learning
+                learning=step('prune_learning',lambda:prune_learning(store),{})   # 90 days / 20 MB; the event log is not allowed to become a data platform
+                # Idle, at most once a day, and never while recording (this pass only runs when nothing does): the
+                # identity calibration and the team counterfactual are two replays, which is why neither is run
+                # from the setup card or the heartbeat — both of those read the file this writes.
+                from .quality import calibration_refresh,team_effect_refresh
+                calibration=step('calibration_refresh',lambda:calibration_refresh(store,data),{})
+                team_effect=step('team_effect_refresh',lambda:team_effect_refresh(store,data),{})
+                # …and the silent experiments (1.2.85, Codex #11): the same idle pass, at most one a day, no cloud
+                # call, and by default nothing is applied — only measured and written to quality/experiments.jsonl.
+                from .experiments import run_due as run_experiments
+                experiments=step('experiments',lambda:run_experiments(store,data),{})
+                # Two more cheap local derivations (Codex #8, #9): the three summary preferences and the task
+                # error class distribution. Both are one indexed read and no model call, both are recomputed at
+                # most once a day, and the analysis only ever READS the files they write.
+                from .preferences import refresh as refresh_preferences
+                from .task_errors import refresh as refresh_task_errors
+                preferences=step('preferences',lambda:refresh_preferences(store,data),{})
+                task_errors=step('task_errors',lambda:refresh_task_errors(store,data),{})
+                warning=step('retention_warning',lambda:audio_retention_warning(store,days))
+                text_warning=step('text_retention_warning',lambda:text_retention_warning(store,text_days))
+                outbox=step('outbox',lambda:TC.outbox(data))
+            except _RecordingStarted:
+                # A meeting is being taped. What already ran, ran; the rest waits for the next hourly pass.
+                return {'skipped':'recording','failures':failures}
             return {'learning':learning,'calibration':{k:calibration.get(k) for k in ('date','n','enough','line','fresh')},
                     'experiments':{'ran':experiments.get('ran'),'reason':experiments.get('reason'),'promoted':experiments.get('promoted') or [],
                                    'verdicts':{r.get('candidate'):r.get('verdict') for r in experiments.get('results') or []}},
@@ -849,7 +892,8 @@ def dispatch(request, db=None):
                     'team_effect':{k:team_effect.get(k) for k in ('right','wrong','clusters','team_samples','fresh')},
                     'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],
-                    'retention_warning':audio_retention_warning(store,days),'text_retention_warning':text_retention_warning(store,text_days),'team':team,'outbox':TC.outbox(data)}
+                    'retention_warning':warning,'text_retention_warning':text_warning,'team':team,'outbox':outbox,
+                    'failures':failures}   # what broke, by step: the Settings card can finally say "team sync failed 14 times"
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)
         if action=='probe':
