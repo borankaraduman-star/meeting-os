@@ -133,6 +133,8 @@ der ve hiçbir yere bağlanmaz. `BUNDLE_BASE_URL` = `https://hermes-vps.tail2d8c
   varsa yeni paketinki **birebir aynı** olmalıdır ("Paket imzası uygulamayla eşleşmiyor"). `spctl --assess`
   **bilerek yoktur**: paket noter onayı kurulana dek ad-hoc imzalıdır, Gatekeeper her meşru güncellemeyi
   reddederdi. Karantina temizliği bu yüzden takastan *sonra* kalabilir — imza zaten doğrulanmıştır.
+  **Geçiş bedeli:** imzalayan kimlik değişince (bugünkü yerel sertifika WHA43MLZN6 → Developer ID 3ZJMCZ6BVJ)
+  güncelleme bilerek reddedilir; o sürüm her Mac'e bir kez elle indirilir, sonrası yine uygulama içinden gelir.
 - `update-status.json` sözleşmesi `scripts/update.sh` ile aynıdır (`state`,`from`,`to`,`message`,`time`); tek
   eklenen anahtar `percent`. Böylece uygulamanın mevcut yoklaması değişmeden çalışır.
 

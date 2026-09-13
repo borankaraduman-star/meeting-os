@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 91 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 92 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.87](#v1287) | 2026-09-13 | v1.2.87 — Denetim sürümü: paket kendini güncelleyebilir, transkript kaybı kapatıldı |
 | [v1.2.86](#v1286) | 2026-09-12 02:10 | v1.2.86 — Özet ve görev uyarlaması: düzenlemelerden tercih, görev hata sınıfları |
 | [v1.2.85](#v1285) | 2026-09-12 01:20 | v1.2.85 — Deney ve geri dönüş: sürümlü yerel politika, sessiz ucuz deneyler |
 | [v1.2.84](#v1284) | 2026-09-12 00:30 | v1.2.84 — Kelime döngüsü: sıralı yazım ipucu, ekipte çelişen yazım sorusu, tekrar hatası ölçümü |
@@ -111,6 +112,25 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1287"></a>
+### v1.2.87 — Denetim sürümü: paket kendini güncelleyebilir, transkript kaybı kapatıldı
+
+2026-09-13 · yerel not · GitHub sürüm sayfası yok
+
+İki bağımsız denetimin (`docs/reviews/2026-09-13-fresh-mac-simulation.md`, `docs/reviews/2026-09-13-reliability-audit.md`) bulguları. **Paketten kurulan 1.2.72–1.2.86 kendini güncelleyemiyordu; bu sürüm bir kez elle indirilmeli.**
+
+- **Paket güncellemesi** (P0): `swap-update.sh` pakete girmiyordu; uygulama içi güncelleme her seferinde "swap-update.sh bulunamadı" ile duruyordu. Artık pakette. Ayrıca: yazılamayan klasörde takas reddedilince uygulama yeniden açılır, başarılı takastan sonra indirilen zip silinir, durumda eski sürüm de yazılır.
+- **Mikrofon kapısı** (P0): Zoom modunda kapı hiç açılmadıysa (Meet, Teams, telefon, Erişilebilirlik izni yok) kullanıcının kendi sesi artık ATILMAZ; kapı yalnız gerçekten izlenip kapalı kaldığına dair kanıt varsa uygulanır.
+- **Tamamlanmış transkript geri düşmez** (P0): sıkıştırma, FLAC arşivi ve ekip raporu gibi toplantı sonrası işler başarısız olsa bile toplantı `incomplete`'e dönmez, yeniden deneme hakkı harcanmaz.
+- **Bakım geçişi tek adımda durmaz** (P0): ekip klasörü erişilemezse ses/metin saklama, öğrenme budaması, kalibrasyon yine çalışır; başarısız adımlar sonuçta sayılır. Kayıt sürerken bakım erken biter.
+- **Boş özet kaydedilmez** (P0): model boş liste döndürürse hata gösterilir, önbelleğe alınmaz.
+- **Güncelleme doğrulaması** (P0): indirme adresi yalnız `https://github.com`; yeni paket `codesign --verify` geçmeli ve Developer ID imzalıysa çalışan uygulamanın ekip kimliğiyle eşleşmeli.
+- P1: `team.token` atomik yazılır ve asla üzerine yazılmaz; analiz maliyeti iş parçacıklarından da kaydedilir (yedek model `model_id`'yi değiştirmez, her çağrı ayrı satır); bir parça başarısız olunca kalan parçalar iptal edilir, birleştirme hatasında doğrulanmış özet kısaltılarak kullanılır; veritabanı geçişi kilidi bırakır; özet/Kontrol kararları nesne+sonuç ile kaydedilir; ekibe katılım 6 s bütçeyle eşitler.
+- Swift P1: bakım zamanı kalıcı (her açılışta tam geçiş yok) ve başarısızlıklar ayarlarda görünür; her işin kendi günlüğü; takılan güncelleme tespit edilir ve buton yeniden aktif olur; ⌘Q ana iş parçacığını bloklamaz, kayıt durdurma SIGINT→SIGTERM→SIGKILL basamaklı.
+- Geçiş notu: güncelleme paketi imzalayan kimliğin değişmesini reddeder; Developer ID'ye geçildiğinde o sürüm de bir kez elle indirilecek.
+- Kurulum kartı: ağ hataları Türkçe cümle ("internet ya da sunucu bağlantısı yok"); ham hata `errors.jsonl`'de kalır.
+- Testler: Python 1260 (36 yeni), Swift 348 (39 yeni).
 
 <a id="v1286"></a>
 ### v1.2.86 — Özet ve görev uyarlaması: düzenlemelerden tercih, görev hata sınıfları
