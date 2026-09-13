@@ -5,7 +5,7 @@ import XCTest
 /// take an extra row under every item is a chip.
 final class SummaryUXTests:XCTestCase {
     func testStatsLineReadsAsOneSentence() {
-        XCTAssertEqual(SummaryUX.statsLine(segments:335,openTasks:8,hasSummary:true,stale:false),"335 bölüm · 8 açık görev · özet hazır")
+        XCTAssertEqual(SummaryUX.statsLine(segments:335,openTasks:8,hasSummary:true,stale:false),"335 bölüm · 8 güncel açık görev · özet hazır")
     }
     func testZeroCountsDropOutButTheSummaryStateStays() {
         XCTAssertEqual(SummaryUX.statsLine(segments:0,openTasks:0,hasSummary:false,stale:false),"özet bekliyor")

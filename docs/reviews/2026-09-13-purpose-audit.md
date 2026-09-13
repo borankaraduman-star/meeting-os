@@ -36,6 +36,10 @@ yüzen panel kararını koruduk.
 README'nin başlangıcındaki güncel Mac arayüzüyle çelişen yerel model yönergeleri
 düzeltildi; yeni ekip üyeleri terminalsiz paket rehberine yönlendirildi.
 Analiz ilerlemesindeki `2/1` gibi toplamı aşan sayılar da düzeltildi.
+Kurulum sonrası arayüz kontrolünde özetteki görev sayısının yalnız kaynağı
+güncel görevleri, görev ekranındaki rozetin ise kaynak kontrolü bekleyenleri
+de içerdiği görüldü. Bu eski ayrımı görünür kılmak için özet etiketi
+“güncel açık görev” olarak netleştirildi.
 
 Eşleştirme bilinçli olarak temkinlidir: anlamı değişmiş veya birden fazla
 önceki maddeye uyabilecek yeniden yazımlar kullanıcı kararını otomatik
@@ -56,8 +60,9 @@ bellek baskısı kapısını atlar. Çalışma klasöründeki önbellek okumalar
 için son koşuda ayrı geçici Python önbelleği kullanıldı. Mevcut bağımlılıkların
 deprecation/ResourceWarning mesajları sürüyor; test hatası oluşmadı.
 
-Birleşik Swift takımı: **352 test, sıfır hata**. Son koşu ayrı geçici derleme
-diziniyle tamamlandı. Değişiklikler ayrıca bağımsız ajan incelemesinden geçti;
+Birleşik Swift takımı: **352 test, sıfır hata**. Son metin düzeltmesi dahil
+koşu geçici yerel kaynak ve derleme dizinleriyle tamamlandı. Değişiklikler
+ayrıca bağımsız ajan incelemesinden geçti;
 `git diff --check` temiz.
 
 Asıl proje ve kurulu uygulamanın çalışma kaynağı:

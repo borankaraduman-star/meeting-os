@@ -9,11 +9,11 @@ struct SummaryChip:Identifiable, Equatable {
 /// The pure decisions behind the Özet page: the single compact line under the title, the chips that
 /// replaced the extra lines under every item, and the key an expanded item is remembered by.
 enum SummaryUX {
-    /// "335 bölüm · 8 açık görev · özet hazır". Counts that are zero drop out; the summary state always shows.
+    /// "335 bölüm · 8 güncel açık görev · özet hazır". Only tasks whose source is current are counted here.
     static func statsLine(segments:Int,openTasks:Int,hasSummary:Bool,stale:Bool)->String {
         var parts:[String]=[]
         if segments>0 { parts.append("\(segments) bölüm") }
-        if openTasks>0 { parts.append("\(openTasks) açık görev") }
+        if openTasks>0 { parts.append("\(openTasks) güncel açık görev") }
         parts.append(!hasSummary ? "özet bekliyor" : stale ? "özet güncel değil" : "özet hazır")
         return parts.joined(separator:" · ")
     }
