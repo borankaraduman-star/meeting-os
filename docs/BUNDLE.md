@@ -215,3 +215,16 @@ Funnel yolu (`/dl/<gizli>/`) tailnet içinde 4,5 MB/s, tailnet dışındaki bir 
 güncelleyici oradan `latest.json` ve zip'i alır (302 yönlendirmeleri `urlopen` izler, Range destekli). Sürüm
 adımı: `gh release create v<sürüm>` (etiket + zip + sha256 + latest.json; latest.json en son). VPS `/dl/` yolu yedek
 olarak duruyor.
+
+
+## Developer ID + notarize (hazırlık, 13 Eylül 2026)
+
+Boran'ın Apple Developer hesabı var (Team ID 3ZJMCZ6BVJ); bu Mac'te yalnız "Apple Development" sertifikası bulundu.
+Dağıtım için **Developer ID Application** sertifikası (developer.apple.com → Certificates; CSR Anahtar Zinciri
+Erişimi → Sertifika Yardımcısı ile) ve `xcrun notarytool store-credentials meetingos --apple-id … --team-id 3ZJMCZ6BVJ`
+(uygulamaya özel parola) gerekir. Sonra: `sh scripts/build-bundle.sh` → `sh scripts/sign-notarize.sh` (her Mach-O
+dosyayı hardened runtime + entitlements ile imzalar, kayıt yardımcısını ayrı, uygulamayı en son; notarytool'a
+gönderir, `stapler staple`, dağıtım zip'ini yazar) → `sh scripts/publish-github.sh build/Meeting-OS-<sürüm>.zip`.
+Kazanım: Gatekeeper uyarısı ve "Yine de Aç" adımı kalkar; MDM'li Mac'lerde engel yok; izinler sertifikaya bağlı
+kaldığı için sürümler arasında yeniden sorulmaz. Uyarı: sertifika değişince (kendinden imzalı → Developer ID) macOS
+mikrofon/ekran izinlerini bir kez daha sorar; rehberin izin adımı zaten bunu anlatıyor.
