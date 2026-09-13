@@ -7,7 +7,7 @@ import json,os,platform,re,shutil,stat,subprocess,sys,tempfile,time
 from pathlib import Path
 from . import __version__
 
-KINDS=('ui','job','cloud','capture','update','crash')
+KINDS=('ui','job','cloud','capture','update','crash','finalize','analysis')   # mirrors errors.KINDS
 ERROR_ENTRIES=20   # the export is a snapshot a person reads, not an archive
 STAGES={'loading_models','assembling','reading_audio','vad','diarizing','transcribing','identifying','stopping_capture','complete'}
 ERRORS={'pressure_unavailable','memory_pressure','footprint_unavailable','disk_unavailable'}

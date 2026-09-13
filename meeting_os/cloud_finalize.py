@@ -754,9 +754,9 @@ def mic_gate_windows(capture_dir):
 
     Boran, 11 Eyl 2026: "Mikrofondan gelen her sesi almak yerine sadece toplantıda unmute edince … alsın."
     The app journals one `mic_gate` line per state change — the first at second zero — and this turns them
-    into [start,end) windows on the audio timeline. `None` means the recording carries no gate at all (it was
-    made before the gate existed, or the journal is unreadable): then nothing is skipped and the whole
-    microphone track is transcribed exactly as before.
+    into [start,end) windows on the audio timeline. `None` means there is no usable gate — no journal at all
+    (a recording made before the gate existed, or an unreadable file) or a journal that never once reported
+    the gate open: then nothing is skipped and the whole microphone track is transcribed exactly as before.
 
     The app stamps `t` on its own record start and the transcript runs on the capture helper's audio clock,
     which sleep freezes and a relaunch splices — the same two clocks `read_markers` reconciles, with the same
@@ -787,6 +787,11 @@ def mic_gate_windows(capture_dir):
             if seconds>open_at: windows.append((open_at,seconds))
             open_at=None
     if open_at is not None: windows.append((open_at,math.inf))   # the gate was still open when the recording ended
+    # A gate that never opened once is not a gate, it is an unanswered question: Zoom not running, no meeting,
+    # or Accessibility never granted all read as `zoomMuted is None` → one `off` line at t=0 and nothing else.
+    # Returning [] there dropped the owner's whole microphone track from every non-Zoom meeting, silently
+    # (audit 2026-09-13 #1). The track is only discarded on evidence the gate was really watched AND closed.
+    if not windows: return None
     return windows
 
 
@@ -856,7 +861,7 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
     from .recovery import classify, current_job_metadata, metadata as read_metadata
     metadata=read_metadata(row)
     mode=metadata.get('cloud_mode')
-    if row['status']=='complete' and mode in ('capture','file'): return {'meeting':mid,'segments':len(store.segments(mid)),'model':metadata.get('model')}
+    if row['status']=='complete' and mode in ('capture','file'): return {'meeting':mid,'segments':len(store.segments(mid)),'model':metadata.get('model'),'mic_gated':metadata.get('mic_gated_windows',0)}
     if row['status'] in ('processing','provisional') and classify(metadata.get('worker_identity'))=='active': raise ValueError('Bu toplantı üzerinde iş sürüyor; önce durdurun')
     capture=metadata.get('capture_dir')
     if mode!='file' and (not capture or not Path(capture).is_dir()): raise ValueError('Bu toplantının ses kaydı klasörü yok')
@@ -922,17 +927,29 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
                 metadata['identity_error']='Bellek baskısı; ses profili eşleştirmesi atlandı' if isinstance(exc,(MemoryPressureError,ResourceProbeError)) else 'Ses profili eşleştirmesi yapılamadı'
             with store.db: store.db.execute('UPDATE meetings SET metadata=? WHERE id=?',(json.dumps(metadata),mid))
             store.status(mid,'complete');emit('complete')
-            compact_capture(store,mid)
-            from .audio_archive import archive_meeting
-            archive_meeting(store,mid)   # float32 WAV → 16-bit FLAC, lossless, 3–4× smaller
-            from .reports import write_meeting_report
-            from . import __version__
-            write_meeting_report(store,mid,data_dir,version=__version__)
-            return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources),
-                    'hint_included':metadata['hint_included'],'hint_excluded':metadata['hint_excluded']}
         except BaseException as exc:
             store.status(mid,'incomplete')
             # A deliberate stop (⌘. / quit) is not a cloud failure and must not schedule an unwanted retry.
             if isinstance(exc,Exception): note_cloud_failure(store,mid,exc)
             else: note_cloud_cancel(store,mid)   # KeyboardInterrupt/SystemExit: the user's decision, not a retryable failure
             raise
+        # Past this line the transcript is committed and paid for. What follows is bookkeeping, and it used to
+        # sit inside the guard above: one `database is locked` from the 2 s poll (compact_capture and
+        # archive_meeting each open a write transaction) or a MemoryError in the FLAC encode turned a finished
+        # meeting red, spent one of the thirty cloud retries and lost the team report (audit 2026-09-13 #2).
+        # Each chore now fails on its own, into the journal, and the meeting stays complete.
+        from .audio_archive import archive_meeting
+        from .reports import write_meeting_report
+        from . import __version__
+        for name,chore in (('compact_capture',lambda:compact_capture(store,mid)),
+                           ('archive_meeting',lambda:archive_meeting(store,mid)),   # float32 WAV → 16-bit FLAC, lossless, 3–4× smaller
+                           ('write_meeting_report',lambda:write_meeting_report(store,mid,data_dir,version=__version__))):
+            try: chore()
+            except Exception as exc:
+                try:
+                    from .errors import record,meeting_key
+                    record('finalize',f'{name}: {exc}',data_dir=data_dir,context={'meeting':meeting_key(mid),'step':name})
+                except Exception: pass
+        return {'meeting':mid,'segments':len(store.segments(mid)),'model':model,'sources':sorted(sources),
+                'hint_included':metadata['hint_included'],'hint_excluded':metadata['hint_excluded'],
+                'mic_gated':metadata.get('mic_gated_windows',0)}   # what the gate dropped, on the result the UI reads

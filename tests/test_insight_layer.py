@@ -234,16 +234,20 @@ class RetentionAndMetricsTests(unittest.TestCase):
             store, mid, ids = meeting(tmp)
             iid = save(store, mid, payload([note(TEXT, ids[0])]))['payload']['summary'][0]['item_id']
             was = IL.record_event
-            IL.record_event = lambda store, action, **fields: seen.append((action, fields.get('object'), fields.get('outcome')))
+            IL.record_event = lambda store, action, **fields: seen.append((action, fields.get('object'), fields.get('reason'), fields.get('outcome')))
             try:
                 IL.record(store, mid, iid, 'summary', 'edit', text='Kendi cümlem.')
                 IL.record(store, mid, iid, 'summary', 'remove', reason='wrong')
                 IL.toggle_confirm(store, mid, iid, 'summary')
             finally:
                 IL.record_event = was
-            self.assertEqual([a for a, _, _ in seen], ['summary_edit', 'summary_remove', 'summary_confirm'])
-            self.assertTrue(all(obj == iid for _, obj, _ in seen))
-            self.assertEqual(seen[1][2], 'wrong')   # the reason is the outcome, and only a stated one is recorded
+            self.assertEqual([a for a, *_ in seen], ['summary_edit', 'summary_remove', 'summary_confirm'])
+            self.assertTrue(all(obj == iid for _, obj, *_ in seen))
+            # The removal reason travels as `reason`; as an `outcome` it was silently dropped, because the
+            # outcomes are an enum of three and 'wrong' is not one of them (audit 2026-09-13 #14).
+            self.assertEqual(seen[1][2], 'wrong')
+            self.assertIsNone(seen[0][2])   # only a stated reason is recorded
+            self.assertTrue(all(outcome in (None, 'applied') for *_, outcome in seen))
             store.close()
 
     def test_a_recorder_that_does_not_know_a_keyword_never_breaks_the_action(self):

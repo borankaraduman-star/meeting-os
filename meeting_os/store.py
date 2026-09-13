@@ -108,7 +108,12 @@ class Store:
         for r in self.db.execute('SELECT id,provenance FROM samples WHERE created IS NULL'):
             created=meetings.get(self.provenance_meeting(r[1]))
             if created: rows.append((created,r[0]))
-        if rows: self.db.executemany('UPDATE samples SET created=? WHERE id=?',rows)
+        # `with self.db:` — without it the implicit transaction is never committed, so merely OPENING an
+        # upgraded database held the write lock for the life of the process (every other process then read
+        # `database is locked`) and the backfill was rolled back at close while the column survived, so the
+        # `created not in columns` guard never fired again and the dates were gone (audit 2026-09-13 #7).
+        if rows:
+            with self.db: self.db.executemany('UPDATE samples SET created=? WHERE id=?',rows)
     def close(self): self.db.close()
     def create_meeting(self, title, metadata=None):
         mid = uuid.uuid4().hex[:12]

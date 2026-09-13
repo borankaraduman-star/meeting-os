@@ -1,8 +1,8 @@
 """Reproductions for the 2026-09-13 reliability audit (docs/reviews/2026-09-13-reliability-audit.md).
 
-Every test here states the behaviour the app SHOULD have. They are marked `@unittest.expectedFailure` so the
-suite stays green while the bugs stand: fixing one turns it into an unexpected success, which unittest
-reports as a failure, so the marker has to be removed in the same commit as the fix. That is the point.
+Every test here states the behaviour the app SHOULD have. They were marked `@unittest.expectedFailure` while
+the bugs stood; each marker came off in the commit that fixed its finding, so these now guard the fixes as
+plain regression tests. A new reproduction arrives marked, and leaves unmarked.
 """
 import json, sqlite3, tempfile, unittest
 from pathlib import Path
@@ -15,12 +15,17 @@ from meeting_os.store import Store
 
 
 def capture_dir(root, seconds=4, silent_mic=False):
-    """A two-source capture folder. The mic carries the owner's voice at 220 Hz and the system carries the
-    other side at 880 Hz: uncorrelated, so the echo test keeps them apart and neither reads as silence."""
+    """A two-source capture folder. The mic carries the owner's voice at 220 Hz and the system the other side
+    at 880 Hz, each under its OWN slow amplitude envelope (0.9 Hz vs 0.23 Hz).
+
+    The envelopes are the point: `is_echo` compares 50 ms loudness envelopes, not waveforms, so two tones at
+    a constant level correlate 0.94 — over the 0.8 threshold — however different their pitch. Modulated, they
+    measure 0.18, so the mic reads as the owner speaking rather than as speaker bleed and the piece reaches
+    the mic gate, which is what these tests are about."""
     d = Path(root)/'rec'; d.mkdir(); events = []
     t = np.arange(16000*seconds)/16000
-    mic = np.zeros(len(t), dtype='float32') if silent_mic else (0.3*np.sin(2*np.pi*220*t)).astype('float32')
-    system = (0.3*np.sin(2*np.pi*880*t)).astype('float32')
+    mic = np.zeros(len(t), dtype='float32') if silent_mic else (0.3*np.sin(2*np.pi*220*t)*(0.55+0.45*np.sin(2*np.pi*0.9*t))).astype('float32')
+    system = (0.3*np.sin(2*np.pi*880*t)*(0.55+0.45*np.sin(2*np.pi*0.23*t+1.1))).astype('float32')
     for source, signal in (('mic', mic), ('system', system)):
         path = d/f'{source}-000000.wav'; sf.write(path, signal, 16000, subtype='FLOAT')
         events.append({'event': 'chunk', 'source': source, 'start': 0, 'duration': seconds,
@@ -39,7 +44,6 @@ class FakeClient:
 class MicGateTests(unittest.TestCase):
     """P0-1 — the microphone gate silently throws away the owner's half of the meeting."""
 
-    @unittest.expectedFailure
     def test_a_gate_that_never_opened_still_transcribes_the_owner(self):
         """A teammate on Google Meet (or on Zoom without the Accessibility grant) gets `zoomMuted == nil`
         for the whole recording. MicGate.state treats unknown as muted, so the app journals one `off` line at
@@ -54,16 +58,16 @@ class MicGateTests(unittest.TestCase):
                 {'kind': 'mic_gate', 'state': 'off', 't': 0.0, 'reason': 'zoom'})+'\n')
             store = Store(Path(tmp)/'db.sqlite')
             mid = store.create_meeting('Meet toplantısı', {'capture_dir': str(d)}); store.status(mid, 'incomplete')
-            CF.finalize_capture(store, mid, tmp, consent=True, model='openai/gpt-transcribe', client=FakeClient())
+            result = CF.finalize_capture(store, mid, tmp, consent=True, model='openai/gpt-transcribe', client=FakeClient())
             sources = {r['source'] for r in store.segments(mid)}
             store.close()
             self.assertIn('mic', sources, 'the owner is missing from their own transcript')
+            self.assertEqual(result['mic_gated'], 0, 'the result must say how many pieces the gate dropped')
 
 
 class FinalizeAtomicityTests(unittest.TestCase):
     """P0-2 — a finished, paid-for transcript is flipped back to `incomplete` by a bookkeeping failure."""
 
-    @unittest.expectedFailure
     def test_a_complete_transcript_survives_a_failing_post_complete_step(self):
         """cloud_finalize.py:924 marks the meeting complete; lines 925-930 then compact the chunks, archive
         the WAVs to FLAC and write the team report. All three sit INSIDE the `except BaseException` at :933,
@@ -74,7 +78,9 @@ class FinalizeAtomicityTests(unittest.TestCase):
         transcript is already in the database and already paid for; the user is shown a failed meeting, the
         team report is never written, and one of the thirty retries is spent.
 
-        Once the transcript is committed, the meeting is complete. Housekeeping after that point may fail."""
+        Once the transcript is committed, the meeting is complete. Housekeeping after that point may fail —
+        it fails into the error journal (kind `finalize`) and the job still returns, because there is nothing
+        left for the user to retry."""
         with tempfile.TemporaryDirectory() as tmp:
             d = capture_dir(tmp, silent_mic=True); store = Store(Path(tmp)/'db.sqlite')
             mid = store.create_meeting('Kayıt', {'capture_dir': str(d)}); store.status(mid, 'incomplete')
@@ -84,22 +90,24 @@ class FinalizeAtomicityTests(unittest.TestCase):
                 raise sqlite3.OperationalError('database is locked')
             CF.compact_capture = locked
             try:
-                with self.assertRaises(sqlite3.OperationalError):
-                    CF.finalize_capture(store, mid, tmp, consent=True, model='openai/gpt-transcribe', client=FakeClient())
+                result = CF.finalize_capture(store, mid, tmp, consent=True, model='openai/gpt-transcribe', client=FakeClient())
             finally:
                 CF.compact_capture = real
             row = store.db.execute('SELECT status,metadata FROM meetings WHERE id=?', (mid,)).fetchone()
             status, meta = row['status'], json.loads(row['metadata'])
             segments = len(store.segments(mid)); store.close()
             self.assertEqual(segments, 1, 'guard: the transcript really was committed')
+            self.assertEqual(result['meeting'], mid, 'the finished job must still return its result')
             self.assertEqual(status, 'complete', 'a committed transcript was demoted by a housekeeping failure')
             self.assertIsNone(meta.get('cloud_error'), 'a retry was scheduled for a meeting that succeeded')
+            journal = [json.loads(line) for line in (Path(tmp)/'errors.jsonl').read_text(encoding='utf-8').splitlines()]
+            self.assertEqual([e['kind'] for e in journal], ['finalize'], 'the failed chore left no trace at all')
+            self.assertIn('compact_capture', journal[0]['message'])
 
 
 class HousekeepingIsolationTests(unittest.TestCase):
     """P0-3 — one unreachable folder stops every later housekeeping step, for good and in silence."""
 
-    @unittest.expectedFailure
     def test_retention_and_pruning_still_run_when_the_team_sync_fails(self):
         """desktop.py:810-843 is one unguarded straight line: archive, team_sync, audio retention, text
         retention, learning prune, calibration, experiments, preferences, task errors. `team_knowledge.sync`
@@ -127,12 +135,13 @@ class HousekeepingIsolationTests(unittest.TestCase):
                 TK.sync, L.prune = real_sync, real_prune
             self.assertEqual(ran, ['prune'], 'the event-log prune was skipped by an unrelated sync failure')
             self.assertIn('retention_days', result)
+            # …and the pass says which step failed, so the Settings card can stop being silent about it.
+            self.assertEqual(result['failures'], {'team_sync': 'OSError'})
 
 
 class MigrationTests(unittest.TestCase):
     """P0-4 — opening an older database leaves a write transaction open for the life of the process."""
 
-    @unittest.expectedFailure
     def test_upgrading_an_old_database_does_not_hold_the_write_lock(self):
         """store.py:67 runs `_backfill_sample_dates` (store.py:103-111), whose `executemany` opens an implicit
         transaction and never commits it — unlike `_backfill_feedback` (store.py:275), which wraps its writes
@@ -173,22 +182,27 @@ class MigrationTests(unittest.TestCase):
 class LearningLoopTests(unittest.TestCase):
     """P1 — the summary/Kontrol decisions the learning loop exists to measure are recorded blank."""
 
-    @unittest.expectedFailure
     def test_a_summary_decision_records_which_item_it_was(self):
         """insight_layer.py:92 and review.py:138 call the recorder with `meeting=mid`, which
         `learning.record_event` (learning.py:105) has no parameter for. The TypeError lands on the fallback at
         insight_layer.py:34 — `record_event(store, action)` — so the row is written with no object, no
         outcome and no scope. The learning loop shipped in 1.2.80-1.2.86 is measuring nothing here."""
         from meeting_os import insight_layer as IL, learning as L
+        from meeting_os.memory import Memory
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp)/'db.sqlite')
+            Memory(store)   # `analyses` (the version an edit is recorded against) is created with the rest of Hafıza
             mid = store.create_meeting('Kayıt', {}); store.status(mid, 'complete')
-            IL.record(store, mid, 'i1', section='summary', action='edit', text='Düzeltilmiş madde', version=1)
+            IL.record(store, mid, 'i1', section='summary', action='edit', text='Düzeltilmiş madde')
+            IL.record(store, mid, 'i2', section='summary', action='remove', reason='duplicate')
             rows = L.events(store) if hasattr(L, 'events') else [
                 dict(r) for r in store.db.execute('SELECT action,object,scope,outcome FROM learning_events')]
             store.close()
             self.assertTrue(rows, 'the decision was not recorded at all')
-            self.assertEqual(rows[-1]['object'], 'i1', f'recorded without the item it was about: {rows[-1]}')
+            self.assertEqual(rows[0]['object'], 'i1', f'recorded without the item it was about: {rows[0]}')
+            self.assertEqual((rows[0]['action'], rows[0]['scope'], rows[0]['outcome']), ('summary_edit', 'meeting', 'applied'))
+            # `summary_remove` was not in learning.ACTIONS at all, so a removed bullet wrote nothing anywhere.
+            self.assertEqual((rows[1]['action'], rows[1]['object'], rows[1]['reason']), ('summary_remove', 'i2', 'duplicate'))
 
 
 if __name__ == '__main__':

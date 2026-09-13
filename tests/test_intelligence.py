@@ -467,3 +467,110 @@ class MicInferenceFlagTests(unittest.TestCase):
         item = self.owned('system')
         self.assertEqual(item['owner'], 'Boran')
         self.assertFalse(item['needs_review'])
+
+
+class EmptyAnalysisTests(unittest.TestCase):
+    """Audit 2026-09-13 #5: a model answer with no summary in it used to validate, be saved, and then be
+    served back from the cache forever — pressing Analiz again returned the same blank screen."""
+
+    class Silent:
+        """Schema-shaped, and empty. The real failure mode: the keys are all there, every list is []."""
+        def __init__(self): self.calls = 0
+        def count(self, text): return len(text)
+        def complete(self, system, user, **kwargs):
+            self.calls += 1
+            return json.dumps({key: [] for key in ('summary', 'decisions', 'risks', 'questions', 'actions')})
+
+    def test_an_empty_summary_is_an_error_with_one_nudge_first(self):
+        from meeting_os.intelligence import EMPTY_SUMMARY, analyze_rows
+        llm = self.Silent()
+        with self.assertRaises(ValueError) as caught: analyze_rows(ROWS, llm)
+        self.assertEqual(str(caught.exception), EMPTY_SUMMARY)   # the Turkish sentence, not "doğrulanamadı"
+        self.assertEqual(llm.calls, 2)                           # the schema-nudge retry, then the error
+
+    def test_the_schema_asks_the_model_for_at_least_one_bullet(self):
+        from meeting_os.schemas import analysis_schema
+        schema = analysis_schema([1])['properties']
+        self.assertEqual(schema['summary']['minItems'], 1)
+        # A meeting may genuinely have no decision, risk, question or task; it cannot have no summary.
+        for key in ('decisions', 'risks', 'questions', 'actions'): self.assertNotIn('minItems', schema[key])
+
+
+class MergeDegradationTests(unittest.TestCase):
+    """Audit 2026-09-13 #9: the two cheap follow-up calls used to be able to throw away every paid chunk."""
+
+    # Twelve topics that share no wording, so the merge really keeps twelve bullets (near-duplicates are
+    # folded together) and the compaction down to the six-bullet target really has work to do. The last one
+    # retracts the first, which is what makes `reconcile_actions` ask the model about the task at all.
+    TOPICS = ['Faturalama servisini yarın devreye alacağım.',
+              'Kargo entegrasyonu için yeni bir tedarikçi seçtik.',
+              'Depo sayımı pazartesi sabahı tamamlanacak.',
+              'Mobil bildirim metinleri Türkçeleştirildi.',
+              'Arama sonuçlarında sıralama algoritması değişiyor.',
+              'Kupon kampanyası bütçesi ikiye katlandı.',
+              'İade süreci müşteri hizmetlerine devredildi.',
+              'Panel giriş ekranı yeniden tasarlandı.',
+              'Stok uyarıları artık günlük olarak geliyor.',
+              'Abonelik fiyatları eylülde güncellenecek.',
+              'Hediye çeki altyapısı test ortamına kuruldu.',
+              'Faturalama planı iptal edildi, ekip başka işe geçti.']
+    ROWS = [{'id': i+1, 'start': i*30.0, 'end': i*30.0+25, 'source': 'system', 'speaker': 'S0',
+             'speaker_name': 'Boran', 'text': text, 'flags': []} for i, text in enumerate(TOPICS)]
+
+    class Model:
+        """Answers every chunk and fails both merge calls. `notes` is compact_summary, `task` reconcile.
+        `count` is inflated so this short fixture still chunks — the chunk budget is a constant."""
+        def __init__(self): self.chunks = 0
+        def count(self, text): return len(text)*12
+        def complete(self, system, user, **kwargs):
+            payload = json.loads(user)
+            if 'notes' in payload: raise RuntimeError('birleştirme çöktü')
+            if 'task' in payload: raise RuntimeError('kontrol çöktü')
+            self.chunks += 1
+            batch = payload['transcript']
+            out = {'summary': [{'text': b['text'], 'evidence': [{'segment_id': b['segment_id'], 'quote': b['text']}]} for b in batch],
+                   'decisions': [], 'risks': [], 'questions': [], 'actions': []}
+            if batch[0]['segment_id'] == 1:
+                out['actions'] = [{'title': 'Faturalama servisini devreye al', 'owner': 'Boran', 'due_text': 'yarın',
+                                   'evidence': [{'segment_id': 1, 'quote': MergeDegradationTests.TOPICS[0]}]}]
+            return json.dumps(out, ensure_ascii=False)
+
+    def test_a_failed_merge_degrades_the_summary_instead_of_losing_the_meeting(self):
+        from meeting_os.intelligence import analyze_rows, meeting_minutes, summary_target
+        with tempfile.TemporaryDirectory() as tmp:
+            llm = self.Model()
+            result = analyze_rows(self.ROWS, llm, workers=1, data_dir=tmp)
+            target = summary_target(meeting_minutes(self.ROWS))
+            self.assertGreater(llm.chunks, 1, 'guard: this meeting really is chunked')
+            self.assertEqual(result['summary'], result['section_summaries'][:target])   # degraded, not lost
+            self.assertEqual(len(result['actions']), 1, 'the merged tasks stand when the retraction check dies')
+            self.assertEqual(result['degraded'], ['compact_summary', 'reconcile_actions'])
+            # …and the Mac admits it to itself: none of this is on screen.
+            journal = [json.loads(line) for line in (Path(tmp)/'errors.jsonl').read_text(encoding='utf-8').splitlines()]
+            self.assertEqual([e['kind'] for e in journal], ['analysis', 'analysis'])
+
+    def test_a_failing_chunk_cancels_the_chunks_that_have_not_started(self):
+        """The analysis is lost the moment one chunk fails; every chunk still queued would be uploaded, paid
+        for and thrown away. Without cancel_futures the pool's exit ran every one of them anyway."""
+        from meeting_os.intelligence import analyze_rows
+        import threading, time
+        rows = [{'id': i, 'start': i*30.0, 'end': i*30.0+25, 'source': 'system', 'speaker': 'S0',
+                 'speaker_name': 'Boran', 'text': f'{i} numaralı gündem maddesi görüşüldü ve karara bağlandı.',
+                 'flags': []} for i in range(1, 41)]
+
+        class Failing:
+            def __init__(self): self.calls = 0; self.lock = threading.Lock()
+            def count(self, text): return len(text)*12
+            def complete(self, system, user, **kwargs):
+                first = json.loads(user)['transcript'][0]['segment_id']
+                with self.lock: self.calls += 1
+                if first == 1: raise ValueError('bu parça çöktü')   # the first chunk fails at once, both attempts
+                time.sleep(0.2)                                     # the others are still in the queue when it does
+                return json.dumps({'summary': [{'text': 'Gündem maddesi görüşüldü.', 'evidence': [{'segment_id': first, 'quote': 'gündem maddesi görüşüldü'}]}],
+                                   'decisions': [], 'risks': [], 'questions': [], 'actions': []}, ensure_ascii=False)
+
+        llm = Failing()
+        with self.assertRaises(ValueError): analyze_rows(rows, llm, workers=2)
+        # Two attempts on the chunk that fails, plus whatever the other worker already had in hand — not the
+        # ten chunks this fixture splits into.
+        self.assertLessEqual(llm.calls, 4, f'chunks kept being paid for after the failure: {llm.calls}')

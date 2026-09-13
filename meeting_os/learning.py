@@ -34,7 +34,10 @@ ACTIONS = (
     'glossary_apply', 'glossary_dismiss',
     'review_resolve',
     'task_edit', 'task_due',
-    'summary_edit',          # reserved for 1.2.81 (#2); nothing writes it yet
+    # The summary sheet (1.2.80/#2) writes all three: a bullet reworded, removed or ticked. `summary_remove`
+    # and `summary_confirm` were missing from this list, so two thirds of those decisions were dropped by
+    # the `action not in ACTIONS` gate and the loop measured nothing (audit 2026-09-13 #14).
+    'summary_edit', 'summary_remove', 'summary_confirm',
     'export_ok', 'team_join', 'undo',
     # Codex #6, time to value. `team_join` is a setup step and says nothing about benefit; these two say when
     # the team's knowledge actually ARRIVED and when it first produced a name a human then verified. Each is
@@ -51,7 +54,10 @@ SCOPES = ('segment', 'speaker', 'meeting', 'global')
 # Why a decision was made, when the app can honestly tell. An enum, like the actions: a free-text "why" is a
 # sentence, and this table never stores sentences. `team_conflict` is a word taught to settle two teammates'
 # spellings (#7); the task reasons are the ones the edit sheet offers (#3).
-REASONS = ('team_conflict', 'inference_error', 'changed_later')
+REASONS = ('team_conflict', 'inference_error', 'changed_later',
+           # …and the three the summary sheet offers when a bullet is removed (insight_layer.REASONS):
+           # without them a `summary_remove` says that a bullet went, but never why.
+           'wrong', 'duplicate', 'too_detailed')
 SOURCES = ('human', 'auto')
 OUTCOMES = ('applied', 'reverted', 'noop')
 

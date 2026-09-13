@@ -58,13 +58,19 @@ def analyze(store,mid,llm=None,force=False):
     import time
     started=time.monotonic()
     with usage_context(store,mid):
-        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner,prefs=prefs,review_classes=review or ())
+        result=analyze_rows(rows,llm,lambda i,n:print(f'Analiz {i+1}/{n}',file=sys.stderr,flush=True),glossary=glossary or None,owner=owner,prefs=prefs,review_classes=review or (),data_dir=data)
     # How long this analysis took, in the record itself: the daily quality summary reports p50/p95 from it,
     # and a model that answers correctly in four minutes is a different product from one that takes forty.
     result['elapsed_seconds']=round(time.monotonic()-started,2)
     # Which adaptation this analysis ran under, in the record itself: an offline comparison of "with" and
     # "without" is only honest if the saved analysis says which one it was. Values only, never evidence.
     if prefs or review: result['adaptation']={'preferences':dict(prefs or {}),'review_classes':list(review or ())}
+    # Never cache a non-answer. An empty summary used to be saved and then served back forever by the `not
+    # stale` branch above, with no way forward from the UI — pressing Analiz again returned the same blank
+    # (audit 2026-09-13 #5). Nothing was extracted, so nothing is saved and the error says what happened.
+    if not result.get('summary'):
+        from .intelligence import EMPTY_SUMMARY
+        raise ValueError(EMPTY_SUMMARY)
     saved=mem.save_analysis(mid,digest,llm.model_id,result)
     auto_title(store,mid,result)
     from .reports import write_meeting_report
