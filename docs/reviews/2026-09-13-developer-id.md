@@ -14,8 +14,9 @@ seçeneklerini korumak.
 - Noter API bilgileri Apple tarafından doğrulandı. `meetingos` profili açıkça
   kullanıcının `login` anahtar zincirine kaydedildi; varsayılan anahtar zinciriyle
   ilk deneme kullanıcı etkileşimine izin vermediği için başarısız olmuştu.
-- `xcrun notarytool history --keychain-profile meetingos --output-format json`
-  başarılı: `{"history":[],"message":"No submission history."}`.
+- Noter profili sorgusu başarılı. Anahtar zincirinin geçici erişim hataları
+  nedeniyle gönderimde `login.keychain-db` yolu açıkça belirtildi; erişim
+  izinleri genişletilmedi.
 - Noterleme betiğindeki hata kodlarını gizleyen borular kaldırıldı. Başarı için
   JSON sonucunda tam `Accepted`, imza, staple ve Gatekeeper doğrulaması gerekir.
 - Developer ID seçilen yerel derlemeler için güvenli zaman damgası ve hardened
@@ -25,20 +26,48 @@ seçeneklerini korumak.
   incelemesinde engel bulunmadı. Testlerde gerçek sertifika veya anahtar zinciri
   kullanılmadı.
 
-## Kalan hesap adımı
+## Kurulan Developer ID kimliği
 
-Geçerli kod imzalama kimliklerinde yalnız `Apple Development` var. Kurulu
-uygulamanın gerçek `TeamIdentifier` değeri `WHA43MLZN6`. Developer ID Application
-sertifikası henüz edinilmedi; uygulamanın imzası ve kayıtlı kimlik bu nedenle
-henüz değiştirilmedi. Apple Developer sekmesi oturum açmayı bekliyor;
-Xcode → Apple Accounts ekranında da kayıtlı hesap bulunmuyor.
+Kullanıcının Apple Developer web oturumuyla G2 Developer ID Application
+sertifikası oluşturuldu; CSR, özel anahtar ve sertifikanın açık anahtarları
+eşleşti. Sertifika ve anahtar `login` anahtar zincirine kuruldu.
 
-Sertifika edinildikten sonra aynı CSR'nin anahtarıyla eşleşmesi doğrulanmalı,
-sertifika login anahtar zincirine kurulmalı, eski pin yedeklenerek seçilen
-Developer ID SHA-1'e geçilmeli ve hem ana uygulama hem kayıt yardımcısı yeniden
-imzalanmalıdır. Sonuç `codesign --verify --deep --strict`, gerçek
-`Authority`/`TeamIdentifier` ve noterleme sonucu üzerinden doğrulanmalıdır.
-Gerçek imza/noterleme tamamlanmadan bu belge tamamlanmış geçiş kanıtı değildir.
+- Kimlik: `Developer ID Application: BORAN KARADUMAN (WHA43MLZN6)`
+- SHA-1: `7DF7783FCA518AD2D6E141EB977F3334EBDE064B`
+- TeamIdentifier: `WHA43MLZN6` (önceki uygulamayla aynı ekip)
+- Apple sertifika kimliği: `3K2QWQ3Y83`
+- Son geçerlilik: `2031-09-14T19:18:16Z`
+- Sertifika yedeği: `~/.appstoreconnect/developer-id-application.cer`
+
+Kurulu `build/Meeting OS.app` ve `build/MeetingCapture.app` yeniden imzalandı.
+Her ikisinde `codesign --verify --deep --strict` başarılı; Developer ID
+otoritesi, ekip, güvenli zaman damgası ve hardened runtime doğrulandı.
+Ana uygulama yalnız mikrofon/takvim, yardımcı yalnız mikrofon entitlement'ı
+taşıyor. `build/signing-identity.json` yeni SHA-1'e sabitlendi.
+
+Kurulu 1.2.87 sürümünün mevcut ikilileri kullanıldı. `Info.plist`, kaynaklar ve
+kaynak deposuna/.venv'ye işaret eden `runtime.json` korundu;
+`build/installed-commit` bu nedenle `ab9679f` olarak kaldı. Aktif kayıt ve
+işleme işi olmadığı doğrulandı, uygulama kapatılıp imzalı kopyalar kuruldu ve
+yeniden açıldığında arayüzde Hazır durumu görüldü. Yardımcının `--self-test`
+kontrolü sentetik sesle başarılı; gerçek mikrofon/sistem sesi kaydı yapılmadı.
+
+Önceki iki uygulama, imzalama kaydı ve sürüm işaretinin tam yedekleri ile
+doğrulama çıktıları `build/developer-id-migration-20260913/` altında tutuluyor.
+
+## Bekleyen Apple noter sonucu
+
+İmzalı iki uygulama birlikte Apple noter servisine gönderildi:
+
+- Başvuru: `77756197-79e4-415e-aedb-99de763dda03`
+- Dosya: `meetingos-developer-id.zip`
+- Gönderim: `2026-09-13T19:30:46.315Z`
+- Son sorgu: **In Progress**; henüz Accepted veya noter onay bileti yok.
+
+Yerel Developer ID kurulumu tamamlandı. Noter onayı için başvurunun Accepted
+olması, iki uygulamaya `stapler staple` uygulanması, ardından `stapler validate`
+ve Gatekeeper değerlendirmesinin başarılı olması bekleniyor. Bu belge şu an
+noter onayının tamamlandığına dair kanıt değildir.
 
 ## Kaynaklar
 
