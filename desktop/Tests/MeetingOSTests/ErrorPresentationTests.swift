@@ -6,7 +6,7 @@ final class ErrorPresentationTests: XCTestCase {
         let result=ErrorPresentation.summary(text)
         XCTAssertLessThanOrEqual(result.count,400)
         XCTAssertTrue(result.contains("bellek baskısı"))
-        XCTAssertTrue(result.contains("last-job.log"))
+        XCTAssertTrue(result.contains("last-job-*.log"))   // one log per job now; the name says so
     }
     func testShortErrorIsPreserved() {
         XCTAssertEqual(ErrorPresentation.summary("İzin reddedildi"),"İzin reddedildi")

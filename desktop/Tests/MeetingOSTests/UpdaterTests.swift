@@ -151,3 +151,58 @@ final class BundleUpdateTests:XCTestCase {
         XCTAssertEqual(u.headline,"Güncelleme adresi bu pakette yok · Boran’a bildirin")
     }
 }
+
+/// Finding #12: a detached download worker that dies (logout, OOM, sleep) leaves `update-status.json` frozen
+/// at `downloading`. The card said "%37" for the rest of the day, `updating` stayed true and the button could
+/// never be pressed again. Every bundle state now has a budget for how long its `time` may stand still.
+final class UpdateStallTests:XCTestCase {
+    func stamp(_ minutesAgo:Double,now:Date)->String {
+        let f=DateFormatter(); f.dateFormat="yyyy-MM-dd HH:mm:ss"; f.locale=Locale(identifier:"en_US_POSIX"); f.timeZone=TimeZone.current
+        return f.string(from:now.addingTimeInterval(-minutesAgo*60))
+    }
+    func testAMovingDownloadIsNeverCalledDead() {
+        let now=Date()
+        XCTAssertFalse(UpdateStatusLine.isStalled(state:"downloading",time:stamp(1,now:now),now:now))
+        XCTAssertEqual(UpdateStatusLine.line(state:"downloading",message:"",time:stamp(1,now:now),percent:37,now:now),"Yeni sürüm indiriliyor · %37")
+    }
+    func testADownloadThatStoppedWritingIsStalled() {
+        let now=Date()
+        XCTAssertTrue(UpdateStatusLine.isStalled(state:"downloading",time:stamp(6,now:now),now:now))
+        XCTAssertEqual(UpdateStatusLine.line(state:"downloading",message:"",time:stamp(6,now:now),percent:37,now:now),UpdateStatusLine.bundleStalledMessage)
+    }
+    func testVerifyingGetsTheSameShortBudget() {
+        let now=Date()
+        XCTAssertFalse(UpdateStatusLine.isStalled(state:"verifying",time:stamp(4,now:now),now:now))
+        XCTAssertTrue(UpdateStatusLine.isStalled(state:"verifying",time:stamp(6,now:now),now:now))
+    }
+    /// Extracting and swapping write the status once and then work through ~1 GB in silence: five minutes of
+    /// quiet is normal there, and cancelling on it would abandon an update that is going fine.
+    func testExtractingAndSwappingGetTheLongerBudget() {
+        let now=Date()
+        for state in ["extracting","swapping"] {
+            XCTAssertFalse(UpdateStatusLine.isStalled(state:state,time:stamp(10,now:now),now:now),state)
+            XCTAssertTrue(UpdateStatusLine.isStalled(state:state,time:stamp(16,now:now),now:now),state)
+        }
+        XCTAssertEqual(UpdateStatusLine.line(state:"swapping",message:"",time:stamp(16,now:now),now:now),UpdateStatusLine.bundleStalledMessage)
+    }
+    /// Finished states cannot go stale, and `running` keeps the git channel's own half-hour sentence.
+    func testFinalStatesHaveNoBudgetAndRunningKeepsItsOwn() {
+        let now=Date()
+        for state in ["done","failed","refused","kim bilir"] {
+            XCTAssertNil(UpdateStatusLine.stallBudget(state:state),state)
+            XCTAssertFalse(UpdateStatusLine.isStalled(state:state,time:stamp(600,now:now),now:now),state)
+        }
+        XCTAssertEqual(UpdateStatusLine.stallBudget(state:"running"),UpdateStatusLine.stallSeconds)
+        XCTAssertEqual(UpdateStatusLine.line(state:"running",message:"x",time:stamp(31,now:now),now:now),UpdateStatusLine.stalledMessage)
+    }
+    /// An unwritten or unreadable timestamp is "cannot tell", not "dead": the poll loop's own deadline covers
+    /// that case rather than this one cancelling a healthy update.
+    func testAnUnreadableTimestampIsNotAStall() {
+        XCTAssertFalse(UpdateStatusLine.isStalled(state:"downloading",time:"",now:Date()))
+        XCTAssertFalse(UpdateStatusLine.isStalled(state:"downloading",time:"10 Eyl 2026",now:Date()))
+        XCTAssertGreaterThan(UpdateStatusLine.pollDeadline,UpdateStatusLine.heavyStallSeconds)
+    }
+    func testTheStalledLineTellsTheUserTheButtonWorksAgain() {
+        XCTAssertEqual(UpdateStatusLine.bundleStalledMessage,"Güncelleme yanıt vermiyor · yeniden deneyin")
+    }
+}

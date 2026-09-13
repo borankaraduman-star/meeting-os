@@ -485,8 +485,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         let idle=idleRetry; idleRetry=false   // consumed by this launch only
         do {
             try FileManager.default.createDirectory(at:dataDir,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])   // transcripts and receipts live here; an existing folder keeps its mode
-            let log=dataDir.appendingPathComponent("last-job.log")
+            // One log per child. A recording and a finalize are explicitly allowed to run together and used to
+            // share `last-job.log`: two processes writing at independent offsets into one truncated inode, so
+            // a failed finalize could report the recorder's last line as its own error (finding #11).
+            let log=JobLog.url(dataDir:dataDir,jobId:UUID().uuidString)
+            JobLog.prune(dataDir:dataDir)   // keeps the last few; the folder must not fill with old logs
             FileManager.default.createFile(atPath:log.path,contents:nil,attributes:[.posixPermissions:0o600])   // the log can carry job output; never world-readable
+            JobLog.linkLatest(dataDir:dataDir,to:log)   // the Python side still opens `last-job.log`
             let handle=try FileHandle(forWritingTo:log)
             resourceStopMessage="";jobCanceled=false
             let progress=dataDir.appendingPathComponent("progress/"+UUID().uuidString+".json")
@@ -499,7 +504,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                 let jobError=ErrorPresentation.logSummary(log)
                 Task { @MainActor in
                     guard let self=self else { return }
-                    if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; try? FileManager.default.removeItem(at:progress) }
+                    if isRecord { self.recordProcess=nil; self.recordStartedAt=nil; self.stopEscalation?.cancel(); self.stopRequestedAt=nil; self.stopSignalSent=nil; try? FileManager.default.removeItem(at:progress) }
                     else { self.job=nil; self.jobKind=nil; self.busy=false; self.jobLowPriority=false; self.jobs.jobProgress=""; self.progressURL=nil; self.jobStarted=nil; JobSleepGuard.end(); try? FileManager.default.removeItem(at:progress) }
                     if process.terminationStatus != 0 && !self.jobCanceled {
                         // Before the banner, so the throttle credits this to `job` rather than to the `ui` echo.
@@ -511,7 +516,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                     // idle queue picks them up on the next launch. Popping here would begin a job we cannot finish.
                     if !isRecord, !self.requestedQuit, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
                     if !isRecord, !self.requestedQuit, self.pendingSummaryRefresh { self.pendingSummaryRefresh=false; self.runScheduledSummaryRefresh(self.pendingSummaryMeeting) }   // a queued finalize took the slot back: this re-arms rather than stacks
-                    if self.requestedQuit && self.job==nil && self.recordProcess==nil { NSApp.reply(toApplicationShouldTerminate:true) }
+                    if self.requestedQuit && self.job==nil && self.recordProcess==nil { self.replyToQuit() }
                 }
             }
             try p.run(); error=""
@@ -567,7 +572,40 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             else { self.activity="Kayıt saklandı · Son işlem otomatik başlatılamadı" }
         }
     }
-    func stop() { guard recording else { return }; recordingNavigation.cancel(); activity="Ses parçaları tamamlanıyor…"; recording=false; stopArmedAt=nil; recordProcess?.interrupt() }
+    /// Finding #13: this used to send one SIGINT and set `recording=false` on the same line. A supervisor that
+    /// never exited left every stop control disabled (the app already believed the recording was over) and the
+    /// second press was a no-op, so Force Quit was the user's only move. The signal escalates now, and the UI
+    /// keeps the recording until the child is actually gone.
+    func stop() {
+        guard recording else { return }
+        recordingNavigation.cancel(); stopArmedAt=nil
+        guard recordProcess != nil else { recording=false; stopRequestedAt=nil; stopSignalSent=nil; return }   // nothing to signal: the helper never started
+        if stopRequestedAt==nil { stopRequestedAt=Date(); activity="Ses parçaları tamamlanıyor…" }
+        else { stopRequestedAt=Date().addingTimeInterval(-StopEscalation.bringForward(sent:stopSignalSent)) }   // a second press advances the clock, it does not restart it
+        escalateStop()
+    }
+    /// The escalation loop: SIGINT, then SIGTERM after five seconds, then SIGKILL after ten. Restarting it is
+    /// safe — the clock lives in `stopRequestedAt` and the last signal in `stopSignalSent`.
+    func escalateStop() {
+        stopEscalation?.cancel()
+        stopEscalation=Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let child=self.recordProcess else { return }
+                let alive=child.isRunning
+                let elapsed=Date().timeIntervalSince(self.stopRequestedAt ?? Date())
+                if let signal=StopEscalation.next(elapsed:elapsed,alive:alive,sent:self.stopSignalSent) {
+                    self.stopSignalSent=signal
+                    switch signal {
+                    case .interrupt: child.interrupt()
+                    case .terminate: child.terminate(); self.activity=StopEscalation.notResponding
+                    case .kill: kill(child.processIdentifier,SIGKILL); self.activity=StopEscalation.killed   // `Process.terminate` is SIGTERM; a wedged child needs the one that cannot be caught
+                    }
+                }
+                if StopEscalation.finished(alive:alive,sent:self.stopSignalSent) { self.recording=false; return }
+                try? await Task.sleep(nanoseconds:500_000_000)
+            }
+        }
+    }
     func finishRecordedMeeting(_ mid:String) {
         if let cal=pendingCalendar { pendingCalendar=nil; Task { _=try? await request(["action":"meeting_context","meeting":mid,"calendar":cal.payload]) } }
         if transcriptionMode=="openrouter" { finalizeWithOpenRouter(mid,model:cloudModel); return }
@@ -753,6 +791,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     }
     /// Recording lives in its own process slot (see launch); jobs never block it.
     var recordProcess:Process?; var recordStartedAt:Date?; var stopArmedAt:Date?
+    /// The stop escalation's state: when the user first asked, and the strongest signal already sent.
+    var stopRequestedAt:Date?; var stopSignalSent:StopEscalation.Signal?; var stopEscalation:Task<Void,Never>?
     var sleptAt:Date?; var continuitySeen:RecordingContinuity.State?
     /// One passive line in the recorder panel when a recording survived a stream rebuild, a helper relaunch or a sleep.
     var finalizeQueue:[String]=[]
@@ -787,7 +827,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Set for the one launch that follows an idle retry, so the job starts at background priority.
     var idleRetry=false
     /// Hourly heartbeat into the shared iCloud folder so a day without a finished meeting still leaves a trace.
-    var lastHeartbeat:Date?
+    /// Persisted (finding #10): in memory it was nil at every launch, so the heaviest pass in the product was
+    /// due on the first poll of every run — three restarts a day meant three full sweeps a day.
+    var lastHeartbeat:Date? {
+        get { UserDefaults.standard.object(forKey:HousekeepingSchedule.lastRunKey) as? Date }
+        set { UserDefaults.standard.set(newValue,forKey:HousekeepingSchedule.lastRunKey) }
+    }
+    /// One short Turkish line when the sweep could not finish a step, shown in Ayarlar → Depolama. The answer
+    /// used to be dropped on the floor, so a team sync failing every hour for a week was invisible.
+    @Published var housekeepingNote:String?
     // Cross-meeting PM views (loaded on demand, never while recording)
     @Published var decisions:[DecisionEntry]=[]; @Published var waiting:[WaitingPerson]=[]; @Published var debt:[DebtItem]=[]; @Published var debtSummary=""
     /// Evidence / review navigation: scroll the reading view to the paragraph and flash it, keeping context around it.
@@ -1087,16 +1135,49 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         activity=touched>0 ? "Adınız \(next) · önceki \(touched) toplantıdaki sesiniz yeniden etiketlendi" : "Adınız \(next) · kayıtlarda sesiniz bu adla etiketlenecek"
         await refresh()
     }
-    /// ⌘Q with the settings sheet open used to drop a name that had been typed but never submitted: the field
-    /// saves on ⏎ and on `onDisappear`, and neither runs when the process is going away. This is synchronous on
-    /// purpose — an async Task would not outlive `applicationShouldTerminate`.
-    func saveUserNameOnQuit() {
-        guard showSettings, settingsLoaded else { return }
+    /// Debounced save while the name is being typed (finding #13). ⌘Q used to be the moment a typed-but-never-
+    /// submitted name was written, synchronously, from `applicationShouldTerminate` — a Python interpreter on
+    /// the main thread, up to ten seconds of frozen app on the very first launch. Saving a second after the
+    /// typing stops means quit has nothing left to write.
+    var userNameSave:Task<Void,Never>?
+    func userNameEdited() {
+        userNameSave?.cancel()
+        userNameSave=Task { [weak self] in
+            try? await Task.sleep(nanoseconds:UInt64(QuitSequence.nameDebounceSeconds*1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            await self.saveUserName()
+        }
+    }
+    /// ⌘Q pressed within the debounce window: start the save off the main thread and say whether the quit has
+    /// to wait for it. Never blocking, never synchronous — the deadline on `.terminateLater` bounds the wait.
+    @discardableResult func flushUserNameOnQuit()->Bool {
+        userNameSave?.cancel()
+        guard settingsLoaded else { return false }
         let typed=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines)
-        guard !typed.isEmpty, !NameFold.same(typed,storedUserName) else { return }
-        var changes=reportSettings.changes; changes["user_name"]=typed
-        _=try? invoke(runtime,["action":"report_settings_set","changes":changes])
-        storedUserName=typed
+        guard !typed.isEmpty, !NameFold.same(typed,storedUserName) else { return false }
+        Task { [weak self] in
+            guard let self else { return }
+            await self.saveUserName()
+            if self.job==nil, self.recordProcess==nil { self.replyToQuit() }
+        }
+        return true
+    }
+    /// `.terminateLater` had exactly one way out: a child's termination handler, behind another bridge call.
+    /// A wedged job meant a window that could not be closed and a ⌘Q that never finished. Every quit now has
+    /// a deadline, and every reply goes through here so the second one is a no-op rather than a crash.
+    var quitDeadline:Task<Void,Never>?; var quitReplied=false
+    func armQuitDeadline(seconds:TimeInterval=QuitSequence.deadlineSeconds) {
+        quitDeadline?.cancel()
+        quitDeadline=Task { [weak self] in
+            try? await Task.sleep(nanoseconds:UInt64(seconds*1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.replyToQuit()
+        }
+    }
+    func replyToQuit() {
+        guard !quitReplied else { return }
+        quitReplied=true; quitDeadline?.cancel(); quitDeadline=nil
+        NSApp.reply(toApplicationShouldTerminate:true)
     }
     /// Open the field that is missing and put the caret in it: the welcome screen when there are no meetings
     /// yet, Ayarlar → Genel otherwise.
@@ -1144,11 +1225,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                 if !BundleInfo.bundled { try? await Task.sleep(nanoseconds:600_000_000); NSApp.terminate(nil); return }
                 // Bundle channel: the detached worker downloads (minutes for ~1 GB) while the app stays open and shows
                 // the percentage; the swap script waits for this pid, so we quit only once the state says `swapping`.
+                // …and it must be able to give up. A worker that dies (logout, OOM, sleep) leaves the status
+                // file frozen at `downloading`, and this loop used to spin on it forever with `updating` true,
+                // so the button could never be pressed again without quitting the app (finding #12).
+                let pollStarted=Date()
                 while true {
                     try? await Task.sleep(nanoseconds:2_000_000_000)
-                    guard let status=try? await request(["action":"update_status"]), let state=status["state"] as? String else { continue }
+                    if Date().timeIntervalSince(pollStarted) >= UpdateStatusLine.pollDeadline { updating=false; activity=UpdateStatusLine.bundleStalledMessage; return }
+                    guard let status=try? await request(["action":"update_status"]), let state=status["state"] as? String else { continue }   // a failed read is covered by the deadline above
                     let percent=status["percent"] as? Int ?? 0
-                    if let line=UpdateStatusLine.line(state:state,message:status["message"] as? String ?? "",time:status["time"] as? String ?? "",percent:percent) { activity=line }
+                    let stamp=status["time"] as? String ?? ""
+                    if let line=UpdateStatusLine.line(state:state,message:status["message"] as? String ?? "",time:stamp,percent:percent) { activity=line }
+                    // The status file's own clock stopped moving: nothing is downloading, extracting or
+                    // swapping any more. Release the button rather than quitting into a swap that never comes.
+                    if UpdateStatusLine.isStalled(state:state,time:stamp) { updating=false; return }
                     if UpdateStatusLine.shouldQuit(state:state) { NSApp.terminate(nil); return }
                     if state=="failed" { updating=false; return }
                 }
@@ -1277,11 +1367,13 @@ func statusLabel(_ status:String)->String {
         Self.model?.handleIncoming(urls:urls)
     }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
-        Self.model?.saveUserNameOnQuit()
-        guard let m=Self.model, m.job != nil || m.recordProcess != nil else { return .terminateNow }
+        guard let m=Self.model else { return .terminateNow }
+        let nameInFlight=m.flushUserNameOnQuit()   // fire-and-forget: the bridge is never the main thread's problem
+        guard nameInFlight || m.job != nil || m.recordProcess != nil else { return .terminateNow }
         m.requestedQuit=true
         if m.recording { m.stop() }
-        m.activity="İşlem güvenle tamamlandıktan sonra kapanacak…"
+        m.activity=nameInFlight && m.job==nil && m.recordProcess==nil ? "Adınız kaydediliyor…" : "İşlem güvenle tamamlandıktan sonra kapanacak…"
+        m.armQuitDeadline(seconds:QuitSequence.deadline(draining:m.recordProcess != nil))   // a job that never answers must not hold the app open forever
         return .terminateLater
     }
 }

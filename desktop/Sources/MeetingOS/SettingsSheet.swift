@@ -154,6 +154,7 @@ struct SettingsSheet:View {
                         .accessibilityIdentifier("userNameField")
                         .onSubmit { Task { await model.saveUserName() } }
                         .onDisappear { Task { await model.saveUserName() } }   // saved once when the field goes away, not on every keystroke
+                        .onChange(of:model.reportSettings.userName) { _,_ in model.userNameEdited() }   // …and a second after typing stops: ⌘Q used to be the moment this was written, on the main thread
                         .onChange(of:model.userNameFocusToken) { _,_ in nameFocused=true }
                         .onAppear { if !model.hasUserName { nameFocused=true } }   // the sheet a refused recording opened arrives after the token was bumped
                     Text("Mikrofon kaydı bu adla etiketlenir; “Bana ait” filtresi bu adı kullanır. Adı değiştirince önceki toplantılardaki kendi sesiniz de yeni adla etiketlenir.").font(.caption2).foregroundStyle(.secondary)
@@ -432,6 +433,11 @@ struct StorageSection:View {
                 .accessibilityIdentifier("storageTotals")
             if let warning=storage.textRetentionWarning {
                 Text(warning).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("textRetentionWarning")
+            }
+            // The hourly sweep's own verdict (finding #10): a step that keeps failing — the team folder above
+            // all — has nowhere else to be said, and used to be dropped without a trace.
+            if let note=model.housekeepingNote {
+                Text(note).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("housekeepingNote")
             }
             if storage.meetings.isEmpty {
                 Text("Ses dosyası olan toplantı yok.").font(.caption).foregroundStyle(.secondary)

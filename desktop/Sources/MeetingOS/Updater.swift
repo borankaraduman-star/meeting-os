@@ -58,11 +58,37 @@ enum UpdateStatusLine {
     /// still open for it, so unlike a git rebuild these are worth saying out loud.
     static let downloadingPrefix="Yeni sürüm indiriliyor"
     static let swappingMessage="Yeni sürüm yerine konuyor · uygulama yeniden açılacak"
+    /// A detached download worker that dies (logout, OOM, sleep) leaves `update-status.json` at `downloading`
+    /// forever: the card said "%37" for the rest of the day and `updating` stayed true, so the button could
+    /// never be pressed again. Every bundle state now has a budget for how long its `time` may stand still.
+    /// The worker rewrites the status on each percent step, so five minutes of silence means it is gone;
+    /// extracting and swapping write once and then work through ~1 GB, which is why they get fifteen.
+    static let bundleStallSeconds:TimeInterval=300, heavyStallSeconds:TimeInterval=900
+    static let bundleStalledMessage="Güncelleme yanıt vermiyor · yeniden deneyin"
+    /// Ceiling on the whole poll loop, for the case the status file stops being written (or read) at all.
+    static let pollDeadline:TimeInterval=2*3600
+    static func stallBudget(state:String)->TimeInterval? {
+        switch state {
+        case "downloading","verifying": return bundleStallSeconds
+        case "extracting","swapping": return heavyStallSeconds
+        case "running": return stallSeconds
+        default: return nil                     // done / failed / refused are final; they cannot go stale
+        }
+    }
+    /// An unparsable or missing `time` is "cannot tell", not "dead": the poll loop's deadline covers that case
+    /// rather than this one cancelling an update that is running fine.
+    static func isStalled(state:String,time:String,now:Date=Date())->Bool {
+        guard let budget=stallBudget(state:state), let stamp=parseTime(time) else { return false }
+        return now.timeIntervalSince(stamp) >= budget
+    }
     /// nil = say nothing. `failed` is also worth a notification; the caller decides that from the state.
     /// `percent` is `update-status.json`'s `percent` key (bundle channel only, 0 when it is not there); the
     /// worker also writes the same number into `message`, so a caller that does not read the key still shows
     /// a percentage.
     static func line(state:String,message:String,time:String,percent:Int=0,now:Date=Date())->String? {
+        // `running` keeps its own, older sentence (a git rebuild the user cannot resume from the app); every
+        // bundle state that has stopped moving says the one thing that is actionable: press it again.
+        if state != "running", isStalled(state:state,time:time,now:now) { return bundleStalledMessage }
         switch state {
         case "done": return "Güncelleme tamam · "+message
         case "failed": return "Güncelleme başarısız · "+message
