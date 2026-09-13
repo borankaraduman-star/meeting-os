@@ -22,6 +22,16 @@ from meeting_os import updater
 
 SECRET = 'a' * 64
 REPO = Path(__file__).resolve().parents[1]
+# The minimum codesign accepts as a bundle; without it `--sign -` answers "bundle format unrecognized".
+INFO_PLIST = '''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>MeetingOS</string>
+<key>CFBundleIdentifier</key><string>os.meeting.test</string>
+<key>CFBundleName</key><string>Meeting OS</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>
+'''
 
 
 class Release:
@@ -117,7 +127,9 @@ class RuntimeDetectionTests(unittest.TestCase):
             res = runtime_json(tmp, download_secret='b' * 64)
             rt = updater.bundle_runtime(res/'repo')
             self.assertEqual(updater.bundle_secret(rt), 'b' * 64)
-            self.assertEqual(updater.bundle_base(rt), updater.BUNDLE_HOST + '/' + 'b' * 64)
+            # The secret used to name the Funnel route. That host is not in UPDATE_HOSTS any more, so a
+            # secret-only bundle now refuses the address instead of downloading an app from it.
+            with self.assertRaises(ValueError): updater.bundle_base(rt)
             (res/'download.secret').write_text(SECRET + '\n', encoding='utf-8')
             self.assertEqual(updater.bundle_secret(updater.bundle_runtime(res/'repo')), SECRET)
 
@@ -133,6 +145,87 @@ class RuntimeDetectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             res = runtime_json(tmp, download_secret='kısa')
             self.assertEqual(updater.bundle_base(updater.bundle_runtime(res/'repo')), '')
+
+
+class AddressTests(unittest.TestCase):
+    """Audit #4a. The sha256 arrives in `latest.json` from the SAME origin as the zip, so it says the download
+    was not truncated and nothing about who served it. Until the bundle is notarized the host allowlist is
+    half of this channel's authenticity (the signature check is the other half), and a mistyped or hijacked
+    `download_base` is arbitrary code execution on every teammate's Mac at once."""
+
+    def base(self, url):
+        with tempfile.TemporaryDirectory() as tmp:
+            return updater.bundle_base(updater.bundle_runtime(runtime_json(tmp, download_base=url)/'repo'))
+
+    def test_the_github_addresses_every_shipped_bundle_uses_are_accepted(self):
+        for url in ('https://github.com/borankaraduman-star/meeting-os/releases/latest/download',
+                    'https://objects.githubusercontent.com/github-production-release-asset/1/2'):
+            self.assertEqual(self.base(url), url)
+
+    def test_the_same_address_over_http_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.base('http://github.com/borankaraduman-star/meeting-os/releases/latest/download')
+        self.assertEqual(str(caught.exception), updater.BASE_ERROR)
+
+    def test_a_foreign_host_is_refused_however_it_is_dressed(self):
+        for url in ('https://github.com.evil.example/x', 'https://evilgithub.com/x',
+                    'https://raw.githubusercontent.com/x', 'https://evil.example/meetingos/dl',
+                    'file:///tmp/payload', '//github.com/x'):
+            with self.assertRaises(ValueError, msg=url): self.base(url)
+
+    def test_an_unusable_address_is_a_sentence_on_the_card_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = updater.check(runtime_json(tmp, download_base='https://evil.example/x')/'repo')
+            self.assertFalse(r['available'])
+            self.assertEqual(r['error'], updater.BASE_ERROR)
+            self.assertEqual(r['target'], '1.2.71')
+
+
+class SignatureTests(unittest.TestCase):
+    """Audit #4b. `verify_new_app` is the check the update path had none of: it runs while the installed app
+    is still untouched, and it is the last thing between the zip's contents and `swap-update.sh`."""
+
+    def setUp(self):
+        self.calls = []
+
+    def codesign(self, *, verify_rc=0, teams=()):
+        """A stand-in for /usr/bin/codesign: `--verify` answers verify_rc, `-dv` answers the next team in
+        turn (target app first, then the new one). `None` is an ad-hoc signature: TeamIdentifier=not set."""
+        remaining = list(teams)
+
+        def run(cmd, **_kw):
+            self.calls.append(list(cmd))
+            if '-dv' in cmd:
+                team = remaining.pop(0) if remaining else None
+                report = 'Identifier=os.meeting\nSignature=adhoc\n' + \
+                         (f'TeamIdentifier={team}\n' if team else 'TeamIdentifier=not set\n')
+                return subprocess.CompletedProcess(cmd, 0, '', report)   # codesign reports on stderr
+            if verify_rc: raise subprocess.CalledProcessError(verify_rc, cmd)
+            return subprocess.CompletedProcess(cmd, 0, b'', b'')
+        return run
+
+    def verify(self, **kw):
+        with patch.object(updater.subprocess, 'run', self.codesign(**kw)):
+            return updater.verify_new_app('/tmp/new/Meeting OS.app', '/Applications/Meeting OS.app')
+
+    def test_a_package_that_does_not_pass_codesign_is_refused(self):
+        with self.assertRaises(ValueError) as caught: self.verify(verify_rc=1)
+        self.assertEqual(str(caught.exception), updater.SIGN_ERROR)
+        self.assertEqual(self.calls[0][:4], ['/usr/bin/codesign', '--verify', '--deep', '--strict'])
+
+    def test_an_update_may_not_change_who_signed_the_app(self):
+        with self.assertRaises(ValueError) as caught: self.verify(teams=('TEAM111111', 'TEAM222222'))
+        self.assertEqual(str(caught.exception), 'Paket imzası uygulamayla eşleşmiyor')
+
+    def test_the_same_developer_id_goes_through(self):
+        self.assertTrue(self.verify(teams=('TEAM111111', 'TEAM111111')))
+
+    def test_todays_adhoc_bundle_only_has_to_pass_the_verify(self):
+        """The running app carries no TeamIdentifier until the Developer ID certificate arrives, so there is
+        nothing to match against — and `spctl --assess` is deliberately not called, because Gatekeeper would
+        refuse an un-notarized bundle, i.e. every legitimate update this app can ship today."""
+        self.assertTrue(self.verify())
+        self.assertNotIn('/usr/sbin/spctl', [c[0] for c in self.calls])
 
 
 class CheckTests(unittest.TestCase):
@@ -255,9 +348,15 @@ class WorkerTests(unittest.TestCase):
         self.swap_calls = self.tmp/'swap-args.txt'
         self.swap = self.tmp/'fake-swap.sh'
         self.swap.write_text('#!/bin/sh\nprintf "%%s\\n" "$@" > "%s"\n' % self.swap_calls, encoding='utf-8')
-        # A real signed-looking app bundle, zipped the way scripts/build-bundle.sh does it.
+        # A real app bundle, ad-hoc signed and zipped the way scripts/build-bundle.sh does it: the worker now
+        # runs `codesign --verify --deep --strict` on what it unpacked, so an unsigned stand-in would be
+        # refused — correctly — and the happy path would test nothing.
         stage = self.tmp/'stage'; (stage/'Meeting OS.app'/'Contents'/'MacOS').mkdir(parents=True)
-        (stage/'Meeting OS.app'/'Contents'/'MacOS'/'MeetingOS').write_text('#!/bin/sh\n', encoding='utf-8')
+        binary = stage/'Meeting OS.app'/'Contents'/'MacOS'/'MeetingOS'
+        binary.write_text('#!/bin/sh\n', encoding='utf-8'); binary.chmod(0o755)
+        (stage/'Meeting OS.app'/'Contents'/'Info.plist').write_text(INFO_PLIST, encoding='utf-8')
+        subprocess.run(['/usr/bin/codesign', '--sign', '-', str(stage/'Meeting OS.app')],
+                       check=True, capture_output=True)
         self.zip = self.tmp/'Meeting-OS-1.2.72.zip'
         subprocess.run(['/usr/bin/ditto', '-c', '-k', '--keepParent', str(stage/'Meeting OS.app'), str(self.zip)],
                        check=True, capture_output=True)
@@ -343,6 +442,34 @@ class WorkerTests(unittest.TestCase):
         rc, _ = self.run_worker(release)
         self.assertEqual(rc, 0)
         self.assertEqual(release.ranges, [])
+
+    def test_a_package_whose_signature_does_not_verify_never_reaches_the_swap_script(self):
+        """Audit #4: the swap is the point of no return — once `swap-update.sh` is spawned the installed app
+        is on its way to `.previous` and whatever came out of the zip becomes the app. The signature check
+        happens one line earlier, and a failure leaves the installed version exactly where it was."""
+        release = self.release()
+        spawned = []
+        real_run, real_popen = subprocess.run, subprocess.Popen
+
+        def run(cmd, **kw):
+            # the real ditto, a failing codesign: nothing else about the worker changes
+            if str(cmd[0]).endswith('codesign') and '--verify' in cmd:
+                raise subprocess.CalledProcessError(1, cmd)
+            return real_run(cmd, **kw)
+
+        def popen(cmd, **kw):
+            if list(cmd)[:1] == ['/bin/sh']: spawned.append(list(cmd)); return None   # only the swap is caught
+            return real_popen(cmd, **kw)
+        with patch.object(updater.subprocess, 'run', run), \
+             patch.object(updater.subprocess, 'Popen', popen):
+            rc, states = self.run_worker(release)
+        self.assertEqual(rc, 1)
+        self.assertEqual(spawned, [], 'the swap script must not be spawned for a package that did not verify')
+        self.assertNotIn('swapping', states)
+        final = self.status()
+        self.assertEqual(final['state'], 'failed')
+        self.assertEqual(final['error'], updater.SIGN_ERROR)
+        self.assertFalse(self.swap_calls.exists())
 
     def test_a_lying_latest_json_is_refused_before_anything_is_downloaded(self):
         release = self.release()

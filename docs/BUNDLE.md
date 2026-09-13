@@ -125,6 +125,14 @@ der ve hiçbir yere bağlanmaz. `BUNDLE_BASE_URL` = `https://hermes-vps.tail2d8c
   (`verifying`), `ditto -x -k` ile geçici klasöre açar (`extracting`), `swap-update.sh`'yi bağımsız başlatıp
   `swapping` yazar. Her hata `state: failed` + `error`. Yarım zip **durur** (sonraki koşu Range ile sürdürür),
   sha256 **tutmayan** zip silinir (yoksa her denemeyi zehirler).
+- **Kimlik doğrulama (1.2.87, denetim #4).** sha256 zip ile *aynı kaynaktan* geldiği için yalnızca "indirme
+  kesilmedi" der. Bu yüzden: (1) `bundle_base` yalnız `https` ve yalnız `github.com` /
+  `objects.githubusercontent.com` adreslerini kabul eder (`UPDATE_HOSTS`; başkası → "Güncelleme adresi güvenli
+  değil"; emekli Funnel adresi artık geçmez), (2) `ditto`dan sonra, takas betiği başlamadan **önce**
+  `verify_new_app` çalışır: `codesign --verify --deep --strict`, ve çalışan uygulamanın `TeamIdentifier`'ı
+  varsa yeni paketinki **birebir aynı** olmalıdır ("Paket imzası uygulamayla eşleşmiyor"). `spctl --assess`
+  **bilerek yoktur**: paket noter onayı kurulana dek ad-hoc imzalıdır, Gatekeeper her meşru güncellemeyi
+  reddederdi. Karantina temizliği bu yüzden takastan *sonra* kalabilir — imza zaten doğrulanmıştır.
 - `update-status.json` sözleşmesi `scripts/update.sh` ile aynıdır (`state`,`from`,`to`,`message`,`time`); tek
   eklenen anahtar `percent`. Böylece uygulamanın mevcut yoklaması değişmeden çalışır.
 

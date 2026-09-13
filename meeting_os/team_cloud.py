@@ -88,6 +88,7 @@ PRIVATE_MODE = 0o600
 MIRROR_MODE = 0o700
 CONNECT_TIMEOUT = 5.0        # a server that does not answer in five seconds is a server that is down
 BUDGET = 20.0                # the whole pass, uploads and downloads together
+JOIN_BUDGET = 6.0            # accept_invite runs on the fast bridge: its whole pass has to fit one 10 s watchdog
 PULL_REPORTS = 300           # the newest reports of the other Macs; a team's history is not a download
 PULL_REPORT_BYTES = 50*1024*1024   # …and a hard disk ceiling for them: 300 is a per-pass selection, not a cap
 MAX_FILE_BYTES = 4*1024*1024  # the server refuses more; refusing it here keeps one big file out of the budget
@@ -102,46 +103,80 @@ def _now():
 # ---------------------------------------------------------------- identity
 
 def _write_token(path, tok):
-    """0600, no symlink, whole file. The only place a team token is written."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, PRIVATE_MODE)
-    try: os.write(fd, (tok + '\n').encode('utf-8'))
-    finally: os.close(fd)
-    try: Path(path).chmod(PRIVATE_MODE)
-    except OSError: pass
-    return path
+    """0600, whole file, ATOMIC. The only place a team token is deliberately replaced (`join`).
+
+    Atomic because it was not: an O_TRUNC write killed by a crash, a full disk or the 10 s bridge watchdog
+    left an EMPTY `team.token`, and the next `token()` call derived a fresh one from the current API key —
+    silently moving this Mac to a team of one, with its mirror and its pulled reports left behind."""
+    return _write_private(path, tok + '\n')
+
+
+def _broken_token(data_dir, raw):
+    """`team.token` exists and is not a token. Say so — into the error journal, like every other cloud fault —
+    and let the caller answer None. Deriving over it is the bug: a different team, and nobody told."""
+    try:
+        from .errors import record
+        shown = 'boş' if not raw else f'{len(raw)} karakter'
+        record('cloud', f'Ekip belirteci dosyası bozuk ({shown}) · davet bağlantısıyla yeniden katılın',
+               context={'where': 'team_cloud.token'}, data_dir=str(data_dir))
+    except Exception: pass
 
 
 def _remember_token(data_dir, tok):
     """Write a token that was DERIVED from the OpenRouter key into `team.token`, once, so it is never derived
     again. Without this, replacing the API key silently moves this Mac to a team of one: the mirror it filled,
-    the reports it published and the voices it taught all stay behind, and nobody is told. A usable token file
-    already on disk always wins — this never overwrites a `join`."""
+    the reports it published and the voices it taught all stay behind, and nobody is told.
+
+    O_EXCL: whatever is already on disk wins, token or garbage. This can never overwrite a `join`, and it can
+    never paper over a truncated file either — a file that exists but does not parse is a fault to report, not
+    a blank to fill in. True when this call created the file."""
     data = Path(data_dir); path = data / TOKEN_FILE
     try:
-        if not data.is_dir(): return
-        try: raw = path.read_text(encoding='utf-8').strip()
-        except (OSError, ValueError): raw = ''
-        if TOKEN_RE.match(raw): return
-        _write_token(path, tok)
-    except OSError: pass   # a read-only data folder is not a reason to fail a settings load
+        if not data.is_dir(): return False
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, PRIVATE_MODE)
+        try:
+            os.write(fd, (tok + '\n').encode('utf-8'))
+            os.fsync(fd)
+        finally: os.close(fd)
+        return True
+    except FileExistsError: return False   # somebody else's file: the caller re-reads it rather than trusting `tok`
+    except OSError: return False   # a read-only data folder is not a reason to fail a settings load
+
+
+def _read_token(path):
+    """(token, raw): `token` is the lowercased value when the file holds one; `raw` is None when there is no
+    file at all. An unreadable file answers (None, '') — it exists, so it is not ours to replace."""
+    try: raw = path.read_text(encoding='utf-8').strip()
+    except FileNotFoundError: return None, None
+    except (OSError, ValueError): return None, ''
+    return (raw.lower() if TOKEN_RE.match(raw) else None), raw
 
 
 def token(data_dir):
     """This Mac's team token, or None. `team.token` (written by the installer, by `team join`, or by the first
     derivation below) wins; otherwise the OpenRouter key is hashed, so Macs installed with the same key are the
     same team without anyone doing anything. The key itself never leaves the Mac: only this hash travels, as a
-    bearer token — and once derived it is remembered, so the team survives a new API key."""
-    data = Path(data_dir)
-    try:
-        raw = (data / TOKEN_FILE).read_text(encoding='utf-8').strip()
-        if TOKEN_RE.match(raw): return raw.lower()
-    except (OSError, ValueError): pass
+    bearer token — and once derived it is remembered, so the team survives a new API key.
+
+    A `team.token` that exists and does not parse answers None. It used to fall through to the derivation,
+    which is how an interrupted `join` moved a Mac into a different team without a word."""
+    data = Path(data_dir); path = data / TOKEN_FILE
+    tok, raw = _read_token(path)
+    if tok: return tok
+    if raw is not None:
+        _broken_token(data, raw)
+        return None
     try: key = (data / KEY_FILE).read_text(encoding='utf-8').strip()
     except (OSError, ValueError): return None
     if not key: return None
     derived = hashlib.sha256((TOKEN_SALT + key).encode('utf-8')).hexdigest()
-    _remember_token(data, derived)
-    return derived
+    if _remember_token(data, derived): return derived
+    # The file appeared between the read and the write (a parallel one-shot process, or `join`): disk wins.
+    tok, raw = _read_token(path)
+    if tok: return tok
+    if raw is None: return derived   # nothing written and nothing there: a read-only folder, not a wrong team
+    _broken_token(data, raw)
+    return None
 
 
 def device_id(data_dir):
@@ -462,8 +497,12 @@ def accept_invite(data_dir, text_or_url):
         if payload.get('url'):
             from .reports import save_settings
             save_settings(data, {'team_url': payload['url']})
+        # A six-second budget, not the default twenty: `team_join` is dispatched from the FAST bridge block,
+        # whose watchdog SIGTERMs the process at 10 s. The token is already written by now, so a kill here
+        # would leave the Mac joined while the sheet reported a failure. The rest of the pass is the next
+        # housekeeping tick's job.
         return {'joined': True, 'team_id_short': joined['team_id_short'], 'key_written': key_written,
-                'synced': sync(data)}
+                'synced': sync(data, budget=JOIN_BUDGET)}
     except Exception as exc:
         return {'error': f'Davet uygulanamadı ({type(exc).__name__})'}
 

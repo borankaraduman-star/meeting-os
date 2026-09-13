@@ -2,6 +2,7 @@
 import json
 import math
 import sqlite3
+import threading
 import unicodedata
 import uuid
 from pathlib import Path
@@ -36,7 +37,13 @@ class Store:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = path
-        self.db = sqlite3.connect(path)
+        # check_same_thread=False: the analysis fans its chunks out over a thread pool, and the usage sink
+        # (assistant.usage_context) writes from whichever worker finished a call. Without this every one of
+        # those writes raised ProgrammingError into a swallowing except, so a chunked meeting — i.e. every
+        # real meeting — reported its cloud spend as $0. Writes through this connection are serialized by
+        # `_write_lock`; sqlite's own module is in serialized threading mode underneath.
+        self.db = sqlite3.connect(path, check_same_thread=False)
+        self._write_lock = threading.Lock()
         path.chmod(0o600)
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA journal_mode=WAL')
@@ -658,13 +665,17 @@ class Store:
     def record_analysis_usage(self, meeting, model, usage):
         """One chat completion's tokens and money. The provider's own `cost` is recorded when it sends one;
         otherwise the caller's price-table estimate is recorded with estimated=1, so the number shown to the
-        user is never silently a guess. Never raises into an analysis."""
+        user is never silently a guess. Never raises into an analysis.
+
+        Under the lock: this is the one write the parallel chunk workers make, so two of them would otherwise
+        interleave the DDL, the implicit BEGIN and the INSERT on ONE connection and lose a row."""
         try:
-            self._ensure_analysis_usage()
-            with self.db:
-                self.db.execute('INSERT INTO analysis_usage(meeting,created,model,prompt_tokens,completion_tokens,cost,estimated) VALUES(?,?,?,?,?,?,?)',
-                    (meeting, datetime.now(timezone.utc).isoformat(), model, int(usage.get('prompt_tokens') or 0), int(usage.get('completion_tokens') or 0),
-                     float(usage.get('cost') or 0.0), 1 if usage.get('estimated') else 0))
+            with self._write_lock:
+                self._ensure_analysis_usage()
+                with self.db:
+                    self.db.execute('INSERT INTO analysis_usage(meeting,created,model,prompt_tokens,completion_tokens,cost,estimated) VALUES(?,?,?,?,?,?,?)',
+                        (meeting, datetime.now(timezone.utc).isoformat(), model, int(usage.get('prompt_tokens') or 0), int(usage.get('completion_tokens') or 0),
+                         float(usage.get('cost') or 0.0), 1 if usage.get('estimated') else 0))
         except Exception: return None
         return True
     def analysis_usage(self, meeting=None):

@@ -144,7 +144,11 @@ class OpenRouterTests(unittest.TestCase):
             return Response(json.dumps({'choices':[{'finish_reason':'stop','message':{'content':'{"summary":[]}'}}]}).encode())
         llm=OpenRouterClient('k',transport=transport).analysis('deepseek/deepseek-v3.2',consent=True)
         self.assertEqual(llm.complete('s','u',schema={'type':'object'}),'{"summary":[]}')
-        self.assertEqual(calls,['deepseek/deepseek-v3.2','openai/gpt-4.1-mini']); self.assertTrue(llm.fell_back); self.assertEqual(llm.model_id,'openai/gpt-4.1-mini')
+        self.assertEqual(calls,['deepseek/deepseek-v3.2','openai/gpt-4.1-mini']); self.assertTrue(llm.fell_back)
+        # Audit #8: `model_id` is NOT rewritten. One adapter is shared by every chunk worker, so a single
+        # chunk's 429 used to relabel every chunk still in flight — and the saved analysis then claimed to be
+        # 100 % fallback model. Which model answered is carried per call, into the usage row.
+        self.assertEqual(llm.model_id,'deepseek/deepseek-v3.2')
         def auth(request, timeout): raise urllib.error.HTTPError(request.full_url,401,'no',{},io.BytesIO(b'{}'))
         with self.assertRaises(OpenRouterError): OpenRouterClient('k',transport=auth).analysis('deepseek/deepseek-v3.2',consent=True).complete('s','u')
         def always(request, timeout): raise urllib.error.HTTPError(request.full_url,429,'no',{},io.BytesIO(b'{}'))
@@ -225,6 +229,61 @@ class AnalysisUsageTests(unittest.TestCase):
             self.assertEqual(s.analysis_cost_totals(),{'cost':0.007,'calls':2,'estimated':True})
             s.delete_meeting(mid)   # a deleted meeting takes its bookkeeping with it
             self.assertEqual(s.analysis_usage(),[]);s.close()
+
+    def test_usage_from_a_worker_thread_reaches_the_database(self):
+        """Audit #8. `sqlite3.connect(path)` refuses a call from another thread, and the analysis fans its
+        chunks out over a ThreadPoolExecutor — so every chunk's cost raised ProgrammingError into a swallowing
+        `except` and every meeting long enough to chunk reported its spend as $0."""
+        import tempfile, threading
+        from pathlib import Path
+        from meeting_os.store import Store
+        with tempfile.TemporaryDirectory() as tmp:
+            s=Store(Path(tmp)/'meeting-os.sqlite');mid=s.create_meeting('Sprint',{})
+            failures=[]
+            def worker(n):
+                try: s.record_analysis_usage(mid,'openai/gpt-4.1-mini',{'prompt_tokens':n,'completion_tokens':1,'cost':0.001,'estimated':False})
+                except Exception as exc: failures.append(exc)
+            threads=[threading.Thread(target=worker,args=(i,)) for i in range(8)]
+            for t in threads: t.start()
+            for t in threads: t.join()
+            self.assertEqual(failures,[])
+            rows=s.analysis_usage(mid)
+            self.assertEqual(len(rows),8)   # the lock: eight workers on ONE connection, no row lost
+            self.assertEqual(s.analysis_cost_totals(mid)['calls'],8)
+            s.close()
+
+    def test_a_retried_call_is_billed_twice_and_recorded_twice(self):
+        """Audit #8. A starved reasoning answer is re-posted, and the sink used to read only the LAST result:
+        the first call was paid for and invisible. Every `_post` is metered now."""
+        from meeting_os.openrouter import analysis_usage_recorder
+        answers=[{'choices':[{'finish_reason':'length','message':{'content':''}}],'usage':{'cost':0.05}},
+                 {**self.RESPONSE,'usage':{'cost':0.006}}]
+        self.requests=[]
+        def transport(request,timeout):
+            self.requests.append((request,timeout))
+            return Response(json.dumps(answers[min(len(self.requests)-1,len(answers)-1)]).encode())
+        client=OpenRouterClient('k',transport=transport)
+        seen=[]
+        with analysis_usage_recorder(lambda model,usage: seen.append((model,usage['cost']))):
+            self.assertEqual(client.analysis('openai/gpt-4.1-mini',consent=True).complete('s','u'),'{"summary":[]}')
+        self.assertEqual(len(self.requests),2)
+        self.assertEqual(seen,[('openai/gpt-4.1-mini',0.05),('openai/gpt-4.1-mini',0.006)])   # 0.056 spent, 0.056 recorded
+
+    def test_a_fallback_call_is_recorded_against_the_model_that_answered(self):
+        """The other half of #8: the model is carried per call rather than written onto the shared adapter."""
+        from meeting_os.openrouter import analysis_usage_recorder, ANALYSIS_FALLBACK_MODEL
+        self.requests=[]
+        def transport(request,timeout):
+            self.requests.append((request,timeout))
+            if json.loads(request.data)['model']=='deepseek/deepseek-v3.2':
+                raise urllib.error.HTTPError(request.full_url,429,'rate limited',{},io.BytesIO(b'{}'))
+            return Response(json.dumps({**self.RESPONSE,'usage':{'cost':0.002}}).encode())
+        llm=OpenRouterClient('k',transport=transport).analysis('deepseek/deepseek-v3.2',consent=True)
+        seen=[]
+        with analysis_usage_recorder(lambda model,usage: seen.append(model)):
+            llm.complete('s','u')
+        self.assertEqual(seen,[ANALYSIS_FALLBACK_MODEL])   # the row says who answered…
+        self.assertEqual(llm.model_id,'deepseek/deepseek-v3.2')   # …and the shared adapter is untouched
 
     def test_an_analysis_records_its_calls_against_the_meeting(self):
         import tempfile

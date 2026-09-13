@@ -231,9 +231,45 @@ class TokenTests(CloudFixture):
         self.assertIn('install.sh', line['line'])
         self.assertEqual(TC.invite_line(self.tmp)['token'], '')                      # no key here: nothing to invite with
 
-    def test_a_junk_token_file_falls_back_to_the_key(self):
-        mac = self.mac('a'); (mac.data / 'team.token').write_text('elle yazılmış\n', encoding='utf-8')
-        self.assertEqual(TC.token(mac.data), hashlib.sha256(b'meetingos-team-v1:' + self.KEY.encode()).hexdigest())
+    def test_a_junk_token_file_is_reported_instead_of_being_derived_over(self):
+        """Audit #6. Falling back to the key here is how a Mac changed teams without anyone saying so: the
+        derived token is a DIFFERENT team id whenever the API key was rotated since joining, and the mirror
+        and every pulled report move with it. A file that exists and does not parse is a fault to report."""
+        mac = self.mac('a'); path = mac.data / 'team.token'
+        path.write_text('elle yazılmış\n', encoding='utf-8')
+        self.assertIsNone(TC.token(mac.data))
+        self.assertEqual(path.read_text(encoding='utf-8'), 'elle yazılmış\n')   # untouched, not replaced
+        journal = [e for e in E.entries(mac.data) if e['kind'] == 'cloud']
+        self.assertEqual(len(journal), 1)
+        self.assertEqual(journal[0]['context'], {'where': 'team_cloud.token'})
+
+    def test_an_empty_token_file_never_becomes_a_different_team(self):
+        """The crash/full-disk/SIGTERM shape of #6: `join` was a non-atomic O_TRUNC write, so an interrupted
+        join left `team.token` empty — and the next call filled the blank with a token derived from the
+        CURRENT api key. Same Mac, same user, different team, no message. The write is atomic now and the
+        blank is never filled in."""
+        mac = self.mac('a')
+        derived = hashlib.sha256(b'meetingos-team-v1:' + self.KEY.encode()).hexdigest()
+        path = mac.data / 'team.token'
+        path.write_text('', encoding='utf-8')
+        self.assertIsNone(TC.token(mac.data))
+        self.assertEqual(path.read_text(encoding='utf-8'), '')          # the derived token was NOT written over it
+        self.assertNotEqual(TC.token(mac.data), derived)
+        self.assertFalse(TC.configured(mac.settings(), mac.data))       # no token, no cloud: nothing is uploaded
+        self.assertEqual(TC.sync(mac.data, mac.settings())['error'], 'unconfigured')
+        # and the fix for the user is the one the journal names: rejoin with the invite.
+        TC.join(mac.data, 'f' * 40)
+        self.assertEqual(TC.token(mac.data), 'f' * 40)
+
+    def test_the_derived_token_is_written_once_and_never_over_an_existing_file(self):
+        """`_remember_token` opens O_CREAT|O_EXCL: whatever is on disk wins, token or garbage. It could
+        otherwise overwrite a `join` that landed between the read and the write."""
+        mac = self.mac('a')
+        derived = TC.token(mac.data)
+        self.assertTrue(TC._remember_token(mac.data, derived) is False)   # the file it just made is in the way
+        (mac.data / 'team.token').write_text('e' * 40 + '\n', encoding='utf-8')
+        self.assertFalse(TC._remember_token(mac.data, derived))
+        self.assertEqual(TC.token(mac.data), 'e' * 40)
 
     def test_the_derived_token_is_written_down_so_a_new_api_key_never_moves_this_mac(self):
         """The API key pays for summaries; it is not who the user's team is. Renewing it, or pasting a personal
@@ -821,6 +857,21 @@ class InviteTests(CloudFixture):
         self.assertEqual(reports.load_settings(newcomer)['team_url'], self.url)
         # The teammate's word is already on this Mac, in the mirror the rest of the app reads as a team folder.
         self.assertIn('Jira', (TC.mirror_dir(newcomer) / TC.WORDS_FILE).read_text(encoding='utf-8'))
+
+    def test_the_join_sync_fits_inside_the_fast_bridges_watchdog(self):
+        """Audit #15. `team_join` is dispatched from the FAST block, whose watchdog SIGTERMs the process at
+        10 s — and the token is written before the sync starts. A 20 s budget therefore meant: on a slow
+        server the newcomer's Mac IS joined while the sheet says the join failed."""
+        a = self.mac('a')
+        newcomer = self.blank('bütçe')
+        seen = {}
+        real = TC.sync
+        with patch.object(TC, 'sync', lambda data_dir, settings=None, **kw: seen.update(kw) or real(data_dir, settings, **kw)):
+            with self.hosted('butce'):
+                result = TC.accept_invite(newcomer, TC.invite_url(a.data))
+        self.assertTrue(result['joined'])
+        self.assertEqual(seen.get('budget'), TC.JOIN_BUDGET)
+        self.assertLessEqual(TC.JOIN_BUDGET, 6.0)   # plus the token write and the settings write, under 10 s
 
     def test_the_invite_file_works_exactly_like_the_link(self):
         a = self.mac('a')
