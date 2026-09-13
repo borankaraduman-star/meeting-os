@@ -49,9 +49,12 @@ paketteki ffmpeg'i bulsun (Swift `jobEnvironment` + bridge `Process.environment`
 4. `--invite`: gerçek veri klasöründen `team_cloud.invite_file_text(REAL_DATA_DIR, include_key=True)` → `invite.json`.
 5. Doğrulama (betik içinde, imzasız kopyada): `runtime/bin/python3 -m meeting_os doctor`, `runtime/bin/python3 -c
    "import resemblyzer, silero_vad, sherpa_onnx, torch"`, `runtime/bin/ffmpeg -version`, paket boyutu yazdırılır.
-6. İmza ve zip betiğin DIŞINDA (Boran'ın Mac'i): `scripts/signing.py --sign "build/bundle/Meeting OS.app"` →
-   `ditto -c -k --keepParent` → `build/Meeting-OS-<sürüm>.zip` + sha256. (`codesign --deep` Resources altındaki Mach-O
-   dosyaları da imzalar; hardened runtime yok, kendinden imzalı sertifika.)
+6. İmza ve noterleme paket oluşturma betiğinin DIŞINDA: Developer ID Application sertifikası ve `meetingos`
+   noter profili hazır olduğunda `sh scripts/sign-notarize.sh "build/bundle/Meeting OS.app"` çalıştırılır.
+   Betik içteki kodu önce imzalar, hardened runtime ve güvenli zaman damgası kullanır; Apple sonucu tam olarak
+   `Accepted`, damga yapıştırma ve Gatekeeper kontrolü başarılıysa ZIP + sha256 üretir. Başarısız doğrulama veya
+   arşiv üretimi mevcut dağıtım ZIP'ini değiştirmez. Sertifika edinmek için Apple Developer web hesabı veya
+   Xcode kullanılır; App Store Connect sertifika API'si Developer ID oluşturmayı desteklemez.
 
 ## İlk açılış (Swift)
 
@@ -133,8 +136,10 @@ der ve hiçbir yere bağlanmaz. `BUNDLE_BASE_URL` = `https://hermes-vps.tail2d8c
   varsa yeni paketinki **birebir aynı** olmalıdır ("Paket imzası uygulamayla eşleşmiyor"). `spctl --assess`
   **bilerek yoktur**: paket noter onayı kurulana dek ad-hoc imzalıdır, Gatekeeper her meşru güncellemeyi
   reddederdi. Karantina temizliği bu yüzden takastan *sonra* kalabilir — imza zaten doğrulanmıştır.
-  **Geçiş bedeli:** imzalayan kimlik değişince (bugünkü yerel sertifika WHA43MLZN6 → Developer ID 3ZJMCZ6BVJ)
+  **Geçiş bedeli:** eski ve yeni uygulamanın `codesign -dvv` çıktısındaki `TeamIdentifier` farklıysa
   güncelleme bilerek reddedilir; o sürüm her Mac'e bir kez elle indirilir, sonrası yine uygulama içinden gelir.
+  Sertifika adındaki parantezli değer ekip kimliği yerine kullanılmaz; gerçek yeni sertifika görülmeden
+  bu geçişin ekip değiştirip değiştirmediği varsayılmaz.
 - `update-status.json` sözleşmesi `scripts/update.sh` ile aynıdır (`state`,`from`,`to`,`message`,`time`); tek
   eklenen anahtar `percent`. Böylece uygulamanın mevcut yoklaması değişmeden çalışır.
 

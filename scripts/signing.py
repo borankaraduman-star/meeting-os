@@ -12,6 +12,7 @@ import plistlib
 import re
 import subprocess
 import shutil
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,9 +38,10 @@ def choose_identity(identities, pinned, requested):
     return selected
 
 
-def resolve():
+def resolve(*, include_name=False):
     listing = subprocess.check_output(['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
     identities = re.findall(r'^\s*\d+\) ([A-F0-9]{40}) ', listing, re.M)
+    names = dict(re.findall(r'^\s*\d+\) ([A-F0-9]{40}) "([^"]+)"', listing, re.M))
     PIN.parent.mkdir(parents=True, exist_ok=True)
     with PIN.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -49,7 +51,46 @@ def resolve():
             temporary = PIN.with_suffix('.tmp')
             temporary.write_text(json.dumps({'identity': selected}) + '\n')
             temporary.replace(PIN)
+    if include_name:
+        if selected != '-' and selected not in names:
+            raise ValueError('The selected certificate name is unavailable; signing profile cannot be verified.')
+        return selected, names.get(selected, '')
     return selected
+
+
+def runtime_entitlements(app):
+    """Only the protected resources the app declares using. No sandbox, JIT, or validation exceptions.
+
+    The capture helper declares microphone access; the main app also declares calendar access. Screen
+    capture has no additional hardened-runtime entitlement and does not justify Apple Events access.
+    """
+    with (app / 'Contents/Info.plist').open('rb') as source:
+        info = plistlib.load(source)
+    def declared(key):
+        return isinstance(info.get(key), str) and bool(info[key].strip())
+    entitlements = {}
+    if declared('NSMicrophoneUsageDescription'):
+        entitlements['com.apple.security.device.audio-input'] = True
+    if any(declared(key) for key in ('NSCalendarsUsageDescription', 'NSCalendarsFullAccessUsageDescription',
+                                    'NSCalendarsWriteOnlyAccessUsageDescription')):
+        entitlements['com.apple.security.personal-information.calendars'] = True
+    return entitlements
+
+
+def sign(app):
+    identity, name = resolve(include_name=True)
+    if name.startswith('Developer ID Application:'):
+        entitlements = runtime_entitlements(app)
+        with tempfile.TemporaryDirectory(prefix='meetingos-sign-') as temporary:
+            path = Path(temporary) / 'entitlements.plist'
+            path.write_bytes(plistlib.dumps(entitlements))
+            # Sign this bundle, not nested helpers with the main app's permissions. Full standalone
+            # bundles sign their embedded runtime inside-out in sign-notarize.sh.
+            subprocess.run(['codesign', '--force', '--timestamp', '--options', 'runtime', '--entitlements', str(path),
+                            '--sign', identity, str(app)], check=True)
+    else:
+        subprocess.run(['codesign', '--force', '--deep', '--sign', identity, str(app)], check=True)
+    verify(app)   # never reached after a signing/timestamp failure; there is no weaker fallback
 
 
 def verify(app):
@@ -107,9 +148,7 @@ def main():
     if args.resolve:
         print(resolve())
     elif args.sign:
-        identity = resolve()
-        subprocess.run(['codesign', '--force', '--deep', '--sign', identity, str(args.sign)], check=True)
-        verify(args.sign)
+        sign(args.sign)
     elif args.publish and args.target:
         publish(args.publish, args.target)
     else:

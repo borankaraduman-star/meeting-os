@@ -52,6 +52,18 @@ To deliberately change certificates, close the application, retain a backup of
 the pin, then remove the pin and select the intended identity. Treat this as a
 permission migration. Never silently fall back to ad-hoc signing.
 
+When the selected identity is `Developer ID Application`, the source builders
+also enable the hardened runtime and request a secure timestamp. Microphone and
+calendar entitlements come only from the bundle's usage descriptions; the capture
+helper therefore receives audio-input access without the main app's calendar
+access. The embedded Python distribution still needs the separate
+`scripts/sign-notarize.sh` flow, which signs its nested code before the outer app.
+
+Compare `codesign -dvv`'s `TeamIdentifier` on the old and new applications before
+a distribution migration. The parenthesized value in a certificate's display
+name is not a substitute for that field. A different team requires a one-time
+manual installation under the updater's existing identity check.
+
 ## One-time migration of the old grant
 
 After replacing the old ad-hoc application with the consistently signed build:
