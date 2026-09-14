@@ -818,7 +818,7 @@ def dispatch(request, db=None):
         if action=='storage_report':
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
         if action=='storage_compact':
-            from .cloud_finalize import compact_capture, reopen_echo_skips
+            from .cloud_finalize import compact_capture
             from .audio_archive import archive_all
             freed=0;count=0
             for m in store.meetings():
@@ -854,6 +854,7 @@ def dispatch(request, db=None):
                 # without the ten-second watchdog killing it. Launch does its own; a teach publishes straight away.
                 from .team_knowledge import sync as team_sync
                 # Before the team sync, so the meeting's report goes out complete once the pieces are back.
+                from .cloud_finalize import reopen_echo_skips
                 reopened=step('echo_reopen',lambda:reopen_echo_skips(store),[])
                 team=step('team_sync',lambda:team_sync(store,data,settings=settings))
                 cleaned=step('audio_retention',lambda:storage_cleanup(store,data,days=days,dry_run=False),{'meetings':[],'bytes':0}) if days>0 else {'meetings':[],'bytes':0}

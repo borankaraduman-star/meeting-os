@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 92 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 93 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.88](#v1288) | 2026-09-14 | v1.2.88 — Kendi sesiniz artık atılmıyor; Developer ID imzalı ve noter onaylı paket |
 | [v1.2.87](#v1287) | 2026-09-13 | v1.2.87 — Denetim sürümü: paket kendini güncelleyebilir, transkript kaybı kapatıldı |
 | [v1.2.86](#v1286) | 2026-09-12 02:10 | v1.2.86 — Özet ve görev uyarlaması: düzenlemelerden tercih, görev hata sınıfları |
 | [v1.2.85](#v1285) | 2026-09-12 01:20 | v1.2.85 — Deney ve geri dönüş: sürümlü yerel politika, sessiz ucuz deneyler |
@@ -112,6 +113,20 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1288"></a>
+### v1.2.88 — Kendi sesiniz artık atılmıyor; Developer ID imzalı ve noter onaylı paket
+
+2026-09-14 · yerel not · GitHub sürüm sayfası yok
+
+Boran, hoparlörle girdiği Zoom toplantısında herkesin transkriptini gördü, kendisininkini görmedi. Sebep 1.1.0'dan beri her sürümde vardı: beş dakikalık mikrofon parçası hoparlörden gelen sesle ilişkiliyse parçanın **tamamı** "yankı" sayılıp hiç transkribe edilmiyordu; kulaklıkla girilen toplantılarda yankı olmadığı için fark edilmedi. Mikrofon kapısı bunun sebebi değildi (0 parça attı).
+
+- **Yankı diye parça atılmaz** (Codex, `docs/reviews/2026-09-14-zoom-owner-voice.md`): korelasyon ölçümü artık yalnız tanı için; mikrofon parçaları sessiz değilse ve kapı kapalı değilse her zaman transkribe edilir. Transkript üstündeki yankı işaretleme (aynı cümlenin iki kaynakta görünmesi) sürer. Bedel: hoparlörlü toplantılarda mikrofon parçaları da yüklenir; 65 dakikalık toplantıda yaklaşık 0,10 $ ek.
+- **Kaybolan ses geri gelir:** saatlik bakım geçişi son 3 günün, sesi hâlâ diskte olan, "yankı" atlaması taşıyan tamamlanmış toplantılarını bir kez boşta yeniden deneme kuyruğuna koyar ("Mikrofon sesi geri getiriliyor (13 parça)"). Yalnız atlanan mikrofon parçaları yüklenir; ödenmiş sistem transkripti ve sessizlik atlamaları korunur. Bugünkü iki toplantı (diğer Mac) bu yolla düzelir; özet sonra yeniden çıkarılır.
+- Rapor sayaçları dürüst: `silent_windows_skipped` ayrı; `echo_windows_skipped` yalnız eski sürümün attıklarını sayar (1.2.87'ye kadar sessizlik de "yankı" görünüyordu).
+- **Developer ID + noter onayı:** Codex sertifikayı kurdu (Team WHA43MLZN6, aynı ekip kimliği → uygulama içi güncelleme reddetmez), noter profili `meetingos` çalışıyor; `signing.py` Developer ID seçildiğinde hardened runtime + güvenli zaman damgası, yalnız mikrofon/takvim entitlement'ı; `sign-notarize.sh` noter sonucunu JSON'dan doğrular, "Accepted" değilse paket değişmez. Bu sürümün paketi noter onaylıysa "Yine de Aç" adımı kalkar.
+- Özet kartında görev sayısı ifadesi netleştirildi (Codex).
+- Testler: Python 1323 (4 yeni), Swift 352 (Codex: 4 yeni).
 
 <a id="v1287"></a>
 ### v1.2.87 — Denetim sürümü: paket kendini güncelleyebilir, transkript kaybı kapatıldı
