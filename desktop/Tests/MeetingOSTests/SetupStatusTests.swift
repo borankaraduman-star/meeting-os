@@ -103,6 +103,14 @@ final class SetupStatusTests: XCTestCase {
     /// The team knowledge base with nothing to set up: the bridge says "cloud" and the row has to read as a
     /// working shared brain, an outage the app survives, or a first sync that has not happened yet — never as
     /// a missing folder the user has to go and pick.
+    func testATeamOfOneNobodyInvitedReadsAsMissing() {
+        // The key was pasted, the invite never was (14 Eyl 2026): the row must say so, above every sync detail.
+        let alone=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["alone":true,"last_ok":"2026-09-14T12:44:50+00:00","hosts":[]]])
+        XCTAssertEqual(alone.state,.missing)
+        XCTAssertTrue(alone.hint.contains("davet uygulanmadı"))
+        let joined=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["alone":false,"last_ok":"2026-09-14T12:44:50+00:00","hosts":[]]])
+        XCTAssertEqual(joined.state,.ok)
+    }
     func testTeamRowReadsTheCloudState() {
         let ok=SetupStatus.teamRootCheck(["team_root_kind":"cloud","team_cloud":["last_ok":"2026-09-10T21:40:03.512345+00:00","hosts":["mac-a","mac-b"]]])
         XCTAssertEqual(ok.id,"team"); XCTAssertEqual(ok.state,.ok)

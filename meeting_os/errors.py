@@ -303,6 +303,19 @@ def collect_crashes(data_dir, *, directory=None, now=None):
     return recorded
 
 
+UPDATE_REASONS = (('indirilemedi', 'download'), ('indiril', 'download'), ('adresi güvenli', 'address'), ('doğrulanamadı', 'checksum'),
+                  ('sha256', 'checksum'), ('imza', 'signature'), ('codesign', 'signature'), ('yazılabilir değil', 'folder'),
+                  ('disk', 'space'), ('yer', 'space'), ('kapanmadı', 'quit'), ('bulunamadı', 'missing'), ('yerine kon', 'swap'))
+
+def update_reason(message):
+    """One word for the team export, which carries codes and never sentences: a teammate's "update-failed" line
+    said nothing about WHY (14 Eyl 2026), and the sentence itself must stay on their Mac."""
+    text = str(message or '').lower()
+    for needle, reason in UPDATE_REASONS:
+        if needle in text: return reason
+    return 'other'
+
+
 def note_update_failure(data_dir):
     """scripts/update.sh already writes its verdict; a failed one reached nowhere a person would look.
     Imported once, keyed on the failure's own time, so an hourly sweep does not repeat it."""
@@ -313,7 +326,7 @@ def note_update_failure(data_dir):
         state = _load_state(data_dir)
         if state.get('update_time') == stamp: return None
         entry = record('update', f"Güncelleme başarısız: {raw.get('message') or 'ayrıntı update.log'}",
-                       context={'state': 'failed', 'time': stamp}, data_dir=data_dir)
+                       context={'state': 'failed', 'time': stamp, 'reason': update_reason(raw.get('message'))}, data_dir=data_dir)
         _save_state(data_dir, {**state, 'update_time': stamp})
         return entry
     except (OSError, ValueError): return None
@@ -360,7 +373,7 @@ TEAM_CONTEXT = {
     'job': ('command', 'supervised', 'state', 'seconds', 'pieces'),
     'cloud': ('http', 'model', 'state', 'seconds', 'pieces'),
     'capture': ('state', 'seconds', 'pieces'),
-    'update': ('state',),
+    'update': ('state', 'reason',),
     'crash': ('state',),
 }
 

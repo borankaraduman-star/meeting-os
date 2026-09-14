@@ -144,6 +144,12 @@ enum SetupStatus {
             let lastOK=cloud["last_ok"] as? String ?? ""
             let lastError=cloud["last_error"] as? String ?? ""
             let waiting=cloud["outbox_pending_since"] as? String ?? ""
+            // A team of one that nobody invited this Mac into: the key was pasted, the invite never was. A
+            // teammate sat like this for hours (14 Eyl 2026) while every line here read green-ish.
+            if cloud["alone"] as? Bool == true {
+                return SetupCheck(id:"team",title:"Ekip bilgi tabanı",state:.missing,
+                                  hint:"yalnız bu Mac · davet uygulanmadı · Ayarlar → Ekip → Davet yapıştır… (ya da kişisel bağlantınıza tıklayın)")
+            }
             // An error outranks an older success: a Mac that synced this morning and has been failing since
             // lunch used to read "son eşitleme 09:14" and nothing else (Codex, 10 Sep 2026, P1 #8 note).
             if !lastError.isEmpty {

@@ -55,6 +55,7 @@ from .glossary import ICLOUD, SHARED_DIR, REAL_DATA_DIR   # iCloud is only ever 
 DEFAULT_URL = 'https://hermes-vps.tail2d8c7e.ts.net/meetingos'
 TOKEN_FILE = 'team.token'
 KEY_FILE = 'openrouter.key'
+JOINED_FILE = 'team.joined'                # written by `join` only: proof the token came from an invite, not from the key
 DEVICE_FILE = 'device.id'
 STATE_FILE = 'team-cloud-state.json'      # 1.2.67 and earlier: one state file, whatever team the Mac was in
 STATE_PREFIX = 'team-cloud-state-'        # since: `team-cloud-state-<team id short>.json`, one per team
@@ -342,6 +343,10 @@ def join(data_dir, tok, store=None):
     data = Path(data_dir); data.mkdir(parents=True, exist_ok=True, mode=MIRROR_MODE)
     previous = token(data)
     path = _write_token(data / TOKEN_FILE, tok)
+    # The marker is what tells a derived team of one apart from a real join: a teammate who pasted only the
+    # OpenRouter key sat in a team of one for hours (14 Eyl 2026) and nothing on screen said so.
+    try: _write_private(data / JOINED_FILE, tok + '\n')
+    except OSError: pass
     left = _leave_team(data, store) if previous and previous != tok else {}
     return {'joined': True, 'team_id_short': team_id_short(tok), 'path': str(path), **left}
 
@@ -600,6 +605,13 @@ def clear_outbox(data_dir, keep=None):
     except OSError: return False
 
 
+def _joined(data_dir, tok):
+    """True when `team.joined` names the token in `team.token` — this team was entered through an invite."""
+    if not tok: return False
+    try: return (Path(data_dir) / JOINED_FILE).read_text(encoding='utf-8').strip().lower() == tok
+    except (OSError, ValueError): return False
+
+
 def status(data_dir, settings=None):
     """What the setup card and the heartbeat show. Reads one small file; never touches the network."""
     data = Path(data_dir); state = _load_state(data); tok = token(data)
@@ -608,12 +620,17 @@ def status(data_dir, settings=None):
         host = host_name()
     except Exception: host = ''
     box = outbox(data)
-    return {'configured': tok is not None, 'url': url(settings or {}) if settings else (state.get('url') or DEFAULT_URL),
+    hosts = state.get('hosts') or []
+    joined = _joined(data, tok)
+    # Alone: a token nobody invited this Mac into and no other Mac in sight. Boran's own first install and
+    # every teammate who joined before the marker existed have hosts, so they never read as alone.
+    alone = tok is not None and not joined and not hosts
+    return {'configured': tok is not None, 'joined': joined, 'alone': alone, 'url': url(settings or {}) if settings else (state.get('url') or DEFAULT_URL),
             'host': host, 'device': device_id(data), 'team_id_short': state.get('team_id_short') or team_id_short(tok),
             # Honest, not green: "son eşitleme 14:20" is a lie while a word the user taught at 14:35 is still here.
             'outbox_pending_since': box['since'] if box['pending'] else None, 'outbox_reasons': box['reasons'],
             'last_ok': state.get('last_ok'), 'last_error': state.get('last_error'), 'last_attempt': state.get('last_attempt'),
-            'hosts': state.get('hosts') or [], 'pushed': len(state.get('pushed') or {}), 'pulled': len(state.get('pulled') or {})}
+            'hosts': hosts, 'pushed': len(state.get('pushed') or {}), 'pulled': len(state.get('pulled') or {})}
 
 
 def _short(exc):

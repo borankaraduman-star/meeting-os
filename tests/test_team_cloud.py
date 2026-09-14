@@ -1246,3 +1246,29 @@ class CardErrorText(unittest.TestCase):
             journal = (data / 'errors.jsonl').read_text(encoding='utf-8')
             self.assertIn('URLError', journal)
             self.assertIn('Connection refused', journal)
+
+
+class JoinedMarker(CloudFixture):
+    """A teammate who pasted only the OpenRouter key sat in a team of one for hours (14 Eyl 2026) and nothing on
+    screen said so. `join` now leaves a marker; `status` reports `alone` when the token was never invited in
+    and no other Mac is in sight."""
+
+    def test_a_derived_token_without_teammates_reads_as_alone(self):
+        data = self.mac('solo').data   # the fixture writes a key; nothing else
+        st = TC.status(data)
+        self.assertTrue(st['configured']); self.assertFalse(st['joined']); self.assertTrue(st['alone'])
+
+    def test_a_join_leaves_the_marker_and_is_never_alone(self):
+        data = self.mac('solo').data   # the fixture writes a key; nothing else
+        TC.status(data)   # derives a team of one first, the way a heartbeat would
+        TC.join(data, 'a' * 64)
+        self.assertEqual((data / TC.JOINED_FILE).read_text(encoding='utf-8').strip(), 'a' * 64)
+        st = TC.status(data)
+        self.assertTrue(st['joined']); self.assertFalse(st['alone']); self.assertEqual(st['team_id_short'], TC.team_id_short('a' * 64))
+
+    def test_a_team_with_other_macs_is_not_alone_even_without_the_marker(self):
+        data = self.mac('solo').data   # the fixture writes a key; nothing else
+        tok = TC.token(data)
+        TC._save_state(data, {'team_id_short': TC.team_id_short(tok), 'hosts': ['OTHER-MAC']})
+        st = TC.status(data)
+        self.assertFalse(st['joined']); self.assertFalse(st['alone'])

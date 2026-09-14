@@ -755,6 +755,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// (the welcome screen reads that), and the answer of the last join — which IS the confirmation sheet.
     @Published var teamTarget=TeamTarget.off
     @Published var teamConfigured=false
+    @Published var teamAlone=false            // a derived team of one: the invite was never applied
     @Published var teamJoin:TeamJoinOutcome?
     /// Whether this is a downloaded, self-contained app rather than a checkout. Read by the setup card (no
     /// git rows), the welcome screen and the update channel.

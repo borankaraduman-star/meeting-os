@@ -15,14 +15,14 @@ struct WelcomeView:View {
     /// not be applied, because then pasting one is the only way in.
     /// Also shown when the team is already joined but there is no key yet (a package invite carries only the team;
     /// the personal key arrives as a second link): pasting that link here writes the key.
-    private var needsInvite:Bool { OpenRouterCredential.cached()==nil && !model.bundleInvitePending }
+    private var needsInvite:Bool { (OpenRouterCredential.cached()==nil && !model.bundleInvitePending) || model.teamAlone }
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
             Text("Hoş geldiniz").font(.system(size:27,weight:.bold,design:.rounded))
             Text("Meeting OS Zoom toplantılarını kaydeder, bulutta Türkçe yazıya çevirir, konuşanları tanır ve kararları, görevleri çıkarır. Bu Mac’te model yüklenmez.").font(.callout).foregroundStyle(.secondary).frame(maxWidth:560,alignment:.leading)
             if needsInvite {
                 VStack(alignment:.leading,spacing:8) {
-                    Text(model.teamConfigured ? "Kişisel bağlantınızı yapıştırın" : "Ekipten davet aldınız mı?").font(.headline)
+                    Text(model.teamAlone ? "Ekibe henüz katılmadınız · davet bağlantınızı yapıştırın" : model.teamConfigured ? "Kişisel bağlantınızı yapıştırın" : "Ekipten davet aldınız mı?").font(.headline)
                     HStack(spacing:10) {
                         TextField("Davet bağlantısını buraya yapıştırın",text:$invite)
                             .textFieldStyle(.roundedBorder).frame(width:320)

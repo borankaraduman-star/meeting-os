@@ -307,3 +307,27 @@ class TeamExportTests(unittest.TestCase):
 
 
 if __name__=='__main__': unittest.main()
+
+
+class UpdateFailureReason(unittest.TestCase):
+    """The team export carries a one-word reason: a teammate's `update-failed` line said nothing (14 Eyl 2026)."""
+
+    def test_messages_map_to_codes(self):
+        from meeting_os.errors import update_reason
+        self.assertEqual(update_reason('Güncelleme indirilemedi (URLError)'), 'download')
+        self.assertEqual(update_reason('Paket imzası uygulamayla eşleşmiyor'), 'signature')
+        self.assertEqual(update_reason('Uygulama klasörü yazılabilir değil (/Applications)'), 'folder')
+        self.assertEqual(update_reason('Uygulama kapanmadı; güncelleme kurulmadı'), 'quit')
+        self.assertEqual(update_reason(None), 'other')
+
+    def test_the_reason_reaches_the_team_line(self):
+        import json, tempfile
+        from pathlib import Path
+        from meeting_os import errors
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / errors.UPDATE_STATUS_FILE).write_text(json.dumps({'state': 'failed', 'message': 'Güncelleme indirilemedi (URLError)', 'time': '2026-09-14 16:38:49'}), encoding='utf-8')
+            self.assertIsNotNone(errors.note_update_failure(tmp))
+            line = json.loads(errors.export_for_team(tmp).strip().splitlines()[-1])
+            self.assertEqual(line['code'], 'update-failed')
+            self.assertEqual(line['context'].get('reason'), 'download')
+            self.assertNotIn('URLError', json.dumps(line))

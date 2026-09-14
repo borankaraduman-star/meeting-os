@@ -381,6 +381,7 @@ extension Model {
             // decides whether the three share switches mean anything at all.
             teamTarget=TeamInvite.target(r,home:NSHomeDirectory())
             teamConfigured=teamTarget.kind == .cloud
+            teamAlone=(r["team_cloud"] as? [String:Any])?["alone"] as? Bool ?? false
             adoptTeamOutbox(r["team_cloud"] as? [String:Any])   // a report a job wrote while nobody was looking
         }
         setupChecks=checks
@@ -407,6 +408,7 @@ extension Model {
     func loadTeamStatus() async {
         guard let r=try? await request(["action":"team_status"]) else { return }
         teamConfigured=r["configured"] as? Bool ?? false
+        teamAlone=r["alone"] as? Bool ?? false
     }
     /// The invite, on the pasteboard. With `includeKey` the teammate never meets the OpenRouter key step —
     /// which also means the link now carries a password that pays Boran's bill, so the confirmation says so.
