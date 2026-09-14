@@ -818,7 +818,7 @@ def dispatch(request, db=None):
         if action=='storage_report':
             return storage_report(store,DATA_DIR if db is None else Path(db).parent,db or DATA_DIR/'meeting-os.sqlite')
         if action=='storage_compact':
-            from .cloud_finalize import compact_capture
+            from .cloud_finalize import compact_capture, reopen_echo_skips
             from .audio_archive import archive_all
             freed=0;count=0
             for m in store.meetings():
@@ -853,6 +853,8 @@ def dispatch(request, db=None):
                 # Hourly, idle, on the slow bridge: the one place a team sync can take a second on a network folder
                 # without the ten-second watchdog killing it. Launch does its own; a teach publishes straight away.
                 from .team_knowledge import sync as team_sync
+                # Before the team sync, so the meeting's report goes out complete once the pieces are back.
+                reopened=step('echo_reopen',lambda:reopen_echo_skips(store),[])
                 team=step('team_sync',lambda:team_sync(store,data,settings=settings))
                 cleaned=step('audio_retention',lambda:storage_cleanup(store,data,days=days,dry_run=False),{'meetings':[],'bytes':0}) if days>0 else {'meetings':[],'bytes':0}
                 # Then the text: off unless the user picked a horizon, and when they did, the whole meeting goes the
@@ -894,7 +896,7 @@ def dispatch(request, db=None):
                     'team_effect':{k:team_effect.get(k) for k in ('right','wrong','clusters','team_samples','fresh')},
                     'archived_meetings':arch['meetings'],'archived_bytes':arch['bytes'],'retention_days':days,'removed_meetings':len(cleaned['meetings']),'removed_bytes':cleaned['bytes'],
                     'text_retention_days':text_days,'removed_text_meetings':len(text['meetings']),'removed_text_bytes':text['bytes'],
-                    'retention_warning':warning,'text_retention_warning':text_warning,'team':team,'outbox':outbox,
+                    'retention_warning':warning,'text_retention_warning':text_warning,'team':team,'outbox':outbox,'echo_reopened':reopened,
                     'failures':failures}   # what broke, by step: the Settings card can finally say "team sync failed 14 times"
         if action=='storage_cleanup':
             return storage_cleanup(store,DATA_DIR if db is None else Path(db).parent,days=request.get('days',30),dry_run=request.get('dry_run',True) is not False)

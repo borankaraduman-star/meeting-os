@@ -162,7 +162,7 @@ ALLOWED = {
         'engine': TOKEN, 'model': TOKEN, 'cloud_mode': TOKEN,
         'duration_seconds': NUM, 'segments': NUM, 'words': NUM, 'capture': _CAPTURE,
         'pieces': NUM, 'pieces_paid': NUM, 'pieces_skipped': NUM, 'cost_usd': NUM, 'uploaded_seconds': NUM,
-        'echo_windows_skipped': NUM, 'mic_gated_windows': NUM, 'echo_segments': NUM,
+        'echo_windows_skipped': NUM, 'mic_gated_windows': NUM, 'echo_segments': NUM, 'silent_windows_skipped': NUM, 'echo_reopen_pieces': NUM,
         'identity': {'embedded': NUM, 'named': NUM, 'suggested': NUM, 'fed': NUM},
         'markers': NUM, 'glossary_suggestions': NUM,
         # How many spelling-hint terms fitted the 900-character budget and how many did not. Numbers only:

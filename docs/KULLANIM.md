@@ -1,4 +1,4 @@
-# Meeting OS — Kullanım kılavuzu (1.2.87)
+# Meeting OS — Kullanım kılavuzu (1.2.88)
 
 Meeting OS, Mac’te Zoom (ya da herhangi bir) toplantısını kaydeder, sesi OpenRouter’da Türkçe yazıya çevirir, konuşanları ses profilleriyle tanır ve özet, karar, görev çıkarır. Bu Mac’te model yüklenmez; tek yerel iş ses profili eşleştirmesidir. Kendiliğinden dışarı çıkanlar: kayıt bitince ses ve transkript OpenRouter’a; her toplantıdan sonra sayısal teşhis raporu, saatte bir nabız ve kayıt sürerken dakikada bir kayıt nabzı iCloud’daki ya da ekip klasörüne (varsayılan hâlde yalnız sayılar — başlık boş, konuşmacılar S1, S2…; başlık, adlar ve transkript yalnız “Raporlara transkript metnini de ekle” açıkken girer); altı saatte bir güncelleme kontrolü GitHub’a gider. Bunların dışında hiçbir şey gönderilmez; özet, görev ve transkript dışa aktarımları dosya olarak kaydedilir (Hatırlatıcılar’a eklediğiniz görevler iCloud’la eşitlenir).
 
@@ -225,6 +225,8 @@ Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden y
 
 ## 9. Sözlük
 `iCloud Drive/MeetingOS-Shared/glossary.jsonl` (her satır `{"term": …, "expansion": …, "category": …}`); `~/Library/Application Support/MeetingOS/glossary.jsonl` Mac’e özel ek. Ayarlar → Sesler ve sözlük → **Sözlük** kutusundaki basit terim listesi aynı klasörde `vocabulary.txt` olarak tutulur (depodaki dosya yalnız ilk açılışta kopyalanan başlangıç listesidir). Üç yerde kullanılır: bulut STT’ye yazım ipucu (prompt kabul eden modellerde), transkript sonrası düzeltme önerileri (Kontrol), özetlerde kısaltma açılımı. Ham transkript kendiliğinden değişmez. Slack agent istemi: `docs/GLOSSARY.md`.
+
+**Hoparlörle de kendi sesiniz kalır (1.2.88).** Eski sürümler hoparlörden gelen sesle karışan mikrofon parçalarını bütünüyle "yankı" sayıp atıyordu; kulaklıksız Zoom'da kendi konuşmanız transkripte girmiyordu. Artık girer; aynı cümle iki kaynakta görünürse yalnız işaretlenir. Eski sürümde kaybolan son üç günün toplantıları bakım geçişinde kendiliğinden kuyruğa girer ve yalnız eksik mikrofon parçaları yüklenir.
 
 **Kendi sesiniz her toplantıda kalır (1.2.87).** Mikrofon kapısı Zoom modundayken kapı hiç açılmadıysa — Meet, Teams, telefon görüşmesi ya da Erişilebilirlik izni verilmemişse — uygulama artık kendi sesinizi atmaz; kapı yalnız gerçekten izlenip kapalı kaldığı kanıtlandığında uygulanır. Paketten kurulu 1.2.72–1.2.86 kendini güncelleyemiyordu; bu sürümü bir kez elle indirin, sonrası uygulama içinden gelir.
 

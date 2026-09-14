@@ -869,6 +869,51 @@ def compact_capture(store, mid):
     return record()
 
 
+ECHO_REOPEN_DAYS=3
+
+def reopen_echo_skips(store, *, days=ECHO_REOPEN_DAYS, now=None):
+    """Give back the owner's voice to meetings finished by 1.1.0–1.2.87.
+
+    Those versions compared every five-minute microphone piece with the system audio and, when the loudness
+    envelopes correlated, skipped the whole piece as "echo" — with the owner's own turns inside it. Boran,
+    14 Eyl 2026, on a Zoom call over speakers: "herkesin transkripti çıkardı benim çıkarmadı". The skip is
+    gone from `prepare`, and `transcribe_sources` already revisits the free `{"skipped":"echo"}` checkpoints
+    when an incomplete job resumes. This turns a finished meeting back into such a job: status `incomplete`,
+    a retry due now, one honest sidebar line — the idle queue then uploads ONLY the skipped mic pieces.
+
+    Bounded on purpose: only meetings of the last `days` (older ones were already read and would cost money
+    for nothing), only while their audio is still on disk, and once per meeting (`echo_reopened`)."""
+    from datetime import datetime, timedelta, timezone
+    now=now or datetime.now(timezone.utc)
+    reopened=[]
+    # A Mac that never transcribed in the cloud has no checkpoint table; nothing to give back there.
+    if not store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cloud_chunks'").fetchone(): return reopened
+    for row in store.meetings():
+        if row['status']!='complete': continue
+        try: meta=json.loads(row['metadata'] or '{}')
+        except ValueError: continue
+        if not isinstance(meta,dict) or meta.get('echo_reopened') or meta.get('cloud_canceled'): continue
+        try: created=datetime.fromisoformat(row['created'])
+        except (TypeError,ValueError): continue
+        if created.tzinfo is None: created=created.replace(tzinfo=timezone.utc)
+        if now-created>timedelta(days=days): continue
+        paths=[v for v in (meta.get('paths') or {}).values() if isinstance(v,str)]
+        if not paths or not all(Path(v).is_file() for v in paths): continue
+        echo=[]
+        for position,usage in store.db.execute('SELECT position,usage FROM cloud_chunks WHERE meeting=?',(row['id'],)):
+            try: skipped=json.loads(usage or '')
+            except (ValueError,TypeError): continue
+            if skipped=={'skipped':'echo'}: echo.append(position)
+        if not echo: continue
+        meta['echo_reopened']=now.isoformat();meta['echo_reopen_pieces']=len(echo)
+        meta['cloud_error']={'kind':'echo_reopen','message':f'Mikrofon sesi geri getiriliyor ({len(echo)} parça)','at':now.isoformat()}
+        meta['cloud_retry_after']=now.isoformat()
+        with store.db:
+            store.db.execute('UPDATE meetings SET metadata=?,status=? WHERE id=?',(json.dumps(meta,ensure_ascii=False),'incomplete',row['id']))
+        reopened.append(row['id'])
+    return reopened
+
+
 def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=None, ffmpeg=None, embedder=None):
     """Capture-directory recordings and cloud-only file imports share this resumable path."""
     _consent(consent)
@@ -932,7 +977,8 @@ def finalize_capture(store, mid, data_dir, *, consent=False, model=None, client=
             metadata['echo_segments']=flag_echo(store,mid)
             metadata['glossary_suggestions']=glossary_candidates(store.segments(mid),glossary)[:80] if glossary else []   # free local pass; LLM refinement is on demand
             usages=[u or '' for (u,) in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=?',(mid,))]
-            metadata['echo_windows_skipped']=sum(1 for u in usages if 'skipped' in u and 'mic_gated' not in u)
+            metadata['echo_windows_skipped']=sum(1 for u in usages if '"echo"' in u)   # only a job finished by 1.1.0–1.2.87 can still carry these
+            metadata['silent_windows_skipped']=sum(1 for u in usages if '"silent"' in u)   # was counted as echo until 1.2.88, which hid a mic that recorded nothing
             metadata['mic_gated_windows']=sum(1 for u in usages if 'mic_gated' in u)   # what the mic gate saved: never uploaded, never paid for
             metadata['job_usage']=job_usage(job_started)
             metadata.pop('cloud_error',None);metadata.pop('cloud_retry_after',None);metadata.pop('cloud_retry_attempt',None);metadata.pop('cloud_attempt_open',None)   # it worked: nothing left to retry
