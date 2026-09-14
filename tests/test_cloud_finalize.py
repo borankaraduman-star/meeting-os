@@ -346,7 +346,7 @@ class EchoSkipTests(unittest.TestCase):
             path=d/f'{source}-000000.wav';sf.write(path,signal,16000,subtype='FLOAT')
             events.append({'event':'chunk','source':source,'start':0,'duration':8,'path':str(path),'sample_rate':16000,'index':0})
         (d/'capture-native.jsonl').write_text('\n'.join(json.dumps(e) for e in events)+'\n');return d
-    def test_echo_windows_are_not_uploaded_but_real_mic_speech_is(self):
+    def test_nonsilent_microphone_is_retained_even_when_mostly_echo(self):
         from meeting_os.cloud_finalize import envelope_correlation
         for echo in (True,False):
             with tempfile.TemporaryDirectory() as tmp:
@@ -355,10 +355,8 @@ class EchoSkipTests(unittest.TestCase):
                 usage=[json.loads(u[0]) for u in store.db.execute('SELECT usage FROM cloud_chunks WHERE meeting=? ORDER BY position',(mid,))]
                 mic_rows=[r for r in store.segments(mid) if r['source']=='mic']
                 meta=json.loads(store.db.execute('SELECT metadata FROM meetings WHERE id=?',(mid,)).fetchone()[0])
-                if echo:
-                    self.assertEqual(usage[0],{'skipped':'echo'});self.assertEqual(mic_rows,[]);self.assertEqual(meta['echo_windows_skipped'],1);self.assertEqual(len(client.calls),1)
-                else:
-                    self.assertNotIn('skipped',usage[0]);self.assertEqual(len(mic_rows),1);self.assertEqual(meta['echo_windows_skipped'],0);self.assertEqual(len(client.calls),2)
+                self.assertNotIn('skipped',usage[0]);self.assertEqual(len(mic_rows),1)
+                self.assertEqual(meta['echo_windows_skipped'],0);self.assertEqual(len(client.calls),2)
                 store.close()
         self.assertEqual(envelope_correlation(np.zeros(16000*4,dtype='float32'),np.ones(16000*4,dtype='float32')),0.0)
 

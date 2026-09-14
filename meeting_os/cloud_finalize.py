@@ -155,7 +155,11 @@ def envelope_correlation(mic, system, max_lag=8):
     return best
 
 def is_echo(mic_path, system_path, start, end):
-    """True when the microphone window is the system audio bleeding through the speakers."""
+    """Loudness similarity for diagnostics, not proof that a window has no local speech.
+
+    A five-minute piece can correlate strongly while containing the owner's only short turn.
+    Never use this measurement to discard microphone audio before transcription.
+    """
     with sf.SoundFile(mic_path) as f:
         f.seek(round(start*f.samplerate));m=f.read(round((end-start)*f.samplerate),dtype='float32')
     with sf.SoundFile(system_path) as f:
@@ -311,6 +315,18 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
     if not old:
         with store.db:store.db.execute('INSERT INTO cloud_sources(meeting,digest,plan,model) VALUES(?,?,?,?)',(mid,signature,plan_json,model))
     done={row[0]:(row[1] or '') for row in store.db.execute('SELECT position,usage FROM cloud_chunks WHERE meeting=?',(mid,))}
+    # Old versions discarded whole mic pieces on envelope similarity. Revisit those FREE checkpoints
+    # when an incomplete job resumes; preserve paid transcripts, silence skips and explicit mic gates.
+    reconsider=[]
+    for position,usage in done.items():
+        if not 0<=position<len(plan) or plan[position][0]!='mic': continue
+        try: skipped=json.loads(usage)
+        except (ValueError,TypeError): continue
+        if skipped=={'skipped':'echo'}: reconsider.append(position)
+    if reconsider:
+        with store.db:
+            store.db.executemany('DELETE FROM cloud_chunks WHERE meeting=? AND position=?',[(mid,p) for p in reconsider])
+        for position in reconsider: done.pop(position)
     # Progress weighted by audio seconds, not by piece count: a skipped echo window finishes instantly and a
     # five-minute upload does not. `total` shrinks as windows turn out to be skippable, `uploaded` only grows
     # when audio really went out, so the remaining-time estimate is built on the rate that is actually running.
@@ -330,14 +346,15 @@ def transcribe_sources(store, mid, sources, client, *, consent=False, model=STT_
         done_now=max(0.0,weight['uploaded']-baseline);left=max(weight['total']-baseline,done_now)
         emit('transcribing',finished,len(plan),detail,uploaded_seconds=round(done_now,1),total_seconds=round(left,1))
     def prepare(position):
-        """Skip (echo/silent) or encode this piece. Runs on the encode pool one batch ahead of the uploads;
+        """Skip (gated/silent) or encode this piece. Runs on the encode pool one batch ahead of the uploads;
         the Opus bytes land in a scratch file so a prefetched batch never sits in memory."""
         source,a,b,index=plan[position];path=sources[source]
         # The gate first: a piece recorded while the microphone was not part of the meeting is never read,
         # never encoded, never uploaded and never transcribed — the room conversation simply does not exist.
         if source=='mic' and mic_windows is not None and gate_overlap(mic_windows,a,b)<MIC_GATE_MIN_OVERLAP: return ('skip',{'skipped':'mic_gated'})
-        silent=is_silent(path,a,b)   # one pass over the window: the echo branch and the silence branch ask the same question
-        if source=='mic' and 'system' in sources and not silent and is_echo(path,sources['system'],a,b): return ('skip',{'skipped':'echo'})
+        # Correlation cannot rule out a short local turn mixed into speaker bleed. Keep the permitted
+        # mic audio; transcript-level echo annotations remain available after both sources are read.
+        silent=is_silent(path,a,b)
         if silent: return ('skip',{'skipped':'silent'})
         audio=encode_piece(path,a,b,ffmpeg)
         if len(audio)>MAX_PIECE_BYTES: raise ValueError('Ses parçası yükleme sınırını aşıyor')
