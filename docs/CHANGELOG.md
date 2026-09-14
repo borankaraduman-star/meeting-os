@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 93 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 94 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.89](#v1289) | 2026-09-14 | v1.2.89 — "Yalnız bu Mac" uyarısı: davet uygulanmadıysa ekran söyler |
 | [v1.2.88](#v1288) | 2026-09-14 | v1.2.88 — Kendi sesiniz artık atılmıyor; Developer ID imzalı ve noter onaylı paket |
 | [v1.2.87](#v1287) | 2026-09-13 | v1.2.87 — Denetim sürümü: paket kendini güncelleyebilir, transkript kaybı kapatıldı |
 | [v1.2.86](#v1286) | 2026-09-12 02:10 | v1.2.86 — Özet ve görev uyarlaması: düzenlemelerden tercih, görev hata sınıfları |
@@ -113,6 +114,19 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1289"></a>
+### v1.2.89 — "Yalnız bu Mac" uyarısı: davet uygulanmadıysa ekran söyler
+
+2026-09-14 · yerel not · GitHub sürüm sayfası yok
+
+Yeni bir ekip arkadaşı anahtarını yapıştırdı ama davet bağlantısı hiç uygulanmadı; Mac'i saatlerce tek kişilik bir ekipte kaldı ve hiçbir yerde yazmadı (sunucuda 73a159 ekibi, 14 Eylül).
+
+- **Katılım işareti:** davetle katılım artık `team.joined` dosyası bırakır. Ekip anahtarı davetten değil OpenRouter anahtarından türetilmişse ve görünürde başka Mac yoksa kurulum kartı turuncu yazar: "yalnız bu Mac · davet uygulanmadı · Ayarlar → Ekip → Davet yapıştır…". Karşılama ekranı da anahtar olsa bile davet kutusunu geri getirir ("Ekibe henüz katılmadınız"). Diğer Mac'lerin göründüğü ekipler asla "yalnız" sayılmaz; eski kurulumlar etkilenmez.
+- **Güncelleme hatası nedeni ekibe gider:** `update-failed` satırı artık tek kelimelik neden taşır (download / checksum / signature / folder / space / quit / swap / other); cümle Mac'te kalır. Bugünkü başarısız güncellemenin nedeni görülemiyordu.
+- Paket içine çalışma zamanında `__pycache__` yazılmaz (`PYTHONDONTWRITEBYTECODE`): noter mührü ilk açılıştan sonra da bozulmaz.
+- Doğrulama: yayındaki 1.2.87 paketi bu Mac'te gerçek 1.2.88 paketine uygulama içinden güncellendi (21 s indirme, sha256, `codesign`, ekip kimliği, takas, `.previous` yedeği).
+- Testler: Python 1328 (5 yeni), Swift 353 (2 yeni).
 
 <a id="v1288"></a>
 ### v1.2.88 — Kendi sesiniz artık atılmıyor; Developer ID imzalı ve noter onaylı paket
