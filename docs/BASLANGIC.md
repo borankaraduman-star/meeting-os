@@ -7,7 +7,7 @@ Canlı sürüm, görselli (paylaşılabilir sayfa): https://claude.ai/code/artif
 **Kurulum (6 adım):**
 1. Bağlantıdan `Meeting-OS-1.2.x.zip` GitHub'dan iner (≈350 MB; Safari sorarsa *İzin Ver*); çift tıklayınca *Meeting OS* çıkar.
 2. *Meeting OS*'u Finder'daki *Uygulamalar* klasörüne sürükleyin.
-3. Açın. "Apple bu uygulamayı doğrulayamadı" derse: *Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç* (yalnız ilk sefer).
+3. Açın. 1.2.88'den itibaren paket Apple noter onaylı: uyarı çıkmaz. "Doğrulanamadı" görürseniz paket eskidir, en son paketi indirin.
 4. Adınızı yazın (mikrofonunuz bu adla etiketlenir).
 5. Kişisel bağlantınıza tıklayın (tıklanmıyorsa karşılama ekranındaki *Ekipten davet aldınız mı?* kutusuna yapıştırıp *Katıl*). Ekip ve anahtar böyle gelir.
 6. Üç izni verin: Mikrofon, Ekran Kaydı (karşı tarafın sesi için; görüntü alınmaz), Bildirimler. *Kurulum durumu* kartı yeşilse hazırsınız.

@@ -165,7 +165,7 @@ kuralı da aynıdır.
 ## Gatekeeper (tek seferlik, iki tık)
 
 Zip tarayıcıyla indiği için karantinalıdır; kendinden imzalı sertifika Apple tarafından doğrulanamaz. İlk açılışta
-macOS "Apple bu uygulamayı doğrulayamadı" der: **Sistem Ayarları → Gizlilik ve Güvenlik → en altta "Yine de Aç"**.
+1.2.88'den itibaren paket Developer ID imzalı ve noter onaylı (`sign-notarize.sh`, `stapler`): Gatekeeper uyarısı yok. 1.2.87 ve öncesi zip'lerde macOS "doğrulayamadı" der; çözüm en son paketi indirmek.
 Bir kez. Güncellemeler uygulamanın kendi indirmesi olduğu için bir daha sorulmaz. Apple Developer ID (yıllık 99 $) alınırsa
 paket notarize edilir ve bu adım tamamen kalkar; Boran'ın kararı.
 
@@ -173,7 +173,7 @@ paket notarize edilir ve bu adım tamamen kalkar; Boran'ın kararı.
 
 - Paket bu Mac'te: `build/bundle/Meeting OS.app` doğrudan açılır (repo/venv yokmuş gibi: `MEETING_OS_TEST_BUNDLE=1`
   ile `runtime.json` göreli yollar), kurulum kartı yeşil, kısa bir kayıt → transkript → özet.
-- İkinci Mac (Boran'ın): zip indir → Uygulamalar → Yine de Aç → ad → kayıt.
+- İkinci Mac (Boran'ın): zip indir → Uygulamalar → aç → ad → kayıt.
 - Testler: `tests/test_bundle_layout.py` (runtime.json göreli çözüm, rsync dışlama listesi, invite içe alma),
   `tests/test_updater_bundle.py` (latest.json, sha, sürüm kıyası, takas betiği kuru koşu), `tests/test_sync_server.py`
   (+ `/dl/` route, Range, 404), Swift `RuntimeTests` (göreli yol), `UpdaterTests` (bundled dal).
