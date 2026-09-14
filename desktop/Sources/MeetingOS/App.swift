@@ -93,7 +93,9 @@ struct Runtime:Decodable {
     func childEnvironment(path:String?)->[String:String] {
         guard bundled, !binDirectory.isEmpty else { return [:] }
         let rest=(path ?? "").isEmpty ? "/usr/bin:/bin:/usr/sbin:/sbin" : path!
-        return ["PATH":binDirectory+":"+rest]
+        // A notarized bundle is sealed; Python writing __pycache__ into Resources/repo would break that seal
+        // after the first launch (measured 14 Eyl 2026: one import made `spctl` say "sealed resource is missing").
+        return ["PATH":binDirectory+":"+rest,"PYTHONDONTWRITEBYTECODE":"1"]
     }
     var childEnvironment:[String:String] { childEnvironment(path:ProcessInfo.processInfo.environment["PATH"]) }
 }

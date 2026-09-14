@@ -37,6 +37,7 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(r.childEnvironment(path:"/usr/bin:/bin")["PATH"],
                        "/Applications/Meeting OS.app/Contents/Resources/runtime/bin:/usr/bin:/bin")
         // An empty inherited PATH (a launch from LaunchServices with nothing set) must not produce ":"-only.
+        XCTAssertEqual(r.childEnvironment(path:"/usr/bin")["PYTHONDONTWRITEBYTECODE"],"1")   // the notarized bundle stays sealed
         XCTAssertEqual(r.childEnvironment(path:nil)["PATH"],
                        "/Applications/Meeting OS.app/Contents/Resources/runtime/bin:/usr/bin:/bin:/usr/sbin:/sbin")
     }
