@@ -873,3 +873,18 @@ Boran: diğer Mac'te hoparlörle Zoom → "herkesin transkripti çıktı benimki
 ## 2026-09-14 20:45 — 1.2.89: yalnız-ekip uyarısı, güncelleme hata nedeni, pyc mührü
 
 Boran: "bir kişi daha katılmaya çalışırken hata almış". Sunucu izleri: GHVH0YWR3F (1.2.87 paketi, macOS 26.3) 12:38Z anahtarsız açılış (probe api_key fail), 12:44Z anahtarlı ama davetsiz → türetilmiş ekip 73a159, 13:38Z `update-failed` (neden dışa aktarılmıyordu). Davet bağlantısı sağlam (temiz dizinde `team join` → 7df39b, 9 dosya). Gerçek 1.2.87→1.2.88 paket güncellemesi burada yayındaki dosyalarla koşturuldu: 21 s, rc 0, `.previous` (DİKKAT: takas betiği `open` ile scratch kopyayı açtı ve `update-status.json`'u gerçek veri klasörüne yazdı — simülasyonda `open` stub'la). 1.2.89: `team.joined` işareti (`join`), `status()['joined'/'alone']`, SetupStatus turuncu satır, Welcome `teamAlone`, `errors.update_reason` + TEAM_CONTEXT update reason, PYTHONDONTWRITEBYTECODE (App.swift childEnvironment). Full suite yalnız `MEETING_OS_TEST_IGNORE_PRESSURE=1` ile temiz (1328); onsuz 40 bellek-baskısı hatası bu Mac'te olağan. Paket noter Accepted, GitHub latest + VPS aynası; build/bundle silindi. Kişinin gerçek hata metni hâlâ bilinmiyor (Boran'dan istendi).
+
+## 2026-09-15 10:15 — İki kişilik paralel geliştirme düzeni
+
+Boran: "bir arkadaşımla bu toolu geliştirmeye devam edeceğiz, onun da Claude Code ve Codex'i var". Depoda yönerge
+dosyası, CI ve dal koruması yoktu; Codex zaten `codex/*` dallarında doğrudan çalışıyordu. Kurulanlar: `AGENTS.md`
+(Codex doğrudan, Claude Code `CLAUDE.md` → `@AGENTS.md` ile okur: ilkeler, test komutları, yasaklar — gerçek veri
+klasörü/imza/sunucu/anahtar, dal ve çakışma sıcak noktaları, sürüm), `.github/workflows/tests.yml` (macOS 15,
+iki iş: python 1328 + swift 353; ffmpeg runner'da YOK → `imageio-ffmpeg==0.6.0` ikilisi PATH'e bağlanır, ilk
+koşuda 40 hata bundandı, `brew install ffmpeg` yerine paketle aynı ikili), `scripts/release.sh <sürüm>
+[--app-only]` (bump→test→commit→uygulama→push/tag→paket→Developer ID+noter→GitHub+VPS; korumaları test edildi:
+sürüm notu yok / geçersiz sürüm / kirli ağaç / yanlış dal), `scripts/setup-team.sh <github-kullanıcı>`
+(collaborator daveti + v0.1 koruması: PR + iki CI + 1 onay, `enforce_admins` kapalı ki release.sh doğrudan
+push edebilsin), `docs/GELISTIRME.md` (roller tablosu, ikinci Mac kurulumu, günlük akış, çakışma önleme).
+Dal koruması API çağrısı classifier'ca engellendi → betik Boran'ın çalıştırması için hazır, henüz UYGULANMADI.
+Paket/imza/yayın tek Mac'te kalır (imzalayan kimlik değişirse uygulama içi güncelleme reddeder).
