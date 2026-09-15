@@ -28,7 +28,7 @@ kaybolmaz, kullanıcı asla ortada kalmaz, toplantı asla yavaşlamaz, metin bul
 - Gizli dosyalar (`openrouter.key`, `team.token`, `invite.json`, `download.secret`) depoya ya da pakete girmez. Depo herkese açık.
 
 ## Nasıl çalışırız
-- Dal: `v0.1` bütünleşme dalı, korumalı. Her iş `<kisi>/<konu>` dalında, PR ile; CI (Python + Swift testleri) yeşil olmadan
+- Dal: `v0.1` bütünleşme dalı, korumalı (PR + `python`/`swift` CI + 1 onay; yönetici muaf). Her iş `<kisi>/<konu>` dalında, PR ile; CI (Python + Swift testleri) yeşil olmadan
   birleşmez. Sürüm sahibi doğrudan itebilir (yalnız sürüm commit'leri için).
 - Ajanlar worktree'de çalışır (`git worktree add`), dalını commit'ler; birleştirmeyi insan yapar (`git merge --no-ff`).
   Çakışma sıcak noktaları: `meeting_os/__init__.py` + `scripts/build-desktop.sh` + `docs/KULLANIM.md` 1. satır (sürüm —
@@ -42,3 +42,6 @@ kaybolmaz, kullanıcı asla ortada kalmaz, toplantı asla yavaşlamaz, metin bul
 `sh scripts/release.sh 1.2.90` — `docs/releases/v1.2.90.md` yazılmış olmalı. Betik: sürüm bump, CHANGELOG, uygulama
 derle+kur, push+tag, paket derle, Developer ID imza + Apple noter, GitHub Releases (latest) + VPS aynası. Ayrıntı
 `docs/BUNDLE.md`. Diğer geliştirici `--app-only` ile yalnız yerel uygulamayı derleyip dener; paket üretemez.
+
+## Ekip
+İki kişilik akışın tamamı `docs/GELISTIRME.md`: roller, ilk gün, günlük akış, çakışma sıcak noktaları, CI.
