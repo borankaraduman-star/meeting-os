@@ -19,6 +19,15 @@ jobs:
           cache-dependency-path: requirements-macos-tested.txt
       - run: python -m pip install -r requirements-macos-tested.txt
       - run: python -m pip install -e . --no-deps
+      # The same ffmpeg the shipped bundle carries (scripts/bundle_manifest.py), instead of a 4-minute
+      # `brew install ffmpeg`: 40 tests encode audio pieces and the runner has no ffmpeg at all.
+      - name: ffmpeg
+        run: |
+          python -m pip install imageio-ffmpeg==0.6.0
+          mkdir -p "$HOME/.local/bin"
+          ln -sf "$(python -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')" "$HOME/.local/bin/ffmpeg"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/ffmpeg" -version | head -1
       - name: unittest
         env:
           MEETING_OS_TEST_IGNORE_PRESSURE: "1"
