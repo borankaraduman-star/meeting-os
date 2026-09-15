@@ -1,0 +1,33 @@
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [v0.1]
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  python:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-macos-tested.txt
+      - run: python -m pip install -r requirements-macos-tested.txt
+      - run: python -m pip install -e . --no-deps
+      - name: unittest
+        env:
+          MEETING_OS_TEST_IGNORE_PRESSURE: "1"
+          MEETING_OS_NO_KEYCHAIN: "1"
+        run: python -m unittest discover -s tests
+  swift:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd desktop && swift build
+      - run: cd desktop && swift test
