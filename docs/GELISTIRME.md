@@ -17,7 +17,7 @@ kimlik değişirse uygulama içi güncelleme paketi reddeder (`docs/BUNDLE.md`).
 
 ## Bir kez: depoyu ekibe aç
 
-Depo sahibi: `sh scripts/setup-team.sh <github-kullanıcı-adı>`. Betik arkadaşınızı push yetkisiyle davet eder ve
+Depo sahibi: `sh scripts/setup-team.sh <github-kullanıcı-adı>`. 15 Eylül 2026'da `cakmakbatuhan-afk` için koşuldu. Betik arkadaşınızı push yetkisiyle davet eder ve
 `v0.1` dalını korur: PR zorunlu, `python` ve `swift` CI işleri yeşil olmalı, bir onay gerekir, force-push kapalı.
 Yönetici muafiyeti açık bırakılır, böylece `release.sh` doğrudan push'unu yapmaya devam eder.
 
