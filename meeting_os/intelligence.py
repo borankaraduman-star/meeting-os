@@ -535,7 +535,10 @@ def absorb(kept,item):
 
 
 REVERSED_NOTE='geri alındı'   # what every reader (log, digest, brief, share) prints next to a decision the meeting itself reversed
-REVERSAL=re.compile(r'iptal(?!\s*(?:edilmey|edilmed|olmay|değil))|geri al(?!ınmay)|vazgeç(?!ilmey|ilmed)|yapılmayacak|yapmayacağ|ertelen(?!mey|med)|askıya|geçersiz|kaldırıld|rafa',re.I)
+# İptal/erteleme kadar DÜZELTME de bir supersession'dır: "kararı düzelttik", "revize edildi", "karar
+# değiştirildi" eski planı canlı bırakmamalı (2026-10-16, Granola karşılaştırması). Her düzeltme fiilinin
+# olumsuz hâli hariç — "değiştirilmeyecek"/"revize edilmeyecek" bir ONAYDIR, kararı korur.
+REVERSAL=re.compile(r'iptal(?!\s*(?:edilmey|edilmed|olmay|değil))|geri al(?!ınmay)|vazgeç(?!ilmey|ilmed)|yapılmayacak|yapmayacağ|ertelen(?!mey|med)|askıya|geçersiz|kaldırıld|rafa|düzelt(?!ilmey|ilmed)|revize(?!\s*edilmey|\s*edilmed)|değiş(?!tirilmey|tirilmed|meyecek|meyeceğ|medi)',re.I)
 
 def drop_superseded(items):
     """Mark a decision the meeting later reversed, so the list never states a plan that no longer stands

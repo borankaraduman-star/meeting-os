@@ -162,6 +162,29 @@ class SupersededDecisionTests(unittest.TestCase):
  def test_a_reversal_cannot_delete_a_decision_taken_after_it(self):
   reversal=note('Eski plan iptal edildi.',60.);newer=note('Bundan sonra dağıtımda canary kullanılacak.',600.)
   self.assertEqual(len(merge_records([blank(decisions=[reversal,newer])])['decisions']),2)
+ def test_a_corrective_restatement_supersedes_the_earlier_decision(self):
+  # 2026-10-16 (Granola karşılaştırması): drop_superseded yalnız iptal/erteleme kelimelerinde (iptal,
+  # ertelen, vazgeç…) tetikleniyordu. Toplantı içinde bir kararı DÜZELTEN yeniden ifade ("kararı
+  # düzelttik", "karar değiştirildi", "revize edildi") eski planı canlı bırakıyordu — kullanıcı özette
+  # çelişen iki kararı görüyordu. Düzeltme de iptal kadar supersession'dır; aynı konuda, eskisinden sonra.
+  earlier="4.2 sürümü 16 Kasım'da Android ve iOS'ta birlikte yayınlanacak."
+  for later in ("Karar düzeltildi: 16 Kasım'da yalnız Android yayınlanacak, iOS 23 Kasım'da çıkacak.",
+                "Önceki karar revize edildi: 16 Kasım'da yalnız Android yayınlanacak, iOS 23 Kasım'da çıkacak.",
+                "Yayın kararı değiştirildi: 16 Kasım'da yalnız Android yayınlanacak, iOS 23 Kasım'da çıkacak."):
+   kept=merge_records([blank(decisions=[note(earlier,64.)]),blank(decisions=[note(later,600.)])])['decisions']
+   self.assertTrue(kept[0].get('superseded') and kept[0]['needs_review'],later)   # eski karar silinmez, işaretlenir
+   self.assertFalse(kept[1].get('superseded'),later)
+ def test_a_negated_revision_is_not_a_supersession(self):
+  earlier='Ödeme sağlayıcısı Stripe olarak değiştirilecek.'
+  later='Ödeme sağlayıcısı kararı değiştirilmeyecek; Stripe planı aynen devam ediyor.'
+  kept=merge_records([blank(decisions=[note(earlier,60.),note(later,600.)])])['decisions']
+  self.assertFalse(any(i.get('superseded') for i in kept))   # "değiştirilmeyecek" bir onaydır, düzeltme değil
+ def test_same_feature_different_number_without_a_revision_word_stays_live(self):
+  # Aynı özellik hakkında farklı sayı taşıyan iki BAĞIMSIZ karar düzeltme değildir. Düzeltme/iptal kelimesi
+  # yoksa ikisi de kalır — yoksa "30 günlük geçmiş" sessizce "5 toplantı sınırı"nı yerdi.
+  a=note('Ücretsiz planda 30 günlük geçmiş olacak.',60.);b=note('Ücretsiz planda günlük 5 toplantı sınırı olacak.',600.)
+  kept=merge_records([blank(decisions=[a,b])])['decisions']
+  self.assertEqual(len(kept),2);self.assertFalse(any(i.get('superseded') for i in kept))
  def test_two_cancellations_do_not_cancel_each_other(self):
   first=note('Migration planı iptal edildi.',60.);second=note('Ayrıca demo hazırlığı da iptal edildi.',600.)
   self.assertEqual(len(merge_records([blank(decisions=[first,second])])['decisions']),2)

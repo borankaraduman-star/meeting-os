@@ -888,3 +888,33 @@ sürüm notu yok / geçersiz sürüm / kirli ağaç / yanlış dal), `scripts/se
 push edebilsin), `docs/GELISTIRME.md` (roller tablosu, ikinci Mac kurulumu, günlük akış, çakışma önleme).
 Dal koruması API çağrısı classifier'ca engellendi → betik Boran'ın çalıştırması için hazır, henüz UYGULANMADI.
 Paket/imza/yayın tek Mac'te kalır (imzalayan kimlik değişirse uygulama içi güncelleme reddeder).
+
+## 2026-10-16 00:10 — Kayıt durumu, canlı taslak, kullanıcı notları (sürümsüz, kaynakta)
+
+Boran: “bulduklarını meetingOS’a uygula” — `/Users/boran/dev/meetingos-granola/ONERILER.md`'deki üç özgün öneri,
+sekiz paralel worktree parçası + entegrasyon (s2) + inceleme (s3). Sözleşme, kabul eşlemesi ve dosya sahipliği:
+`docs/CANLI_DURUM_ONIZLEME_NOTLAR.md`. (A) yardımcı `--session/--launch`, `permission`/`first_buffer`/
+`channel_flow` olayları, `capture_state.session_state/channels`, `CaptureSessionState.swift`; (B) varsayılan kapalı
+`cloudLivePreview` → `record --cloud-preview --allow-preview-upload` → `meeting_os/preview_transcription.py`
+(`PreviewWorker`, ≤3 kuyruk + cursor, epoch/revision, bütçe → paused, izinsiz sıfır çağrı) → `transcript_previews`
+→ `PreviewDrafts.swift`; (C) `meeting_os/notes.py` (`meeting_notes`/`note_revisions`, BEGIN IMMEDIATE CAS,
+`pending_key` claim, anchor `source_unavailable`), `NoteDocument.swift` + `MeetingNotesView.swift`, export
+`include_notes` opt-in. Belgeler: KULLANIM bölüm 2/6/14 + giriş, EKIP “Buluta ne çıkar” ek paragrafı. Sürüm ve
+CHANGELOG yok. **Kodlandı, denenmedi:** gerçek OpenRouter önizleme gecikmesi/maliyeti ve gerçek ScreenCaptureKit
+`first_buffer` zamanlaması ölçülmedi (yalnız sahte yardımcı/adaptör + tempfile testleri); gerçek ses, gerçek STT,
+uygulama açılmadı; **kurulu uygulama güncellenmedi**. Test sonuçları parça/entegrasyon raporlarında; bu girdi
+yazılırken birleşik tam suite henüz koşulmamıştı.
+
+## Latest: karar düzeltmesi artık "düzelt/revize/değiştir" ifadelerini de supersession sayıyor
+
+Granola karşılaştırması (belge + kendi kod; `~/dev/meetingos-granola/RAPOR.md`) bir kod açığı çıkardı: `intelligence.drop_superseded`
+yalnız iptal/erteleme kelimelerinde (`REVERSAL`) tetikleniyordu; toplantı içinde bir kararı DÜZELTEN yeniden ifade
+("kararı düzelttik", "revize edildi", "karar değiştirildi") eski planı canlı bırakıyordu. `REVERSAL`'a `düzelt/revize/değiş`
+olumsuz hâlleri dışlanarak eklendi (`intelligence.py:541`); mevcut güçlü konu-örtüşme eşiği (`stems`, `need`) ve "önceki
+kararı supersede, sonrakini değil" / "iki iptal birbirini iptal etmez" guardları korunur. Test-önce (KIRMIZI→YEŞİL),
+`tests/test_intelligence.py` `SupersededDecisionTests`: 1 pozitif (üç ifade), 2 koruma ("değiştirilmeyecek" onaydır;
+düzeltme kelimesi olmayan farklı-sayılı bağımsız kararlar kalır). Tam Python suite 1331 test YEŞİL (221 s'lik ilk koşuda
+`test_cloud_finalize` retry-wait testi global `time.sleep` patch'inin eşzamanlı upload worker'larıyla çakışmasından 7≠3
+düştü, izole ve ikinci tam koşuda temiz — bilinen tam-suite flaki'si, bu değişiklikle nedensel bağı yok). Swift'e dokunulmadı.
+**Kodlandı, denenmedi:** gerçek OpenRouter analiz çıktısıyla uçtan uca denenmedi (yalnız `drop_superseded` birim düzeyi);
+uygulama açılmadı/kurulmadı. Dal `boran/karar-duzeltme-saglamlastirma`, PR ile.
