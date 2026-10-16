@@ -40,3 +40,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: cd desktop && swift build
       - run: cd desktop && swift test
+      - run: cd capture && swift build && swift test   # the helper's pure buffer logic (CaptureAudio: pcmPeak)

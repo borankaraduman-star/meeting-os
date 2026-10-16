@@ -259,3 +259,35 @@ final class CapturePreviewWarningTests: XCTestCase {
         XCTAssertEqual(SignalDot.hint("silent"),"Sessiz · ses gelmiyor")
     }
 }
+
+/// Schema 2 payloads use the new channel wording; schema 1 payloads above still read word for word as before.
+final class CaptureSessionPayloadPresentationTests: XCTestCase {
+    func testSchemaOnePayloadIsNotASessionPayload() {
+        XCTAssertFalse(CaptureSignalPresentation.isSessionPayload(["state": "capturing", "signals": [:] as [String: Any]]))
+        XCTAssertTrue(CaptureSignalPresentation.isSessionPayload(["schema": 2]))
+        XCTAssertTrue(CaptureSignalPresentation.isSessionPayload(["session_state": "receiving"]))
+    }
+
+    func testSchemaTwoLabelUsesChannelEvidence() {
+        let capture: [String: Any] = ["schema": 2, "state": "capturing", "session_state": "receiving", "seconds": 61,
+                                      "channels": ["mic": ["state": "silent"], "system": ["state": "signal"]]]
+        XCTAssertEqual(CaptureSignalPresentation.label(capture), "Kayıt: 01:01\nMikrofon: Ses geliyor · sessiz\nSistem: Sinyal var")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(capture, key: "mic"), "silent")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(capture, key: "system"), "ok")
+    }
+
+    func testSchemaTwoAwaitingStreamAndMissingChannels() {
+        let capture: [String: Any] = ["schema": 2, "session_state": "awaiting_stream", "channels": ["mic": "awaiting_first_buffer"]]
+        XCTAssertEqual(CaptureSignalPresentation.label(capture), "Ses akışı bekleniyor\nMikrofon: İlk ses bekleniyor\nSistem: Doğrulanamadı")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(capture, key: "mic"), "waiting")
+        XCTAssertEqual(CaptureSignalPresentation.dotState(capture, key: "system"), "unknown")
+        XCTAssertEqual(SignalDot.hint("waiting"), "İlk ses bekleniyor")
+    }
+
+    func testSchemaTwoStalledAndDiskLineKept() {
+        let capture: [String: Any] = ["schema": 2, "session_state": "receiving", "seconds": 5, "low_disk_bytes": 1_000_000_000,
+                                      "channels": ["mic": ["state": "stalled"], "system": ["state": "signal", "age_seconds": 31]]]
+        let label = CaptureSignalPresentation.label(capture)
+        XCTAssertTrue(label.hasPrefix("Kayıt: 00:05\nMikrofon: Akış kesildi\nSistem: Akış kesildi\nDisk azalıyor"))
+    }
+}

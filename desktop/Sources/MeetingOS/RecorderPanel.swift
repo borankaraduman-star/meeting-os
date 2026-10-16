@@ -24,34 +24,41 @@ struct RecorderPanelView:View {
     @ObservedObject var model:Model
     @ObservedObject var recorder:RecorderState
     init(model:Model) { self.model=model; _recorder=ObservedObject(wrappedValue:model.recorder) }
-    /// Disk first, then a survived interruption, then the meeting title.
+    /// Disk first, then a survived interruption, then the live-draft upload, then the meeting title.
     var noticeText:String {
         if !recorder.lowDiskNotice.isEmpty { return recorder.lowDiskNotice }
         if !recorder.recordingNotice.isEmpty { return recorder.recordingNotice }
+        if recorder.livePreview { return PreviewDrafts.recordingBadge }
         return model.recordingTitle.isEmpty ? "Meeting OS" : model.recordingTitle
     }
     var noticeStyle:AnyShapeStyle {
         if !recorder.lowDiskNotice.isEmpty { return AnyShapeStyle(.red) }
-        return recorder.recordingNotice.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange)
+        return recorder.recordingNotice.isEmpty && !recorder.livePreview ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange)
     }
     /// The truncated line always has its whole text one hover away.
     var noticeHelp:String {
         if !recorder.lowDiskNotice.isEmpty { return recorder.lowDiskNotice }
-        return recorder.recordingNotice.isEmpty ? model.recordingTitle : recorder.recordingNotice
+        if !recorder.recordingNotice.isEmpty { return recorder.recordingNotice }
+        return recorder.livePreview ? PreviewDrafts.recordingBadge+" · "+model.recordingTitle : model.recordingTitle
     }
     var body:some View {
         HStack(spacing:10) {
-            Circle().fill(.red).frame(width:10,height:10)
+            // Green only while a channel actually delivers buffers; a started process alone is not a recording.
+            Circle().fill(SignalDot.overallColor(recorder.captureOverall)).frame(width:10,height:10)
+                .help(recorder.captureHeadline).accessibilityLabel(recorder.captureHeadline)
             Text(recorder.elapsedText).font(.system(.body,design:.monospaced).weight(.semibold)).monospacedDigit()
             // The meeting is in progress: a line about a survived interruption replaces the title in place —
             // no notification, no sound, nothing that moves or asks for attention. A disk running out outranks
             // both, because it is the one warning the user can still act on before the recording stops itself.
             // The panel keeps its fixed 400×56 frame; the slot widens into the spacer instead of growing the window.
             Text(noticeText).font(.caption).foregroundStyle(noticeStyle)
-                .lineLimit(1).truncationMode(.tail).frame(maxWidth:recorder.lowDiskNotice.isEmpty ? 110 : 210,alignment:.leading)
+                .lineLimit(1).truncationMode(.tail).frame(maxWidth:(!recorder.lowDiskNotice.isEmpty || noticeText==PreviewDrafts.recordingBadge) ? 210 : 110,alignment:.leading)
                 .help(noticeHelp)
-            SignalDot(label:"Mik",state:recorder.captureDots["mic"] ?? "unknown")
-            SignalDot(label:"Sis",state:recorder.captureDots["system"] ?? "unknown")
+            // Audio is leaving the Mac during the meeting: said in the one window that is always on screen, and
+            // never hidden behind a disk or continuity line (those take the text slot; this mark stays).
+            if recorder.livePreview { Image(systemName:"icloud.and.arrow.up").font(.caption).foregroundStyle(.orange).help(PreviewDrafts.recordingBadge).accessibilityLabel(PreviewDrafts.recordingBadge) }
+            SignalDot(label:"Mik",state:recorder.captureDots["mic"] ?? "unknown",detail:recorder.captureHints["mic"])
+            SignalDot(label:"Sis",state:recorder.captureDots["system"] ?? "unknown",detail:recorder.captureHints["system"])
             if model.markerCount>0 { Text("⌘M \(model.markerCount)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary).help("İşaretlenen an sayısı") }
             Spacer()
             Button("An") { model.markMoment("important") }.help("An (⌃⌥M)")
@@ -62,15 +69,18 @@ struct RecorderPanelView:View {
 }
 
 
-/// One capture source at a glance: green = signal, grey = silent, orange = stale reading, hollow = not checked yet.
+/// One capture source at a glance: green = signal, grey = silent, orange = stale reading, hollow = not checked yet
+/// (or, with a schema-2 helper, no first buffer yet). `detail` is the channel's own wording when the session knows it.
 struct SignalDot:View {
-    let label:String; let state:String
+    let label:String; let state:String; var detail:String?=nil
     static func color(_ state:String)->Color { switch state { case "ok": return .green; case "silent": return .secondary; case "stale": return .orange; default: return .clear } }
-    static func hint(_ state:String)->String { switch state { case "ok": return "Sinyal var"; case "silent": return "Sessiz · ses gelmiyor"; case "stale": return "Son okuma eski"; default: return "Henüz doğrulanmadı" } }
+    static func hint(_ state:String)->String { switch state { case "ok": return "Sinyal var"; case "silent": return "Sessiz · ses gelmiyor"; case "stale": return "Son okuma eski"; case "waiting": return "İlk ses bekleniyor"; default: return "Henüz doğrulanmadı" } }
+    /// The session as a whole: green receiving, orange a warning, red failed, grey waiting or finishing.
+    static func overallColor(_ state:String)->Color { switch state { case "ok": return .green; case "warning": return .orange; case "failed": return .red; default: return .secondary } }
     var body:some View {
         HStack(spacing:3) {
             Circle().fill(Self.color(state)).overlay(Circle().stroke(Color.secondary.opacity(0.6),lineWidth:state=="unknown" ? 1 : 0)).frame(width:7,height:7)
             Text(label).font(.caption2).foregroundStyle(.secondary)
-        }.help("\(label=="Mik" ? "Mikrofon" : "Sistem sesi"): \(Self.hint(state))").accessibilityLabel("\(label) \(Self.hint(state))")
+        }.help("\(label=="Mik" ? "Mikrofon" : "Sistem sesi"): \(detail ?? Self.hint(state))").accessibilityLabel("\(label) \(detail ?? Self.hint(state))")
     }
 }

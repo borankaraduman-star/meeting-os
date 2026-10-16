@@ -599,6 +599,21 @@ class MarkerDriftTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             d=self.journal(tmp,chunks)
             self.assertEqual(self.markers(d,500.0),[{'seconds':200.0,'kind':'decision','created':'x','wall_seconds':500.0}])
+    def test_a_moment_after_waking_but_before_the_first_post_wake_chunk_uses_that_chunks_drift(self):
+        # Judge 2026-10-16: the helper had 100 s of audio when the lid closed at wall 96 (the open chunk kept
+        # four more seconds), the Mac slept, and a link went in at wall 400 — before the first post-wake chunk
+        # closed at 408. The earlier chunk has no drift yet; taking it put the link on audio second 400.
+        chunks=self.steady(96)+[(408,100,12),(420,112,12)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks)
+            from meeting_os.cloud_finalize import audio_seconds_at
+            self.assertEqual(audio_seconds_at(d,self.ORIGIN+400),104.0)
+            self.assertEqual(self.markers(d,400.0),[{'seconds':104.0,'kind':'decision','created':'x','wall_seconds':400.0}])
+            # Just after the last pre-sleep chunk the Mac was still awake: no drift yet.
+            self.assertEqual(audio_seconds_at(d,self.ORIGIN+98),98.0)
+            # A moment that fits neither awake stretch fell inside the gap: it lands where the last closed chunk
+            # left the audio, never past the first post-wake one.
+            self.assertEqual(audio_seconds_at(d,self.ORIGIN+250),96.0)
     def test_a_gap_after_the_marker_does_not_touch_it(self):
         chunks=self.steady(96)+[(396+12*k,96+12*(k-1),12) for k in range(1,10)]
         with tempfile.TemporaryDirectory() as tmp:
@@ -615,6 +630,30 @@ class MarkerDriftTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             d=self.journal(tmp,[(t+0.4,t-12,12) for t in range(12,121,12)])
             self.assertEqual(self.markers(d,100.0)[0]['seconds'],100.0)
+    def test_permission_lines_before_started_do_not_switch_the_correction_off(self):
+        # A schema 2 helper journals its macOS permission questions before `started`; the journal is still measurable.
+        chunks=self.steady(96)+[(396+12*k,96+12*(k-1),12) for k in range(1,10)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks);j=d/'capture-native.jsonl'
+            asked=[{'event':'permission','kind':'microphone','state':s,'wall':self.ORIGIN-30+i} for i,s in enumerate(('requested','granted'))]
+            j.write_text(''.join(json.dumps(e)+'\n' for e in asked)+j.read_text())
+            self.assertEqual(self.markers(d,500.0),[{'seconds':200.0,'kind':'decision','created':'x','wall_seconds':500.0}])
+    def test_buffer_events_that_beat_started_to_the_journal_do_not_switch_the_correction_off(self):
+        # Judge 2026-10-16 (s6): the buffer callback's first_buffer/channel_flow leave through their own event
+        # queue, so a valid journal can carry them before `started`; that turned the sleep correction off.
+        chunks=self.steady(96)+[(396+12*k,96+12*(k-1),12) for k in range(1,10)]
+        with tempfile.TemporaryDirectory() as tmp:
+            d=self.journal(tmp,chunks);j=d/'capture-native.jsonl'
+            early=[{'event':'permission','kind':'microphone','state':'granted','wall':self.ORIGIN-2},
+                   {'event':'first_buffer','source':'mic','epoch':0,'seq':1,'silent':False,'wall':self.ORIGIN-0.2},
+                   {'event':'channel_flow','source':'mic','epoch':0,'seq':1,'state':'signal','wall':self.ORIGIN-0.1}]
+            j.write_text(''.join(json.dumps(e)+'\n' for e in early)+j.read_text())
+            from meeting_os.cloud_finalize import audio_seconds_at
+            self.assertEqual(self.markers(d,500.0),[{'seconds':200.0,'kind':'decision','created':'x','wall_seconds':500.0}])
+            self.assertEqual(audio_seconds_at(d,self.ORIGIN+500),200.0)
+            # Anything else before `started` still means a journal that cannot be measured.
+            j.write_text(json.dumps({'event':'chunk','source':'mic','start':0.0,'duration':12.0,'wall':self.ORIGIN-1})+'\n'+j.read_text())
+            self.assertIsNone(audio_seconds_at(d,self.ORIGIN+500))
     def test_a_journal_without_wall_stamps_leaves_every_marker_alone(self):
         with tempfile.TemporaryDirectory() as tmp:
             d=self.journal(tmp,self.steady(120),stamped=False)

@@ -187,7 +187,12 @@ struct DetailView:View {
                     if meeting.status != "complete" { Button("İşlemi sürdür") { if meeting.metadata["cloud_mode"] != nil { model.finalizeWithOpenRouter(meeting.id,model:nil) } else { model.showOpenRouter=true } }.disabled(model.busy || meeting.recoveryState=="active") }
                 }.padding(.horizontal,24).padding(.bottom,8)
             }
-            HStack(spacing:10) { BackButton(model:model); MeetingNavigation(model:model) }.padding(.horizontal,24).padding(.bottom,16)
+            HStack(spacing:10) {
+                BackButton(model:model); MeetingNavigation(model:model)
+                if !model.showNotes && (model.recording || model.meeting != nil) {
+                    Button { model.showNotes=true } label: { Label("Notlar",systemImage:"note.text") }.buttonStyle(.bordered).controlSize(.large).help("Toplantı notlarınızı açar").accessibilityIdentifier("showNotesButton")
+                }
+            }.padding(.horizontal,24).padding(.bottom,16)
             if model.tab=="transcript" {
                 TranscriptSearchBar(model:model).padding(.horizontal,24).padding(.bottom,12)
             }
@@ -201,16 +206,25 @@ struct DetailView:View {
                 HStack(spacing:10) { Image(systemName:"checkmark.circle.fill").foregroundStyle(MeetingStyle.accent); Text("Toplantı hazır · \(m.title)").font(.callout).lineLimit(2).fixedSize(horizontal:false,vertical:true); Spacer(minLength:8); Button("Aç") { model.selected=ready; model.pendingReady=nil }.controlSize(.small).accessibilityIdentifier("openReady"); Button { model.pendingReady=nil } label: { Image(systemName:"xmark") }.buttonStyle(.plain).foregroundStyle(.secondary) }
                     .padding(.horizontal,24).padding(.vertical,8).background(MeetingStyle.accent.opacity(0.08))
             }
-            Group {
-                if model.meetings.isEmpty && !model.recording { WelcomeView(model:model) } else {
-                switch model.tab {
-                case "analysis": AnalysisView(m:model)
-                case "actions": ActionsView(m:model)
-                case "review": ReviewView(model:model)
-                case "memory": MemoryView(m:model)
-                default: TranscriptView(model:model)
-                } }
+            HStack(spacing:0) {
+                Group {
+                    if model.meetings.isEmpty && !model.recording { WelcomeView(model:model) } else {
+                    switch model.tab {
+                    case "analysis": AnalysisView(m:model)
+                    case "actions": ActionsView(m:model)
+                    case "review": ReviewView(model:model)
+                    case "memory": MemoryView(m:model)
+                    default: TranscriptView(model:model)
+                    } }
+                }.frame(maxWidth:.infinity,maxHeight:.infinity)
+                // The user's own notes, beside every tab and during the recording too (a pending note before the
+                // meeting row exists). Hidden from the welcome screen only, where there is nothing to write about.
+                if model.showNotes && (model.recording || model.meeting != nil) {
+                    Divider()
+                    MeetingNotesView(model:model).frame(width:300).frame(maxHeight:.infinity,alignment:.top)
+                }
             }.frame(maxWidth:.infinity,maxHeight:.infinity)
+            .onChange(of:model.selected) { _,_ in model.syncNote() }
             Divider()
             if let e=model.meeting?.metadata["identity_error"] as? String, !e.isEmpty {
                 HStack(alignment:.top) { Label(e,systemImage:"exclamationmark.triangle").foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true); Spacer(minLength:0) }.font(.caption).padding(.horizontal,12).padding(.vertical,6)

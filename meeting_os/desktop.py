@@ -30,18 +30,34 @@ def capture_state(metadata, include_signal=False):
     directory=metadata.get('capture_dir')
     if not directory: return None
     path=Path(directory)/'capture-native.jsonl'
-    if not path.exists(): return {'state':'waiting','seconds':0,'sources':{}}
-    events=journal_events(path)
+    from .capture_metrics import CHANNEL_SOURCES,belongs,current_session,journal_counters,journal_state_events,session_view
+    if not path.exists():
+        # No helper line yet: nothing is known about either channel except that no buffer has arrived.
+        return {'state':'waiting','seconds':0,'sources':{},'schema':None,'session':None,'session_state':'awaiting_stream',
+                'channels':{s:{'state':'awaiting_first_buffer','epoch':None,'age_seconds':None} for s in CHANNEL_SOURCES}}
+    # The whole journal, folded: the tail alone lost a steady channel's first_buffer past ~30 minutes of chunks.
+    events=journal_state_events(path)
+    expected=metadata.get('capture_session')
+    if isinstance(expected,str) and expected:
+        # The recorder put its session into the meeting (live.record). A line stamped with any other session is not
+        # this meeting's: not even a newer `started` may take the session over, and its chunks are not its audio.
+        events=[e for e in events if not (isinstance(e.get('session'),str) and e['session']!=expected)]
+    else: expected=None
     sources={}
+    # Coverage counts every chunk on disk, whichever launch wrote it: that audio is the meeting's either way.
     for e in events:
         if e.get('event')=='chunk': sources[e['source']]=max(sources.get(e['source'],0),e['start']+e['duration'])
+    _,session,launch=current_session(events)
     state='waiting'
     for e in events:
+        # Schema 1 lines carry no session and are all read, exactly as before. A schema 2 journal ignores a late
+        # line of a replaced helper, and a channel's own start error does not mark the whole capture 'error'.
+        if not belongs(e,session,launch): continue
         if e.get('event') in ('started','chunk','restarted'): state='capturing'
+        elif e.get('event')=='error' and session is not None and e.get('source') in CHANNEL_SOURCES: continue
         elif e.get('event') in ('error','stopped'):state=e['event']
-    result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources}
-    from .capture_metrics import journal_counters
-    health=journal_counters(path)   # the whole journal: these lines fall out of the 64 KB tail on a long meeting
+    result={'state':state,'seconds':max(sources.values(),default=0),'sources':sources,**session_view(events)}
+    health=journal_counters(path,session or expected)   # the whole journal: these lines fall out of the 64 KB tail on a long meeting
     # What the owner needs to see during and after a meeting: the stream was rebuilt, the whole helper was
     # replaced, the Mac slept — and how many seconds that cost. Zeros stay out of the poll payload.
     for key in ('restarts','relaunches','wakes','gap_seconds','wake_gap_seconds'):
@@ -398,6 +414,29 @@ def learn(store, action, **fields):
     return record_event(store, action, **fields)
 
 
+def note_action(store, action, request, data_dir):
+    """The note editor's five calls. A NoteError is already a sentence for the user; anything else (a locked
+    or broken database) is logged with its type only and answered with a sentence that says the text is safe
+    in the editor — the editor keeps it until a save succeeds."""
+    from . import notes as N
+    key=lambda: {'meeting':request.get('meeting')} if request.get('meeting') is not None else {'pending_key':request.get('pending_key')}
+    try:
+        if action=='note_get': return N.get_note(store,**key())
+        if action=='note_history': return {'revisions':N.history(store,**key(),limit=request.get('limit',50))}
+        if action=='note_claim': return N.claim_pending(store,request.get('pending_key'),request.get('meeting'))
+        if action=='note_draft_drop': return N.drop_draft(store,**key())
+        # 'ai_accepted' only when the request says so in as many words: nothing on this path writes AI text by itself.
+        return N.save_note(store,**key(),base_revision=request.get('base_revision'),text=request.get('text'),
+                           anchors=request.get('anchors'),author='ai_accepted' if request.get('author')=='ai_accepted' else 'user',
+                           park=request.get('park') is True,resolve=request.get('resolve') is True)
+    except N.NoteError: raise
+    except Exception as exc:
+        from . import errors as E
+        E.record('ui',f'{action}: {type(exc).__name__}',data_dir=data_dir)
+        if action=='note_save': raise ValueError('Not kaydedilemedi; metniniz düzenleyicide duruyor, birazdan yeniden denenecek.') from None
+        raise ValueError('Notlar şu an okunamadı; birazdan yeniden deneyin.') from None
+
+
 def dispatch(request, db=None):
     if request.get('action')=='diagnostics':
         from .diagnostics import collect,export_report
@@ -444,12 +483,26 @@ def dispatch(request, db=None):
         if action=='openrouter_models':
             from .openrouter import STT_MODELS,STT_MODEL,DIARIZATION_DEFAULT_MODEL
             return {'models':[{**m,'diarization':m['diarization'] is not None} for m in STT_MODELS],'default':STT_MODEL,'diarization_default':DIARIZATION_DEFAULT_MODEL,'verified_at':'2026-09-09'}
+        if action=='transcript_previews':
+            # Draft text of a recording in progress. It travels only in this reply — never into a log line — and it is
+            # not the transcript: `segments` stays what the final pass wrote.
+            from . import preview_transcription as PT
+            with contextlib.closing(PT.connect(store.path)) as pdb:
+                rows=PT.previews(pdb,request['meeting'])
+                after=request.get('after_updated')
+                if type(after) in (int,float): rows=[r for r in rows if (r['updated'] or 0)>after]
+                status=PT.session_status(pdb,request['meeting'])
+                # `state` 'off' = this meeting never had a draft worker (the default recording); `status` is the worker's row.
+                return {'meeting':request['meeting'],'status':status,'state':status['state'] if status else 'off','reason':status['reason'] if status else None,
+                        'lag_seconds':status['lag_seconds'] if status else 0,'previews':rows,'draft':True}
         if action in ('transcript_preview','transcript_import'):
             from .transcript_import import preview,save
             return preview(request.get('text')) if action=='transcript_preview' else save(store,request.get('title'),request.get('text'))
         if action in ('label','edit_text','enroll','label_speaker'):
             row=store.db.execute('SELECT status FROM meetings WHERE id=?',(request['meeting'],)).fetchone()
             if not row or row['status']!='complete': raise ValueError('Önce nihai transkriptin tamamlanmasını bekleyin')
+        if action in ('note_get','note_save','note_history','note_claim','note_draft_drop'):
+            return note_action(store,action,request,data_folder(db))
         from .memory import Memory
         from .assistant import drafts,handoff,route,edit_draft
         memory=Memory(store)
@@ -1034,9 +1087,24 @@ def dispatch(request, db=None):
         if action=='export':
             rows=store.segments(request['meeting'])
             from .reports import store_owner
-            path=Path(request['path']); path.write_text(export_text(rows,request['format'],store_owner(store)))
+            text=export_text(rows,request['format'],store_owner(store))
+            # The user's notes are theirs to hand out: only an explicit `include_notes: true` puts them in the
+            # file, and the answer says which one happened so the app never has to guess (ONERILER.md §3).
+            include=request.get('include_notes') is True; included=False
+            if include:
+                from . import notes as N
+                note=N.get_note(store,meeting=request['meeting'])
+                if request['format']=='srt' and note['exists'] and note['text']: raise ValueError('Notlar SRT dosyasına eklenemez; metin veya JSON olarak dışa aktarın.')
+                if request['format']=='json':
+                    text=json.dumps({'segments':json.loads(text),'notes':{'text':note['text'],'revision':note['revision'],
+                        'anchors':[{k:a[k] for k in ('source','start','end','status')} for a in note['anchors']]} if note['exists'] else None},ensure_ascii=False,indent=2)
+                    included=note['exists']
+                elif request['format']!='srt':
+                    block=N.export_block(note,timestamp)
+                    if block: text+='\n'+block; included=True
+            path=Path(request['path']); path.write_text(text)
             learn(store,'export_ok',object=request['meeting'],version=str(request.get('format') or ''),scope='meeting')
-            return {'path':str(path)}
+            return {'path':str(path),'include_notes':include,'notes_included':included}
         if action=='vocabulary':
             from . import glossary as G
             path=G.vocabulary_path(DATA_DIR if db is None else Path(db).parent,ROOT)   # data folder, never the checkout: a write here must not make git dirty and block update.sh

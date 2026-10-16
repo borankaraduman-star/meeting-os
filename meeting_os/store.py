@@ -589,8 +589,12 @@ class Store:
                 self.db.execute('DELETE FROM retry_attempts WHERE meeting=?',(mid,))
             # `insight_edits` carries the user's own wording about this meeting and `review_results` their
             # answers about its text: both die with the meeting they describe, like every other derived row.
-            for t in ('analyses','analysis_usage','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','insight_edits','review_results','segments'):
+            for t in ('analyses','analysis_usage','cloud_chunks','cloud_sources','asr_checkpoints','diarization_checkpoints','corrections','text_edits','insight_edits','review_results','transcript_previews','preview_sessions','preview_calls','segments'):
                 if t in tables: self.db.execute(f'DELETE FROM {t} WHERE meeting=?',(mid,))
+            # The user's own notes go with the meeting too, revisions included (meeting_os/notes.py).
+            if 'meeting_notes' in tables:
+                from .notes import delete_for_meeting
+                delete_for_meeting(self, mid)
             self.db.execute('DELETE FROM meetings WHERE id=?',(mid,))
         removed, kept = self._remove_retry_workspaces(workspaces)
         try: meta=json.loads(row['metadata']) or {}

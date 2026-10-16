@@ -21,7 +21,13 @@ struct SettingsSheet:View {
                         Picker("Model",selection:$model.cloudModel) { ForEach(model.cloudModels) { Text($0.name).tag($0.id) } }
                             .labelsHidden().frame(width:320).disabled(model.recording || model.busy).accessibilityIdentifier("cloudModelPicker")
                     }
-                    Text("Kayıt bitince ses OpenRouter’a gider; bu Mac’te model yüklenmez, canlı metin olmaz. Her yerden ⌃⌥R başlat/bitir, ⌃⌥M an işaretle.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Kayıt bitince ses OpenRouter’a gider; bu Mac’te model yüklenmez. Her yerden ⌃⌥R başlat/bitir, ⌃⌥M an işaretle.").font(.caption2).foregroundStyle(.secondary)
+                    // An explicit, off-by-default choice: it moves the upload from after the meeting into it. The text
+                    // says both sides every time, so turning it on is never a surprise and leaving it off is a promise.
+                    Toggle("Kayıt sırasında canlı taslak (ses parçaları OpenRouter’a gider)",isOn:$model.cloudLivePreview)
+                        .disabled(model.recording).accessibilityIdentifier("cloudLivePreviewToggle")
+                    Text(model.cloudLivePreview ? CloudTranscription.livePreviewOn : CloudTranscription.livePreviewOff).font(.caption2).foregroundStyle(model.cloudLivePreview ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary)).fixedSize(horizontal:false,vertical:true)
+                    if model.recording { Text("Bu ayar bir sonraki kayıtta geçerli olur.").font(.caption2).foregroundStyle(.secondary) }
                 } else {
                     Text("Yerel model bu Mac’te çalışır ve bellek baskısında durur.").font(.caption2).foregroundStyle(.secondary)
                 }

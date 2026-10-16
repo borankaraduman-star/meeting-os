@@ -71,4 +71,23 @@ final class StopEscalationTests:XCTestCase {
         XCTAssertGreaterThan(QuitSequence.deadline(draining:true),StopEscalation.killAfter)
         XCTAssertLessThanOrEqual(QuitSequence.deadline(draining:true),15)   // still bounded: ⌘Q always finishes
     }
+    /// Judge 2026-10-16 (s6): the deadline answered "quit" past `note.settledForQuit`, so a note save or conflict
+    /// park that failed lost the text that lived only in the editor. The deadline now keeps the app open for it.
+    func testTheDeadlineNeverQuitsOverANoteThatIsOnlyInMemory() {
+        let t0=Date(timeIntervalSince1970:1_000_000)
+        var d=NoteDocument(key:.meeting("m1")); d.applyLoaded(key:.meeting("m1"),revision:3,text:"",anchors:[],author:"user")
+        d.edit("yalnız bellekte",now:t0); let r=d.beginSave(now:t0,force:true)!
+        XCTAssertFalse(QuitSequence.quitAtDeadline(noteSettled:d.settledForQuit,noteClaiming:false),"kayıt yoldayken süre dolsa da kapanmaz")
+        d.finishSave(r,.failed)
+        XCTAssertFalse(QuitSequence.quitAtDeadline(noteSettled:d.settledForQuit,noteClaiming:false),"başarısız kayıt metni kaybettirmez")
+        // A conflict whose park failed is the same: the text on screen is on disk nowhere.
+        let again=d.beginSave(now:t0.addingTimeInterval(1),force:true)!
+        d.finishSave(again,.conflict(NoteConflict(revision:4,text:"diğer",anchors:[],parked:true)))
+        d.edit("çatışmada yazılan",now:t0.addingTimeInterval(2)); let park=d.beginSave(now:t0.addingTimeInterval(3),force:true)!
+        d.finishSave(park,.failed)
+        XCTAssertFalse(QuitSequence.quitAtDeadline(noteSettled:d.settledForQuit,noteClaiming:false))
+        XCTAssertFalse(QuitSequence.quitAtDeadline(noteSettled:true,noteClaiming:true),"talep yoldaysa beklenir")
+        XCTAssertTrue(QuitSequence.quitAtDeadline(noteSettled:true,noteClaiming:false),"takılı iş yine kapanmayı engellemez")
+        XCTAssertTrue(QuitSequence.noteKeptOpen.contains("açık kaldı"))
+    }
 }

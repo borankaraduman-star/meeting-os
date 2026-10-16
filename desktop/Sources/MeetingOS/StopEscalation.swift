@@ -45,4 +45,10 @@ enum QuitSequence {
     /// A recording that is still draining gets the whole escalation ladder before the app gives up on it:
     /// replying "yes, quit" at eight seconds would leave a wedged helper running with nobody left to kill it.
     static func deadline(draining:Bool)->TimeInterval { draining ? StopEscalation.killAfter+3 : deadlineSeconds }
+    /// What the deadline may answer. A wedged job or helper must not hold the app open, but the note is different:
+    /// its text lives only in the editor until `note_save` (or the conflict's park) lands. Judge 2026-10-16 (s6):
+    /// the deadline replied "quit" past `settledForQuit`, so a failing save lost the typing at eight seconds. Then
+    /// the quit is cancelled instead — the app stays open with the text on screen, and the next ⌘Q tries again.
+    static func quitAtDeadline(noteSettled:Bool,noteClaiming:Bool)->Bool { noteSettled && !noteClaiming }
+    static let noteKeptOpen="Notunuz kaydedilemedi · uygulama açık kaldı, metniniz düzenleyicide duruyor. Kapatmayı yeniden deneyin."
 }

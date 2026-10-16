@@ -164,16 +164,25 @@ journal=out/'capture-native.jsonl'
 # folder back with --start-offset. Its value is irrelevant; 0.000 is a helper that died before its first chunk.
 if journal.exists() and '--start-offset' not in args:
     sys.stderr.write('Choose a new recording folder\\n');sys.exit(1)
+session,launch=opt('--session'),opt('--launch')
 def emit(event):
+    if session and 'session' not in event: event={**event,'session':session,'launch':int(launch)}
     line=json.dumps(event)
     print(line,flush=True)
     with journal.open('a') as f: f.write(line+'\\n')
+if plan.get('permission_wait') and run==1:   # the real helper asks macOS before it writes `started`
+    emit({'event':'permission','kind':'screen_audio','state':'requested','epoch':0})
+    time.sleep(plan['permission_wait'])
+    emit({'event':'permission','kind':'screen_audio','state':'granted','epoch':0})
 emit({'event':'started','start_offset':offset})
 for n in range(plan['chunks'] if run==1 else plan.get('chunks_after',plan['chunks'])):
     start=offset+12.0*n
     path=out/('mic-%06d.wav'%(int(start)//12))
     path.write_bytes(b'audio')
     emit({'event':'chunk','source':'mic','path':str(path),'start':start,'duration':12.0})
+if plan.get('foreign') and run==1:
+    emit({'event':'chunk','source':'mic','path':str(out/'mic-foreign.wav'),'start':12.0,'duration':12.0,'session':'baska-oturum','launch':1})
+    (out/'foreign-done').write_text('1')
 if run>1: (out/'relaunched').write_text(str(offset))
 if plan.get('error') and run<=plan.get('error_runs',99): emit({'event':'error','message':'device gone'})
 if plan.get('exit') is not None and run<=plan.get('exit_runs',99): sys.exit(plan['exit'])
@@ -251,6 +260,22 @@ class SupervisedHelperTests(unittest.TestCase):
             self.assertNotIn('--start-offset',_json.loads((root/'capture/argv-1.json').read_text()))   # first launch is not a continuation
             self.assertTrue((root/'capture/relaunched').exists())
             self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
+    def test_an_open_permission_dialog_is_not_a_stall(self):
+        # Audit 2026-10-16: the watchdog counted from the launch, so a macOS dialog left open for 44 s (the
+        # default 2*12+20) killed and relaunched the helper the owner was still answering.
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':1,'permission_wait':2.0,'sleep':30})
+            db=Store(root/'db')
+            with patch('meeting_os.live.RELAUNCH_MIN_UPTIME_SECONDS',0),patch('meeting_os.live.RELAUNCH_WAIT_SECONDS',.01),\
+                 patch('meeting_os.live.STALL_MARGIN_SECONDS',.5),patch('meeting_os.live.CAPTURE_STOP_GRACE_SECONDS',.5):
+                record(binary,root/'capture',600,.1,store=db,pipeline_factory=self.stopper(root/'capture/mic-000000.wav'))
+            events=self.journal(root)
+            self.assertEqual([e for e in events if e.get('event')=='relaunch'],[])   # 2 s of dialog against a 0.7 s stall limit
+            self.assertFalse((root/'capture/argv-2.json').exists())
+            self.assertEqual([e['state'] for e in events if e.get('event')=='permission'],['requested','granted'])
+            self.assertEqual(len([e for e in events if e.get('event')=='chunk']),1)
+            self.assertEqual(db.meetings()[0]['status'],'provisional');db.close()
     # Reviewed behaviour changed: an exhausted relaunch budget with audio on disk used to raise, so no receipt
     # was written and nothing ever picked the meeting up again. The complaint now rides the receipt instead.
     def test_exhausted_relaunch_budget_keeps_the_audio_and_hands_it_over(self):
@@ -278,3 +303,54 @@ class SupervisedHelperTests(unittest.TestCase):
                 record(binary,root/'capture',600,12,store=db)
             self.assertEqual([e for e in self.journal(root) if e.get('event')=='relaunch'],[])
             self.assertEqual(db.meetings()[0]['status'],'incomplete');db.close()
+
+
+class SessionLaunchTests(unittest.TestCase):
+    """Every helper start carries the recording's session and its own launch number (schema 2 contract)."""
+    helper=SupervisedHelperTests.helper; stopper=SupervisedHelperTests.stopper; journal=SupervisedHelperTests.journal
+    def test_every_launch_gets_the_session_and_a_relaunch_raises_the_launch(self):
+        import contextlib,io,json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':2,'exit':3,'exit_runs':1,'chunks_after':1,'sleep':30})
+            db=Store(root/'db');receipt=root/'receipt.json';out=io.StringIO()
+            with patch('meeting_os.live.RELAUNCH_MIN_UPTIME_SECONDS',0),patch('meeting_os.live.RELAUNCH_WAIT_SECONDS',.01),contextlib.redirect_stdout(out):
+                record(binary,root/'capture',600,12,store=db,result_path=receipt,pipeline_factory=self.stopper(root/'capture/relaunched'))
+            first=json.loads((root/'capture/argv-1.json').read_text());second=json.loads((root/'capture/argv-2.json').read_text())
+            session=first[first.index('--session')+1]
+            self.assertEqual(second[second.index('--session')+1],session)
+            self.assertEqual((first[first.index('--launch')+1],second[second.index('--launch')+1]),('1','2'))
+            capturing=[json.loads(l) for l in out.getvalue().splitlines() if '"capturing"' in l]
+            self.assertEqual(capturing[0]['session'],session)
+            # Unchanged: same timeline, one relaunch, every chunk counted, provisional receipt.
+            self.assertEqual([e['start'] for e in self.journal(root) if e.get('event')=='chunk'],[0.0,12.0,24.0])
+            result=json.loads(receipt.read_text())
+            self.assertEqual((result['relaunches'],result['finalized_chunks'],result['status']),(1,3,'provisional'))
+            relaunch=[e for e in self.journal(root) if e.get('event')=='relaunch']
+            self.assertEqual(relaunch[0]['session'],session)
+            from meeting_os.desktop import capture_state
+            state=capture_state({'capture_dir':str(root/'capture')})
+            self.assertEqual((state['schema'],state['session'],state['relaunches']),(2,session,1))
+            db.close()
+    def test_another_sessions_chunk_is_kept_but_left_out_of_the_heartbeat(self):
+        import json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);binary=self.helper(root,{'chunks':1,'foreign':True,'sleep':30})
+            db=Store(root/'db');receipt=root/'receipt.json';beats=[]
+            with patch('meeting_os.live.RECORDING_HEARTBEAT_SECONDS',0.0),\
+                 patch('meeting_os.reports.write_recording_heartbeat',side_effect=lambda d,s:beats.append(s)),\
+                 patch('meeting_os.reports.clear_recording_heartbeat'):
+                record(binary,root/'capture',600,12,store=db,result_path=receipt,data_dir=root/'data',
+                       pipeline_factory=self.stopper(root/'capture/foreign-done'))
+            self.assertTrue(beats)
+            self.assertEqual(beats[-1]['chunks'],{'mic':1})          # only this helper's own evidence
+            self.assertEqual(beats[-1]['chunks_total'],2)            # the audio on disk is still all counted
+            self.assertEqual(json.loads(receipt.read_text())['finalized_chunks'],2)
+            db.close()
+    def test_old_helper_lines_without_a_stamp_are_this_helpers(self):
+        from meeting_os.live import own_event
+        self.assertTrue(own_event({'event':'chunk'},'s',1))
+        self.assertTrue(own_event({'event':'chunk','session':'s','launch':1},'s',1))
+        self.assertFalse(own_event({'event':'chunk','session':'s','launch':1},'s',2))
+        self.assertFalse(own_event({'event':'chunk','session':'x','launch':2},'s',2))

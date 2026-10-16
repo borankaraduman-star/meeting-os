@@ -6,11 +6,19 @@ enum CloudTranscription {
     static let modeKey="transcriptionMode"
     static let modelKey="cloudTranscriptionModel"
     static let defaultModel="microsoft/mai-transcribe-2"
-    static func recordArguments(mode:String,directory:String,title:String,receipt:String)->[String] {
+    /// Off unless the user turns it on in Ayarlar → Sistem: it changes WHEN audio leaves the Mac (during the
+    /// meeting instead of after it) and what the meeting costs.
+    static let livePreviewKey="cloudLivePreview"
+    static let livePreviewOn="Kayıt sırasında ses parçaları OpenRouter’a gönderilir ve canlı taslak metin olarak görünür. Toplantı sonundaki asıl yazıya çevirme yine yapılır; taslak onun yerini tutmaz. Ses iki kez gönderildiği için maliyet artar."
+    static let livePreviewOff="Kapalıyken kayıt bitene kadar hiçbir şey gönderilmez: ses toplantı sonunda bir kez OpenRouter’a gider."
+    static func recordArguments(mode:String,directory:String,title:String,receipt:String,livePreview:Bool=false)->[String] {
         var args=["record",directory,"--seconds","14400","--output",receipt]   // the title travels in MEETING_OS_TITLE: argv is readable by every user on the Mac
         // `--cloud` only marks intent on the meeting: if the app is quit before finalize ever runs, the idle
         // queue can still tell this recording was meant for OpenRouter. It loads and uploads nothing itself.
         if mode != "openrouter" { args.insert("--live",at:2) } else { args.insert("--cloud",at:2) }   // live local preview only in local mode
+        // The cloud draft needs both flags: asking for a preview is not, on its own, permission to upload. The
+        // local mode already has its own live text and never sends anything, so the choice does not apply there.
+        if mode=="openrouter" && livePreview { args += ["--cloud-preview","--allow-preview-upload"] }
         return args
     }
     static func finalizeArguments(meeting:String,model:String?,output:String)->[String] {

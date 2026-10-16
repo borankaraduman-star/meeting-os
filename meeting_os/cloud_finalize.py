@@ -687,6 +687,7 @@ def assign_identities(scored):
 
 
 MARKER_DRIFT_FLOOR=1.0   # under a second is launch jitter and write latency, not a clock that ran away
+PRE_START_STATUS=('permission','first_buffer','channel_flow')   # journal lines that may precede `started`
 
 def wall_audio_drift(capture_dir, journal='capture-native.jsonl'):
     """How far the wall clock has run ahead of the recording's audio timeline, sampled at every finalized chunk.
@@ -712,6 +713,13 @@ def wall_audio_drift(capture_dir, journal='capture-native.jsonl'):
             # The first line of a capture folder is the first helper's `started`; a relaunched helper appends to
             # the same file, so this stays the origin of the one meeting even across relaunches. A journal that
             # opens any other way (an older build, a helper that died before starting) is not measurable.
+            # A schema 2 helper journals its macOS permission questions BEFORE `started` (capture main.swift):
+            # those lines say nothing about audio, and refusing the journal over them left every current
+            # recording uncorrected. The wait they record is not on the audio timeline, so `started` stays the origin.
+            # The buffer callback's `first_buffer`/`channel_flow` leave through their own serial event queue
+            # (capture main.swift `emitAsync`) while `started` is written after `startCapture` returns, so a valid
+            # journal may carry them first (judge 2026-10-16 s6). They are status, not audio timeline: skipped too.
+            if event.get('event') in PRE_START_STATUS: continue
             if not stamped or event.get('event')!='started': return None,[]
             origin=float(wall);continue
         if not stamped: continue
@@ -729,12 +737,41 @@ def wall_audio_drift(capture_dir, journal='capture-native.jsonl'):
 
 def drift_before(samples, seconds):
     """Drift accumulated by the time the wall clock read `seconds`. Each chunk is an independent measurement, so
-    a single slow fsync moves one marker slightly instead of poisoning every later one."""
-    value=0.0
+    a single slow fsync moves one marker slightly instead of poisoning every later one.
+
+    A moment between two chunks that straddle a sleep or a relaunch is the hard case: the chunk BEFORE it has not
+    seen the gap yet, so taking its drift put a link added four seconds after waking 300 s late (judge 2026-10-16:
+    "doğru 104 yerine 400"). Between the two chunks only (later audio end − earlier audio end) seconds were
+    awake, split into a stretch right after the earlier chunk and one right before the later one. A moment
+    further than that from the earlier chunk cannot be before the gap, one further than that from the later
+    chunk cannot be after it; a moment that could be either goes with the nearer chunk, and one that fits
+    neither fell inside the gap itself and lands where the earlier chunk left the audio."""
+    before=None;after=None
     for wall_elapsed,drift in samples:
-        if wall_elapsed>seconds: break
-        value=drift
+        if wall_elapsed>seconds: after=(wall_elapsed,drift);break
+        before=(wall_elapsed,drift)
+    if before is None: value=0.0
+    elif after is None: value=before[1]
+    else:
+        (w0,d0),(w1,d1)=before,after
+        awake=max(0.0,(w1-d1)-(w0-d0))
+        early,late=seconds-w0<=awake,w1-seconds<=awake
+        if late and (not early or w1-seconds<seconds-w0): value=d1
+        elif early: value=d0
+        else: value=min(d1,max(d0,seconds-(w0-d0)))   # inside the gap: audio w0−d0, the last it was seen at
     return round(value,1) if value>=MARKER_DRIFT_FLOOR else 0.0
+
+
+def audio_seconds_at(capture_dir, wall):
+    """Where an absolute wall-clock moment falls on the recording's audio timeline, with the same measured
+    correction `read_markers` applies: seconds from the helper's own `started`, minus the sleep and relaunch
+    splices accumulated by then. None when the journal cannot measure it (an older build, no `started` yet) —
+    the caller then keeps whatever estimate it had."""
+    if type(wall) not in (int,float) or not math.isfinite(wall): return None
+    origin,samples=wall_audio_drift(capture_dir)
+    if origin is None: return None
+    elapsed=max(0.0,round(float(wall)-origin,1))
+    return round(max(0.0,elapsed-drift_before(samples,elapsed)),1)
 
 
 def read_markers(capture_dir, limit=200):
@@ -766,7 +803,7 @@ def read_markers(capture_dir, limit=200):
 MIC_GATE_MIN_OVERLAP = 1.0   # a piece that touches an open gate for less than a second is room noise, not the meeting
 
 
-def mic_gate_windows(capture_dir):
+def mic_gate_windows(capture_dir, live=False):
     """The spans of the recording during which the owner's microphone counted as meeting audio.
 
     Boran, 11 Eyl 2026: "Mikrofondan gelen her sesi almak yerine sadece toplantıda unmute edince … alsın."
@@ -808,7 +845,10 @@ def mic_gate_windows(capture_dir):
     # or Accessibility never granted all read as `zoomMuted is None` → one `off` line at t=0 and nothing else.
     # Returning [] there dropped the owner's whole microphone track from every non-Zoom meeting, silently
     # (audit 2026-09-13 #1). The track is only discarded on evidence the gate was really watched AND closed.
-    if not windows: return None
+    # `live=True` is the draft preview asking WHILE the meeting runs: "never opened" then only means "not opened
+    # yet", and guessing open would send closed-gate microphone audio to the cloud before the owner unmutes.
+    # A draft that skips is lost text, never lost audio — the final pass still decides with the whole journal.
+    if not windows: return [] if live else None
     return windows
 
 

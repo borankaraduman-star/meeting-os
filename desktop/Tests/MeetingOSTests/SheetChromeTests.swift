@@ -51,6 +51,6 @@ final class SheetChromeTests:XCTestCase {
     func testSectionContentHeightsAreUnchanged() {
         XCTAssertEqual(SettingsSections.height("genel"),540)
         XCTAssertEqual(SettingsSections.height("sesler"),940)
-        XCTAssertEqual(SettingsSections.height("sistem"),900)   // grew with the Hatalar card (1.2.65)
+        XCTAssertEqual(SettingsSections.height("sistem"),960)   // grew with the Hatalar card (1.2.65), then the live-draft choice
     }
 }

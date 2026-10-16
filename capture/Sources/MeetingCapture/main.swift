@@ -3,6 +3,7 @@ import ScreenCaptureKit
 import AVFoundation
 import CoreMedia
 import Darwin
+import CaptureAudio   // pcmPeak: interleaved and planar buffers scanned within their own samples
 
 var journal: FileHandle?
 let journalLock = NSLock()
@@ -17,8 +18,43 @@ func chunkClock() -> Date { journalLock.lock(); let value = lastChunkAt; journal
 /// the last finalized chunk, so the wall seconds those two things cost are recorded nowhere else. With `wall`
 /// on the chunk lines the drift is measured rather than guessed, and finalize can put the ⌘M markers — which
 /// the app stamps on the wall clock — back where the transcript actually is.
+/// Session and launch identify who wrote a line: the app passes --session/--launch, a bare run gets its own UUID
+/// and launch 0, so events from a stale helper can be told apart from the current one.
+var sessionID = UUID().uuidString.lowercased()
+var launchNumber = 0
+/// Flow events leave the audio queue through this serial queue: the journal write + fsync never run in a callback.
+let eventQueue = DispatchQueue(label: "meeting-os.events")
+func emitAsync(_ object: [String: Any]) { eventQueue.async { emit(object) } }
+
+/// Pure per-source state: which buffers arrived this epoch and whether the source is silent, carrying signal or
+/// stalled. Only transitions produce events, so a steady stream costs nothing but a peak scan.
+struct SourceFlow {
+    enum State: String { case silent, signal, stalled }
+    var seq = 0
+    var sawFirst = false
+    var state: State?
+    var lastBuffer: Date
+    init(now: Date) { lastBuffer = now }
+    mutating func newEpoch(now: Date) { sawFirst = false; state = nil; lastBuffer = now }
+    /// Returns the events (without session/epoch/source) a valid buffer with this peak produces.
+    mutating func buffer(peak: Float, now: Date) -> [[String: Any]] {
+        seq += 1; lastBuffer = now
+        var events: [[String: Any]] = []
+        if !sawFirst { sawFirst = true; events.append(["event":"first_buffer", "peak":Double(peak), "silent":peak == 0, "seq":seq]) }
+        let next: State = peak > 0 ? .signal : .silent
+        if state != next { state = next; events.append(["event":"channel_flow", "state":next.rawValue, "seq":seq]) }
+        return events
+    }
+    mutating func tick(now: Date, stalledAfter: Double) -> [[String: Any]] {
+        guard state != .stalled, now.timeIntervalSince(lastBuffer) > stalledAfter else { return [] }
+        state = .stalled
+        return [["event":"channel_flow", "state":"stalled", "seq":seq]]
+    }
+}
+
 func emit(_ object: [String: Any]) {
     var object = object
+    object["session"] = sessionID; object["launch"] = launchNumber
     object["wall"] = (Date().timeIntervalSince1970*1000).rounded()/1000
     if let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), var line = String(data: data, encoding: .utf8) {
         line += "\n"
@@ -107,6 +143,39 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var failureValue: Error?
     private var streamErrorValue: Error?
     private var lastSampleValue = Date()
+    /// Flow state has its own lock and is touched only for a few comparisons; events go out via eventQueue.
+    private let flowLock = NSLock()
+    private var epochValue = 0
+    private var flows: [String: SourceFlow] = [:]
+    func currentEpoch() -> Int { flowLock.lock(); defer { flowLock.unlock() }; return epochValue }
+    func bumpEpoch() -> Int {
+        flowLock.lock(); defer { flowLock.unlock() }
+        epochValue += 1; let now = Date()
+        for key in flows.keys { flows[key]?.newEpoch(now: now) }
+        return epochValue
+    }
+    func observe(source: String, peak: Float) {
+        let now = Date()
+        flowLock.lock()
+        var flow = flows[source] ?? SourceFlow(now: now)
+        let events = flow.buffer(peak: peak, now: now); flows[source] = flow
+        let epoch = epochValue
+        flowLock.unlock()
+        for var e in events { e["source"] = source; e["epoch"] = epoch; emitAsync(e) }
+    }
+    func tickFlow(stalledAfter: Double = 2) {
+        let now = Date()
+        flowLock.lock()
+        var out: [[String: Any]] = []
+        for key in ["mic", "system"] {
+            var flow = flows[key] ?? SourceFlow(now: epochStart)
+            for var e in flow.tick(now: now, stalledAfter: stalledAfter) { e["source"] = key; e["epoch"] = epochValue; out.append(e) }
+            flows[key] = flow
+        }
+        flowLock.unlock()
+        for e in out { emitAsync(e) }
+    }
+    private let epochStart = Date()
     init(directory: URL, seconds: Double, offset: Double = 0) {
         origin = CMClockGetTime(CMClockGetHostTimeClock()).seconds
         writers = [.audio: ChunkWriter(directory, "system", seconds, offset: offset), .microphone: ChunkWriter(directory, "mic", seconds, offset: offset)]
@@ -131,6 +200,7 @@ final class Capture: NSObject, SCStreamOutput, SCStreamDelegate {
         let time = sample.presentationTimeStamp.seconds - origin
         guard time.isFinite, time > -1 else { emit(["event":"error", "message":"Invalid capture clock"]); return }
         markSample()
+        observe(source: writer.source, peak: pcmPeak(pcm))
         do { try writer.append(pcm, time: time) }
         catch { fail(error); emit(["event":"error", "message":error.localizedDescription]) }
     }
@@ -180,7 +250,7 @@ func assemblyReserveBytes(elapsed: Double, sources: Int = assemblySources) -> In
 }
 func run() async throws {
     if CommandLine.arguments.contains("--help") {
-        print("MeetingCapture --output DIR [--seconds 60] [--chunk-seconds 12] [--start-offset 0] [--self-test]")
+        print("MeetingCapture --output DIR [--seconds 60] [--chunk-seconds 12] [--start-offset 0] [--session ID] [--launch N] [--self-test]")
         return
     }
     let directory = URL(fileURLWithPath: option("--output") ?? "capture", isDirectory: true).standardizedFileURL
@@ -188,6 +258,8 @@ func run() async throws {
     signal(SIGPIPE, SIG_IGN)
     // Seconds already recorded into this folder by a helper that died. The supervisor hands it back so one
     // meeting keeps one timeline across relaunches; without it an existing folder still means "already used".
+    if let value = option("--session"), !value.isEmpty { sessionID = value }
+    launchNumber = max(0, Int(option("--launch") ?? "0") ?? 0)
     let startOffset = max(0, Double(option("--start-offset") ?? "0") ?? 0)
     guard startOffset.isFinite, startOffset < 86400 else {
         throw NSError(domain:"MeetingCapture", code:8, userInfo:[NSLocalizedDescriptionKey:"start-offset must be 0...86400"])
@@ -219,12 +291,17 @@ func run() async throws {
     }
     // A continuation inherits its predecessor's seconds, and those have to be assembled too.
     if let available=remainingBytes(directory), available < max(diskStartBytes, assemblyReserveBytes(elapsed: startOffset)) { throw diskError() }
-    guard await AVCaptureDevice.requestAccess(for: .audio) else {
+    emit(["event":"permission", "kind":"microphone", "state":"requested", "epoch":0])
+    let micGranted = await AVCaptureDevice.requestAccess(for: .audio)
+    emit(["event":"permission", "kind":"microphone", "state":micGranted ? "granted" : "denied", "epoch":0])
+    guard micGranted else {
         throw NSError(domain:"MeetingCapture", code:2, userInfo:[NSLocalizedDescriptionKey:"Microphone access denied. Enable MeetingCapture in System Settings > Privacy & Security > Microphone."])
     }
     let content: SCShareableContent
-    do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }
-    catch { throw NSError(domain:"MeetingCapture", code:4, userInfo:[NSLocalizedDescriptionKey:"System audio capture unavailable. Check System Settings > Privacy & Security > Screen & System Audio Recording. Original error: \(error.localizedDescription)"]) }
+    emit(["event":"permission", "kind":"screen_audio", "state":"requested", "epoch":0])
+    do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true); emit(["event":"permission", "kind":"screen_audio", "state":"granted", "epoch":0]) }
+    catch {
+        emit(["event":"permission", "kind":"screen_audio", "state":"denied", "epoch":0]); throw NSError(domain:"MeetingCapture", code:4, userInfo:[NSLocalizedDescriptionKey:"System audio capture unavailable. Check System Settings > Privacy & Security > Screen & System Audio Recording. Original error: \(error.localizedDescription)"]) }
     guard let display = content.displays.first else { throw NSError(domain:"MeetingCapture", code:3, userInfo:[NSLocalizedDescriptionKey:"No display available"] ) }
     let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
     let config = SCStreamConfiguration()
@@ -245,7 +322,7 @@ func run() async throws {
     try await stream.startCapture()
     capture.markSample()
     let recordingStarted = Date()
-    emit(["event":"started", "directory":directory.path, "clock":"hostTime", "sources":["mic", "system"], "start_offset":startOffset])
+    emit(["event":"started", "directory":directory.path, "clock":"hostTime", "sources":["mic", "system"], "start_offset":startOffset, "schema":2, "epoch":0])
     let restartGate = DispatchQueue(label:"meeting-os.restart")
     var restarting = false
     var restarts = 0
@@ -272,7 +349,7 @@ func run() async throws {
             try? await Task.sleep(nanoseconds: UInt64(restartBackoff[min(restarts, restartBackoff.count)-1] * 1_000_000_000))
             do {
                 let fresh = try makeStream(); try await fresh.startCapture(); stream = fresh; capture.markSample()
-                emit(["event":"restarted", "attempt":restarts])
+                emit(["event":"restarted", "attempt":restarts, "epoch":capture.bumpEpoch()])
             } catch {
                 emit(["event":"stream_stopped", "message":"yeniden kurulamadı: \(error.localizedDescription)"])
             }
@@ -322,6 +399,7 @@ func run() async throws {
                     else if available >= warnAt { lastDiskWarning=nil }
                 }
             }
+            capture.tickFlow()
             if let err = capture.takeStreamError() { restartStream(reason: err.localizedDescription) }
             else if !restarting && capture.secondsSinceLastSample() > 20 { restartStream(reason: "20 sn ses gelmedi") }
             if Date() >= deadline || capture.getFailure() != nil { stop() }

@@ -6,7 +6,7 @@ struct TranscriptView:View {
     var body:some View {
         // Nothing to scroll: no NamesCard, no hints, no rows. Rendering the notice outside the ScrollView is
         // what lets it centre vertically — inside one it would only ever be as tall as its own text.
-        if model.rows.isEmpty {
+        if model.rows.isEmpty && !model.showsDraftSection {
             TranscriptEmptyView(model:model).noticeArea()
         } else {
             transcript
@@ -57,11 +57,17 @@ struct TranscriptView:View {
                         if i>0, blocks[i-1].label != block.label { Divider().padding(.leading,62).padding(.vertical,4) }
                         TranscriptBlockView(model:model,block:block,canPlay:canPlay,canEdit:canEdit,showAsides:model.showAsides,highlighted:model.highlighted.map { h in block.rows.contains { $0.id==h } || block.asides.contains { $0.id==h } } ?? false,continued:i>0 && blocks[i-1].label==block.label,marks:Markers.inBlock(marks,start:block.start,end:block.end),hideFillers:model.hideFillers,profiles:model.profiles.map(\.name),attendees:model.calendarAttendees,wordFix:model.wordFix?.blockID==block.id ? model.wordFix : nil).equatable().id(block.id)
                     }
-                    if blocks.isEmpty { TranscriptEmptyView(model:model).inlineNoticeArea() }
+                    if blocks.isEmpty && !model.showsDraftSection { TranscriptEmptyView(model:model).inlineNoticeArea() }
                 } else {
                     let rows=model.visibleRows   // filtered once per rebuild, not once per body pass
                     ForEach(rows) { row in TranscriptRow(model:model,row:row,canPlay:canPlay,canEdit:canEdit,wordFix:model.wordFix?.blockID==row.id ? model.wordFix : nil).equatable().id(row.id) }
-                    if rows.isEmpty { TranscriptEmptyView(model:model).inlineNoticeArea() }
+                    if rows.isEmpty && !model.showsDraftSection { TranscriptEmptyView(model:model).inlineNoticeArea() }
+                }
+                // The cloud draft sits under the result, never inside it: not a Row, so no block, search hit,
+                // word link, play button, Düzelt or naming menu can reach it. Final rows covering a span hide its draft.
+                if model.showsDraftSection {
+                    PreviewDraftHeader(status:model.previewStatus).id("draft-header")
+                    ForEach(model.shownDrafts) { draft in PreviewDraftRow(draft:draft).equatable().id("draft:"+draft.id) }
                 }
             }.padding(24).readingColumn()
         }
@@ -200,5 +206,36 @@ struct TranscriptBlockView:View, Equatable {
                 }
             }.frame(maxWidth:.infinity,alignment:.leading)
         }.padding(.vertical,continued ? 4 : 10).padding(.horizontal,12).background(MeetingStyle.accent.opacity(highlighted ? 0.10 : 0),in:RoundedRectangle(cornerRadius:10)).overlay(RoundedRectangle(cornerRadius:10).stroke(MeetingStyle.accent.opacity(highlighted ? 0.9 : 0),lineWidth:2)).animation(.easeOut(duration:0.4),value:highlighted)
+    }
+}
+
+/// One line over the drafts: what the worker is doing and that the result will replace all of it.
+struct PreviewDraftHeader:View {
+    let status:String
+    var body:some View {
+        VStack(alignment:.leading,spacing:3) {
+            Label(status,systemImage:"icloud.and.arrow.up").font(.caption.weight(.semibold)).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true)
+            Text(PreviewDrafts.finalNotice).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+        }.padding(.top,8).accessibilityIdentifier("previewDraftHeader")
+    }
+}
+
+/// A draft line: dashed outline, muted italic text, a “Taslak” capsule and the source. Plain text only — no
+/// links, so a word click (and the correction it opens) cannot land on a draft.
+struct PreviewDraftRow:View, Equatable {
+    let draft:PreviewDraft
+    var body:some View {
+        HStack(alignment:.top,spacing:14) {
+            Text(draft.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width:48,alignment:.leading)
+            VStack(alignment:.leading,spacing:4) {
+                HStack(spacing:6) {
+                    Text(draft.label).font(.caption2.weight(.semibold)).foregroundStyle(.orange).padding(.horizontal,6).padding(.vertical,2).background(Color.orange.opacity(0.12),in:Capsule())
+                    Text(draft.sourceLabel).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(draft.text).font(.system(size:15).italic()).foregroundStyle(.secondary).textSelection(.enabled).lineSpacing(6).fixedSize(horizontal:false,vertical:true).frame(maxWidth:760,alignment:.leading)
+            }.frame(maxWidth:.infinity,alignment:.leading)
+        }.padding(.vertical,8).padding(.horizontal,12)
+        .overlay(RoundedRectangle(cornerRadius:10).stroke(Color.secondary.opacity(0.35),style:StrokeStyle(lineWidth:1,dash:[4,3])))
+        .accessibilityElement(children:.combine).accessibilityLabel("\(draft.label), \(draft.sourceLabel), \(draft.time): \(draft.text)")
     }
 }

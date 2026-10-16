@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from .progress import emit
 from .supervisor import open_lifeline,close_lifeline
@@ -21,8 +22,16 @@ RELAUNCH_WAIT_SECONDS = 1.0           # let ScreenCaptureKit release the devices
 RELAUNCH_MIN_UPTIME_SECONDS = 20.0
 STALL_MARGIN_SECONDS = 20.0           # added to 2*chunk_seconds before a silent-but-alive helper is replaced
 RECORDING_HEARTBEAT_SECONDS = 60.0
+PREVIEW_STOP_GRACE_SECONDS = 5.0      # the opt-in draft transcript gets this long after stop, then it is cancelled; the audio never waits for it
 
-def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None, result_path=None, data_dir=None, cloud=False):
+def own_event(event,session,launch):
+    """False for a line stamped with another session or launch than the helper it came from. Unstamped lines are
+    an old (schema 1) helper's and count as before."""
+    other,number=event.get('session'),event.get('launch')
+    if isinstance(other,str) and other!=session: return False
+    return type(number) is not int or number==launch
+
+def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None, title='Meeting', pipeline_factory=None, result_path=None, data_dir=None, cloud=False, preview_factory=None):
     directory=Path(directory).resolve()
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
     if (directory/'events.jsonl').exists(): raise ValueError('Use a new capture directory; existing recordings are never overwritten')
@@ -34,7 +43,11 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
     pending=queue.Queue(); errors=[]; captured=[0]; preview_failed=0
     capture_failed=threading.Event()
     from .recovery import current_job_metadata
-    mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True,
+    # One session per recording, one launch number per helper process. A schema 2 helper stamps both on every
+    # line, so the app can tell this helper's evidence from a replaced one's late lines (capture_metrics.belongs).
+    # The meeting carries the session too: desktop.capture_state then ignores any other session's line outright.
+    session=str(uuid.uuid4()); launch=0
+    mid=store.create_meeting(title,{**current_job_metadata(),'capture_dir':str(directory),'provisional':True,'capture_session':session,
         **({'cloud_intent':'capture'} if cloud else {})}) if store else None   # marker only: finalize still writes cloud_mode
     def learn(action,outcome='applied'):
         """One learning_event from the recorder. Bounded, local, never on the audio path: the write happens
@@ -46,7 +59,12 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         except Exception: pass
     learn('record_start')
     relaunches=0; relaunched_at=[]; last_end=0.0; last_chunk_at=None; per_source={}
+    # macOS permission questions the current helper has asked and not had answered yet. While one is open no chunk
+    # can arrive, and that is the owner reading a dialog, not a hung helper: the stall clock does not run, and it
+    # starts again from the answer (permission_settled_at), never from the launch.
+    asking=set(); permission_settled_at=0.0
     process=None; guardian=None; lifeline=None; thread=None; launched_at=0.0; error_mark=0; marker=None
+    preview=None
     last_beat=0.0   # read by the finally; must exist before the first thing that can fail (model warm-up)
     def completed(status):
         if result_path is not None:
@@ -80,8 +98,8 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
             from .errors import record,meeting_key
             record('capture',message,data_dir=data_dir,context={'meeting':meeting_key(mid),'relaunches':relaunches})
         except Exception: pass
-    def reader(child,sentinel):
-        nonlocal last_end,last_chunk_at
+    def reader(child,sentinel,own_launch):
+        nonlocal last_end,last_chunk_at,permission_settled_at
         try:
             with (directory/'events.jsonl').open('a',buffering=1) as log:
                 for line in child.stdout:
@@ -95,7 +113,13 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
                         last_chunk_at=time.monotonic()
                         start,duration=event.get('start'),event.get('duration')
                         if type(start) in (int,float): last_end=max(last_end,float(start)+(float(duration) if type(duration) in (int,float) else 0.0))
-                        per_source[event.get('source')]=per_source.get(event.get('source'),0)+1
+                        # The heartbeat's per-source count is this helper's evidence only. captured[0], the queue,
+                        # the watchdog and the relaunch offset above still take every chunk: audio on disk is
+                        # never withheld because of a stamp.
+                        if own_event(event,session,own_launch): per_source[event.get('source')]=per_source.get(event.get('source'),0)+1
+                    if event.get('event')=='permission' and own_event(event,session,own_launch) and own_launch==launch:
+                        if event.get('state')=='requested': asking.add(event.get('kind'))
+                        else: asking.discard(event.get('kind')); permission_settled_at=time.monotonic()
                     if event.get('event')=='error':
                         errors.append(event.get('message','Capture error'))
                         capture_failed.set()
@@ -107,13 +131,16 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         """`offset is None` is the first launch. Any number — 0.0 included — is a relaunch, and the helper is
         told so by the presence of --start-offset, not by its value: a helper that stalls before its first
         chunk hands back 0.000 seconds, and that meeting must still be recoverable."""
-        nonlocal process,guardian,lifeline,thread,launched_at,error_mark,marker
-        command=[binary,'--output',str(directory),'--seconds',str(seconds if offset is None else max(1.0,float(seconds)-offset)),'--chunk-seconds',str(chunk_seconds)]
+        nonlocal process,guardian,lifeline,thread,launched_at,error_mark,marker,launch
+        launch+=1   # counts helper processes, a relaunch included; the session stays the recording's
+        asking.clear()   # a replaced helper's unanswered question is not the new one's
+        command=[binary,'--output',str(directory),'--seconds',str(seconds if offset is None else max(1.0,float(seconds)-offset)),'--chunk-seconds',str(chunk_seconds),
+                 '--session',session,'--launch',str(launch)]
         if offset is not None: command+=['--start-offset',f'{offset:.3f}']
         process=subprocess.Popen(command,stdout=subprocess.PIPE,text=True,start_new_session=True)
         guardian,lifeline=open_lifeline(process)
         launched_at=time.monotonic(); error_mark=len(errors); marker=object()   # end-of-stdout token for this helper only
-        thread=threading.Thread(target=reader,args=(process,marker),daemon=True); thread.start()
+        thread=threading.Thread(target=reader,args=(process,marker,launch),daemon=True); thread.start()
     def retire():
         nonlocal guardian,lifeline
         if process.poll() is None:
@@ -132,7 +159,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         learn('record_stop','noop')   # a start with no stop would read as a recording still running
         raise
     started=time.monotonic()
-    print(json.dumps({'meeting':mid,'capture_dir':str(directory),'status':'capturing'},ensure_ascii=False),flush=True)
+    print(json.dumps({'meeting':mid,'capture_dir':str(directory),'status':'capturing','session':session},ensure_ascii=False),flush=True)
     old_handler=signal.getsignal(signal.SIGINT); stopping=False; stop_deadline=None; reason=None
     def stop(sig,frame):
         nonlocal stopping, stop_deadline
@@ -162,7 +189,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         retire()
         relaunched_at.append(now); relaunches+=1
         offset=round(max(last_end,0.0),3)
-        note({'event':'relaunch','attempt':relaunches,'reason':why,'start_offset':offset})
+        note({'event':'relaunch','attempt':relaunches,'reason':why,'start_offset':offset,'session':session})
         time.sleep(RELAUNCH_WAIT_SECONDS)
         del errors[mark:]   # the dead helper's complaints are history: a recording that recovers stays provisional
         capture_failed.clear(); stop_deadline=None; reason=None
@@ -177,7 +204,7 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         if data_dir is None: return
         from .capture_metrics import capture_health, journal_events
         from .reports import write_recording_heartbeat
-        health=capture_health(journal_events(directory/'capture-native.jsonl'))
+        health=capture_health(journal_events(directory/'capture-native.jsonl'),session)   # another session's lines never count
         try: free=shutil.disk_usage(directory).free
         except OSError: free=None
         write_recording_heartbeat(data_dir,{'meeting':mid,'capture_dir':str(directory),'elapsed_seconds':round(time.monotonic()-started,1),
@@ -190,13 +217,20 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         # Capture and its durable journal start before expensive model warm-up.
         if pipeline_factory is not None: pipeline=pipeline_factory()
         if hasattr(pipeline,"cancel_requested"):pipeline.cancel_requested=lambda:stopping
+        if preview_factory is not None and not stopping:
+            # Opt-in draft transcript on its own thread. Whatever goes wrong here is a missing draft, never a lost recording.
+            # A stop that came while preparing (before the helper's first line) gets no worker at all: no thread, no adapter.
+            try:
+                preview=preview_factory(directory,mid,session=session)
+                if preview is not None: print(json.dumps({'preview':preview.status()},ensure_ascii=False,default=str),flush=True)
+            except Exception as exc: preview=None; note_error(f'Canlı önizleme başlatılamadı: {type(exc).__name__}')
         while True:
             # A failed helper can leave stdout open. Give it the same bounded
             # shutdown and finalized-chunk drain as an explicit user stop.
             if capture_failed.is_set() and stop_deadline is None: capture_failed.clear(); end_helper('error')
             if os.getppid()==1 and not stopping: errors.append('Uygulama kapandı; kayıt güvenle durduruldu'); stop(None,None)   # orphaned by an app crash: never record for hours unattended
             # Alive but silent for two chunk periods: ScreenCaptureKit is gone and the helper has not noticed.
-            if not stopping and stop_deadline is None and process.poll() is None and time.monotonic()-max(launched_at,last_chunk_at or 0.0) > 2*float(chunk_seconds)+STALL_MARGIN_SECONDS:
+            if not stopping and stop_deadline is None and process.poll() is None and not asking and time.monotonic()-max(launched_at,last_chunk_at or 0.0,permission_settled_at) > 2*float(chunk_seconds)+STALL_MARGIN_SECONDS:
                 end_helper('stall')
             # The reader may never reach EOF if the native helper hangs.
             # Check the deadline before waiting, including when chunks are queued.
@@ -214,6 +248,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
                 if event is not marker: continue   # a helper we already replaced; the current one is still running
                 if stopping or not relaunch(): break
                 continue
+            if preview is not None and not stopping and event.get('event')=='chunk':
+                try: preview.offer(event)   # put_nowait only; the journal already holds the chunk
+                except Exception: preview=None
             if pipeline is None: print(json.dumps(event),flush=True); continue
             if stopping:
                 # Completed chunks are already durable in the capture journal.
@@ -260,6 +297,9 @@ def record(binary, directory, seconds, chunk_seconds, pipeline=None, store=None,
         raise
     finally:
         signal.signal(signal.SIGINT,old_handler)
+        if preview is not None:
+            try: preview.stop(PREVIEW_STOP_GRACE_SECONDS)
+            except Exception: pass
         if process.poll() is None:
             process.send_signal(signal.SIGTERM)
             try: process.wait(timeout=15)
