@@ -6,7 +6,23 @@ public enum CaptureSignalPresentation {
     private static let maxSeconds: Double = 86400
     private static let staleThresholdSeconds: Double = 30
 
+    /// Schema 2 carries the session phase and each channel's own buffer evidence; schema 1 only a process state
+    /// and a closed chunk's reading. A schema-1 payload reads exactly as it always did.
+    public static func isSessionPayload(_ capture: [String: Any]) -> Bool {
+        if let schema = capture["schema"] as? Int, schema >= 2 { return true }
+        return capture["session_state"] is String || capture["channels"] is [String: Any]
+    }
+
     public static func label(_ capture: [String: Any]) -> String {
+        if isSessionPayload(capture) {
+            // Stateless reading of a schema-2 payload: the five-second warning needs a clock and lives in CaptureSessionState.
+            var state = CapturePhase(rawValue: capture["session_state"] as? String ?? "") ?? .awaitingStream
+            let channels = capture["channels"] as? [String: Any]
+            let mic = CaptureChannelStatus.parse(channels?["mic"]), system = CaptureChannelStatus.parse(channels?["system"])
+            if state == .awaitingStream, mic.hasBuffer || system.hasBuffer { state = .receiving }
+            let headline = state == .receiving ? "Kayıt: \(formattedTime(sanitizedSeconds(capture["seconds"])))" : state.headline
+            return sessionLabel(headline: headline, mic: mic, system: system, warning: nil, capture: capture)
+        }
         let state = capture["state"] as? String
         let signals = capture["signals"] as? [String: Any]
 
@@ -34,6 +50,12 @@ public enum CaptureSignalPresentation {
         return "\(firstLine)\nMikrofon: \(mic)\nSistem: \(system)" + warning + disk
     }
 
+    static func sessionLabel(headline: String, mic: CaptureChannelStatus, system: CaptureChannelStatus, warning: String?, capture: [String: Any]) -> String {
+        let missingPreview = (capture["preview"] as? [String: Any])?["has_known_failures"] as? Bool == true
+        return "\(headline)\nMikrofon: \(mic.label)\nSistem: \(system.label)" + (warning.map { "\n" + $0 } ?? "")
+            + (missingPreview ? "\nCanlı metin eksik" : "") + (lowDisk(capture).map { "\n" + $0 } ?? "")
+    }
+
     /// "Disk azalıyor · 1,2 GB boş · kayıt 39 dk sonra durabilir" — built from the helper's `low_disk` journal
     /// line, which the bridge surfaces as `low_disk_bytes`. A number of minutes is the only form of this warning
     /// anyone can act on: "disk is filling up" during a meeting tells the user nothing about whether to stop.
@@ -46,6 +68,7 @@ public enum CaptureSignalPresentation {
 
     /// Compact state for the floating panel dots: "ok", "silent", "stale" or "unknown".
     public static func dotState(_ capture: [String: Any], key: String) -> String {
+        if isSessionPayload(capture) { return CaptureChannelStatus.parse((capture["channels"] as? [String: Any])?[key]).dot }
         guard let entry = (capture["signals"] as? [String: Any])?[key] as? [String: Any], let state = entry["state"] as? String else { return "unknown" }
         if isStale(entry) { return "stale" }
         switch state { case "signal": return "ok"; case "digital_silence": return "silent"; default: return "unknown" }
@@ -77,7 +100,7 @@ public enum CaptureSignalPresentation {
 
     // Clamped before the Int conversion so malformed input (NaN, negative,
     // or absurdly large) can never overflow or underflow the result.
-    private static func sanitizedSeconds(_ raw: Any?) -> Int {
+    static func sanitizedSeconds(_ raw: Any?) -> Int {
         guard let value = extractDouble(raw), value.isFinite, value >= 0 else { return 0 }
         return Int(min(value, maxSeconds))
     }
@@ -90,7 +113,7 @@ public enum CaptureSignalPresentation {
         return number.doubleValue
     }
 
-    private static func formattedTime(_ totalSeconds: Int) -> String {
+    static func formattedTime(_ totalSeconds: Int) -> String {
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60

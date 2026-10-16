@@ -125,6 +125,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Every failure the user is shown lands here, from fifty different call sites. That makes it the one
     /// place the error journal can be fed without threading a report call through all of them: a new,
     /// non-empty banner is one recorded event (throttled, so a poll that fails every two seconds is still one).
+    /// The meeting note pane (NoteDocument.swift): one editor, its pending-claim bookkeeping, the segment the user
+    /// last played (what "Bu ana bağla" links to on a finished meeting) and the folder UUID the next recording uses.
+    @Published var note=NoteDocument(key:.pending("")); @Published var noteNotice=""; @Published var noteSegment:Int?
+    @Published var showNotes=UserDefaults.standard.object(forKey:"showNotes") as? Bool ?? true { didSet { UserDefaults.standard.set(showNotes,forKey:"showNotes") } }
+    var noteNextKey=UUID().uuidString; var noteSaveTask:Task<Void,Never>?; var noteClaiming=false
+    /// A note saved under a recording folder that never became a meeting (stopped or refused while preparing, or a
+    /// supervisor that died before its row): `noteOrphan` is offered in the pane, `noteManualClaims` holds the meeting
+    /// the user moved it onto. `meetingsLoaded`: no folder is called an orphan before the first snapshot.
+    @Published var noteOrphan:String?; var noteManualClaims:[String:String]=[:]; var meetingsLoaded=false
+    /// A live anchor was added: re-read the note once it is saved, so its range comes back on the audio clock.
+    /// `noteClaimConflicts`: pending key → meeting whose own note refused the claim; offered when either is open.
+    var noteAnchorRefresh=false; var noteClaimConflicts:[String:String]=[:]; var quitNameSaving=false
+    var notePendingClaims=Set(UserDefaults.standard.stringArray(forKey:"notePendingClaims") ?? []) { didSet { UserDefaults.standard.set(Array(notePendingClaims),forKey:"notePendingClaims") } }
     @Published var error="" { didSet { if error != oldValue, !error.isEmpty { report(error) } } }
     /// Journal state for Ayarlar → Sistem → Hatalar. Loaded on launch, hourly, and when the sheet opens.
     @Published var errorEntries:[ErrorEntry]=[]; @Published var errorCounts:[String:Int]=[:]; @Published var errorCrashes=0
@@ -138,6 +151,15 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     @Published var transcriptionMode=UserDefaults.standard.string(forKey:CloudTranscription.modeKey) ?? "openrouter" { didSet { UserDefaults.standard.set(transcriptionMode,forKey:CloudTranscription.modeKey) } }
     @Published var cloudModel=UserDefaults.standard.string(forKey:CloudTranscription.modelKey) ?? CloudTranscription.defaultModel { didSet { UserDefaults.standard.set(cloudModel,forKey:CloudTranscription.modelKey) } }
     @Published var cloudModels:[OpenRouterModelOption]=[]
+    /// Opt-in cloud draft while recording (Ayarlar → Sistem). Read once at ⌃⌥R: flipping it mid-meeting changes nothing
+    /// for the running recorder, whose argv was fixed at launch.
+    @Published var cloudLivePreview=UserDefaults.standard.bool(forKey:CloudTranscription.livePreviewKey) { didSet { UserDefaults.standard.set(cloudLivePreview,forKey:CloudTranscription.livePreviewKey) } }
+    /// The meeting whose recorder was started with a cloud draft, the drafts kept for it between polls, and the
+    /// lines/status the transcript tab shows. Published only on change, like `rows`.
+    var previewMeetingID:String?; var preview=PreviewState()
+    @Published var previewLines:[PreviewDraft]=[]; @Published var previewStatus=""
+    var shownDrafts:[PreviewDraft] { preview.meeting==selected ? previewLines : [] }
+    var showsDraftSection:Bool { preview.meeting==selected && (!previewLines.isEmpty || !previewStatus.isEmpty) }
     @Published var vocabulary=""; @Published var showSettings=false; @Published var editRow:Row?; @Published var editName=""; @Published var editText=""; @Published var clean=false
     /// The word the user clicked in the transcript, if any: it moves on a click and on nothing else, so the
     /// paragraph views can take it as a plain parameter without a per-poll redraw.
@@ -156,7 +178,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Whether the running job was launched throttled (idle retry, or a job started under a live meeting).
     /// Only the ETA reads it: such a job is meant to take longer, so its estimate is allowed a longer cap.
     var jobLowPriority=false
-    @Published var job:Process?; var recordingDir:URL?; var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
+    @Published var job:Process?; var recordingDir:URL?; var captureSession=CaptureSessionState(); var timer:Timer?; var player:AVAudioPlayer?; var refreshing=false
     let playback=PlaybackState()   // which span is playing; observed only by the play buttons, not the transcript layout
     init() {
         let resources=Bundle.main.resourceURL
@@ -388,6 +410,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         process.terminate()   // `job` is never the recorder (separate slot): pressure never stops a live meeting
     }
     @Published var microphoneHint=""
+    /// One `transcript_previews` call on the poll that is already running. Failure is silent: a backend without
+    /// the action, or a busy bridge, costs a draft line — never an error banner in the middle of a meeting.
+    func refreshPreview(_ mid:String) async {
+        let cursor=preview.meeting==mid ? preview.cursor : 0
+        guard let reply=try? await request(["action":"transcript_previews","meeting":mid,"after_updated":cursor]) else { return }
+        let next=PreviewDrafts.merge(preview,reply:reply)
+        let lines=PreviewDrafts.visible(next,finals:rows,complete:meetings.first { $0.id==mid }?.status=="complete")
+        let line=PreviewDrafts.statusLine(next,recording:recording && recorder.livePreview)
+        if next != preview { preview=next }
+        if lines != previewLines { previewLines=lines }
+        if line != previewStatus { previewStatus=line }
+    }
+    func clearPreview() { previewMeetingID=nil; preview=PreviewState(); if !previewLines.isEmpty { previewLines=[] }; if !previewStatus.isEmpty { previewStatus="" } }
     func refresh() async {
         if !settingsLoaded { await loadReportSettings() }   // a failed first load must not leave ⌃⌥R refusing for an hour
         if recording || pollTick%3==0 { let hint=MicrophoneHint.current(); if hint != microphoneHint { microphoneHint=hint } }   // IOKit query: every poll while recording, every third otherwise
@@ -408,6 +443,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             let result=try await request(["action":"snapshot","meeting":wanted,"segments_hash":wanted==lastSegmentsMeeting ? segmentsHash : "","signals":pollTick%3==0])   // chunk-level signal analysis every 6 s, not every 2 s
             let nextMeetings=(result["meetings"] as? [[String:Any]] ?? []).map(Meeting.init)
             if nextMeetings.map(\.fingerprint) != meetings.map(\.fingerprint) { meetings=nextMeetings }   // publish only on change
+            meetingsLoaded=true
             let nextProfiles=(result["profiles"] as? [[String:Any]] ?? []).map { Profile(name:$0["name"] as? String ?? "",model:$0["model"] as? String ?? "",samples:$0["samples"] as? Int ?? 0) }
             if nextProfiles != profiles { profiles=nextProfiles }
             if recording, let dir=recordingDir, let active=meetings.first(where:{ $0.metadata["capture_dir"] as? String==dir.path }) {
@@ -415,16 +451,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                 // Disk is journalled on every chunk, not with the 6-second signal analysis: read it on every poll.
                 let lowDisk=CaptureSignalPresentation.lowDisk(active.capture) ?? ""
                 if recorder.lowDiskNotice != lowDisk { recorder.lowDiskNotice=lowDisk }
-                if active.capture["signals"] != nil {   // polls without signal analysis keep the last reading
-                    let label=CaptureSignalPresentation.label(active.capture); if activity != label { activity=label }
-                    let dots=["mic":CaptureSignalPresentation.dotState(active.capture,key:"mic"),"system":CaptureSignalPresentation.dotState(active.capture,key:"system")]
-                    if recorder.captureDots != dots { recorder.captureDots=dots }
+                // Only this recording's folder and session move the status; a late line from the previous one is dropped.
+                // The session id the bridge reports with the first `capturing` payload is kept for the whole recording.
+                let now=Date()
+                if captureSession.apply(active.capture,directory:dir.path,now:now) {
+                    if let label=captureSession.activityLine(active.capture,now:now), activity != label { activity=label }   // schema-1 polls without signal analysis keep the last reading
+                    if !captureSession.legacy || active.capture["signals"] != nil { publishCaptureDots(now:now) }
                 }
                 // One line, once, when the recording had to survive something. The first reading of a meeting
                 // only seeds the comparison, so a restored session never announces old history.
                 let seen=RecordingContinuity.read(active.capture)
                 if let was=continuitySeen, let line=RecordingContinuity.notice(from:was,to:seen) { recorder.recordingNotice=line; activity=line }
                 continuitySeen=seen
+                if recorder.livePreview { previewMeetingID=active.id }
             }
             // The name is asked for the moment we know it is missing, not at the record button: a Zoom call is
             // the worst place to discover a recording will not start. Once per launch, and only once there is
@@ -449,6 +488,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             if zoomMeetingOpen != zoomNow { zoomMeetingOpen=zoomNow }   // same value would still fire objectWillChange and re-lay out every paragraph
             if zoomInMeeting != zoomState.strict { zoomInMeeting=zoomState.strict; applyWindowPrivacy() }
             if screenSharing != zoomState.sharing { screenSharing=zoomState.sharing }
+            claimPendingNotes(); syncNote()
             updateRecorderPanel()
             applyWindowPrivacy()
             applyLivePriority(zoomOpen:zoomState.strict || recordProcess != nil)   // any live recording (Zoom, Meet, in person) gets the same protection
@@ -463,7 +503,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             case .stop: stop(); activity="Zoom toplantısı kapandı · kayıt bitiriliyor"
             case nil: break
             }
-            if recording, let started=recordStartedAt { let s=Int(Date().timeIntervalSince(started)); let t=String(format:"%02d:%02d",s/60,s%60); if recorder.elapsedText != t { recorder.elapsedText=t } }
+            if recording, !captureSession.legacy { publishCaptureDots(now:Date()) }   // the five-second warning ages between payloads
+            if recording, captureSession.countsElapsed, let started=recordStartedAt { let s=Int(Date().timeIntervalSince(started)); let t=String(format:"%02d:%02d",s/60,s%60); if recorder.elapsedText != t { recorder.elapsedText=t } }
             if DiscreetMode.mayNotify(recording:recording,meetingOpen:zoomMeetingOpen,sharing:screenSharing), !queuedNotifications.isEmpty { for (t,b) in queuedNotifications { deliver(t,b) }; queuedNotifications.removeAll() }   // meeting-safe mode: notifications wait
             if lastUpdateCheck==nil || Date().timeIntervalSince(lastUpdateCheck!) >= 6*3600 { Task { await checkForUpdates() } }
             if NSApp.isActive, let last=lastUpdateCheck, Date().timeIntervalSince(last) >= 60*60 { Task { await checkForUpdates() } }
@@ -476,6 +517,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                 if intel != intelHash || changed || analysis==nil && actions.isEmpty { intelHash=intel; try await refreshIntelligence(wanted); if analysis?["stale"] as? Bool != true { summaryStale=false } else if summaryRefreshTask==nil && !pendingSummaryRefresh { summaryStale=true } }
                 if changed, !recording, meeting?.status=="complete" { await loadReview() }
             }
+            if let pm=previewMeetingID, !recording, meetings.first(where:{ $0.id==pm })?.status ?? "complete"=="complete" { clearPreview() }   // the result has replaced the draft
+            else if let pm=previewMeetingID, wanted==pm, wanted==selected, recording || pollTick%3==0 { await refreshPreview(pm) }   // this poll's rhythm, no loop of its own
         } catch { self.error=error.localizedDescription }
     }
     /// Recording has its own process slot: a finalize/analyze job from the previous meeting must never block ⌃⌥R.
@@ -521,13 +564,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                     // idle queue picks them up on the next launch. Popping here would begin a job we cannot finish.
                     if !isRecord, !self.requestedQuit, let next=self.finalizeQueue.first { self.finalizeQueue.removeFirst(); self.finalizeWithOpenRouter(next,model:self.cloudModel) }   // meetings that ended while a job ran
                     if !isRecord, !self.requestedQuit, self.pendingSummaryRefresh { self.pendingSummaryRefresh=false; self.runScheduledSummaryRefresh(self.pendingSummaryMeeting) }   // a queued finalize took the slot back: this re-arms rather than stacks
-                    if self.requestedQuit && self.job==nil && self.recordProcess==nil { self.replyToQuit() }
+                    self.quitIfSettled()
                 }
             }
             try p.run(); error=""
             if isRecord { recordProcess=p; recordStartedAt=Date() } else { job=p; busy=true; jobBackgrounded=false; JobSleepGuard.begin() }   // a Mac that idles to sleep mid-transcription wakes up to an unfinished meeting
             return true
-        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil; JobSleepGuard.end() }; return false }
+        } catch { self.error=error.localizedDescription; if isRecord { recording=false; recorder.livePreview=false; recordingNavigation.cancel() } else { busy=false; jobKind=nil; JobSleepGuard.end() }; return false }
     }
     /// Returns false when the previous helper is still draining: the caller must not claim a recording started.
     @discardableResult func start()->Bool {
@@ -549,12 +592,20 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         stopPlayback()   // never play audio into the room during a recording
         guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
         recordingNavigation.begin()
-        let dir=dataDir.appendingPathComponent("recordings/"+UUID().uuidString)
+        // A note typed before ⌃⌥R is filed under this folder's UUID and claimed later. With nothing typed for this
+        // recording, a note left by one that never became a meeting (even before a relaunch) takes the folder: it is
+        // in the editor again and the meeting claims it. Its folder holds no events.jsonl, so the recorder accepts it.
+        let folderKey=NoteTarget.recordingKey(nextKey:noteNextKey,nextHoldsNote:notePendingClaims.contains(noteNextKey) || (note.key == .pending(noteNextKey) && !note.text.isEmpty),orphans:noteOrphans())
+        let dir=dataDir.appendingPathComponent("recordings/"+folderKey); if folderKey==noteNextKey { noteNextKey=UUID().uuidString }
+        noteManualClaims[folderKey]=nil; noteOrphan=nil
+        captureSession.startRequested(directory:dir.path); recorder.elapsedText="00:00"; publishCaptureDots(now:Date())
         recordingDir=dir; recording=true; markerCount=0; micManualOn=false; micGateWritten=nil; zoomMuted=nil; recorder.recordingNotice=""; recorder.lowDiskNotice=diskNotice ?? ""; continuitySeen=nil; sleptAt=nil; activity=diskNotice ?? "Kayıt hazırlanıyor · macOS izinleri açık olmalı"; DisplaySleepGuard.begin(); updateRecorderPanel()
         pendingCalendar=useCalendar ? CalendarContext.current() : nil
         let name=title.isEmpty ? (pendingCalendar?.title ?? Date().formatted(Date.FormatStyle(date:.abbreviated,time:.shortened,locale:Locale(identifier:"tr_TR")))) : title   // "9 Eyl 2026 14:05"
         if title.isEmpty, diskNotice==nil, let cal=pendingCalendar { activity="Takvimden: \(cal.title)"+(cal.attendees.isEmpty ? "" : " · \(cal.attendees.count) katılımcı") }
         recordingTitle=name
+        let withPreview=transcriptionMode=="openrouter" && cloudLivePreview
+        clearPreview(); recorder.livePreview=withPreview
         let receipt=dataDir.appendingPathComponent("record-\(UUID().uuidString).json")
         jobTitle=name
         defer {
@@ -563,8 +614,9 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             evaluateMicGate()
             if recording { Task { await pollMicGate() } }   // and ask Zoom straight away rather than at the next tick
         }
-        return launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path)) { [weak self] ok in
-            guard let self=self else { return }; self.recording=false; self.recordingNavigation.cancel(); self.recorder.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
+        let launched=launch(CloudTranscription.recordArguments(mode:transcriptionMode,directory:dir.path,title:name,receipt:receipt.path,livePreview:withPreview)) { [weak self] ok in
+            guard let self=self else { return }; self.captureSession.processExited(succeeded:ok); self.publishCaptureDots(now:Date()); self.recording=false; self.recorder.livePreview=false; self.recordingNavigation.cancel(); self.recorder.recordingNotice=""; self.continuitySeen=nil; DisplaySleepGuard.end(); RecorderPanel.hide()
+            self.refreshNoteAnchors()   // the journal is complete now: anchors taken while recording come back on the audio clock
             let result=(try? Data(contentsOf:receipt)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] } ?? [:]
             try? FileManager.default.removeItem(at:receipt)
             // The receipt comes first, before the exit status: a supervisor that died still leaves one when audio
@@ -576,6 +628,23 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             else if result["status"] as? String == "canceled" { self.activity="Kayıt iptal edildi · Ses alınmadı" }
             else { self.activity="Kayıt saklandı · Son işlem otomatik başlatılamadı" }
         }
+        if launched { captureSession.processLaunched() } else { captureSession.processExited(succeeded:false); reclaimNoteKey(dir) }
+        publishCaptureDots(now:Date())
+        return launched
+    }
+    /// A recording that never got a process never made its folder or a meeting to claim the note typed while it was
+    /// preparing. The next recording takes that folder UUID again, so the note stays in the editor and is claimed then.
+    func reclaimNoteKey(_ dir:URL) { if !FileManager.default.fileExists(atPath:dir.path) { noteNextKey=dir.lastPathComponent } }
+    /// The panel's dots and headline come from the session: each channel from its own evidence, the leading dot
+    /// green only while a channel delivers buffers.
+    func publishCaptureDots(now:Date) {
+        var dots:[String:String]=[:], hints:[String:String]=[:]
+        for key in CaptureSessionState.channelKeys { let status=captureSession.channelStatus(key); dots[key]=status.dot; hints[key]=status.label }
+        if recorder.captureDots != dots { recorder.captureDots=dots }
+        if recorder.captureHints != hints { recorder.captureHints=hints }
+        let overall=captureSession.overallDot(now:now); if recorder.captureOverall != overall { recorder.captureOverall=overall }
+        let headline=[captureSession.headline,captureSession.warning(now:now)].compactMap { $0 }.joined(separator:" · ")
+        if recorder.captureHeadline != headline { recorder.captureHeadline=headline }
     }
     /// Finding #13: this used to send one SIGINT and set `recording=false` on the same line. A supervisor that
     /// never exited left every stop control disabled (the app already believed the recording was over) and the
@@ -583,8 +652,11 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// keeps the recording until the child is actually gone.
     func stop() {
         guard recording else { return }
+        flushNote()   // the note typed during the meeting is on disk before the recording winds down
         recordingNavigation.cancel(); stopArmedAt=nil
-        guard recordProcess != nil else { recording=false; stopRequestedAt=nil; stopSignalSent=nil; return }   // nothing to signal: the helper never started
+        let action=captureSession.stopRequested(); publishCaptureDots(now:Date())
+        // Nothing to signal: the helper never started. No ghost recording, no elapsed time, nothing pending for the next one.
+        guard recordProcess != nil else { recording=false; stopRequestedAt=nil; stopSignalSent=nil; if action == .discard { recorder.elapsedText="00:00"; RecorderPanel.hide() }; if let dir=recordingDir { reclaimNoteKey(dir) }; return }
         if stopRequestedAt==nil { stopRequestedAt=Date(); activity="Ses parçaları tamamlanıyor…" }
         else { stopRequestedAt=Date().addingTimeInterval(-StopEscalation.bringForward(sent:stopSignalSent)) }   // a second press advances the clock, it does not restart it
         escalateStop()
@@ -1162,12 +1234,18 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         guard settingsLoaded else { return false }
         let typed=reportSettings.userName.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !typed.isEmpty, !NameFold.same(typed,storedUserName) else { return false }
+        quitNameSaving=true
         Task { [weak self] in
             guard let self else { return }
             await self.saveUserName()
-            if self.job==nil, self.recordProcess==nil { self.replyToQuit() }
+            self.quitNameSaving=false; self.quitIfSettled()
         }
         return true
+    }
+    /// The one place a pending ⌘Q is answered once its work is done: no job, no recorder, no name save and a note
+    /// with nothing typed left unsaved. Every completion handler asks here; the deadline still bounds the wait.
+    func quitIfSettled() {
+        if requestedQuit, job==nil, recordProcess==nil, !quitNameSaving, note.settledForQuit { replyToQuit() }
     }
     /// `.terminateLater` had exactly one way out: a child's termination handler, behind another bridge call.
     /// A wedged job meant a window that could not be closed and a ⌘Q that never finished. Every quit now has
@@ -1177,9 +1255,19 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         quitDeadline?.cancel()
         quitDeadline=Task { [weak self] in
             try? await Task.sleep(nanoseconds:UInt64(seconds*1_000_000_000))
-            guard !Task.isCancelled else { return }
-            self?.replyToQuit()
+            guard !Task.isCancelled, let self else { return }
+            if QuitSequence.quitAtDeadline(noteSettled:self.note.settledForQuit,noteClaiming:self.noteClaiming) { self.replyToQuit() }
+            else { self.keepOpenForNote() }
         }
+    }
+    /// The deadline found the note's text still only in memory (a save or park that failed or never answered):
+    /// answer "do not quit" rather than lose it. `quitReplied` stays false, so the next ⌘Q is a fresh request.
+    func keepOpenForNote() {
+        guard !quitReplied, requestedQuit else { return }
+        quitDeadline?.cancel(); quitDeadline=nil; requestedQuit=false
+        NSApp.reply(toApplicationShouldTerminate:false)
+        noteNotice=QuitSequence.noteKeptOpen; activity=QuitSequence.noteKeptOpen
+        if note.owesSave || note.owesPark { scheduleNoteSave() }
     }
     func replyToQuit() {
         guard !quitReplied else { return }
@@ -1321,6 +1409,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     func saveVocabulary() async { do { _=try await request(["action":"vocabulary","text":vocabulary]); showSettings=false } catch { self.error=error.localizedDescription } }
     func play(_ row:Row) {
         guard let m=meeting else { return }
+        noteSegment=row.id
         play(source:row.source,start:row.start,seconds:row.end-row.start,metadata:m.metadata,key:"row:\(row.id)")
     }
     /// The same button stops what it started; ⌘. stops from anywhere. Boran, 10 Sep 2026: "play tuşuna basınca stop yok".
@@ -1376,10 +1465,11 @@ func statusLabel(_ status:String)->String {
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
         guard let m=Self.model else { return .terminateNow }
         let nameInFlight=m.flushUserNameOnQuit()   // fire-and-forget: the bridge is never the main thread's problem
-        guard nameInFlight || m.job != nil || m.recordProcess != nil else { return .terminateNow }
+        let noteInFlight=m.flushNoteOnQuit()
+        guard nameInFlight || noteInFlight || m.job != nil || m.recordProcess != nil else { return .terminateNow }
         m.requestedQuit=true
         if m.recording { m.stop() }
-        m.activity=nameInFlight && m.job==nil && m.recordProcess==nil ? "Adınız kaydediliyor…" : "İşlem güvenle tamamlandıktan sonra kapanacak…"
+        m.activity=nameInFlight && m.job==nil && m.recordProcess==nil ? "Adınız kaydediliyor…" : noteInFlight && m.job==nil && m.recordProcess==nil ? "Notunuz kaydediliyor…" : "İşlem güvenle tamamlandıktan sonra kapanacak…"
         m.armQuitDeadline(seconds:QuitSequence.deadline(draining:m.recordProcess != nil))   // a job that never answers must not hold the app open forever
         return .terminateLater
     }
@@ -1419,10 +1509,17 @@ func statusLabel(_ status:String)->String {
 @MainActor final class RecorderState:ObservableObject {
     @Published var elapsedText="00:00"
     @Published var captureDots:[String:String]=[:]
+    /// The channel's own wording ("İlk ses bekleniyor", "Ses geliyor · sessiz"…) for the dot's tooltip.
+    @Published var captureHints:[String:String]=[:]
+    /// "ok", "warning", "failed", "waiting" or "idle" — the panel's leading dot — and the line behind it.
+    @Published var captureOverall="idle"
+    @Published var captureHeadline=""
     @Published var recordingNotice=""
     /// "Disk azalıyor · 1,2 GB boş · kayıt 69 dk sonra durabilir". Seeded by ⌃⌥R when the volume is already
     /// tight, then kept honest by the helper's own `low_disk` line on every poll. Empty means there is room.
     @Published var lowDiskNotice=""
+    /// This recorder was launched with `--cloud-preview --allow-preview-upload`: audio leaves the Mac during the meeting.
+    @Published var livePreview=false
 }
 
 @MainActor final class JobState:ObservableObject { @Published var jobProgress="" }
@@ -1435,5 +1532,177 @@ struct MenuBarLabel:View {
         // menu bar looks the same recorded and not. "Kayıt sürüyor" lives in the menu behind it (QuickMenu).
         let look=DiscreetMode.menuBar(recording:model.recording,discreet:model.discreetMode,zoomOpen:model.zoomMeetingOpen,elapsed:recorder.elapsedText)
         if let text=look.text { Label(text,systemImage:look.glyph) } else { Image(systemName:look.glyph) }
+    }
+}
+
+/// Meeting notes over the bridge: `note_get`, `note_save` (compare-and-swap on `base_revision`), `note_claim`. Every
+/// rule about what may overwrite the editor lives in `NoteDocument`; this only moves its requests and answers.
+extension Model {
+    var recordingMeetingID:String? { recordingDir.flatMap { dir in meetings.first { $0.metadata["capture_dir"] as? String==dir.path }?.id } }
+    var noteTarget:NoteKey { NoteTarget.key(recording:recording,recordingKey:recordingDir?.lastPathComponent,activeMeeting:recordingMeetingID,selected:selected,nextKey:noteNextKey) }
+    /// Point the editor at the note the window is showing. Never leaves unsaved text behind: the old note is
+    /// flushed first and the switch happens on the next pass, once it is on disk (or the user resolved a conflict).
+    func syncNote() {
+        let target=noteTarget
+        guard note.key != target else { return }
+        if note.key == .pending("") {   // the placeholder before the first poll: carry anything typed into the real note
+            var next=NoteDocument(key:target); next.edit(note.text,now:Date()); note=next; loadNote(target); scheduleNoteSave(); return
+        }
+        if note.hasUnsavedWork || note.inFlight != nil { flushNote(); return }
+        if let pending=note.key.pendingKey, notePendingClaims.contains(pending), case .meeting=target, recordingMeetingID != nil, recordingDir?.lastPathComponent==pending { return }   // the claim moves it, keeping the editor
+        note=NoteDocument(key:target); noteNotice=""; loadNote(target)
+    }
+    func loadNote(_ key:NoteKey) {
+        Task { [weak self] in
+            guard let self else { return }
+            var req=key.request; req["action"]="note_get"
+            do {
+                let got=NoteWire.loaded(try await self.request(req))
+                self.note.applyLoaded(key:key,revision:got.revision,text:got.text,anchors:got.anchors,author:got.author,draft:got.draft)
+            } catch {
+                // Unknown revision: typing is still allowed, base 0 meets the CAS and shows a conflict rather than overwrite.
+                self.note.applyLoaded(key:key,revision:0,text:"",anchors:[],author:"user")
+                if self.note.key==key { self.noteNotice="Not okunamadı · yazdıklarınız yine kaydedilmeye çalışılır" }
+            }
+            // Text typed before this answer was refused by the debounce (no revision yet): it is owed a save now.
+            if self.note.key==key, self.note.owesSave || self.note.owesPark { if self.requestedQuit { self.flushNote() } else { self.scheduleNoteSave() } }
+            self.quitIfSettled()
+        }
+    }
+    /// Re-read the open meeting note: `note_get` is where the bridge puts live anchors on the audio clock
+    /// (`notes._on_audio_clock`), and the editor otherwise never re-reads the note it already holds.
+    func refreshNoteAnchors() { if case .meeting=note.key { loadNote(note.key) } }
+    func noteEdited(_ text:String) { note.edit(text,now:Date()); scheduleNoteSave() }
+    func addNoteAnchor(_ anchor:NoteAnchor) { if anchor.wall != nil { noteAnchorRefresh=true }; note.addAnchor(anchor,now:Date()); scheduleNoteSave() }
+    func removeNoteAnchor(_ id:String) { note.removeAnchor(id:id,now:Date()); scheduleNoteSave() }
+    func scheduleNoteSave(after seconds:TimeInterval=NoteDocument.debounce) {
+        noteSaveTask?.cancel()
+        noteSaveTask=Task { [weak self] in
+            try? await Task.sleep(nanoseconds:UInt64(seconds*1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.saveNote(force:false)
+        }
+    }
+    /// Focus lost, recording stopped, quit: skip the debounce.
+    func flushNote() { noteSaveTask?.cancel(); saveNote(force:true) }
+    var noteIsRecordingNote:Bool {
+        guard recording, let dir=recordingDir else { return false }
+        return note.key == .pending(dir.lastPathComponent) || recordingMeetingID.map { note.key == .meeting($0) } == true
+    }
+    func saveNote(force:Bool) {
+        guard !noteClaiming, let req=note.beginSave(now:Date(),force:force) else { return }
+        send(req)
+    }
+    /// "Benim sürümümü kaydet" in the conflict bar.
+    func keepMyNote() { guard !noteClaiming, let req=note.keepMine(now:Date()) else { return }; send(req) }
+    /// "Diğerini al": the stored version wins, so the parked draft of the user's side goes too. A drop that fails
+    /// only brings the bar back on the next read — the safe direction.
+    func takeTheirNote() {
+        let key=note.key
+        guard !noteClaiming, note.takeTheirs() else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            var req=key.request; req["action"]="note_draft_drop"
+            _=try? await self.request(req)
+            self.quitIfSettled()
+        }
+    }
+    private func send(_ req:NoteSaveRequest) {
+        Task { [weak self] in
+            guard let self else { return }
+            let result:NoteSaveResult
+            do { result=NoteWire.saveResult(try await self.request(req.payload)) } catch { result = .failed }
+            self.note.finishSave(req,result)
+            if case .saved=result, let pending=req.key.pendingKey { self.notePendingClaims.insert(pending) }
+            if req.key==self.note.key { self.noteNotice = result == .failed ? "Not kaydedilemedi · birkaç saniye sonra yeniden denenecek" : "" }
+            if self.note.state == .dirty || self.note.owesPark {
+                // Quitting: text typed while this save was on the wire goes now — the debounce would outlive the app.
+                if self.requestedQuit, result != .failed { self.flushNote() }
+                else { self.scheduleNoteSave(after:result == .failed ? (self.requestedQuit ? 1 : 5) : NoteDocument.debounce) }
+            }
+            if case .saved=result, case .meeting=req.key, req.key==self.note.key, self.noteAnchorRefresh, req.anchors.contains(where:{ $0.wall != nil }) {
+                self.noteAnchorRefresh=false; self.loadNote(req.key)
+            }
+            self.quitIfSettled()
+            self.syncNote()
+        }
+    }
+    /// The meeting row for a recording folder exists now: move the note written under its UUID onto the meeting.
+    /// Waits while a save under the pending key is on the wire, so the claim and the save never cross.
+    func claimPendingNotes() {
+        let orphan=recording ? nil : noteOrphans().first
+        if noteOrphan != orphan { noteOrphan=orphan }
+        guard !noteClaiming else { return }
+        for pending in notePendingClaims {
+            let manual=noteManualClaims[pending]
+            guard let mid=meetings.first(where:{ ($0.metadata["capture_dir"] as? String).map { URL(fileURLWithPath:$0).lastPathComponent }==pending })?.id ?? manual else { continue }
+            if note.key == .pending(pending), !note.canClaim || note.hasUnsavedWork { flushNote(); continue }
+            // Moved by hand onto the meeting the editor shows: that note settles first, so the re-read below is safe.
+            if manual==mid, note.key == .meeting(mid), note.hasUnsavedWork || note.inFlight != nil { flushNote(); continue }
+            // A refused claim is not asked again every poll: it waits until the editor holds one of the two notes.
+            let refused=noteClaimConflicts[pending]==mid
+            if refused, note.key != .pending(pending), !(note.key == .meeting(mid) && !note.hasUnsavedWork && note.inFlight==nil) { continue }
+            noteClaiming=true
+            Task { [weak self] in
+                guard let self else { return }
+                defer { self.noteClaiming=false; if self.requestedQuit { self.flushNote() }; self.quitIfSettled() }
+                do {
+                    let answer:NoteWire.Claim = refused ? .meetingHasNote : NoteWire.claimResult(try await self.request(["action":"note_claim","pending_key":pending,"meeting":mid]))
+                    switch answer {
+                    case .moved:
+                        self.notePendingClaims.remove(pending); self.noteClaimConflicts[pending]=nil; self.noteManualClaims[pending]=nil
+                        if self.noteOrphan==pending { self.noteOrphan=nil }
+                        // Re-read under the meeting: anchors written under the pending key were never put on the audio clock.
+                        if self.note.key == .pending(pending) { self.note.claimed(meeting:mid); self.loadNote(.meeting(mid)) }
+                        else if self.note.key == .meeting(mid), !self.note.hasUnsavedWork, self.note.inFlight==nil { self.loadNote(.meeting(mid)) }   // the moved note shows up in the open meeting
+                    case .meetingHasNote:
+                        self.noteClaimConflicts[pending]=mid
+                        try await self.offerClaimConflict(pending:pending,meeting:mid)
+                    case .failed: throw CancellationError()
+                    }
+                } catch { self.noteNotice="Not toplantıya bağlanamadı · bir sonraki yoklamada yeniden denenecek" }
+            }
+            return   // one claim per poll
+        }
+    }
+    /// Pending notes no meeting will claim by itself: no meeting row names their folder and no recorder ever wrote
+    /// there (`events.jsonl`). A recording whose row is only one poll away has that file, so it is never taken.
+    func noteOrphans()->[String] {
+        guard meetingsLoaded else { return [] }
+        let folders=Set(meetings.compactMap { ($0.metadata["capture_dir"] as? String).map { URL(fileURLWithPath:$0).lastPathComponent } })
+        let started=Set(notePendingClaims.filter { FileManager.default.fileExists(atPath:dataDir.appendingPathComponent("recordings/\($0)/events.jsonl").path) })
+        return NoteTarget.orphans(claims:notePendingClaims,meetingFolders:folders,startedFolders:started,active:recording ? recordingDir?.lastPathComponent : nil,nextKey:noteNextKey)
+    }
+    /// "Bu toplantıya taşı": the orphaned note goes onto the meeting the pane shows, through the same claim (and the
+    /// same conflict bar when that meeting already has a note of its own).
+    func moveOrphanNote() {
+        guard let pending=noteOrphan, !recording, let mid=selected, note.key == .meeting(mid) else { return }
+        noteManualClaims[pending]=mid; noteClaimConflicts[pending]=nil
+        if note.hasUnsavedWork { flushNote() }
+        claimPendingNotes()
+    }
+    /// The meeting already had a note of its own, so the bridge kept both. Never move the editor onto the meeting as
+    /// if the claim had worked — its next autosave could pass the CAS on an equal revision and erase the other note.
+    /// Instead the two are shown side by side in the conflict bar, whichever of them the editor holds now.
+    func offerClaimConflict(pending:String,meeting mid:String) async throws {
+        let holdsPending=note.key == .pending(pending)
+        var mine=note
+        if !holdsPending {
+            let p=NoteWire.loaded(try await request(["action":"note_get","pending_key":pending]))
+            mine=NoteDocument(key:.pending(pending)); mine.applyLoaded(key:.pending(pending),revision:p.revision,text:p.text,anchors:p.anchors,author:p.author)
+        }
+        let theirs=NoteWire.loaded(try await request(["action":"note_get","meeting":mid]))
+        // The editor may have moved during the two reads; then the offer waits for the next poll.
+        if holdsPending { guard note.key == .pending(pending) else { return }; mine=note }   // typing during the read stays
+        else { guard note.key == .meeting(mid), !note.hasUnsavedWork, note.inFlight==nil else { return } }
+        guard mine.claimConflicted(meeting:mid,theirs:NoteConflict(revision:theirs.revision,text:theirs.text,anchors:theirs.anchors)) else { return }
+        note=mine; notePendingClaims.remove(pending); noteClaimConflicts[pending]=nil
+        noteNotice="Bu toplantının zaten bir notu var · kayıt öncesi yazdığınız not ayrı saklandı, hangisinin kalacağını seçin"
+    }
+    /// Says whether ⌘Q has to wait for the note. Flushes first; a claim on the wire or a note not yet read also
+    /// waits (their completion handlers flush and answer the quit), so typed text never meets `.terminateNow`.
+    @discardableResult func flushNoteOnQuit()->Bool {
+        if note.hasUnsavedWork { flushNote() }   // during a conflict this only parks the text on screen
+        return !note.settledForQuit || noteClaiming
     }
 }

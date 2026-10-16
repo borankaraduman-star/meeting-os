@@ -142,6 +142,15 @@ veritabanının karnesini taşıyordu; aynı Mac'in iki raporunu toplamak aynı 
 artık `scope: "meeting"` ile yalnız kendi toplantısının sayılarını taşır, eski raporlar ise `snapshot`
 sayılır ve toplamaya **hiç girmez**.
 
+**Canlı taslak ve kullanıcı notları.** **Canlı taslak** (Ayarlar → Sistem → Yazıya çevirme, yalnız OpenRouter
+modunda) **varsayılan kapalıdır** ve ancak açıkça seçilirse kayıt **sırasında** kapanan ses parçaları
+OpenRouter’a gider — aynı sağlayıcıya, kayıt sonundaki çeviriyle aynı yoldan; değişen yalnız gönderim zamanıdır.
+Seçim kapalıyken önizleme için **hiçbir ağ çağrısı yapılmaz**; mikrofon kapısı dışındaki mikrofon parçaları bu
+yolda da gönderilmez. Taslak metni bu Mac’te, final transkriptten ayrı tabloda tutulur.
+**Kullanıcı notları hiçbir buluta çıkmaz:** OpenRouter analizine, ekip bulutuna/klasörüne, teşhis raporuna, nabza
+ve hata günlüğü dışa aktarımına girmez; `ALLOWED` beyaz listesine eklenmedi. Not ancak dışa aktarırken
+**açıkça** “notları dahil et” seçilirse dosyaya yazılır.
+
 #### Ekibe katılmak: bir bağlantı, bir tıklama (1.2.68+)
 
 **Terminal gerekmez.** Ekipteki herhangi bir Mac davet üretir, davet gönderilir, alan kişi tıklar. Hepsi bu.

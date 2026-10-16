@@ -139,6 +139,26 @@ final class CloudTranscriptionTests:XCTestCase {
         XCTAssertFalse(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--live"))
         XCTAssertTrue(CloudTranscription.recordArguments(mode:"local",directory:"/d",title:"T",receipt:"/r").contains("--live"))
     }
+    /// The live cloud draft is opt-in: the default call is byte-for-byte today's argv, the opt-in adds both the
+    /// request and the explicit upload permission, and local mode (which has its own live text) never gets them.
+    func testLivePreviewFlagsOnlyForOpenRouterWhenAskedFor() {
+        XCTAssertEqual(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r"),["record","/d","--cloud","--seconds","14400","--output","/r"])
+        XCTAssertEqual(CloudTranscription.recordArguments(mode:"local",directory:"/d",title:"T",receipt:"/r"),["record","/d","--live","--seconds","14400","--output","/r"])
+        XCTAssertEqual(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r",livePreview:false),CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r"))
+        let on=CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r",livePreview:true)
+        XCTAssertEqual(on,["record","/d","--cloud","--seconds","14400","--output","/r","--cloud-preview","--allow-preview-upload"])
+        XCTAssertFalse(on.contains("--live"));XCTAssertTrue(JobPriority.isRealtime(on));XCTAssertFalse(ResourceGuard.stopsOnPressure(jobArguments:on))
+        let local=CloudTranscription.recordArguments(mode:"local",directory:"/d",title:"T",receipt:"/r",livePreview:true)
+        XCTAssertEqual(local,["record","/d","--live","--seconds","14400","--output","/r"])
+        XCTAssertFalse(local.contains("--cloud-preview"));XCTAssertFalse(local.contains("--allow-preview-upload"))
+    }
+    /// The setting is off on a fresh Mac, and both sentences say what the choice changes.
+    func testLivePreviewIsOffByDefaultAndSaysWhatItSends() {
+        XCTAssertFalse(UserDefaults(suiteName:"meetingos.test.\(UUID().uuidString)")!.bool(forKey:CloudTranscription.livePreviewKey))
+        XCTAssertTrue(CloudTranscription.livePreviewOn.contains("Kayıt sırasında"));XCTAssertTrue(CloudTranscription.livePreviewOn.contains("OpenRouter"))
+        XCTAssertTrue(CloudTranscription.livePreviewOn.contains("asıl yazıya çevirme yine yapılır"));XCTAssertTrue(CloudTranscription.livePreviewOn.contains("maliyet artar"))
+        XCTAssertTrue(CloudTranscription.livePreviewOff.contains("kayıt bitene kadar hiçbir şey gönderilmez"))
+    }
     /// A cloud-mode recording quit before finalize ever ran must still be findable by the idle queue.
     func testOpenRouterModeMarksTheRecordingsCloudIntent() {
         XCTAssertTrue(CloudTranscription.recordArguments(mode:"openrouter",directory:"/d",title:"T",receipt:"/r").contains("--cloud"))

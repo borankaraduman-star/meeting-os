@@ -918,3 +918,23 @@ düzeltme kelimesi olmayan farklı-sayılı bağımsız kararlar kalır). Tam Py
 düştü, izole ve ikinci tam koşuda temiz — bilinen tam-suite flaki'si, bu değişiklikle nedensel bağı yok). Swift'e dokunulmadı.
 **Kodlandı, denenmedi:** gerçek OpenRouter analiz çıktısıyla uçtan uca denenmedi (yalnız `drop_superseded` birim düzeyi);
 uygulama açılmadı/kurulmadı. Dal `boran/karar-duzeltme-saglamlastirma`, PR ile.
+
+## 2026-10-16 01:00 — Canlı durum/taslak/not denetim açıkları kapatıldı (sürümsüz, kaynakta)
+
+Bağımsız yargıcın yedi açığı, her biri önce eski kodda KIRMIZI yazılan testle (8/8 eski kodda düştü, yenide geçti):
+(1) canlı mikrofon kapısı: `mic_gate_windows(live=True)` henüz yalnız `off` söylemiş kapıyı KAPALI sayar (son geçiş
+eski kuralı korur: hiç açılmamış kapı → None); `test_preview_transcription.LiveGateAndBoundedReadBack`. (2) izin
+diyaloğu açıkken bekçi saymaz, saat yanıttan başlar (`live.py` `asking`/`permission_settled_at`);
+`test_live.SupervisedHelperTests.test_an_open_permission_dialog_is_not_a_stall`. (3) `pcmPeak` interleaved tamponda
+tek işaretçiyi frames×channels tarar; `capture/Sources/CaptureAudio` kütüphane hedefine taşındı, `capture/Tests`
+4 XCTest (interleaved/planar float, int16, mono); CI'ye `cd capture && swift build && swift test` eklendi.
+(4) kanal durumu bütün günlükten, sınırlı bellekle ve artımlı (`capture_metrics.journal_state_events`), 64 KB kuyruk
+artık yalnız sayaç dışı eski çağrılarda; `test_capture_session_state.WholeJournalStateTests`. (5) canlı not bağı
+`wall` damgası taşır, köprü `cloud_finalize.audio_seconds_at` ile ölçülmüş kaymayı uygular (`notes._on_audio_clock`);
+ayrıca `wall_audio_drift` `started` öncesi `permission` satırlarında artık düzeltmeyi kapatmıyor (⌘M ve mikrofon
+kapısı da bundan yararlanır); `test_notes.LiveAnchorOnTheAudioClock`, `MarkerDriftTests.test_permission_lines_…`.
+(6) önizleme işçisi günlüğü bayt imleciyle okur; parça listesi/span kümesi/varış haritası yok, yaş `wall`'dan.
+Koşulanlar: ilgili 18 Python modülü tek tek YEŞİL; `capture` swift build + release build + 4 test YEŞİL; `desktop`
+swift build + 386 test YEŞİL. Tam Python suite'i bu turda JEV koşuyor. **Kodlandı, denenmedi:** gerçek
+ScreenCaptureKit interleaved tamponu ve gerçek macOS izin diyaloğu; uygulama açılmadı, **kurulu uygulama güncellenmedi**.
+
