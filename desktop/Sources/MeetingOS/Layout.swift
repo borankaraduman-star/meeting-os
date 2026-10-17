@@ -21,6 +21,9 @@ struct MeetingContent:View {
         .sheet(item:$m.editRow) { row in EditSegmentSheet(model:m,row:row) }
         .sheet(isPresented:$m.showSettings) { SettingsSheet(model:m) }
         .sheet(isPresented:$m.showShare) { ShareSheet(model:m) }
+        // First launch on a Mac that cannot record yet, the welcome card, the failed-start banner and Ayarlar →
+        // “İzin kurulumunu yeniden aç” all land here. Gated on the settings sheet being closed, like the invite below.
+        .sheet(isPresented:Binding(get:{ m.showPermissionOnboarding && !m.showSettings },set:{ m.showPermissionOnboarding=$0 })) { PermissionOnboardingSheet(model:m) }
         // An invite link clicked in Slack, or a `.meetingos-invite` file double clicked in Finder, lands as a
         // confirmation on the main window. Gated on the settings sheet being closed: two sheets on one presenter
         // means the second never appears, and the paste field inside Ayarlar closes it before joining.
@@ -202,6 +205,7 @@ struct DetailView:View {
             }
             Divider()
             if !model.error.isEmpty { ErrorBanner(model:model) }
+            PermissionGuidanceBanner(model:model)
             if let ready=model.pendingReady, let m=model.meetings.first(where:{ $0.id==ready }) {
                 HStack(spacing:10) { Image(systemName:"checkmark.circle.fill").foregroundStyle(MeetingStyle.accent); Text("Toplantı hazır · \(m.title)").font(.callout).lineLimit(2).fixedSize(horizontal:false,vertical:true); Spacer(minLength:8); Button("Aç") { model.selected=ready; model.pendingReady=nil }.controlSize(.small).accessibilityIdentifier("openReady"); Button { model.pendingReady=nil } label: { Image(systemName:"xmark") }.buttonStyle(.plain).foregroundStyle(.secondary) }
                     .padding(.horizontal,24).padding(.vertical,8).background(MeetingStyle.accent.opacity(0.08))

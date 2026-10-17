@@ -58,6 +58,8 @@ kurulan Mac'ler aynı ekiptir.**
 
 ### Buluta ne çıkar — tam sözleşme (1.2.78+)
 
+**İzin kurulumu buluta hiçbir şey göndermez.** Mikrofon, sistem sesi ve Erişilebilirlik kartları yalnız bu Mac’te macOS’tan durum okur (`AVCaptureDevice`, `CGPreflightScreenCaptureAccess`, `AXIsProcessTrusted`), ağa çıkmaz ve `telemetry_schema.ALLOWED` listesine yeni alan eklemez; tamamlanma bilgisi yalnız yerel `UserDefaults`’ta (`permissionOnboardingCompletedVersion`) durur. İzin durumu rapor ya da nabıza girmez.
+
 **Tek kapı (1.2.80+).** Buluta çıkan **her** tanılama yükü — hata günlüğü dışa aktarımı, teşhis raporu ve
 nabız — aynı beyaz listeden geçer: `meeting_os/telemetry_schema.py` içindeki `ALLOWED`. Listede olmayan bir
 alan çıkmaz; **serbest metnin geçebileceği bir tür yoktur.** Bu yüzden şunlar artık **hiç** gitmez ve yalnız

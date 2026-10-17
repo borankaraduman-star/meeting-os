@@ -366,7 +366,8 @@ extension Model {
     /// `quick`: no git fetch inside the bridge (Settings opens; the hourly update check already ran and its
     /// answer is merged in below), so the card never waits on the network.
     func loadSetupStatus(quick:Bool=false) async {
-        var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar)
+        permissions.refresh()   // the flow's snapshot is the one truth: the list below is built from it, not from a second read
+        var checks=SetupStatus.permissionChecks(calendarWanted:useCalendar,snapshot:permissions.state.snapshot)
         let settings=await UNUserNotificationCenter.current().notificationSettings()
         checks.append(SetupStatus.notificationCheck(settings))
         var answer:[String:Any]?
