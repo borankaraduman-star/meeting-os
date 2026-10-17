@@ -1,6 +1,6 @@
 # Meeting OS — bütün sürüm notları
 
-Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 94 sürüm, en yeni en üstte. Diğer günlükler:
+Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `docs/releases/*.md`). 95 sürüm, en yeni en üstte. Diğer günlükler:
 
 - [Sürüm günlüğü (canlı sayfa: kurul turları, sprint durumu, bütün sürümler)](https://claude.ai/code/artifact/ed7b851a-164d-4631-9322-e1bd84920425)
 - [GitHub sürümleri (her etiketin notu ve kaynak paketi)](https://github.com/borankaraduman-star/meeting-os/releases)
@@ -18,6 +18,7 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 
 | Sürüm | Tarih | Başlık |
 |---|---|---|
+| [v1.2.90](#v1290) | 2026-10-17 | v1.2.90 — Notlar, canlı önizleme, ses-kanıtlı kayıt durumu, karar düzeltmesi |
 | [v1.2.89](#v1289) | 2026-09-14 | v1.2.89 — "Yalnız bu Mac" uyarısı: davet uygulanmadıysa ekran söyler |
 | [v1.2.88](#v1288) | 2026-09-14 | v1.2.88 — Kendi sesiniz artık atılmıyor; Developer ID imzalı ve noter onaylı paket |
 | [v1.2.87](#v1287) | 2026-09-13 | v1.2.87 — Denetim sürümü: paket kendini güncelleyebilir, transkript kaybı kapatıldı |
@@ -114,6 +115,24 @@ Bu dosya `scripts/changelog-index.py` ile üretilir (GitHub sürüm notları + `
 | [v1.0.1](#v101) | 2026-09-08 09:14 | Meeting OS 1.0.1 — Mac kurulum paketi |
 
 ## Notlar
+
+<a id="v1290"></a>
+### v1.2.90 — Notlar, canlı önizleme, ses-kanıtlı kayıt durumu, karar düzeltmesi
+
+2026-10-17 · yerel not · GitHub sürüm sayfası yok
+
+Granola karşılaştırması (belge + kendi kaynak kodumuz; `~/dev/meetingos-granola/RAPOR.md`) rapordaki boşlukları kapatan bir dizi özellik ve bir kod açığı düzeltmesi getirdi. Granola kodu kopyalanmadı.
+
+- **Kullanıcı notları (transkriptten ayrı):** Her toplantının kendi not belgesi var; not transkript segmenti olarak yazılmaz, `correct_text` düzeltme akışı değişmez. CAS + revizyon geçmişi (`note_revisions`), odak kaybı/stop/çıkışta flush, çakışmada kullanıcı metni ezilmez ("Benim sürümümü kaydet / Diğerini al / Karşılaştır"). Kaynak bağları (anchor) kalıcı ses zamanına bağlı; kaynak silinse not kalır, sahte alıntı üretilmez. Kayıttan önce yazılan not `pending_key` ile sonradan toplantıya bağlanır. **Notlar hiçbir bulut yüküne girmez**; export'ta `include_notes` varsayılan kapalı.
+- **Canlı önizleme (varsayılan KAPALI):** Bulut modunda, kayıt sürerken kapanmış parçalardan taslak transkript üreten ayrı, düşük öncelikli işçi. Kayıt yolunu ve kurtarma sözleşmesini bozmaz; kuyruk bloklamaz, taşan iş kalıcı imleçten okunur. `upload_allowed=False` iken **sıfır ağ çağrısı**. Final segmentler geldikçe taslak gizlenir; revizyon/epoch geri gitmez. Açmak için Ayarlar → "Canlı önizleme" + yükleme izni.
+- **Kayıt durumu artık gerçek ses kanıtına bağlı:** "Kayıt başladı" göstergesi alt sürecin yalnız "akış kuruldu" demesine değil, ilk geçerli ses buffer'ına dayanıyor. Kanal başına "İlk ses bekleniyor / Ses geliyor · sessiz / Sinyal var / Akış kesildi" ayrımı. **İzin beklerken başlangıç zaman aşımı işlemez** (izin diyaloğu açıkken bekçi saymaz); hazırlıkta Stop → hayalet kayıt/süre yok. Eski yardımcı (schema 1) aynı metinle çalışır.
+- **Karar düzeltmesi supersession sayılıyor:** Toplantı içinde bir kararı DÜZELTEN yeniden ifade ("kararı düzelttik", "revize edildi", "karar değiştirildi") eski planı canlı bırakıyordu; `intelligence.REVERSAL`'a olumsuz hâlleri dışlanarak `düzelt/revize/değiş` eklendi. Güçlü konu-örtüşme eşiği ve "önceki kararı supersede, sonrakini değil" / "iki iptal birbirini iptal etmez" guardları korunur. "değiştirilmeyecek" onaydır, supersede etmez.
+- **İzin (permission) onboarding akışı:** Mikrofon ve ekran-sesi izinleri ilk açılışta ve ayarlarda net bir akışla isteniyor; izin reddinde kullanıcı ortada kalmaz, kayıt yolu bozulmaz. (PR #3; sürümden önce `v0.1`'e merge edilmişse dahildir.)
+
+İlkeler değişmedi: **kayıt asla kaybolmaz, kullanıcı asla ortada kalmaz, toplantı asla yavaşlamaz, metin buluta yalnız beyaz listeyle çıkar** (notlar listeye eklenmedi).
+
+- Testler: Python **1403** (PR #1+#2 ile +75), Swift paketi CI'da yeşil (NoteDocument / PreviewDrafts / CaptureSessionState / CaptureSignalPresentation / Permission* testleri); `capture` paketi `swift build`+4 ses testi CI'da.
+- **Kodlandı ama ölçülmedi:** gerçek ScreenCaptureKit `first_buffer` zamanlaması, gerçek OpenRouter önizleme gecikmesi/maliyeti, canlı Zoom'da iki pencereli not çatışması ölçülmedi. 5 sn ilk-buffer uyarısı ve bütçe varsayılanları ürün hedefidir, ölçüm değildir. Bu notu yazan oturum uygulamayı açmadı/imzalamadı; sürüm paketi sürüm sahibinin Mac'inde üretilir.
 
 <a id="v1289"></a>
 ### v1.2.89 — "Yalnız bu Mac" uyarısı: davet uygulanmadıysa ekran söyler
