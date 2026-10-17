@@ -938,3 +938,15 @@ Koşulanlar: ilgili 18 Python modülü tek tek YEŞİL; `capture` swift build + 
 swift build + 386 test YEŞİL. Tam Python suite'i bu turda JEV koşuyor. **Kodlandı, denenmedi:** gerçek
 ScreenCaptureKit interleaved tamponu ve gerçek macOS izin diyaloğu; uygulama açılmadı, **kurulu uygulama güncellenmedi**.
 
+
+## 2026-10-17 — 1.2.90 YAYINLANDI (notlar + canlı önizleme + kayıt durumu + karar düzeltmesi + izin onboarding)
+
+Granola karşılaştırmasından (`~/dev/meetingos-granola/RAPOR.md`) çıkan iş üç PR ile v0.1'e girdi ve 1.2.90 olarak imzalı+noterli yayınlandı (GitHub Releases + VPS aynası, `Meeting-OS-1.2.90.zip` 336M, `latest.json` ile oto-güncelleme):
+- **#1 (PR, `6af91a2`):** karar düzeltmesi supersession — `intelligence.REVERSAL`'a olumsuz hâller dışlanarak `düzelt/revize/değiş` eklendi.
+- **#2 (PR, `8c0f354`):** kullanıcı notları (transkriptten ayrı, buluta çıkmaz, CAS+revizyon), canlı önizleme (varsayılan kapalı, `upload_allowed=False`→sıfır ağ), ses-kanıtlı kayıt durumu (ilk gerçek buffer; izin beklerken zaman aşımı yok).
+- **#3 (PR, `269a853`):** izin (permission) onboarding akışı (saf PermissionContract/Flow/Presentation + Service + görünümler).
+- **Flaky kök düzeltmesi:** `test_finalize_uploads..._with_or_without_a_preview` paralel upload yarışında final segment sırasına bağlıydı; final satırlar artık `sorted` ile sıraya bağımsız karşılaştırılıyor (10/10 yerel yeşil). invariant korunur.
+
+Doğrulama: her PR'da python+swift CI YEŞİL; tam Python suite 1403 (merge öncesi). Sürüm sahibinin Mac'inde `release.sh 1.2.90`: testler, Developer ID imza, Apple noter ("staple and validate worked", accepted), yayın. Granola **decompile edilmedi** (lisans); yalnız belge + kendi kodumuz.
+
+**Açık (sonraki tur, rapordan):** #4 aktif-konuşmacı sinyaliyle etiketleme, #5 anlamsal geri çağırma — başlanmadı. **Kodlandı ama ölçülmedi:** gerçek ScreenCaptureKit `first_buffer` zamanlaması, gerçek OpenRouter önizleme gecikmesi/maliyeti, canlı Zoom'da iki pencereli not çatışması.
