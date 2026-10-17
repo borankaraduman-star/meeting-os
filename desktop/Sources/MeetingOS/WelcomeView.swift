@@ -58,7 +58,7 @@ struct WelcomeView:View {
                 Button { model.beginRecording() } label: { Label("Yeni kayıt",systemImage:"record.circle") }.buttonStyle(.borderedProminent).disabled(!model.recording && model.recordProcess != nil)
                 Button("Kurulum durumunu aç") { Task { await model.settings() } }
             }
-            Text("İzinler eksikse Kurulum durumu kartı gösterir ve tek tıkla ister.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            WelcomePermissionCard(model:model)
             Text("Her toplantıdan sonra sayısal bir teşhis raporu (süre, puan, maliyet, model adı) varsayılan olarak iCloud’daki ekip klasörüne yazılır; konuşma metni girmez. Kapatmak için: Ayarlar → Sistem → Gelişmiş.").font(.caption).foregroundStyle(.secondary).frame(maxWidth:640,alignment:.leading).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("welcomeReportsNotice")
         // A form, not a notice: the column is centred in the window but stays top-aligned and left-read,
         // because vertical centring would move the name field under the caret as the steps grow.

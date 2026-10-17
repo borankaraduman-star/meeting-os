@@ -213,6 +213,16 @@ Bir Kontrol maddesine **dokunmamak ya da “Geç” demek onay sayılmaz**: öl�
 
 **Ekip önbelleği ne kadar büyür.** Ekip arkadaşlarınızın Mac’lerinden inen teşhis raporları `team/` altında birikir ve en fazla **300 rapor** ya da **50 MB** tutulur; sınırı aşan en eski raporlar silinir ve bir daha indirilmez. Kendi raporlarınıza, nabız dosyalarına, ekip sözlüğüne, öğretilen kelimelere ve ses profillerine bu sınır uygulanmaz.
 
+### İzin kurulumu (Mikrofon · Sistem sesi · Erişilebilirlik)
+
+İlk açılışta (ya da kayıt için gereken bir izin eksikse) tek bir izin ekranı açılır; her izin ayrı bir kart, rozet gerçek durumu gösterir. Hiçbir istem kendiliğinden çıkmaz: macOS’a soru ya da Sistem Ayarları yalnız kartın düğmesine **sizin tıklamanızla** açılır.
+
+1. **Mikrofon** (gerekli): **İzin iste** → macOS sorar → **İzin Ver**. Daha önce reddettiyseniz kart **Sistem Ayarları’nı aç** der; Gizlilik ve Güvenlik → Mikrofon’da Meeting OS’u açın.
+2. **Sistem sesi — karşı tarafın sesi** (gerekli): **İzin iste** → Sistem Ayarları → Gizlilik ve Güvenlik → **Ekran ve Sistem Sesi Kaydı** listesinde Meeting OS’u açın (listede yoksa **+** ile ekleyin). Ekran görüntüsü alınmaz, saklanmaz. Açtıktan sonra macOS “Çık ve yeniden aç” derse ya da kart hâlâ kapalı gösterirse **Meeting OS’u yeniden aç** düğmesi görünür; kayıt sürerken yeniden açma yapılmaz.
+3. **Erişilebilirlik** (**isteğe bağlı**): yalnız “Zoom’u izle” modunda Zoom’daki Sessiz/Sesi aç satırını okumak içindir; tuş vuruşu ya da ekran okunmaz, kısayollar (⌃⌥R, ⌃⌥M, ⌃⌥V) izinsiz de çalışır. Vermezseniz kayıt aynen yapılır; Zoom modunda bütün mikrofon sesi kaydedilir, yalnız sessizdeyken konuşulanların ayıklanması olmaz. Kartta **İzin iste** ya da **Şimdilik geç**; geçilen izin yeşil görünmez (“Kapalı · geçildi”).
+
+Sistem Ayarları’ndan uygulamaya dönünce durum kendiliğinden yeniden okunur; ayrıca bekleme sürerken saniyede bir bakılır (en çok 2 dakika, sonra **Yeniden kontrol et**). Ayarlar açılamazsa kart elle izlenecek yolu yazar. Okunamayan durum “verildi” sayılmaz; yönetici kısıtlamışsa kart bunu söyler. Eksik gerekli izinle de **Tamam** diyebilirsiniz; kayıt o izin gelene kadar çalışmaz ve Ayarlar kartı kırmızı kalır. **Yeniden açma yolu:** Ayarlar → Sistem → **İzin kurulumunu yeniden aç**. Ayrıntı ve Granola eşlemesi: `docs/IZIN_ONBOARDING.md`.
+
 ## 8. Ses profilleri (kişi tanıma)
 Bir kişiyi bir kez adlandırın (İsimler kartında, konuşmacı menüsünden ya da Düzelt ile); profil kaydedilir ve sonraki toplantılarda aynı kişi kendiliğinden tanınır. Sınırda eşleşmeler “Ad?” önerisi olur.
 

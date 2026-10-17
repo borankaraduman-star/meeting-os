@@ -15,32 +15,40 @@ enum SetupStatus {
     /// What the "Düzelt" button on a check does: ask macOS, or open the exact System Settings pane when only the user can change it.
     static let panes=["mic":"Privacy_Microphone","screen":"Privacy_ScreenCapture","calendar":"Privacy_Calendars","reminders":"Privacy_Reminders","accessibility":"Privacy_Accessibility"]
     /// macOS asks only once. Undetermined → ask now; already refused → open the exact System Settings pane, the only place it can change.
-    static func fix(_ id:String,calendarWanted:Bool,done:@escaping ()->Void) {
+    /// The three recording grants (mic, screen, accessibility) are the permission provider's: `PermissionFlowModel`,
+    /// the Ayarlar rows and this list read and change them through the same `PermissionProviding`, so there is one
+    /// truth about a grant. Calendar, reminders and notifications stay here.
+    static let permissionKinds:[String:PermissionKind]=["mic":.microphone,"screen":.systemAudio,"accessibility":.accessibility]
+    static func fix(_ id:String,calendarWanted:Bool,provider:PermissionProviding=LivePermissionProvider.shared,done:@escaping ()->Void) {
         let finish={ DispatchQueue.main.async(execute:done) }
+        if let kind=permissionKinds[id] { fixPermission(kind,provider:provider,done:finish); return }
         switch id {
-        case "mic":
-            if AVCaptureDevice.authorizationStatus(for:.audio) == .notDetermined { AVCaptureDevice.requestAccess(for:.audio) { _ in finish() } }
-            else { openPane("Privacy_Microphone"); finish() }
-        case "screen":
-            if !CGRequestScreenCaptureAccess() { openPane("Privacy_ScreenCapture") }
-            DispatchQueue.main.asyncAfter(deadline:.now()+1,execute:done)
         case "calendar":
             if EKEventStore.authorizationStatus(for:.event) == .notDetermined { CalendarContext.requestAccess { _ in done() } }
             else { openPane("Privacy_Calendars"); finish() }
         case "reminders":
             if EKEventStore.authorizationStatus(for:.reminder) == .notDetermined { RemindersBridge.requestAccess { _ in done() } }
             else { openPane("Privacy_Reminders"); finish() }
-        case "accessibility":
-            // The prompt is the only thing that puts Meeting OS into the Accessibility list; the pane is opened
-            // straight after, because the switch still has to be flicked there by hand.
-            if !ZoomMute.requestTrust() { openPane("Privacy_Accessibility") }
-            DispatchQueue.main.asyncAfter(deadline:.now()+1,execute:done)
         case "notify":
             UNUserNotificationCenter.current().getNotificationSettings { s in
                 if s.authorizationStatus == .notDetermined { UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound]) { _,_ in finish() } }
                 else { open("x-apple.systempreferences:com.apple.Notifications-Settings.extension"); finish() }
             }
         default: done()
+        }
+    }
+    /// Microphone: ask while macOS never was, otherwise only System Settings can change it. Screen and Accessibility
+    /// answer a prompt at once and then need the switch flicked by hand: ask, and open the pane if it is still off
+    /// (the live Accessibility request opens its own pane, the prompt being the only thing that lists the app there).
+    static func fixPermission(_ kind:PermissionKind,provider:PermissionProviding,done:@escaping ()->Void) {
+        switch kind {
+        case .microphone:
+            if provider.status(.microphone) == .notDetermined { provider.request(.microphone) { _ in done() } }
+            else { provider.openSettings(.microphone); done() }
+        case .systemAudio:
+            provider.request(.systemAudio) { status in if !status.isGranted { provider.openSettings(.systemAudio) }; done() }
+        case .accessibility:
+            provider.request(.accessibility) { _ in done() }
         }
     }
     static func openPane(_ pane:String) { open("x-apple.systempreferences:com.apple.preference.security?\(pane)") }
@@ -51,25 +59,45 @@ enum SetupStatus {
     /// Why the Accessibility grant exists at all: it is the only way to read Zoom's own mute state, and without
     /// it `MicGate` keeps the microphone shut in `zoom` mode. Optional, never missing — a Mac that never grants
     /// it still records perfectly, it just needs ⌃⌥V for the owner's own voice.
-    static func accessibilityCheck(trusted:Bool=ZoomMute.trusted(),mode:String=MicGate.mode)->SetupCheck {
+    static func accessibilityCheck(trusted:Bool,mode:String=MicGate.mode)->SetupCheck {
+        accessibilityCheck(status:trusted ? .authorized : .denied,mode:mode)
+    }
+    static func accessibilityCheck(status:PermissionStatus,mode:String=MicGate.mode)->SetupCheck {
         let title="Erişilebilirlik (Zoom’da sesiniz açıkken mikrofonu kaydetmek için)"
-        if trusted { return SetupCheck(id:"accessibility",title:title,state:.ok,hint:"izin verildi · Zoom’un mikrofon durumu okunabiliyor") }
+        if status.isGranted { return SetupCheck(id:"accessibility",title:title,state:.ok,hint:"izin verildi · Zoom’un mikrofon durumu okunabiliyor") }
         let cost = mode=="zoom" ? "Şu an “Zoom’u izle” modundasınız: izin olmadan kendi sesiniz yalnız ⌃⌥V ile kaydedilir." : "“Zoom’u izle” moduna geçerseniz gerekir."
         return SetupCheck(id:"accessibility",title:title,state:.optional,
                           hint:"Meeting OS, Zoom’un Toplantı menüsünden yalnız “Sesi Aç/Sesi Kapat” satırını okur; tuş vuruşu ya da ekran içeriği okunmaz. "+cost+" · Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik")
     }
-    static func permissionChecks(calendarWanted:Bool)->[SetupCheck] {
+    /// Mic and screen rows from the provider's snapshot (default: a fresh read of the live provider). A status the
+    /// provider could not establish is never drawn green: only `authorized` is `.ok`.
+    static func microphoneCheck(_ snapshot:PermissionSnapshot)->SetupCheck {
+        let st=snapshot.status(.microphone)
+        let state:SetupCheck.State = st.isGranted ? .ok : (st == .notDetermined ? .unknown : .missing)
+        let hint = st.isGranted ? "izin verildi" : (st == .restricted ? "Yönetici (cihaz yönetimi) kısıtlamış · BT yöneticinize başvurun" : PermissionSettingsLink.path(.microphone,os:snapshot.os))
+        return SetupCheck(id:"mic",title:"Mikrofon",state:state,hint:hint)
+    }
+    static func screenCheck(_ snapshot:PermissionSnapshot)->SetupCheck {
+        let st=snapshot.status(.systemAudio)
+        let path=PermissionSettingsLink.path(.systemAudio,os:snapshot.os)
+        let hint:String
+        switch st {
+        case .authorized: hint="izin verildi · yalnız karşı tarafın sesi için (macOS sistem sesini bu izne bağlar); ekran görüntüsü alınmaz, saklanmaz"
+        case .needsRelaunch: hint="izin verilmiş görünüyor · Meeting OS’u yeniden açınca geçerli olur"
+        default: hint="Karşı tarafın sesi (Zoom’dan hoparlöre giden ses) macOS’ta yalnız bu izinle alınabilir; ekran görüntüsü alınmaz, saklanmaz · "+path
+        }
+        return SetupCheck(id:"screen",title:"Ekran kaydı (toplantı sesi)",state:st.isGranted ? .ok : .missing,hint:hint)
+    }
+    static func permissionChecks(calendarWanted:Bool,snapshot:PermissionSnapshot=LivePermissionProvider.shared.snapshot(micMode:MicGate.mode))->[SetupCheck] {
         var out:[SetupCheck]=[]
-        let mic=AVCaptureDevice.authorizationStatus(for:.audio)
-        out.append(SetupCheck(id:"mic",title:"Mikrofon",state:mic == .authorized ? .ok : (mic == .notDetermined ? .unknown : .missing),hint:mic == .authorized ? "izin verildi" : "Sistem Ayarları → Gizlilik ve Güvenlik → Mikrofon"))
-        let screen=CGPreflightScreenCaptureAccess()
-        out.append(SetupCheck(id:"screen",title:"Ekran kaydı (toplantı sesi)",state:screen ? .ok : .missing,hint:screen ? "izin verildi · yalnız karşı tarafın sesi için (macOS sistem sesini bu izne bağlar); ekran görüntüsü alınmaz, saklanmaz" : "Karşı tarafın sesi (Zoom’dan hoparlöre giden ses) macOS’ta yalnız bu izinle alınabilir; ekran görüntüsü alınmaz, saklanmaz · Sistem Ayarları → Gizlilik ve Güvenlik → Ekran Kaydı"))
+        out.append(microphoneCheck(snapshot))
+        out.append(screenCheck(snapshot))
         let cal=EKEventStore.authorizationStatus(for:.event)
         let calOK:Bool = { if #available(macOS 14,*) { return cal == .fullAccess }; return cal == .authorized }()
         out.append(SetupCheck(id:"calendar",title:"Takvim (isteğe bağlı)",state:calOK ? .ok : (calendarWanted ? .missing : .optional),hint:calOK ? "izin verildi" : (calendarWanted ? "Ayar açık ama izin yok: Sistem Ayarları → Takvimler" : "Ayarlarda açılırsa istenir")))
         let rem=EKEventStore.authorizationStatus(for:.reminder)
         let remOK:Bool = { if #available(macOS 14,*) { return rem == .fullAccess }; return rem == .authorized }()
-        out.append(accessibilityCheck())
+        out.append(accessibilityCheck(status:snapshot.status(.accessibility),mode:snapshot.micMode))
         out.append(SetupCheck(id:"reminders",title:"Hatırlatıcılar (isteğe bağlı)",state:remOK ? .ok : .optional,hint:remOK ? "izin verildi" : "İlk “Hatırlatıcılar’a ekle” tıklamasında istenir"))
         return out
     }

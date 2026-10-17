@@ -87,10 +87,11 @@ struct SettingsSheet:View {
                 }
                 Divider()
                 }
-                if group=="sistem", !model.setupChecks.isEmpty {
+                if group=="sistem" { PermissionSettingsBlock(model:model) }
+                if group=="sistem", !PermissionIntegration.visibleChecks(model.setupChecks).isEmpty {
                     VStack(alignment:.leading,spacing:6) {
                         HStack { Text("Kurulum durumu").font(.headline);Spacer();Button("Yenile") { Task { await model.loadSetupStatus() } }.controlSize(.small) }
-                        ForEach(model.setupChecks) { c in
+                        ForEach(PermissionIntegration.visibleChecks(model.setupChecks)) { c in
                             HStack(alignment:.top,spacing:8) {
                                 Circle().fill(c.state == .ok ? MeetingStyle.accent : (c.state == .missing ? Color.red : (c.state == .unknown ? Color.orange : Color.secondary))).frame(width:8,height:8).padding(.top,5)
                                 VStack(alignment:.leading,spacing:1) { Text(c.title).font(.callout); Text(c.hint).font(.caption2).foregroundStyle(.secondary) }

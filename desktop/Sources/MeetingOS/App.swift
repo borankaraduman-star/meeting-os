@@ -186,6 +186,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         let declared=(try? JSONDecoder().decode(Runtime.self,from:Data(contentsOf:url))) ?? Runtime(python:"/usr/bin/false",repo:"/tmp")
         runtime=declared.resolved(resources:resources)
         AppDelegate.model=self
+        permissions.attach(isRecording:{ [weak self] in self?.recording == true || self?.recordProcess != nil },relaunch:{ AppRelaunch.run() })
         let pressure=DispatchSource.makeMemoryPressureSource(eventMask:[.warning,.critical],queue:.main)
         pressure.setEventHandler { [weak self] in Task { @MainActor in self?.memoryPressureAt=Date(); self?.stopForResources() } }
         pressure.resume();pressureSource=pressure
@@ -454,6 +455,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
                 // Only this recording's folder and session move the status; a late line from the previous one is dropped.
                 // The session id the bridge reports with the first `capturing` payload is kept for the whole recording.
                 let now=Date()
+                if let kind=PermissionIntegration.deniedKind(active.capture), permissionGuidance != kind { permissionGuidance=kind; permissions.refresh() }
                 if captureSession.apply(active.capture,directory:dir.path,now:now) {
                     if let label=captureSession.activityLine(active.capture,now:now), activity != label { activity=label }   // schema-1 polls without signal analysis keep the last reading
                     if !captureSession.legacy || active.capture["signals"] != nil { publishCaptureDots(now:now) }
@@ -476,6 +478,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
             if settingsLoaded, !teamSyncedOnLaunch, !recording, job==nil {
                 teamSyncedOnLaunch=true; Task { await syncTeamKnowledge() }
             }
+            evaluatePermissionOnboardingOnce()
             if !restoredOnLaunch {
                 restoredOnLaunch=true
                 if !recording, job==nil, let restore=RelaunchRestore.pick(meetings:meetings) { selected=restore.id; restoredMeeting=restore.id }
@@ -590,6 +593,8 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
         let diskNotice=DiskSpace.startNotice(freeBytes:freeBytes)
         if DiskSpace.refuses(freeBytes:freeBytes) { startRefusal=diskNotice; return false }
         stopPlayback()   // never play audio into the room during a recording
+        showPermissionOnboarding=false   // the sheet never sits over a recording; the recording itself is not held up by it
+        permissionGuidance=PermissionIntegration.knownRefusal(permissions.refresh())   // a refused microphone is named at once; the helper reports the rest
         guard recordProcess==nil else { startRefusal=LaunchOutcome.recordBusy; return false }
         recordingNavigation.begin()
         // A note typed before ⌃⌥R is filed under this folder's UUID and claimed later. With nothing typed for this
@@ -823,6 +828,13 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     func focusMemorySearch() { tab="memory"; memoryFocusToken+=1 }
     @Published var cost:[String:Any]?
     @Published var setupChecks:[SetupCheck]=[]
+    /// The permission onboarding: one flow model for the whole app (cards, Ayarlar rows, welcome card and the
+    /// re-check when the app becomes active all read this instance), over the one live provider.
+    let permissions=PermissionFlowModel(provider:LivePermissionProvider.shared,micMode:MicGate.mode)
+    @Published var showPermissionOnboarding=false
+    /// The grant a recording start reported missing; the banner shows while it still reads off.
+    @Published var permissionGuidance:PermissionKind?
+    private var permissionOnboardingChecked=false
     /// Where the team's knowledge actually goes (Ayarlar → Ekip reads it), whether this Mac is in a team at all
     /// (the welcome screen reads that), and the answer of the last join — which IS the confirmation sheet.
     @Published var teamTarget=TeamTarget.off
@@ -1025,7 +1037,7 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     /// Mikrofon kapısı. Default `zoom`: the mic track counts as meeting audio only while Zoom says the local
     /// microphone is open. `manual` keeps it shut until ⌃⌥V, `always` is the behaviour that shipped before.
     @Published var micMode=MicGate.normalize(UserDefaults.standard.string(forKey:MicGate.key)) {
-        didSet { UserDefaults.standard.set(micMode,forKey:MicGate.key); if recording { evaluateMicGate() } }
+        didSet { UserDefaults.standard.set(micMode,forKey:MicGate.key); permissions.setMicMode(micMode); if recording { evaluateMicGate() } }
     }
     /// "Sesimi de kaydet" — forces the gate open for this recording only; cleared at every start.
     @Published var micManualOn=false
@@ -1288,6 +1300,21 @@ func invoke(_ runtime:Runtime,_ request:[String:Any],timeout:TimeInterval = 10) 
     func beginRecording() {
         if let line=LaunchOutcome.activity(started:start(),onStart:LaunchOutcome.recordStarted,onRefusal:startRefusal) { activity=line }
         if startRefusal==Model.nameRequiredMessage { promptForUserName() }   // the caret goes where the answer has to be typed
+    }
+    /// Opens the permission onboarding. From Ayarlar (`reopen`) the settings sheet closes first and skipped steps
+    /// come back; from the welcome card or the first launch the flow continues where it stood.
+    func presentPermissionOnboarding(reopen:Bool) {
+        showSettings=false
+        permissionGuidance=nil
+        if reopen || permissions.state.phase == .finished { permissions.reopen() } else { permissions.appear() }
+        showPermissionOnboarding=true
+    }
+    /// Once per launch, after the first snapshot: a Mac that cannot record yet and never finished the onboarding sees it.
+    private func evaluatePermissionOnboardingOnce() {
+        guard !permissionOnboardingChecked else { return }
+        permissionOnboardingChecked=true
+        guard PermissionIntegration.shouldPresentOnboarding(recording:recording || recordProcess != nil,complete:permissions.isCompletionStored,snapshot:permissions.refresh()) else { return }
+        presentPermissionOnboarding(reopen:false)
     }
     var lastUpdateCheck:Date?
     /// Called after the first snapshot and every six hours; a fetch, nothing more.
