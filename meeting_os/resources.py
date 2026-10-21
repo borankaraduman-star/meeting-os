@@ -41,7 +41,8 @@ def check_asr_model(path):
 
 def configure_mlx():
     check_pressure()
-    import mlx.core as mx
+    from .optional import require
+    mx = require('mlx.core', 'Yerel model (MLX)')
     # MLX memory_limit is advisory, not a hard process limit. The native UI also
     # monitors physical footprint and OS pressure and terminates its own job.
     mx.set_cache_limit(64*1024**2)

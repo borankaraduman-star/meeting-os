@@ -10,7 +10,9 @@ dependencies = ["numpy>=1.26,<3", "scipy>=1.12,<2", "soundfile>=0.12,<1", "huggi
 [project.optional-dependencies]
 analysis = ["mlx-lm==0.31.3", "outlines==1.3.3"]
 mlx = ["mlx-whisper>=0.4.2,<0.5"]
-speakers = ["resemblyzer==0.1.4", "setuptools>=68,<81", "silero-vad>=6,<7", "sherpa-onnx==1.13.7"]
+speakers = ["onnxruntime==1.31.0", "sherpa-onnx==1.13.7"]
+# torch reference for tests/test_onnx_equivalence.py and scripts/convert-resemblyzer-onnx.py; never in the bundle
+reference = ["torch==2.14.0", "resemblyzer==0.1.4", "setuptools>=68,<81", "silero-vad>=6,<7", "librosa==1.0.0"]
 whisper = ["openai-whisper>=20240930"]
 ecapa = ["speechbrain>=1.0,<2", "torchaudio>=2.6,<2.12"]
 pyannote = ["pyannote.audio>=4,<5"]

@@ -110,8 +110,8 @@ TO="$(git rev-parse --short HEAD)"
 # or fails halfway.
 if [ ! -f "$MARKER" ]; then status failed "$TO" "$SIGNING_FIX"; exit 1; fi
 status running "$TO" "Bağımlılıklar kontrol ediliyor"
-if [ "$BASE" != "$TO" ] && ! git diff --quiet "$BASE" "$TO" -- requirements-macos-tested.txt pyproject.toml; then
-  nice -n 19 .venv/bin/python -m pip install -r requirements-macos-tested.txt && nice -n 19 .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]' || { status failed "$TO" "Python bağımlılıkları kurulamadı"; exit 1; }
+if [ "$BASE" != "$TO" ] && ! git diff --quiet "$BASE" "$TO" -- requirements-macos-tested.txt requirements-local-models.txt pyproject.toml; then
+  nice -n 19 .venv/bin/python -m pip install -r requirements-macos-tested.txt -r requirements-local-models.txt && nice -n 19 .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]' || { status failed "$TO" "Python bağımlılıkları kurulamadı"; exit 1; }
 fi
 if [ "$BASE" != "$TO" ] && ! git diff --quiet "$BASE" "$TO" -- capture; then
   nice -n 19 /bin/sh scripts/build-capture.sh || { status failed "$TO" "Kayıt yardımcısı derlenemedi"; exit 1; }

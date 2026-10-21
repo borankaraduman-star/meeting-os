@@ -10,7 +10,8 @@ fi
 if [ ! -x .venv/bin/python ]; then
   "${MEETING_OS_PYTHON:-python3.12}" -m venv .venv
 fi
-.venv/bin/python -m pip install -r requirements-macos-tested.txt
+# Geliştirici Mac'i yerel modelleri de kurar (isteğe bağlı ek, pinleri ölçülmüş); paket ve CI yalnız ilkini.
+.venv/bin/python -m pip install -r requirements-macos-tested.txt -r requirements-local-models.txt
 .venv/bin/python -m pip install -e '.[mlx,speakers,analysis]'
 .venv/bin/python scripts/fetch-recommended.py
 if .venv/bin/python -c 'from meeting_os.resources import low_memory_mac; raise SystemExit(0 if low_memory_mac() else 1)'; then
