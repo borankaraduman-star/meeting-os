@@ -4,8 +4,8 @@
 # Çıktı: build/bundle/Meeting OS.app — İMZASIZ. İmza, zip ve yayınlama bu betiğin DIŞINDA:
 #   .venv/bin/python scripts/signing.py --sign "build/bundle/Meeting OS.app"
 #
-# Paket kendi Python’unu (python-build-standalone), bulut yolunun paketlerini, statik ffmpeg’i, Sherpa
-# konuşmacı modellerini ve kayıt yardımcısını taşır; kullanan Mac’te ne Homebrew ne depo ne venv gerekir.
+# Paket kendi Python’unu (python-build-standalone), bulut yolunun paketlerini (torch yok; ses izi ve VAD ONNX),
+# statik ffmpeg’i, Sherpa konuşmacı modellerini ve kayıt yardımcısını taşır; kullanan Mac’te ne Homebrew ne depo ne venv gerekir.
 # Hangi dosyanın girip hangisinin girmediği scripts/bundle_manifest.py içinde yazılıdır; tests/test_bundle_layout.py
 # aynı listeyi denetler.
 #
@@ -161,7 +161,10 @@ say "Paketler kuruluyor (olculmus pinler: $(basename "$constraints"))"
 ask packages > "$OUTPUT/.packages.txt"
 ask no-deps-packages > "$OUTPUT/.packages-nodeps.txt"
 "$py" -m pip install --no-cache-dir --disable-pip-version-check --constraint "$constraints" -r "$OUTPUT/.packages.txt"
-"$py" -m pip install --no-cache-dir --disable-pip-version-check --no-deps -r "$OUTPUT/.packages-nodeps.txt"
+# Boş olabilir (Resemblyzer paketten çıktı); boş -r dosyası pip'te hata sayılmasın diye yalnız doluysa.
+if [ -s "$OUTPUT/.packages-nodeps.txt" ]; then
+    "$py" -m pip install --no-cache-dir --disable-pip-version-check --no-deps -r "$OUTPUT/.packages-nodeps.txt"
+fi
 rm -f "$OUTPUT/.packages.txt" "$OUTPUT/.packages-nodeps.txt"
 
 # imageio-ffmpeg’in taşıdığı statik ffmpeg ikilisi runtime/bin/ffmpeg olur: PATH’in başına runtime/bin
@@ -249,7 +252,16 @@ xattr -cr "$app" 2>/dev/null || true
 # dosyaları geri getirmesin — imzalanacak paket, derlenen paketin aynısı olmalı.
 say "Dogrulama"
 export PYTHONDONTWRITEBYTECODE=1
-"$py" -c "import resemblyzer, silero_vad, sherpa_onnx, torch, numpy, scipy, soundfile; print('import OK')"
+# Bulut yolunun gerçekten içe aktardıkları + ses izi ve VAD'ın ONNX modelleri gerçekten yüklenip çalışıyor mu
+# (budanmış onnxruntime ile). torch/Resemblyzer/silero_vad artık pakette değil: bilerek denenmez.
+( cd "$repo" && "$py" -c "import numpy, scipy, soundfile, sherpa_onnx, onnxruntime
+from meeting_os.voice_encoder import VoiceEncoder
+from meeting_os.vad_onnx import SileroVAD
+e=VoiceEncoder(); v=e.embed_utterance(numpy.zeros(16000, dtype=numpy.float32)+1e-3)
+assert e.model_id=='resemblyzer:39373b86598fa3da', e.model_id
+assert v.shape==(256,), v.shape
+SileroVAD()(numpy.zeros(512, dtype=numpy.float32))
+print('import OK', e.model_id)" ) || die "paket ici import/ONNX dogrulamasi coktu"
 # PATH tam da uygulamanın çocuklarına verdiği gibi kurulur (App.swift Runtime.childEnvironment), yoksa
 # doctor bu Mac’in Homebrew ffmpeg’ini bulur ve paketin kendi ffmpeg’i hiç denenmemiş olur.
 ( cd "$repo" && PATH="$runtime/bin:$PATH" ../runtime/bin/python3 -m meeting_os doctor ) || die "doctor cokti"

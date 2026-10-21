@@ -32,13 +32,16 @@ def fetch(name, root, revision='main'):
         metadata={'name':name,'engine':'onnx','assets':assets}
         path=target
     elif name == 'whisper-turbo':
-        import whisper
+        from .optional import require
+        whisper = require('whisper', 'Whisper modeli indirme')
         url = whisper._MODELS['turbo']
         path = whisper._download(url, str(target), False)
         metadata = {'name':name,'engine':'whisper','url':url,'sha256':url.split('/')[-2],'path':str(path)}
     else:
         os.environ['HF_HUB_OFFLINE'] = '0'
-        from huggingface_hub import HfApi, snapshot_download, hf_hub_download
+        from .optional import require
+        hub = require('huggingface_hub', 'Model indirme')   # not in the bundle: the cloud path downloads no model
+        HfApi, snapshot_download, hf_hub_download = hub.HfApi, hub.snapshot_download, hub.hf_hub_download
         engine, repo = CATALOG[name]
         sha = HfApi().model_info(repo, revision=revision).sha
         if engine == 'cpp':

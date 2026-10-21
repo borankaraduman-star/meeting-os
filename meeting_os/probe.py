@@ -75,9 +75,12 @@ def run(root, data_dir, *, network=False, timeout=8):
         except Exception as exc: items.append(_item('capture_helper', False, str(exc)[:200], 'sh scripts/build-capture.sh'))
     else: items.append(_item('capture_helper', False, 'kayıt yardımcısı derlenmemiş', 'sh scripts/build-capture.sh'))
     try:
-        import resemblyzer  # noqa: F401
-        items.append(_item('speaker_model', True, 'Resemblyzer hazır'))
-    except Exception as exc: items.append(_item('speaker_model', False, f'Resemblyzer yüklenemedi: {str(exc)[:120]}', '.venv/bin/python -m pip install -e ".[speakers]"'))
+        # The voiceprint model is an ONNX file inside meeting_os/ (voice_encoder.py); loading it once here proves
+        # both onnxruntime and the file, without torch or Resemblyzer.
+        from .voice_encoder import VoiceEncoder
+        VoiceEncoder()
+        items.append(_item('speaker_model', True, 'Ses izi modeli (ONNX) hazır'))
+    except Exception as exc: items.append(_item('speaker_model', False, f'Ses izi modeli yüklenemedi: {str(exc)[:120]}', '.venv/bin/python -m pip install -r requirements-macos-tested.txt'))
     db = data / 'meeting-os.sqlite'
     if db.exists():
         try:

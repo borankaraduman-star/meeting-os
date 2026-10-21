@@ -5,9 +5,11 @@
 the package the tests describe is the package the script actually produces.
 
 The rule behind the lists: the bundle carries the CLOUD path only — record, assemble with ffmpeg, upload to
-OpenRouter, diarize with Sherpa, embed voices with Resemblyzer. Local transcription and local analysis
-(mlx, mlx-lm, mlx-whisper, outlines, transformers, whisper, speechbrain, pyarrow) are a development-machine
-concern and would add gigabytes nobody on the receiving end can use.
+OpenRouter, diarize with Sherpa, embed voices with Resemblyzer's network through ONNX (meeting_os/voice_encoder.py).
+Local transcription and local analysis (mlx, mlx-lm, mlx-whisper, outlines, transformers, whisper, speechbrain,
+pyarrow) are a development-machine concern and would add gigabytes nobody on the receiving end can use. Since
+the torch-free voiceprint (2026-10-22) torch, torchaudio, silero-vad, Resemblyzer and the librosa/numba/llvmlite/
+scikit-learn chain that only Resemblyzer's mel needed stay out too: docs/BUNDLE.md "Ses izi ve VAD: torch'suz".
 """
 import json
 import re
@@ -29,41 +31,36 @@ PYTHON_TAR_TOPLEVEL = 'python'
 # ---------------------------------------------------------------- packages
 
 #: Everything the cloud path imports, at the version `requirements-macos-tested.txt` pins. pip resolves the
-#: transitive closure (httpx, requests, sympy, jinja2, joblib, soxr, …); the same requirements file is passed
-#: as a --constraint, so anything pulled in that was measured on this Mac keeps its measured version.
+#: transitive closure (flatbuffers, protobuf, packaging for onnxruntime; cffi for soundfile); the same
+#: requirements file is passed as a --constraint, so anything pulled in that was measured keeps its version.
 #:
-#: torchaudio is here although docs/BUNDLE.md leaves it out: `silero_vad/utils_vad.py` does a top-level
-#: `import torchaudio`, so `import silero_vad` — which meeting_os/audio.py does for every VAD pass — cannot
-#: work without it. It costs 4 MB, not the hundreds torch costs.
+#: Measured 2026-10-22 in a venv holding only this list: `python -X importtime` over 14 cloud-path test modules
+#: (cloud_finalize, cloud_import, desktop bridge, probe, retry, final_identity worker, live, preview, openrouter,
+#: assistant, echo recovery, final VAD, team cloud, ONNX equivalence; 318 tests green) loaded numpy, scipy,
+#: soundfile and onnxruntime and nothing else outside the standard library; sherpa_onnx loads in the isolated
+#: diarization child. The full suite also passes there except the two dev-only imports (huggingface_hub for
+#: `models fetch`, jsonschema for native_llm), which requirements-macos-tested.txt keeps for checkouts.
 PACKAGES = [
     'numpy==2.5.3',
     'scipy==1.18.1',
     'soundfile==0.14.0',
-    'huggingface_hub==1.30.0',
-    'torch==2.14.0',
-    'torchaudio==2.11.0',
-    'silero-vad==6.2.1',
+    'onnxruntime==1.31.0',
     'sherpa-onnx==1.13.7',
     'sherpa-onnx-core==1.13.7',
-    'librosa==1.0.0',
-    'numba==0.67.0',
-    'llvmlite==0.49.0',
-    'scikit-learn==1.9.0',
-    'webrtcvad==2.0.10',
-    'requests==2.34.2',
-    'setuptools==80.10.2',
     'imageio-ffmpeg==0.6.0',
 ]
 
-#: Installed with --no-deps. Resemblyzer still declares the abandoned `typing` backport, whose only wheel is
-#: py2 and whose module file lands in site-packages next to the standard library's own `typing`. Its real
-#: dependencies (librosa, numpy, scipy, torch, webrtcvad) are all in PACKAGES above.
-NO_DEPS_PACKAGES = ['Resemblyzer==0.1.4']
+#: Installed with --no-deps. Empty since Resemblyzer left the bundle (its network is meeting_os/assets/
+#: resemblyzer.onnx now); kept as a list so build-bundle.sh's second pip call has a file to read.
+NO_DEPS_PACKAGES: list = []
 
-#: Never in the bundle, whatever pulls them in: the local-model era.
+#: Never in the bundle, whatever pulls them in: the local-model era, and since 2026-10-22 torch and everything
+#: that was only there for it. requirements-local-models.txt installs them on a developer Mac.
 EXCLUDED_PACKAGES = ['mlx', 'mlx-lm', 'mlx-metal', 'mlx-whisper', 'outlines', 'outlines_core',
                      'transformers', 'tokenizers', 'pyarrow', 'openai-whisper', 'speechbrain',
-                     'pyannote.audio', 'tiktoken', 'sentencepiece']
+                     'pyannote.audio', 'tiktoken', 'sentencepiece',
+                     'torch', 'torchaudio', 'silero-vad', 'Resemblyzer', 'librosa', 'numba', 'llvmlite',
+                     'scikit-learn', 'sympy', 'webrtcvad', 'huggingface_hub']
 
 CONSTRAINTS_FILE = 'requirements-macos-tested.txt'
 
@@ -119,6 +116,13 @@ PRUNE_GLOBS = [
     'lib/python*/ensurepip',
     'lib/python*/site-packages/torch/include',
     'lib/python*/site-packages/torch/test',
+    # onnxruntime's pure-Python model tooling (BERT/GPT optimizers, quantization, conversion tools) is never
+    # imported by `import onnxruntime` nor by an InferenceSession; the C API dylib is for C/C++ callers — the
+    # Python binding (onnxruntime_pybind11_state.so) carries the runtime itself and does not link it.
+    'lib/python*/site-packages/onnxruntime/transformers',
+    'lib/python*/site-packages/onnxruntime/quantization',
+    'lib/python*/site-packages/onnxruntime/tools',
+    'lib/python*/site-packages/onnxruntime/capi/libonnxruntime.*.dylib',
 ]
 #: Directories with these names are removed wherever they appear. `testing` is NOT here: numpy.testing and
 #: torch.testing are importable modules other code reaches for, unlike a `tests` package.
@@ -127,7 +131,7 @@ PRUNE_DIR_NAMES = ['__pycache__', 'tests', 'test']
 #: bytecode goes with the __pycache__ directories anyway.
 PRUNE_SUFFIXES = ['.a', '.pyc', '.pyo']
 
-SIZE_BUDGET_BYTES = 1.3 * 1024**3
+SIZE_BUDGET_BYTES = 0.5 * 1024**3   # 1.3 GB while torch was in; measured after: see docs/BUNDLE.md
 
 # ---------------------------------------------------------------- runtime.json
 

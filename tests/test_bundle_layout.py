@@ -46,21 +46,54 @@ class ManifestLists(unittest.TestCase):
         for banned in ('mlx', 'mlx-lm', 'mlx-whisper', 'outlines', 'transformers', 'pyarrow'):
             self.assertIn(banned, M.EXCLUDED_PACKAGES)
 
-    def test_resemblyzer_is_installed_without_its_typing_backport(self):
-        """Resemblyzer still asks for `typing`, whose only wheel is py2 and whose module would sit in
-        site-packages beside the standard library's own. Its real dependencies are all in PACKAGES."""
-        self.assertEqual(M.NO_DEPS_PACKAGES, ['Resemblyzer==0.1.4'])
-        names = {s.split('==')[0].lower() for s in M.PACKAGES}
-        for real in ('librosa', 'numpy', 'scipy', 'torch', 'webrtcvad'):
-            self.assertIn(real, names)
+    def test_bundle_is_torch_free(self):
+        """2026-10-22: the voiceprint (Resemblyzer's LSTM) and the VAD (Silero) run through ONNX, so torch and
+        everything only it or Resemblyzer's librosa mel pulled in stay out. ~700 MB of the 1 GB app was that."""
+        names = {s.split('==')[0].lower() for s in M.PACKAGES + M.NO_DEPS_PACKAGES}
+        for gone in ('torch', 'torchaudio', 'silero-vad', 'resemblyzer', 'librosa', 'numba', 'llvmlite',
+                     'scikit-learn', 'sympy', 'webrtcvad'):
+            self.assertNotIn(gone, names)
+            self.assertIn(gone, {e.lower() for e in M.EXCLUDED_PACKAGES})
+        self.assertEqual(M.NO_DEPS_PACKAGES, [])
+        for needed in ('numpy', 'scipy', 'soundfile', 'onnxruntime', 'sherpa-onnx', 'sherpa-onnx-core'):
+            self.assertIn(needed, names)
 
-    def test_silero_needs_torchaudio(self):
-        """docs/BUNDLE.md leaves torchaudio out; silero_vad/utils_vad.py imports it at module level, so
-        `import silero_vad` — every VAD pass — would raise without it. 4 MB, and the bundle verification step
-        imports silero_vad on purpose."""
-        names = {s.split('==')[0].lower() for s in M.PACKAGES}
-        self.assertIn('silero-vad', names)
-        self.assertIn('torchaudio', names)
+    def test_no_module_imports_a_package_the_bundle_does_not_carry_at_top_level(self):
+        """A module-level import of an excluded package would break `import meeting_os.<x>` in the bundle
+        for every path, not just the local one. Lazy imports inside a function are the local-model paths,
+        each behind optional.require (a Turkish sentence instead of ModuleNotFoundError)."""
+        import re
+        banned = {'torch', 'torchaudio', 'silero_vad', 'resemblyzer', 'librosa', 'numba', 'sklearn', 'webrtcvad',
+                  'mlx', 'mlx_lm', 'mlx_whisper', 'outlines', 'transformers', 'whisper', 'speechbrain', 'pyannote',
+                  'huggingface_hub'}
+        for path in (ROOT / 'meeting_os').glob('*.py'):
+            for line in path.read_text(encoding='utf-8').splitlines():
+                m = re.match(r'(?:import|from)\s+([A-Za-z_][\w]*)', line)   # column 0 only: module level
+                if m: self.assertNotIn(m.group(1), banned, f'{path.name}: {line}')
+
+    def test_onnx_models_ship_inside_the_package_tree(self):
+        """The two ONNX files live in meeting_os/assets, which REPO_TREES copies whole; nothing in REPO_EXCLUDE
+        may drop them, and models/ (gitignored, Sherpa only) is not where the code looks."""
+        self.assertIn('meeting_os', M.REPO_TREES)
+        for name in ('resemblyzer.onnx', 'silero_vad.onnx'):
+            self.assertTrue((ROOT / 'meeting_os/assets' / name).is_file(), name)
+            for pattern in M.REPO_EXCLUDE:
+                self.assertFalse(Path(name).match(pattern), f'{pattern} {name} dosyasini disarida birakir')
+
+    def test_onnxruntime_prune_keeps_the_python_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); ort = root / 'lib/python3.12/site-packages/onnxruntime'
+            for sub in ('capi', 'transformers', 'quantization', 'tools'):
+                (ort / sub).mkdir(parents=True)
+            (ort / '__init__.py').write_text('')
+            (ort / 'capi/onnxruntime_pybind11_state.so').write_bytes(b'b' * 64)
+            (ort / 'capi/libonnxruntime.1.31.0.dylib').write_bytes(b'c' * 64)
+            (ort / 'transformers/x.py').write_text('')
+            M.prune(root)
+            self.assertTrue((ort / 'capi/onnxruntime_pybind11_state.so').exists())
+            self.assertTrue((ort / '__init__.py').exists())
+            for gone in ('capi/libonnxruntime.1.31.0.dylib', 'transformers', 'quantization', 'tools'):
+                self.assertFalse((ort / gone).exists(), gone)
 
 
 class RepoContents(unittest.TestCase):

@@ -28,7 +28,10 @@ def resolve_inference(args):
     from .resources import low_memory_mac
     if args.engine == 'auto':
         if args.model: raise ValueError('Custom model requires explicit --engine mlx, cpp or whisper')
-        args.engine='cpp' if low_memory_mac() else 'mlx'
+        # MLX is an optional extra since the cloud-only bundle (requirements-local-models.txt): without it the
+        # CPU whisper.cpp path is the only local engine left, so `auto` must not pick a library that is not there.
+        import importlib.util
+        args.engine='cpp' if low_memory_mac() or importlib.util.find_spec('mlx_whisper') is None else 'mlx'
     if not args.model:
         names={'mlx':'mlx-turbo','cpp':'cpp-turbo/ggml-large-v3-turbo-q5_0.bin','whisper':'whisper-turbo/turbo.pt'}
         args.model=str(ROOT/'models'/names[args.engine])
@@ -209,7 +212,8 @@ def main(supervised=False):
                 'capture_binary':(ROOT/'build/MeetingCapture.app/Contents/MacOS/MeetingCapture').exists(),
                 'ffmpeg':which('ffmpeg'),'whisper_cpp':str(ROOT/'build/whisper-cpp/bin/whisper-cli') if (ROOT/'build/whisper-cpp/bin/whisper-cli').exists() else which('whisper-cli'),
                 'offline':os.environ['HF_HUB_OFFLINE'],
-                'packages':{name:importlib.util.find_spec(name) is not None for name in ['mlx_whisper','resemblyzer','silero_vad','sherpa_onnx','speechbrain','pyannote','whisper','mlx_lm','outlines']},
+                'packages':{name:importlib.util.find_spec(name) is not None for name in ['onnxruntime','sherpa_onnx','mlx_whisper','speechbrain','pyannote','whisper','mlx_lm','outlines']},
+                'voice_model':(ROOT/'meeting_os/assets/resemblyzer.onnx').is_file(),'vad_model':(ROOT/'meeting_os/assets/silero_vad.onnx').is_file(),
                 'models':[str(x) for x in (ROOT/'models').glob('*/meeting-os-model.json')],
                 'permissions':'Run record to request macOS microphone and screen/system-audio access. Never bypassed.'})
             return

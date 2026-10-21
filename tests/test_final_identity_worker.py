@@ -92,7 +92,7 @@ class Tests(unittest.TestCase):
     Path(cmd[-1]).write_text(json.dumps({'model_id':e.model_id,'rows':[{'index':0,'vector':None}]}))
     weights.write_bytes(b'changed')
    with patch('meeting_os.final_identity.run_guarded',side_effect=worker),self.assertRaises(ValueError):e.embed_file(audio,[(0,16000)])
- def test_worker_preserves_post_vad_torch_thread_budget(self):
+ def test_worker_embeds_through_the_resemblyzer_engine(self):
   import hashlib,sys
   from unittest.mock import Mock
   from meeting_os.final_identity import main
@@ -101,7 +101,21 @@ class Tests(unittest.TestCase):
    p=Path(d);weights=p/'weights';weights.write_bytes(b'fixture');audio=p/'a.wav';sf.write(audio,np.zeros(16000),16000,subtype='FLOAT')
    digest=hashlib.sha256(b'fixture').hexdigest();request=p/'request';out=p/'result'
    request.write_text(json.dumps({'weights':str(weights),'digest':digest,'weight_signature':_signature(weights),'path':str(audio),'signature':_signature(audio),'frames':16000,'spans':[[0,16000]]}))
-   torch=Mock();encoder=Mock();encoder.model_id='resemblyzer:'+digest[:16];encoder.embed.return_value=[1.]+[0.]*255
-   def create(*a):torch.set_num_threads.assert_called_once_with(1);return encoder
-   with patch.dict(sys.modules,{'torch':torch}),patch('sys.argv',['worker',str(request),str(out)]),patch('meeting_os.speakers.Embedder',side_effect=create),patch('meeting_os.asr_checkpoints.check_pressure'):main()
+   encoder=Mock();encoder.model_id='resemblyzer:'+digest[:16];encoder.embed.return_value=[1.]+[0.]*255
+   created=[]
+   def create(*a):created.append(a);return encoder
+   with patch.dict(sys.modules,{'torch':None}),patch('sys.argv',['worker',str(request),str(out)]),patch('meeting_os.speakers.Embedder',side_effect=create),patch('meeting_os.asr_checkpoints.check_pressure'):main()
+   self.assertEqual(created,[('resemblyzer',weights)])   # no torch anywhere: sys.modules['torch']=None makes any import raise
    self.assertEqual(len(json.loads(out.read_text())['rows']),1)
+ def test_worker_session_keeps_the_one_thread_budget(self):
+  # The torch worker ran under torch.set_num_threads(1) (Silero had set it in-process); the ONNX session keeps
+  # the same CPU budget so identity never competes with a meeting.
+  from meeting_os.voice_encoder import VoiceEncoder
+  options=VoiceEncoder().session.get_session_options()
+  self.assertEqual(options.intra_op_num_threads,1)
+  self.assertEqual(options.inter_op_num_threads,1)
+ def test_default_weights_are_the_onnx_file_with_the_pretrained_model_id(self):
+  from meeting_os.voice_encoder import ONNX_PATH
+  e=FinalEmbedder(light=True)
+  self.assertEqual(e.weights,ONNX_PATH.resolve())
+  self.assertEqual(e.model_id,'resemblyzer:39373b86598fa3da')

@@ -14,8 +14,13 @@ class ASR:
         self.use_gpu = False
         self.prompt = ', '.join(vocabulary)[:1000]
         self.model = str(Path(model).expanduser().resolve()) if model else None
+        # The bundle ships no local speech model and none of these libraries (cloud transcription only): say so in
+        # a sentence, before a missing model path or a ModuleNotFoundError does it in English.
+        from .optional import LOCAL_HINT, require
+        if engine == 'mlx': require('mlx_whisper', 'Yerel yazıya çevirme (MLX)')
+        if engine == 'whisper': require('whisper', 'Yerel yazıya çevirme (Whisper)')
         if not self.model or not Path(self.model).exists():
-            raise ValueError('A local model path is required. Run models fetch first.')
+            raise ValueError(f'Yerel yazıya çevirme modeli bu Mac’te yok. {LOCAL_HINT}')
         if engine=='mlx':
             from .resources import check_asr_model,configure_mlx
             check_asr_model(self.model);configure_mlx()

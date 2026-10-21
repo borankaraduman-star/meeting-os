@@ -535,7 +535,7 @@ CLUSTER_MAX_SECONDS=60.0
 def embed_short_clusters(store, mid, sources, embedder):
     """Back-channel speakers (“hı hı”, “aynen”) never reach 3 s in one turn. Every such cluster's pieces are
     concatenated, all clusters are appended to one private snapshot and embedded in a single guarded child
-    (one span per cluster), so Torch is imported and the weights hashed once instead of once per cluster."""
+    (one span per cluster), so the voice model is loaded and its weights hashed once instead of once per cluster."""
     import tempfile
     clusters={}
     for r in store.segments(mid):

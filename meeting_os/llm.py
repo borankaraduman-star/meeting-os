@@ -5,7 +5,9 @@ DEFAULT_MODEL=Path(__file__).resolve().parents[1]/'models/analysis-qwen3'
 class LocalLLM:
     def __init__(self,path=DEFAULT_MODEL):
         self.path=Path(path).resolve()
-        if not (self.path/'config.json').is_file(): raise ValueError('Yerel analiz modeli eksik. models fetch analysis-qwen3 komutunu çalıştırın.')
+        from .optional import LOCAL_HINT, require
+        if not (self.path/'config.json').is_file(): raise ValueError(f'Yerel analiz modeli bu Mac’te yok. {LOCAL_HINT}')
+        require('mlx_lm', 'Yerel analiz (MLX)')
         from .resources import configure_mlx
         configure_mlx()
         from mlx_lm import load
@@ -18,7 +20,8 @@ class LocalLLM:
         prompt=self.tokenizer.apply_chat_template([{'role':'system','content':system},{'role':'user','content':user}],tokenize=False,add_generation_prompt=True,enable_thinking=False)
         with contextlib.redirect_stdout(sys.stderr):
             if schema is not None:
-                import outlines
+                from .optional import require
+                outlines = require('outlines', 'Yerel analiz (yapılandırılmış çıktı)')
                 from outlines.types import JsonSchema
                 if not hasattr(self,'structured'):self.structured=outlines.from_mlxlm(self.model,self.tokenizer)
                 return self.structured(prompt,output_type=JsonSchema(schema),max_tokens=max_tokens,sampler=make_sampler(temp=0.0))
