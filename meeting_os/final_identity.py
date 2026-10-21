@@ -1,5 +1,5 @@
-"""Retry-only Resemblyzer worker, after ASR; parent never imports Torch."""
-import importlib.util,json,math,sys,tempfile
+"""Resemblyzer voiceprint worker (ONNX, voice_encoder.py) in its own process; the parent never loads the model."""
+import json,math,sys,tempfile
 from pathlib import Path
 import soundfile as sf
 from .asr_checkpoints import _hash_file,_signature
@@ -37,13 +37,14 @@ class FinalEmbedder:
     engine='resemblyzer'
     def __init__(self,model=None,light=False):
         self.light=light  # voice embedder is small; under light mode OS warning pressure does not block it
+        from .voice_encoder import ONNX_PATH,model_id_for
         if model:self.weights=Path(model).resolve(strict=True)
         else:
-            spec=importlib.util.find_spec('resemblyzer')
-            if spec is None or not spec.submodule_search_locations:raise ValueError('Resemblyzer package unavailable')
-            self.weights=(Path(next(iter(spec.submodule_search_locations)))/'pretrained.pt').resolve(strict=True)
+            if not ONNX_PATH.is_file():raise ValueError('Ses izi modeli bu kurulumda eksik (meeting_os/assets/resemblyzer.onnx); uygulamayı yeniden kurun.')
+            self.weights=ONNX_PATH.resolve(strict=True)
         self.signature,self.digest=_hash_file(self.weights,allow_warning=light)
-        self.model_id='resemblyzer:'+self.digest[:16]
+        # The canonical ONNX file answers with its source pretrained.pt's id, so saved profiles keep matching.
+        self.model_id=model_id_for(self.digest)
     def embed(self,audio):raise ValueError('Final identity requires deferred file batch')
     def embed_file(self,path,spans):
         if _signature(self.weights)!=self.signature:raise ValueError('Embedding weights changed')
@@ -76,13 +77,12 @@ def main():
     if list(_signature(path))!=data['signature']:raise ValueError('Identity snapshot changed')
     sig,digest=_hash_file(weights,allow_warning=data.get('light') is True)
     if list(sig)!=data['weight_signature'] or digest!=data['digest']:raise ValueError('Identity weights changed')
-    import torch
-    # The prior in-process path runs after Silero, which sets this to one.
-    # Preserve that CPU budget when identity moves to its own fresh process.
-    torch.set_num_threads(1)
+    # One intra-op thread, the CPU budget the torch worker kept (torch.set_num_threads(1) after Silero): the
+    # ONNX session is built with intra_op_num_threads=1 in voice_encoder.VoiceEncoder.
     from .speakers import Embedder
+    from .voice_encoder import model_id_for
     embedder=Embedder('resemblyzer',weights)
-    if embedder.model_id!='resemblyzer:'+digest[:16]:raise ValueError('Embedding model identity mismatch')
+    if embedder.model_id!=model_id_for(digest):raise ValueError('Embedding model identity mismatch')
     rows=[]
     import numpy as np
     with sf.SoundFile(path) as reader:

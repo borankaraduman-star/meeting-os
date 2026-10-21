@@ -1,4 +1,4 @@
-"""Run unchanged Silero VAD outside the retry parent; release Torch on exit."""
+"""Run Silero VAD (ONNX, vad_onnx.py) outside the retry parent; the model is released on exit."""
 import json,sys,tempfile,warnings
 from pathlib import Path
 import numpy as np
@@ -38,7 +38,7 @@ def main():
     # Map the private assembled WAV rather than allocating decoded PCM.
     # Copy-on-write is not an external-write snapshot; pre/post signatures
     # check inode, size and nanosecond mtime/ctime before accepting output.
-    # SciPy uses writable copy-on-write storage: Torch can share this view
+    # SciPy uses writable copy-on-write storage: the VAD reads this view
     # without allowing writes through to the source. Keep it alive for VAD.
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore',message=r'^Chunk \(non-data\) not understood, skipping it\.$',category=wavfile.WavFileWarning)

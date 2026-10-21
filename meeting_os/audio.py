@@ -24,8 +24,9 @@ def read_audio(path):
 
 @lru_cache(maxsize=1)
 def vad_model():
-    from silero_vad import load_silero_vad
-    return load_silero_vad()
+    # Silero VAD 6.2.1's own ONNX file, one thread (vad_onnx.py); the torch JIT path gave the same timestamps.
+    from .vad_onnx import SileroVAD
+    return SileroVAD()
 
 def speech_regions(audio, max_seconds=28):
     if len(audio) == 0: return []
@@ -34,9 +35,8 @@ def speech_regions(audio, max_seconds=28):
     for start in range(65536, len(audio), 65536):
         peak = np.maximum(peak, np.max(np.abs(audio[start:start+65536])))
     if peak < 1e-5: return []
-    import torch
-    from silero_vad import get_speech_timestamps
-    stamps = get_speech_timestamps(torch.from_numpy(audio), vad_model(), sampling_rate=RATE,
+    from .vad_onnx import get_speech_timestamps
+    stamps = get_speech_timestamps(audio, vad_model(), sampling_rate=RATE,
         min_speech_duration_ms=250, min_silence_duration_ms=500, speech_pad_ms=200,
         max_speech_duration_s=max_seconds, return_seconds=False)
     return [(int(s['start']), int(s['end'])) for s in stamps]

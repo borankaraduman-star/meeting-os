@@ -9,14 +9,15 @@ class Embedder:
     def __init__(self, engine='resemblyzer', model=None):
         self.engine = engine
         if engine == 'resemblyzer':
-            from resemblyzer import VoiceEncoder
-            import resemblyzer
-            weights = Path(model) if model else Path(resemblyzer.__file__).parent/'pretrained.pt'
-            self.encoder = VoiceEncoder(device='cpu', weights_fpath=weights)
-            self.model_id = 'resemblyzer:'+hashlib.sha256(weights.read_bytes()).hexdigest()[:16]
+            # Same network and preprocessing as resemblyzer.VoiceEncoder, through ONNX (voice_encoder.py): the
+            # canonical file keeps the pretrained.pt model id, so saved profiles keep matching.
+            from .voice_encoder import VoiceEncoder
+            self.encoder = VoiceEncoder(model)
+            self.model_id = self.encoder.model_id
         elif engine == 'ecapa':
             if not model or not Path(model).is_dir(): raise ValueError('ECAPA requires a local model directory')
-            from speechbrain.inference.speaker import EncoderClassifier
+            from .optional import require
+            EncoderClassifier = require('speechbrain.inference.speaker', 'ECAPA ses izi').EncoderClassifier
             self.encoder = EncoderClassifier.from_hparams(source=str(Path(model).resolve()), savedir=str(Path(model).resolve()), overrides={'pretrained_path':str(Path(model).resolve())}, run_opts={'device':'cpu'})
             self.model_id = 'ecapa:'+hashlib.sha256((Path(model)/'embedding_model.ckpt').read_bytes()).hexdigest()[:16]
         else: raise ValueError('Unknown embedding engine')
@@ -64,7 +65,8 @@ class Diarizer:
             self.sherpa_config = cfg
         if mode == 'pyannote':
             if not model or not Path(model).exists(): raise ValueError('pyannote requires an explicitly downloaded local pipeline')
-            from pyannote.audio import Pipeline
+            from .optional import require
+            Pipeline = require('pyannote.audio', 'pyannote konuşmacı ayırma').Pipeline
             self.pipeline = Pipeline.from_pretrained(str(Path(model).resolve()))
     def turns_file(self,path,source,frames):
         if self.mode!='sherpa' or not self.isolate_sherpa:raise ValueError('File diarization requires isolated Sherpa')

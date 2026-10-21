@@ -1,5 +1,3 @@
-import sys
-import types
 import unittest
 from unittest.mock import patch
 import numpy as np
@@ -20,9 +18,8 @@ class SilenceGateTests(unittest.TestCase):
      def timestamps(tensor,actual_model,**kwargs):
       self.assertIs(tensor,audio);self.assertIs(actual_model,model);received.append(kwargs)
       return [{'start':3,'end':9}]
-     torch=types.SimpleNamespace(from_numpy=lambda a:a)
-     silero=types.SimpleNamespace(get_speech_timestamps=timestamps)
-     with patch.dict(sys.modules,{'torch':torch,'silero_vad':silero}),patch('meeting_os.audio.vad_model',return_value=model),patch('meeting_os.audio.np.abs',side_effect=bounded_abs):
+     # The ONNX VAD takes the numpy array itself (no torch.from_numpy copy): `tensor is audio` still holds.
+     with patch('meeting_os.vad_onnx.get_speech_timestamps',side_effect=timestamps),patch('meeting_os.audio.vad_model',return_value=model),patch('meeting_os.audio.np.abs',side_effect=bounded_abs):
       actual=speech_regions(audio)
      self.assertEqual(actual,[] if expected_silent else [(3,9)])
      self.assertEqual(sum(sizes),len(audio))
