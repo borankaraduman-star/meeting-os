@@ -1,17 +1,22 @@
 # Model, yazılım ve veri kaynakları
 
 Uygulama kendi yerel kodudur. Üçüncü taraf paket ve modellerin kendi lisansları
-geçerlidir; kaynak arşivi model ağırlıklarını veya Python paketlerini yeniden
-dağıtmaz. Bu Mac’te indirilen ağırlıklar `models/` altında kalır.
+geçerlidir; kaynak arşivi Python paketlerini yeniden dağıtmaz. Model ağırlıklarından
+yalnız iki küçük ONNX dosyası depoda ve pakette, `meeting_os/assets/` altında durur
+(aşağıda, Silero VAD ve Resemblyzer); geri kalan indirilen ağırlıklar `models/` altında kalır.
 
 - Apple ScreenCaptureKit / AVFoundation: macOS SDK. Ekran kareleri kaydedilmez.
 - OpenAI Whisper: https://github.com/openai/whisper — MIT.
 - MLX Whisper: https://github.com/ml-explore/mlx-examples/tree/main/whisper — MIT.
 - whisper.cpp: https://github.com/ggml-org/whisper.cpp — MIT; build scriptinde
   commit sabittir. Quantized model repository: https://huggingface.co/ggerganov/whisper.cpp .
-- Silero VAD: https://github.com/snakers4/silero-vad — MIT.
-- Resemblyzer: https://github.com/resemble-ai/Resemblyzer — Apache-2.0;
-  model paket içindeki `pretrained.pt` dosyasıdır, profil namespace SHA256 içerir.
+- Silero VAD: https://github.com/snakers4/silero-vad — MIT. `meeting_os/assets/silero_vad.onnx`,
+  silero-vad 6.2.1 PyPI paketinin `silero_vad/data/silero_vad.onnx` dosyasının değiştirilmemiş kopyasıdır.
+- Resemblyzer: https://github.com/resemble-ai/Resemblyzer — Apache-2.0 (Copyright Resemble AI);
+  kaynak model paket içindeki `pretrained.pt` dosyasıdır, profil namespace onun SHA256'sını içerir.
+  `meeting_os/assets/resemblyzer.onnx` aynı ağırlıkların `scripts/convert-resemblyzer-onnx.py` ile yapılmış
+  ONNX biçimine dönüştürülmüş türevidir (değişiklik: yalnız biçim; ağ ve ağırlıklar aynı).
+- ONNX Runtime: https://github.com/microsoft/onnxruntime — MIT; ses izi ve VAD'ı çalıştırır.
 - SpeechBrain ECAPA: https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb .
 - sherpa-onnx: https://github.com/k2-fsa/sherpa-onnx — Apache-2.0.
   Modeller: https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/models.html .

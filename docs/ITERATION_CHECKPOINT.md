@@ -938,3 +938,20 @@ Koşulanlar: ilgili 18 Python modülü tek tek YEŞİL; `capture` swift build + 
 swift build + 386 test YEŞİL. Tam Python suite'i bu turda JEV koşuyor. **Kodlandı, denenmedi:** gerçek
 ScreenCaptureKit interleaved tamponu ve gerçek macOS izin diyaloğu; uygulama açılmadı, **kurulu uygulama güncellenmedi**.
 
+
+## 2026-10-22 01:10 — Torch'suz paket: ses izi ve VAD ONNX'te (sürümsüz, dal `boran/torch-siz-paket`)
+
+Paket 1,0 GB'ın ~700 MB'ını yalnız Resemblyzer LSTM'i ve Silero VAD için taşıyordu. `meeting_os/voice_encoder.py`
+(mel + kısmi pencere + ortalama/L2 numpy'de, ağ `assets/resemblyzer.onnx`, `scripts/convert-resemblyzer-onnx.py`
+ile bir kez çevrildi) ve `meeting_os/vad_onnx.py` (silero-vad 6.2.1'in kendi ONNX'i + `get_speech_timestamps`
+karşılığı) onnxruntime ile, `intra_op=1`. Kanonik ONNX dosyası (`ONNX_SHA256`) `pretrained.pt` kimliğini taşır →
+`resemblyzer:39373b86598fa3da` değişmedi, profil yeniden kaydı yok, eşikler aynı. Eşdeğerlik
+`tests/test_onnx_equivalence.py`: ses izi 39 klip kosinüs min 0,99999988; VAD 25 sinyal (28 s kesme dalı dahil)
+damgalar birebir, olasılık farkı ≤ 1,1e-5; altın değerler torch'suz CI'da da koşar. Paket listesi numpy, scipy,
+soundfile, onnxruntime, sherpa-onnx (+ imageio-ffmpeg): site-packages 869 → 203 MB (budamalı), beklenen paket
+≈ 0,33 GB. `requirements-macos-tested.txt` 1695 → 307 MB; yerel modeller `requirements-local-models.txt`
+(isteğe bağlı; setup/update.sh ikisini kurar). Yerel yollar paket içinde `optional.require` Türkçe cümlesiyle
+durur; `--engine auto` mlx yoksa cpp. Testler: yeni pinli temiz venv'de Python 1414 YEŞİL (6 atlama: torch/librosa
+katmanları), torch'lu venv'de 1414 (1 bilinen flaki: `test_capture_state` WAV başlığı, tek başına yeşil); Swift 475.
+**Kodlandı, denenmedi:** `build-bundle.sh` gerçek paket derlemesi, imza/noter ve paket içinden canlı kayıt →
+bulut → ses izi (sürüm sahibinde); Sherpa diyarizasyonu ile onnxruntime'ın aynı süreçte gerçek modellerle koşusu.

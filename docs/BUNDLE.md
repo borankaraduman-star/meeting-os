@@ -16,7 +16,7 @@ taşır. Güncelleme de aynı yoldan: yeni zip'i indirir, doğrular, kendini de�
       Resources/runtime.json               {"python":"runtime/bin/python3","repo":"repo","bundled":true,"version":"1.2.72"}
       Resources/runtime/                   python-build-standalone cpython-3.12 (aarch64-apple-darwin, install_only)
                                            + pip ile kurulmuş paketler (aşağıda) + bin/ffmpeg (statik)
-      Resources/repo/                      meeting_os/ paketi, vocabulary.txt, docs/KULLANIM.md, docs/MODEL_LOCK.json,
+      Resources/repo/                      meeting_os/ paketi (assets/resemblyzer.onnx + assets/silero_vad.onnx dahil), vocabulary.txt, docs/KULLANIM.md, docs/MODEL_LOCK.json,
                                            models/sherpa/ (yalnız bulut yolunun kullandığı dosyalar),
                                            build/MeetingCapture.app (kayıt yardımcısı), scripts/ (yalnız çalışma anında
                                            gerekenler; install/update/build betikleri DEĞİL)
@@ -37,18 +37,19 @@ paketteki ffmpeg'i bulsun (Swift `jobEnvironment` + bridge `Process.environment`
 1. `scripts/build-desktop.sh` çıktısını (imzasız kopya için `build/desktop-stage` mantığı) temel al.
 2. `runtime/`: `cpython-3.12.<x>+<tarih>-aarch64-apple-darwin-install_only.tar.gz` (astral-sh/python-build-standalone;
    `build/downloads/` altında önbellek; sha256 kontrol), `runtime/bin/python3 -m pip install` ile:
-   `requirements-macos-tested.txt` içinden bulut yolunun gerektirdiği alt küme (numpy, scipy, soundfile,
-   huggingface-hub, resemblyzer + torch, silero-vad, sherpa-onnx, librosa/numba/llvmlite, scikit-learn, webrtcvad,
-   setuptools) + `imageio-ffmpeg` (statik ffmpeg ikilisi → `runtime/bin/ffmpeg` kopyası). mlx, mlx-lm, mlx-whisper,
-   outlines, transformers, pyarrow PAKETE GİRMEZ (yerel model dönemi). torchaudio 4 MB ile GİRER: tasarımın
-   ilk hâli onu da dışarıda bırakıyordu, ama `silero_vad/utils_vad.py` modül düzeyinde `import torchaudio`
-   yapar, yani `import silero_vad` (her VAD geçişi) onsuz patlar. `pip cache purge`, `__pycache__`,
-   `*/tests/`, `*.dist-info/RECORD` dışı gereksizler silinir; hedef ≤ 1,3 GB.
+   `requirements-macos-tested.txt` içinden bulut yolunun gerektirdiği alt küme (2026-10-22'den beri yalnız
+   numpy, scipy, soundfile, onnxruntime, sherpa-onnx) + `imageio-ffmpeg` (statik ffmpeg ikilisi →
+   `runtime/bin/ffmpeg` kopyası). mlx, mlx-lm, mlx-whisper, outlines, transformers, pyarrow PAKETE GİRMEZ (yerel
+   model dönemi); torch, torchaudio, silero-vad, Resemblyzer, librosa/numba/llvmlite, scikit-learn, webrtcvad,
+   huggingface-hub de girmez (aşağıda "Ses izi ve VAD: torch'suz"). `pip cache purge`, `__pycache__`, `*/tests/`,
+   onnxruntime'ın Python araç alt paketleri ve C API dylib'i silinir; hedef ≤ 0,5 GB.
 3. `repo/`: yukarıdaki dosyalar `rsync` ile; `.git`, `build/*` (MeetingCapture.app hariç), `models/*` (sherpa hariç),
    `tests/`, `desktop/` girmez.
 4. `--invite`: gerçek veri klasöründen `team_cloud.invite_file_text(REAL_DATA_DIR, include_key=True)` → `invite.json`.
-5. Doğrulama (betik içinde, imzasız kopyada): `runtime/bin/python3 -m meeting_os doctor`, `runtime/bin/python3 -c
-   "import resemblyzer, silero_vad, sherpa_onnx, torch"`, `runtime/bin/ffmpeg -version`, paket boyutu yazdırılır.
+5. Doğrulama (betik içinde, imzasız kopyada): `runtime/bin/python3 -m meeting_os doctor`; budanmış runtime ile
+   `import numpy, scipy, soundfile, sherpa_onnx, onnxruntime` + ses izi modelini yükleyip bir vektör üretme
+   (`model_id` = `resemblyzer:39373b86598fa3da` olmalı) + VAD modelini bir pencerede koşma; `runtime/bin/ffmpeg
+   -version`, paket boyutu yazdırılır.
 6. İmza ve noterleme paket oluşturma betiğinin DIŞINDA: Developer ID Application sertifikası ve `meetingos`
    noter profili hazır olduğunda `sh scripts/sign-notarize.sh "build/bundle/Meeting OS.app"` çalıştırılır.
    Betik içteki kodu önce imzalar, hardened runtime ve güvenli zaman damgası kullanır; Apple sonucu tam olarak
@@ -243,3 +244,55 @@ gönderir, `stapler staple`, dağıtım zip'ini yazar) → `sh scripts/publish-g
 Kazanım: Gatekeeper uyarısı ve "Yine de Aç" adımı kalkar; MDM'li Mac'lerde engel yok; izinler sertifikaya bağlı
 kaldığı için sürümler arasında yeniden sorulmaz. Uyarı: sertifika değişince (kendinden imzalı → Developer ID) macOS
 mikrofon/ekran izinlerini bir kez daha sorar; rehberin izin adımı zaten bunu anlatıyor.
+
+
+## Ses izi ve VAD: torch'suz (22 Ekim 2026)
+
+Paket 1,0 GB'tı ve bunun ~700 MB'ı yalnız iki küçük ağ içindi: Resemblyzer'in 1,4 M parametrelik LSTM'i (ses izi,
+bulut yolunda `cloud_finalize.identify_clusters` → `FinalEmbedder(light=True)`) ve Silero VAD (yalnız yerel
+yolda, `pipeline.py` → `final_vad`). İkisi de artık ONNX ile ve `onnxruntime` üzerinden çalışır; torch, torchaudio,
+silero-vad, Resemblyzer ve Resemblyzer'in mel'i için gelen librosa/numba/llvmlite/scikit-learn paketten çıktı.
+Yazıya çevirme ve analiz zaten bulutta (OpenRouter); `mlx*`, `outlines`, `transformers`, `openai-whisper`,
+`speechbrain`, `pyannote` daha önce de pakette değildi, şimdi `requirements-macos-tested.txt`'de de değil:
+`requirements-local-models.txt` geliştirici Mac'ine isteğe bağlı ek olarak kurar (`setup.sh`/`update.sh` ikisini
+birden kurar, CI ve paket yalnız ilkini). Bu yollardan biri pakette seçilirse `meeting_os/optional.py` Türkçe bir
+cümle verir ("… paketi yok. Bu kurulum yerel modelleri taşımıyor; Ayarlar → Sistem → Yazıya çevirme: OpenRouter
+(bulut) seçin …"); `--engine auto` mlx yoksa cpp'yi seçer.
+
+**Dosyalar nerede.** `meeting_os/assets/resemblyzer.onnx` (5,7 MB) ve `meeting_os/assets/silero_vad.onnx`
+(2,3 MB) depoda izlenir; `REPO_TREES` `meeting_os/`'u bütün kopyaladığı için pakette `Resources/repo/meeting_os/
+assets/` altına kendiliğinden girer. (`models/` gitignore'da ve yalnız Sherpa için; oraya konmadı.)
+
+- `resemblyzer.onnx`: `scripts/convert-resemblyzer-onnx.py` Resemblyzer 0.1.4'ün `pretrained.pt`'sini (sha256
+  `39373b86…`) torch 2.14'ün TorchScript dışa aktarıcısıyla (opset 17) çevirir; giriş mel `[parça,160,40]`, çıkış
+  ReLU + L2 normlu `[parça,256]`. Kaynak özeti modelin metadata'sında (`source_sha256`). Aynı girdiyle iki kez
+  koşmak bayt bayt aynı dosyayı verdi (`107f7802…`). Ön işleme `meeting_os/voice_encoder.py`'de numpy ile:
+  librosa 1.0 `melspectrogram` (n_fft 400, hop 160, 40 mel, center + sıfır dolgu, periyodik Hann, güç 2, Slaney
+  filtre bankası), Resemblyzer'in `compute_partial_slices` (rate 1.3, min_coverage 0.75), parça ortalaması + L2.
+- `silero_vad.onnx`: silero-vad 6.2.1 paketinin kendi dosyası (`load_silero_vad(onnx=True)`'nun yüklediği,
+  sha256 `1a153a22…`). `meeting_os/vad_onnx.py` paketin `OnnxWrapper` 16 kHz dalını (64 örnek bağlam, durum
+  `[2,1,128]`) ve `get_speech_timestamps`'ı satır satır taşır; `speech_regions`'ın parametreleri aynı (eşik 0.5,
+  250/500/200 ms, 28 s).
+- İş parçacığı bütçesi: iki oturum da `intra_op_num_threads=1`, `inter_op_num_threads=1` — torch yolunun
+  `torch.set_num_threads(1)` bütçesi (`final_identity` ayrı süreçte bunu koruyordu).
+
+**Kayıtlı profiller geçerli kalır.** Profiller `model_id='resemblyzer:'+sha256(pretrained.pt)[:16]` =
+`resemblyzer:39373b86598fa3da` ile saklandı ve yalnız aynı kimlikteki profillerle eşleşir. Kanonik ONNX dosyası
+(özeti `voice_encoder.ONNX_SHA256`'ya sabit) bu kimliği taşır, çünkü aynı ağırlıklardır ve aynı vektörü verdiği
+ölçüldü (aşağıda); başka her dosya kendi özetiyle tanınır, yani denetlenmemiş bir dosya eski profillerle asla
+eşleşmiş sayılmaz. Profil yeniden kaydı gerekmez; ölçülmüş eşikler (kimlik 0.87 / marj 0.05, öneri 0.83, otomatik
+örnek 0.93 / 0.08) değişmedi.
+
+**Eşdeğerlik (ölçüldü, `tests/test_onnx_equivalence.py`).** Depodaki herkese açık fikstürler (FLEURS-tr 12 dosya,
+LibriSpeech dört ses kurgusu, TTS Türkçe/code-switch, cpp kırpıntıları) ve sentetik sesler; kullanıcı kaydı yok.
+- Ses izi: 39 klip (1 s taban, 2,5/7/60 s pencereler, tam dosyalar, sentetik), torch ↔ ONNX kosinüs min
+  0,99999988, ortalama 1,0000000 (eşik 0,9999). Mel, librosa ile bayt düzeyinde aynı çıktı (en büyük göreli fark 0).
+- VAD: 25 sinyal (21 dosya + ~72 s kesintisiz konuşma, 28 s kesme dalını gerçekten çalıştırır + sentetik),
+  43 konuşma bölgesi, zaman damgaları **birebir aynı**; pencere başına olasılık farkı en çok 1,1e-5.
+- Test iki katmanlı: altın değerler (`tests/fixtures/onnx-equivalence.json`, torch yoluyla yazıldı) torch'suz CI'da
+  her koşuda denetlenir; torch + Resemblyzer + silero-vad kuruluysa iki yol yan yana yeniden koşar.
+
+**Boyut (ölçüldü, temiz venv, aynı pinler).** Paket listesinin site-packages'ı: önce 1201 MB (budama sonrası
+869 MB), sonra 318 MB (budama sonrası 203 MB) — ~666 MB eksik. Kurulu 1.2.90 paketi 1,0 GB (runtime 965 MB);
+beklenen yeni paket ≈ 0,33 GB. Geliştirici/CI ortamı (`requirements-macos-tested.txt` tek başına, temiz venv): 1695 MB → 307 MB;
+`requirements-local-models.txt` eklenince eski 1,7 GB'lık ortam (+ onnxruntime) geri gelir.
